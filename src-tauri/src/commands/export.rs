@@ -20,21 +20,34 @@ pub struct ExportFileResult {
     byte_count: usize,
 }
 
+fn start_backup(app: &tauri::AppHandle) -> Result<crate::background_operations::Operation, String> {
+    app.state::<crate::background_operations::BackgroundOperations>()
+        .start(
+            crate::background_operations::OperationKind::Backup,
+            &clipboard_sync::cancellation::CancellationToken::default(),
+        )
+}
+
 #[tauri::command]
 pub async fn create_resource_backup(
     app: tauri::AppHandle,
     path: String,
 ) -> Result<ExportFileResult, String> {
+    let operation = start_backup(&app)?;
     tauri::async_runtime::spawn_blocking(move || {
-        let bytes = crate::export::backup::create(
-            app.state::<Database>().inner(),
-            std::path::Path::new(&path),
-        )?;
-        Ok(ExportFileResult {
-            path,
-            format: "clipbackup".into(),
-            byte_count: usize::try_from(bytes).map_err(|e| e.to_string())?,
-        })
+        let outcome = (|| {
+            let bytes = crate::export::backup::create_with_progress(
+                app.state::<Database>().inner(),
+                std::path::Path::new(&path),
+                &mut |phase, completed, total| operation.progress(phase, completed, total),
+            )?;
+            Ok(ExportFileResult {
+                path,
+                format: "clipbackup".into(),
+                byte_count: usize::try_from(bytes).map_err(|e| e.to_string())?,
+            })
+        })();
+        operation.finish(outcome)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -45,8 +58,14 @@ pub async fn preview_resource_backup(
     app: tauri::AppHandle,
     path: String,
 ) -> Result<crate::export::backup::BackupPreview, String> {
+    let operation = start_backup(&app)?;
     tauri::async_runtime::spawn_blocking(move || {
-        crate::export::backup::preview(std::path::Path::new(&path), app.state::<Database>().inner())
+        let outcome = crate::export::backup::preview_with_progress(
+            std::path::Path::new(&path),
+            app.state::<Database>().inner(),
+            &mut |phase, completed, total| operation.progress(phase, completed, total),
+        );
+        operation.finish(outcome)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -58,42 +77,47 @@ pub async fn restore_resource_backup(
     path: String,
     fingerprint: String,
 ) -> Result<ImportSummary, String> {
+    let operation = start_backup(&app)?;
     tauri::async_runtime::spawn_blocking(move || {
-        let capture = app.state::<crate::state::CaptureState>();
-        let _maintenance = crate::commands::lock::lock_state(
-            &capture.storage_maintenance_lock,
-            "storage maintenance lock is poisoned",
-        )?;
-        let database = app.state::<Database>();
-        let mut result = crate::export::backup::restore(
-            std::path::Path::new(&path),
-            &fingerprint,
-            database.inner(),
-            app.state::<StoragePaths>().inner(),
-        )?;
-        // Import has committed. A failed diagnostic must not present it as a failed restore.
-        if let Err(error) = annotate_truncation_risk(
-            &mut result,
-            database.inner(),
-            app.state::<Mutex<ConfigStore>>().inner(),
-        ) {
-            result.errors.push(error);
-        }
-        if result.imported_count > 0 {
-            app.state::<crate::commands::clipboard::SearchResultCache>()
-                .clear();
-            for event in ["clipboard-history-invalidated", "tags-changed"] {
-                if let Err(error) = app.emit(
-                    event,
-                    ClipboardHistoryInvalidated {
-                        deleted_ids: Vec::new(),
-                    },
-                ) {
-                    crate::log_warn!("[backup] unable to broadcast {event}: {error}");
+        let outcome = (|| {
+            let capture = app.state::<crate::state::CaptureState>();
+            let _maintenance = crate::commands::lock::lock_state(
+                &capture.storage_maintenance_lock,
+                "storage maintenance lock is poisoned",
+            )?;
+            let database = app.state::<Database>();
+            let mut result = crate::export::backup::restore_with_progress(
+                std::path::Path::new(&path),
+                &fingerprint,
+                database.inner(),
+                app.state::<StoragePaths>().inner(),
+                &mut |phase, completed, total| operation.progress(phase, completed, total),
+            )?;
+            // Import has committed. A failed diagnostic must not present it as a failed restore.
+            if let Err(error) = annotate_truncation_risk(
+                &mut result,
+                database.inner(),
+                app.state::<Mutex<ConfigStore>>().inner(),
+            ) {
+                result.errors.push(error);
+            }
+            if result.imported_count > 0 {
+                app.state::<crate::commands::clipboard::SearchResultCache>()
+                    .clear();
+                for event in ["clipboard-history-invalidated", "tags-changed"] {
+                    if let Err(error) = app.emit(
+                        event,
+                        ClipboardHistoryInvalidated {
+                            deleted_ids: Vec::new(),
+                        },
+                    ) {
+                        crate::log_warn!("[backup] unable to broadcast {event}: {error}");
+                    }
                 }
             }
-        }
-        Ok(result)
+            Ok(result)
+        })();
+        operation.finish(outcome)
     })
     .await
     .map_err(|e| e.to_string())?

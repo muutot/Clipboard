@@ -57,8 +57,6 @@ delete the only recovery copy or claim that default settings were persisted.
 
 Plain-text import recognizes a `---` delimiter line with LF or CRLF endings, while preserving line endings inside each record. Delimiters at the file boundary create empty chunks that are ignored; they never create clipboard records. The CRLF regression imports two records and verifies the first record's internal CRLF bytes.
 
-## Synchronization
-
 Historical auto tags use `Database::with_task_connection`: an existing file is reopened
 without schema initialization, with a small cache and file-backed temporary storage. The
 in-memory test path retains its single connection. Matching reads one WAL snapshot and
@@ -68,6 +66,8 @@ changed inputs or a progress callback error roll back every update. Cancellation
 checked at phase/row boundaries and immediately before commit. A single regex or SQLite
 busy wait is not preempted. The temporary plan is removed on success/failure.
 
+## Synchronization
+
 Synchronization is split between the Tauri-independent `src-tauri/crates/clipboard-sync/` crate
 and the desktop integration in `src-tauri/src/sync/`:
 
@@ -75,7 +75,8 @@ and the desktop integration in `src-tauri/src/sync/`:
 - `src/sync/v1/` owns only explicit desktop-domain DTO/path adapters and SQLite-backed integration tests for the crate engine; `storage/sync_repository.rs` supplies the production SQLite implementation. Snapshot/checkpoint publication first makes a point-in-time SQLite copy, releases the live database lock, exports deterministic bounded batches into one temporary chunked pack, then performs one streaming S3 PUT; pull performs one streaming GET and applies every decoded chunk plus cursor/checkpoint state in one rollback-safe SQLite transaction. Segments stay on the compact single-envelope path, so normal daily sync request counts are unchanged. Preview images remain device-local derived data and are stripped at the storage export boundary. With a sync password, resources use a keyed plaintext identity and fixed 1 MiB AES-256-GCM chunks, adding a 20-byte header plus 16 bytes per non-empty chunk; upload/download remain file-streamed and bounded to one chunk of encryption memory. Pulling a pack validates and transactionally records remote resource references but does not download blobs; scope-aware republishing reuses those references even before materialization. Each run performs one paginated heads listing. Once a head has been validated/applied, a disposable `sync_metadata` cache may skip its body GET only when listing ETag/size and local publication state or peer cursor all still match; missing ETags, malformed cache, recovery changes and mismatches conservatively GET/decode the head. Fresh devices authenticate existing canonical pointers before their first publication, then apply the global checkpoint before peer heads; wrong/missing/changed passwords and encryption-mode mismatches fail without writing a new head. In-place password rotation is currently unsupported and requires a future dedicated destructive materialize/delete/reset/republish workflow. Unavailable snapshots or non-contiguous segment chains force checkpoint recovery and one retry, with fallback to the retained previous checkpoint. A local checkpoint-vector baseline prevents checkpoint pointer/body reads on idle runs; compaction runs after 50,000 aggregate new-history units, a known-device removal, or an existing-device epoch change/regression, only when all peers pulled successfully. A newly observed device contributes the larger of its trusted bootstrap record count and published sequence, so an empty peer does not immediately rewrite the full checkpoint. The CAS winner deletes history covered by the previous checkpoint vector, retains current plus previous checkpoints, preserves same/newer-generation candidates against delayed cleanup, and records its local baseline after GC so interruption remains retryable. Before publishing, the engine reconciles the local device's remote head through the same cache-or-GET path; a restored/divergent local publication state first re-applies remote history, rotates epoch, and republishes a complete snapshot instead of overwriting a newer head. Remote-head failures are isolated per device: healthy peers continue, the result reports `failedPeers`, and only head-namespace discovery failure aborts the whole pull pass.
 - `commands/sync/mod.rs` exposes `get_sync_config`, `set_sync_config`, typed S3 connection testing, `sync_now`, and the UI-facing `materialize_clipboard_item`. Sync runs snapshot config before I/O, derive one optional remote-scoped `SessionKey`, construct one scoped `S3ObjectStore`, and call `v1::sync_database` for manual and automatic runs. On-demand materialization reuses verified local files, deduplicates concurrent downloads with weak process-local locks, writes all item paths atomically without replication/version changes, and queues a local thumbnail rebuild for images.
 - `commands/sync/auto.rs` owns the stoppable background loop. Manual and automatic runs share a process-wide try-lock; a successful remote apply emits `clipboard-history-invalidated`, and last-run status persistence is best-effort but logs a failure via `log_event!` instead of discarding the error silently. `SyncCancellation` owns a root token; manual/automatic runs receive child tokens and
-  `sync_database_cancellable` scopes one to the synchronous engine. Engine phases, resource
+  the current operation scopes another child around `sync_database_with_progress`.
+  Cancelling it leaves the root and automatic worker usable for the next run. Engine phases, resource
   hash/encryption chunks and rollback-safe batch iterators check cancellation. The S3 facade
   uses async reqwest on a shared two-thread Tokio runtime; selecting cancellation drops the
   request or body future, and retry waits are cancellable. Upload reads stay at 64 KiB per poll.
@@ -92,8 +93,11 @@ and the desktop integration in `src-tauri/src/sync/`:
 materialization tokens while the configuration mutex is held. Local-only mode
 rejects sync/test entry and returns the local record for materialization without
 network access. Saving local-only=true cancels all registered runs before releasing
-that same mutex, closing the snapshot/register race. It does not cancel the auto
-worker or root, so later opt-in enables fresh runs. A completed request/commit can
+that same mutex, closing the snapshot/register race. The background sync operation
+is a child of that registered token; its scope covers namespace resolution and the
+engine so either privacy changes or task cancellation also interrupts S3 requests.
+It does not cancel the auto worker or root, so later opt-in enables fresh runs.
+A completed request/commit can
 win the cancellation race; cancellation cannot retract already delivered bytes.
 Connection testing uses the blocking pool because the synchronous S3 facade must
 not block Tauri's async executor. Tests include a stalled loopback HTTP response
@@ -246,6 +250,19 @@ behind the database mutex. It is independent of lazy/background indexing and sto
 through unified shutdown. Native WebView/OS behavior and macOS/Linux CI remain separate gates.
 
 ## Unified shutdown
+
+`BackgroundOperations` owns at most one active tags, backup and sync slot. The
+non-clone operation guard releases its slot even on unwinding; matching IDs protect
+against stale cancellation. Before worker joins, shutdown rejects new operations,
+cancels all slots and waits up to 30 seconds on a condition variable, logging timeout.
+This registry wait is separate from the auto-sync worker's existing join fallback and
+is not a bound on total application shutdown time.
+
+Portable backup commands report progress through the registry. Binary transfers check
+cancellation every 64 KiB and at EOF; validation checks entries/rows; restore checks rows
+and the final pre-commit boundary. Cancellation preserves an existing output archive,
+rolls back the current restore transaction and removes newly published resources.
+Local filesystem calls and a single SQLite busy wait remain non-preemptible.
 
 `stop_runtime_services()` signals sync cancellation first, then stops the external-change observer and auto-sync worker (it is a background SQLite/S3 writer that must not outlive a storage snapshot), then cleanup, clipboard monitor, capture, OCR, thumbnail, hotkey, local API, and search-sync services. A poisoned managed lock never skips a stop: the guard is recovered with `into_inner()` (matching `state.rs`) so background writers still stop through teardown. The Tauri `ExitRequested` path invokes it; ordinary window close may hide to tray. Every new worker/listener/server needs a stop signal, retained join/unlisten handle, idempotent stop behavior, integration with normal exit/tray exit/interrupt/restart as applicable, and drop/stop tests or a documented verification gap. Background threads must never call a Tauri API that blocks on the main thread while the main thread may be joining them: `refresh_tray_recent_menu` posts its `tray.set_menu` work through `run_on_main_thread` instead of calling it directly, because `set_menu` blocks on the main thread and the capture worker is joined there during shutdown. If `ctrlc::set_handler` fails (a foreign handler installed first), the failure is logged so the missing unified interrupt path is diagnosable.
 

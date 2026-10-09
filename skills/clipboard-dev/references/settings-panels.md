@@ -157,6 +157,12 @@ Do not wrap the range input merely for styling. Initialize/update `--slider-pct`
 
 ## Feedback and asynchronous state
 
+Tags history, portable backups and sync share `BackgroundOperationStatus`. Keep its
+cancel button outside disabled form fieldsets so a running operation remains cancellable.
+Use the process-wide operation snapshot as well as local pending state to disable starts
+across panel remounts/windows. Mounted polling stops on teardown; work continues in the
+backend until completion or explicit cancellation.
+
 - Use `.settings-feedback`; add `.success` for success and default to error styling otherwise.
 - Clear feedback with a timer whose cleanup is retained when the component can unmount or messages can be replaced.
 - Disable controls or show a saving/loading state during commands that cannot safely overlap.

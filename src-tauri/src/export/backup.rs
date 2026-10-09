@@ -1,5 +1,6 @@
 //! Portable active-history bundles. No configuration, credentials, recycle bin or derived previews.
 use super::{stream::atomic_output, ImportSummary};
+use crate::background_operations::OperationPhase;
 use crate::{
     domain::{ClipboardItem, ClipboardKind},
     storage::{ClipboardRepository, Database, StorageError, StoragePaths},
@@ -13,6 +14,8 @@ use std::{
     path::{Path, PathBuf},
 };
 use zip::{write::SimpleFileOptions, ZipArchive, ZipWriter};
+
+type Progress<'a> = &'a mut dyn FnMut(OperationPhase, u64, Option<u64>) -> Result<(), String>;
 
 const MAX_MANIFEST: u64 = 16 * 1024 * 1024;
 const MAX_RECORDS: u64 = 512 * 1024 * 1024;
@@ -72,11 +75,13 @@ fn transfer(
     mut reader: impl Read,
     mut writer: impl Write,
     limit: u64,
+    progress: Progress<'_>,
 ) -> Result<(u64, String), String> {
     let mut hash = Sha256::new();
     let mut size = 0u64;
     let mut buffer = [0u8; 64 * 1024];
     loop {
+        progress(OperationPhase::Transferring, size, None)?;
         let count = reader.read(&mut buffer).map_err(err)?;
         if count == 0 {
             break;
@@ -157,7 +162,16 @@ fn remap_item(
     Ok(())
 }
 
+#[cfg(test)]
 pub fn create(database: &Database, target: &Path) -> Result<u64, String> {
+    create_with_progress(database, target, &mut |_, _, _| Ok(()))
+}
+pub fn create_with_progress(
+    database: &Database,
+    target: &Path,
+    progress: Progress<'_>,
+) -> Result<u64, String> {
+    progress(OperationPhase::Creating, 0, None)?;
     let scratch = Scratch::at(&std::env::temp_dir())?;
     atomic_output(target, |output| {
         let mut zip = ZipWriter::new(output);
@@ -172,6 +186,8 @@ pub fn create(database: &Database, target: &Path) -> Result<u64, String> {
         let mut record_bytes = 0;
         database
             .visit_active_items(|mut item| {
+                progress(OperationPhase::Creating, manifest.item_count as u64, None)
+                    .map_err(invalid)?;
                 Database::validate_restore_items(std::slice::from_ref(&item))?;
                 remap_item(&mut item, &mut |path| {
                     if let Some(name) = paths.get(path) {
@@ -202,7 +218,7 @@ pub fn create(database: &Database, target: &Path) -> Result<u64, String> {
                             .compression_method(zip::CompressionMethod::Stored),
                     )
                     .map_err(err)?;
-                    let (bytes, sha256) = transfer(source, &mut zip, MAX_RESOURCE)?;
+                    let (bytes, sha256) = transfer(source, &mut zip, MAX_RESOURCE, progress)?;
                     total += bytes;
                     if total > MAX_TOTAL {
                         return Err("backup resources exceed 16 GiB".into());
@@ -237,6 +253,7 @@ pub fn create(database: &Database, target: &Path) -> Result<u64, String> {
             File::open(scratch.0.join("records.jsonl")).map_err(err)?,
             &mut zip,
             MAX_RECORDS,
+            progress,
         )?;
         manifest.entries.push(Entry {
             name: "records.jsonl".into(),
@@ -251,6 +268,11 @@ pub fn create(database: &Database, target: &Path) -> Result<u64, String> {
             .map_err(err)?;
         zip.write_all(&encoded).map_err(err)?;
         zip.finish().map_err(err)?;
+        progress(
+            OperationPhase::Creating,
+            manifest.item_count as u64,
+            Some(manifest.item_count as u64),
+        )?;
         Ok(())
     })
 }
@@ -273,7 +295,8 @@ struct Validated {
     resources: HashMap<String, PathBuf>,
     preview: BackupPreview,
 }
-fn validate(path: &Path, database: &Database) -> Result<Validated, String> {
+fn validate(path: &Path, database: &Database, progress: Progress<'_>) -> Result<Validated, String> {
+    progress(OperationPhase::Validating, 0, None)?;
     let scratch = Scratch::at(&std::env::temp_dir())?;
     let mut file = File::options()
         .read(true)
@@ -285,6 +308,7 @@ fn validate(path: &Path, database: &Database) -> Result<Validated, String> {
         File::open(path).map_err(err)?,
         &mut file,
         MAX_TOTAL + MAX_RECORDS + MAX_MANIFEST * 2,
+        progress,
     )?;
     file.seek(SeekFrom::Start(0)).map_err(err)?;
     let mut zip = ZipArchive::new(file).map_err(err)?;
@@ -293,6 +317,11 @@ fn validate(path: &Path, database: &Database) -> Result<Validated, String> {
     }
     let mut names = HashSet::new();
     for index in 0..zip.len() {
+        progress(
+            OperationPhase::Validating,
+            index as u64,
+            Some(zip.len() as u64),
+        )?;
         let entry = zip.by_index(index).map_err(err)?;
         if !names.insert(entry.name().to_owned())
             || (entry.name() != "manifest.json" && !safe_entry(entry.name()))
@@ -309,6 +338,7 @@ fn validate(path: &Path, database: &Database) -> Result<Validated, String> {
         zip.by_name("manifest.json").map_err(err)?,
         &mut manifest_bytes,
         MAX_MANIFEST,
+        progress,
     )?;
     let manifest: Manifest = serde_json::from_slice(&manifest_bytes).map_err(err)?;
     if manifest.version != 1
@@ -338,6 +368,7 @@ fn validate(path: &Path, database: &Database) -> Result<Validated, String> {
             zip.by_name(&entry.name).map_err(err)?,
             &mut output,
             entry.bytes,
+            progress,
         )?;
         if hash != entry.sha256 || bytes != entry.bytes {
             return Err(format!("checksum mismatch: {}", entry.name));
@@ -357,6 +388,11 @@ fn validate(path: &Path, database: &Database) -> Result<Validated, String> {
     let mut hashes = std::collections::BTreeSet::new();
     let mut duplicates = 0;
     loop {
+        progress(
+            OperationPhase::Validating,
+            items.len() as u64,
+            Some(manifest.item_count as u64),
+        )?;
         let mut line = Vec::new();
         let bytes = reader
             .by_ref()
@@ -420,17 +456,35 @@ fn validate(path: &Path, database: &Database) -> Result<Validated, String> {
     })
 }
 
+#[cfg(test)]
 pub fn preview(path: &Path, database: &Database) -> Result<BackupPreview, String> {
-    Ok(validate(path, database)?.preview)
+    preview_with_progress(path, database, &mut |_, _, _| Ok(()))
+}
+pub fn preview_with_progress(
+    path: &Path,
+    database: &Database,
+    progress: Progress<'_>,
+) -> Result<BackupPreview, String> {
+    Ok(validate(path, database, progress)?.preview)
 }
 
+#[cfg(test)]
 pub fn restore(
     path: &Path,
     fingerprint: &str,
     database: &Database,
     paths: &StoragePaths,
 ) -> Result<ImportSummary, String> {
-    let mut validated = validate(path, database)?;
+    restore_with_progress(path, fingerprint, database, paths, &mut |_, _, _| Ok(()))
+}
+pub fn restore_with_progress(
+    path: &Path,
+    fingerprint: &str,
+    database: &Database,
+    paths: &StoragePaths,
+    progress: Progress<'_>,
+) -> Result<ImportSummary, String> {
+    let mut validated = validate(path, database, progress)?;
     if validated.preview.fingerprint != fingerprint {
         return Err("backup changed since preview; preview it again".into());
     }
@@ -454,13 +508,18 @@ pub fn restore(
     let prefix = uuid::Uuid::new_v4();
     let mut local_paths = HashMap::new();
     for (name, source) in &validated.resources {
+        progress(
+            OperationPhase::Restoring,
+            local_paths.len() as u64,
+            Some(validated.resources.len() as u64),
+        )?;
         let target = paths.files.join(format!(
             "backup-{prefix}-{}",
             name.strip_prefix("resources/").ok_or("invalid resource")?
         ));
         atomic_output(&target, |out| {
-            let mut input = File::open(source).map_err(err)?;
-            std::io::copy(&mut input, out).map_err(err)?;
+            let input = File::open(source).map_err(err)?;
+            transfer(input, out, MAX_RESOURCE, progress)?;
             Ok(())
         })?;
         published.paths.push(target.clone());
@@ -475,7 +534,9 @@ pub fn restore(
         })?;
     }
     let result = database
-        .restore_items_transactional(&validated.items)
+        .restore_items_transactional_with_progress(&validated.items, |completed, total| {
+            progress(OperationPhase::Applying, completed, Some(total)).map_err(invalid)
+        })
         .map_err(err)?;
     // Flat managed paths participate in existing orphan cleanup. Any unused duplicate resources
     // are eligible after its grace period; a failed DB transaction removes all newly published files.
@@ -650,5 +711,80 @@ mod tests {
             .file_name()
             .to_string_lossy()
             .starts_with("backup-")));
+    }
+
+    #[test]
+    fn cancellation_during_resource_copy_preserves_existing_backup() {
+        let root = Scratch::at(&std::env::temp_dir()).unwrap();
+        let database = Database::open_in_memory().unwrap();
+        let binary = root.0.join("asset.png");
+        fs::write(&binary, vec![0u8; 128 * 1024]).unwrap();
+        database
+            .save_item(&item(
+                "image",
+                ClipboardKind::Image,
+                Some(binary.to_string_lossy().into()),
+            ))
+            .unwrap();
+        let archive = root.0.join("bundle.clipbackup");
+        fs::write(&archive, b"previous backup").unwrap();
+        let error = create_with_progress(&database, &archive, &mut |phase, completed, _| {
+            if matches!(phase, OperationPhase::Transferring) && completed >= 64 * 1024 {
+                return Err("operation cancelled".into());
+            }
+            Ok(())
+        })
+        .unwrap_err();
+        assert!(error.contains("cancelled"));
+        assert_eq!(fs::read(archive).unwrap(), b"previous backup");
+    }
+
+    #[test]
+    fn cancellation_before_restore_commit_removes_rows_and_published_resources() {
+        let root = Scratch::at(&std::env::temp_dir()).unwrap();
+        let source = Database::open_in_memory().unwrap();
+        let binary = root.0.join("asset.png");
+        fs::write(&binary, b"synthetic bytes").unwrap();
+        source
+            .save_item(&item(
+                "image",
+                ClipboardKind::Image,
+                Some(binary.to_string_lossy().into()),
+            ))
+            .unwrap();
+        source
+            .save_item(&item("text", ClipboardKind::Text, None))
+            .unwrap();
+        let archive = root.0.join("bundle.clipbackup");
+        create(&source, &archive).unwrap();
+        let target = Database::open_in_memory().unwrap();
+        let paths = StoragePaths::initialize(root.0.join("target")).unwrap();
+        let checked = preview(&archive, &target).unwrap();
+        let error = restore_with_progress(
+            &archive,
+            &checked.fingerprint,
+            &target,
+            &paths,
+            &mut |phase, completed, total| {
+                if matches!(phase, OperationPhase::Applying) && Some(completed) == total {
+                    return Err("operation cancelled".into());
+                }
+                Ok(())
+            },
+        )
+        .unwrap_err();
+        assert!(error.contains("cancelled"));
+        assert_eq!(target.item_count().unwrap(), 0);
+        assert!(!fs::read_dir(&paths.files).unwrap().any(|entry| entry
+            .unwrap()
+            .file_name()
+            .to_string_lossy()
+            .starts_with("backup-")));
+        assert_eq!(
+            restore(&archive, &checked.fingerprint, &target, &paths)
+                .unwrap()
+                .imported_count,
+            2
+        );
     }
 }

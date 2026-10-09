@@ -10,6 +10,11 @@
   import { isTauriRuntime } from "$lib/services/runtime";
   import { fromDisplaySize, toDisplaySize } from "$lib/utils/unit-convert";
   import {
+    createOperationMonitor,
+    isOperationCancelled,
+  } from "$lib/services/background-operations.svelte";
+  import BackgroundOperationStatus from "./BackgroundOperationStatus.svelte";
+  import {
     getSyncConfig,
     runSync,
     setSyncConfig,
@@ -35,6 +40,8 @@
   let syncRemotePath = $state("");
   let syncTesting = $state(false);
   let syncing = $state(false);
+  const operation = createOperationMonitor("sync");
+  const syncBusy = $derived(syncing || operation.active);
   let syncLastMs = $state<number | null>(null);
   let syncStatus = $state<string | null>(null);
   let syncPendingEntries = $state(0);
@@ -164,7 +171,7 @@
   }
 
   async function handleSyncNow() {
-    if (!isTauriRuntime() || syncing) return;
+    if (!isTauriRuntime() || syncBusy) return;
     syncing = true;
     try {
       await persistSyncConfig();
@@ -201,10 +208,15 @@
       syncStatus = result.failedPeers === 0 ? "success" : "partial";
       syncPendingEntries = 0;
     } catch (e) {
-      onfeedback(_t("storage.syncRunFailed") + `: ${String(e)}`, false);
-      syncStatus = "failed";
+      const cancelled = isOperationCancelled(e);
+      onfeedback(
+        cancelled ? _t("operations.cancelled") : _t("storage.syncRunFailed") + `: ${String(e)}`,
+        cancelled,
+      );
+      syncStatus = cancelled ? "cancelled" : "failed";
     } finally {
       syncing = false;
+      await operation.refresh();
     }
   }
 </script>
@@ -301,12 +313,13 @@
         <button
           type="button"
           class="settings-action-btn"
-          disabled={syncing || syncTesting}
+          disabled={syncBusy || syncTesting}
           onclick={handleSyncNow}
         >
-          {syncing ? _t("storage.syncing") : _t("storage.syncNow")}
+          {syncBusy ? _t("storage.syncing") : _t("storage.syncNow")}
         </button>
       </div>
+      <BackgroundOperationStatus {operation} />
     </section>
   {:else if tab === "advanced"}
     <NumberEntry
@@ -364,7 +377,7 @@
       <button
         type="button"
         class="settings-action-btn"
-        disabled={syncTesting || syncing}
+        disabled={syncTesting || syncBusy}
         onclick={handleTestConnection}
       >
         {syncTesting ? _t("storage.syncTesting") : _t("storage.syncTest")}

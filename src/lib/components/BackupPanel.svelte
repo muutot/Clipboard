@@ -8,6 +8,11 @@
     type BackupPreview,
   } from "$lib/services/storage";
   import { formatBytes } from "$lib/utils/format";
+  import {
+    createOperationMonitor,
+    isOperationCancelled,
+  } from "$lib/services/background-operations.svelte";
+  import BackgroundOperationStatus from "./BackgroundOperationStatus.svelte";
   let {
     onfeedback,
     onadjustlimit,
@@ -16,11 +21,13 @@
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);
   let busy = $state(false);
+  const operation = createOperationMonitor("backup");
+  const unavailable = $derived(busy || operation.active);
   let preview = $state<BackupPreview | null>(null);
   let selectedPath = $state("");
   let truncated = $state(0);
   async function run(action: "create" | "preview" | "restore") {
-    if (busy || !isTauriRuntime()) return;
+    if (unavailable || !isTauriRuntime()) return;
     busy = true;
     try {
       const { open, save } = await import("@tauri-apps/plugin-dialog");
@@ -56,14 +63,26 @@
         );
       }
     } catch (error) {
-      onfeedback(error instanceof Error ? error.message : String(error), false);
+      onfeedback(
+        isOperationCancelled(error)
+          ? _t("operations.cancelled")
+          : error instanceof Error
+            ? error.message
+            : String(error),
+        isOperationCancelled(error),
+      );
     } finally {
       busy = false;
+      await operation.refresh();
     }
   }
 </script>
 
-<section class="setting-card" data-settings-search-id="storage.resource-backup" aria-busy={busy}>
+<section
+  class="setting-card"
+  data-settings-search-id="storage.resource-backup"
+  aria-busy={unavailable}
+>
   <div class="setting-heading">
     <div>
       <strong>{_t("backup.title")}</strong>
@@ -73,16 +92,19 @@
   <div class="setting-actions-row">
     <button
       class="settings-action-btn"
-      disabled={busy || !isTauriRuntime()}
+      disabled={unavailable || !isTauriRuntime()}
       onclick={() => run("create")}>{_t("backup.create")}</button
     >
     <button
       class="settings-action-btn"
-      disabled={busy || !isTauriRuntime()}
+      disabled={unavailable || !isTauriRuntime()}
       onclick={() => run("preview")}>{_t("backup.preview")}</button
     >
   </div>
-  {#if busy}<p class="settings-state" role="status">{_t("backup.working")}</p>{/if}
+  <BackgroundOperationStatus {operation} />
+  {#if busy && !operation.active}<p class="settings-state" role="status">
+      {_t("backup.working")}
+    </p>{/if}
   {#if preview}
     <p class="settings-state">{selectedPath}</p>
     <p class="settings-state">
@@ -93,7 +115,7 @@
         size: formatBytes(preview.resourceBytes),
       })}
     </p>
-    <button class="settings-action-btn" disabled={busy} onclick={() => run("restore")}
+    <button class="settings-action-btn" disabled={unavailable} onclick={() => run("restore")}
       >{_t("backup.restore")}</button
     >
   {/if}

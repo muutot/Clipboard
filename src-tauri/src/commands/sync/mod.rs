@@ -602,6 +602,7 @@ pub(super) fn run_sync_cancellable(
 ) -> Result<SyncRunResult, String> {
     cancellation.check()?;
     let _run_guard = try_lock_sync_run()?;
+    use crate::background_operations::{BackgroundOperations, OperationKind, OperationPhase};
     let config = app.state::<Mutex<ConfigStore>>();
     let database = app.state::<Database>();
     let paths = app.state::<StoragePaths>();
@@ -613,11 +614,16 @@ pub(super) fn run_sync_cancellable(
             .register(guard.privacy_local_only(), cancellation)?;
         (SyncSettings::from_config(&guard)?, token)
     };
+    // The operation must descend from the registered privacy token so both
+    // local-only changes and the current-task cancel button reach all S3 I/O.
+    let operation = app
+        .state::<BackgroundOperations>()
+        .start(OperationKind::Sync, &cancellation)?;
     let store = settings.object_store()?;
     let engine_paths = v1::SyncEnginePaths::from(paths.inner());
 
-    let outcome = cancellation.run(|| {
-        cancellation.check()?;
+    let outcome = operation.token().run(|| {
+        operation.check()?;
         let stable_scope = settings.remote_scope_id();
         let previous = database
             .sync_namespace_binding(&stable_scope)
@@ -634,19 +640,30 @@ pub(super) fn run_sync_cancellable(
         database
             .remember_sync_namespace(&stable_scope, &binding.to_bytes())
             .map_err(|e| e.to_string())?;
-        v1::sync_database_cancellable(
+        clipboard_sync::v1::engine::sync_database_with_progress(
             &store,
             database.inner(),
             &engine_paths,
             &binding.scope,
             session_key.as_ref(),
             settings.engine_options(),
-            &cancellation,
+            |phase| {
+                use clipboard_sync::v1::engine::SyncPhase;
+                let phase = match phase {
+                    SyncPhase::Preparing => OperationPhase::Preparing,
+                    SyncPhase::Discovering => OperationPhase::Discovering,
+                    SyncPhase::Uploading => OperationPhase::Uploading,
+                    SyncPhase::Downloading => OperationPhase::Downloading,
+                    SyncPhase::Compacting => OperationPhase::Compacting,
+                };
+                // Cancellation is checked by the scoped engine/transport, not swallowed here.
+                let _ = operation.progress(phase, 0, None);
+            },
         )
     });
     crate::item_operations::invalidate_desktop(app);
     let now_ms = current_time_ms();
-    match outcome {
+    let result = match outcome {
         Ok(engine_result) => {
             if let Ok(mut guard) = config.lock() {
                 let status = if engine_result.failed_peers == 0 {
@@ -663,7 +680,7 @@ pub(super) fn run_sync_cancellable(
         Err(error) => {
             if let Ok(mut guard) = config.lock() {
                 if let Err(status_error) = guard.update_sync_status(
-                    if cancellation.is_cancelled() {
+                    if operation.token().is_cancelled() {
                         "cancelled"
                     } else {
                         "failed"
@@ -677,7 +694,8 @@ pub(super) fn run_sync_cancellable(
             }
             Err(error)
         }
-    }
+    };
+    operation.finish(result)
 }
 
 fn required_value(value: Option<&str>, label: &str) -> Result<String, String> {

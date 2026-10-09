@@ -1,6 +1,23 @@
 import type { LocaleDefinition } from "../types";
 
 const zhCN: LocaleDefinition = {
+  operations: {
+    cancel: "取消当前任务",
+    cancelling: "正在取消…",
+    cancelled: "任务已取消",
+    statusFailed: "无法读取任务状态",
+    preparing: "正在准备…",
+    scanning: "正在匹配历史…",
+    applying: "正在应用记录…",
+    creating: "正在创建备份…",
+    validating: "正在验证备份…",
+    restoring: "正在恢复资源…",
+    transferring: "正在传输当前资源…",
+    discovering: "正在发现设备…",
+    uploading: "正在上传变更…",
+    downloading: "正在下载变更…",
+    compacting: "正在整理历史…",
+  },
   backup: {
     title: "自包含资源备份",
     description:

@@ -411,9 +411,16 @@ size limits and v1 formats are unchanged. An already committed remote object can
 cancellation; immutable objects remain retryable and heads/cursors advance only at existing
 publication boundaries. This is cooperative cancellation, not a distributed rollback.
 
+The settings panel polls the process-wide sync operation every 500 ms and can cancel its
+current ID. Each run has its own child token, so cancellation does not disable later
+manual or automatic runs. `sync_database_with_progress` observes preparing, discovery,
+upload, download and compaction phases; no overall percentage is estimated.
+
 Desktop shutdown cancels the root shared by manual and automatic runs before joining workers.
-Auto-stop also cancels its child token. The 30-second fallback still protects against local
-filesystem/SQLite/OS calls that cannot be preempted. Cancellation persists `cancelled` status;
+The operation registry rejects new tasks, cancels tags/backups/sync and waits up to 30 seconds.
+Auto-stop also cancels its child token. Its separate 30-second join fallback still protects against local
+filesystem/SQLite/OS calls that cannot be preempted; these waits do not bound total exit time.
+Cancellation persists `cancelled` status;
 history invalidation also runs on errors so earlier committed peers become visible.
 
 Local tests cover stalled response headers, upload and partial download, retry interruption,

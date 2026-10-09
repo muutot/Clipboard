@@ -1,4 +1,5 @@
 pub mod api;
+pub mod background_operations;
 pub mod capture;
 pub mod cleanup;
 pub mod clipboard;

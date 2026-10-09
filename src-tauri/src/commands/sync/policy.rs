@@ -68,6 +68,35 @@ mod tests {
     }
 
     #[test]
+    fn privacy_and_task_cancellation_mark_operations_without_stopping_worker() {
+        use crate::background_operations::{BackgroundOperations, OperationKind, OperationStatus};
+
+        let policy = SyncCancellation::default();
+        let worker = policy.0.child_token();
+        let operations = BackgroundOperations::default();
+        for via_privacy in [false, true] {
+            let registered = policy.register(false, &worker).unwrap();
+            let operation = operations.start(OperationKind::Sync, &registered).unwrap();
+            assert!(operation.check().is_ok());
+            if via_privacy {
+                policy.cancel_active();
+            } else {
+                let id = operations.snapshot(OperationKind::Sync).unwrap().id;
+                assert!(operations.cancel(OperationKind::Sync, &id));
+            }
+            let result = operation.check();
+            assert!(operation.finish(result).is_err());
+            assert_eq!(
+                operations.snapshot(OperationKind::Sync).unwrap().status,
+                OperationStatus::Cancelled
+            );
+            assert!(!worker.is_cancelled());
+            assert!(!policy.0.is_cancelled());
+        }
+        assert!(policy.register(false, &worker).unwrap().check().is_ok());
+    }
+
+    #[test]
     fn privacy_toggle_interrupts_an_active_s3_response_wait() {
         use crate::sync::v1::{ObjectStore, S3ObjectStore};
         use std::{io::Read, net::TcpListener, sync::mpsc, time::Duration};

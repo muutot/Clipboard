@@ -23,6 +23,12 @@ pub fn stop_runtime_services(app: &tauri::AppHandle) {
     if let Some(cancellation) = app.try_state::<crate::commands::sync::SyncCancellation>() {
         cancellation.0.cancel();
     }
+    if let Some(operations) = app.try_state::<crate::background_operations::BackgroundOperations>()
+    {
+        if !operations.shutdown(std::time::Duration::from_secs(30)) {
+            crate::log_warn!("[shutdown] background operations exceeded the cancellation deadline");
+        }
+    }
     if let Some(worker) = app.try_state::<Mutex<crate::item_operations::ExternalChangeWorker>>() {
         lock_or_recover(&worker, "external item changes").stop();
     }

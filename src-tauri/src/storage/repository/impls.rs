@@ -34,10 +34,18 @@ impl Database {
         &self,
         entries: &[ClipboardItem],
     ) -> Result<TransactionalSaveSummary, StorageError> {
+        self.restore_items_transactional_with_progress(entries, |_, _| Ok(()))
+    }
+    pub fn restore_items_transactional_with_progress(
+        &self,
+        entries: &[ClipboardItem],
+        mut progress: impl FnMut(u64, u64) -> Result<(), StorageError>,
+    ) -> Result<TransactionalSaveSummary, StorageError> {
         self.with_connection(|connection| {
             let tx = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
             let mut summary = TransactionalSaveSummary::default();
-            for item in entries {
+            for (index, item) in entries.iter().enumerate() {
+                progress(index as u64, entries.len() as u64)?;
                 validate_imported_item(
                     item,
                     current_time_ms().saturating_add(MAX_IMPORT_FUTURE_SKEW_MS),
@@ -56,6 +64,7 @@ impl Database {
                 insert_item_row(&tx, item, size)?;
                 summary.imported_count += 1;
             }
+            progress(entries.len() as u64, entries.len() as u64)?;
             tx.commit()?;
             Ok(summary)
         })

@@ -234,21 +234,41 @@ async fn run_auto_tag_history(
     apply: bool,
 ) -> Result<crate::storage::AutoTagHistoryPreview, String> {
     let compiled = compiled_preview_rules(&rules)?;
+    let operation = app
+        .state::<crate::background_operations::BackgroundOperations>()
+        .start(
+            crate::background_operations::OperationKind::Tags,
+            &clipboard_sync::cancellation::CancellationToken::default(),
+        )?;
     tauri::async_runtime::spawn_blocking(move || {
-        let result = app
-            .state::<Database>()
-            .auto_tag_history(&compiled, apply)
-            .map_err(|error| error.to_string())?;
-        if apply && result.changed_count > 0 {
-            app.state::<crate::commands::clipboard::SearchResultCache>()
-                .clear();
-            for event in ["clipboard-history-invalidated", "tags-changed"] {
-                if let Err(error) = app.emit(event, serde_json::json!({ "deletedIds": [] })) {
-                    crate::log_warn!("[autotag] unable to broadcast {event}: {error}");
+        let outcome = (|| {
+            let result = app
+                .state::<Database>()
+                .auto_tag_history_with_progress(&compiled, apply, |progress| {
+                    use crate::{background_operations::OperationPhase, storage::AutoTagPhase};
+                    let phase = match progress.phase {
+                        AutoTagPhase::Scanning => OperationPhase::Scanning,
+                        AutoTagPhase::Applying => OperationPhase::Applying,
+                    };
+                    operation
+                        .progress(phase, progress.completed, Some(progress.total))
+                        .map_err(|error| {
+                            crate::storage::StorageError::Io(std::io::Error::other(error))
+                        })
+                })
+                .map_err(|error| error.to_string())?;
+            if apply && result.changed_count > 0 {
+                app.state::<crate::commands::clipboard::SearchResultCache>()
+                    .clear();
+                for event in ["clipboard-history-invalidated", "tags-changed"] {
+                    if let Err(error) = app.emit(event, serde_json::json!({ "deletedIds": [] })) {
+                        crate::log_warn!("[autotag] unable to broadcast {event}: {error}");
+                    }
                 }
             }
-        }
-        Ok(result)
+            Ok(result)
+        })();
+        operation.finish(outcome)
     })
     .await
     .map_err(|error| error.to_string())?

@@ -109,6 +109,15 @@ pub struct SyncEngineResult {
     pub skipped_resources: u64,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SyncPhase {
+    Preparing,
+    Discovering,
+    Uploading,
+    Downloading,
+    Compacting,
+}
+
 /// Runs one complete S3/object-store synchronization pass. Publication is
 /// upload-first; immutable packs and resources become visible through the
 /// device head only after their writes succeed. Pull cursors advance in the
@@ -134,6 +143,28 @@ pub fn sync_database(
     session_key: Option<&SessionKey>,
     options: SyncEngineOptions,
 ) -> Result<SyncEngineResult, String> {
+    sync_database_with_progress(
+        store,
+        database,
+        paths,
+        remote_scope,
+        session_key,
+        options,
+        |_| {},
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn sync_database_with_progress(
+    store: &impl ObjectStore,
+    database: &impl SyncRepository,
+    paths: &SyncEnginePaths,
+    remote_scope: &str,
+    session_key: Option<&SessionKey>,
+    options: SyncEngineOptions,
+    mut progress: impl FnMut(SyncPhase),
+) -> Result<SyncEngineResult, String> {
+    progress(SyncPhase::Preparing);
     cancellation::check()?;
     if options.segment_max_entries == 0 {
         return Err("sync segment entry limit must be greater than zero".to_string());
@@ -151,6 +182,7 @@ pub fn sync_database(
         state = database.get_or_create_sync_remote_state(remote_scope)?;
     }
 
+    progress(SyncPhase::Discovering);
     let mut heads = store.list(HEADS_PREFIX, None)?;
     heads.sort_by(|left, right| left.key.cmp(&right.key));
 
@@ -169,6 +201,7 @@ pub fn sync_database(
 
     validate_remote_access_before_first_publish(store, &state, &heads, session_key, &mut result)?;
 
+    progress(SyncPhase::Uploading);
     if !state.initialized {
         state = publish_bootstrap(
             store,
@@ -211,6 +244,7 @@ pub fn sync_database(
         )?;
     }
 
+    progress(SyncPhase::Downloading);
     pull_checkpoint_if_needed(
         store,
         database,
@@ -233,6 +267,7 @@ pub fn sync_database(
         options.resource_limits,
         &mut result,
     )?;
+    progress(SyncPhase::Compacting);
     if result.failed_peers == 0 {
         state = database.get_or_create_sync_remote_state(remote_scope)?;
         maybe_compact(

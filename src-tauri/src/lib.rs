@@ -79,6 +79,7 @@ use storage::{
     StoragePaths,
 };
 use tauri::{Emitter, Manager};
+mod background_operations;
 
 pub(crate) const STORAGE_KIND_DELETE_SCOPE: KindDeleteScope = KindDeleteScope {
     include_favorites: false,
@@ -700,6 +701,7 @@ pub fn run() {
             // `auto_sync_interval_secs` from the managed config each tick, so
             // toggling the setting in the UI takes effect without a restart.
             app.manage(commands::sync::SyncCancellation::default());
+            app.manage(background_operations::BackgroundOperations::default());
             let auto_sync_worker = match commands::sync::AutoSyncWorker::start(app.handle().clone())
             {
                 Ok(worker) => {
@@ -911,6 +913,8 @@ pub fn run() {
             get_sync_config,
             set_sync_config,
             test_sync_connection,
+            commands::background_operations::get_background_operation,
+            commands::background_operations::cancel_background_operation,
             sync_now,
             materialize_clipboard_item,
             copy_clipboard_item_files,

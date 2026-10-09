@@ -1,6 +1,23 @@
 import type { LocaleDefinition } from "../types";
 
 const en: LocaleDefinition = {
+  operations: {
+    cancel: "Cancel current task",
+    cancelling: "Cancelling…",
+    cancelled: "Task cancelled",
+    statusFailed: "Unable to read task status",
+    preparing: "Preparing…",
+    scanning: "Matching history…",
+    applying: "Applying records…",
+    creating: "Creating backup…",
+    validating: "Validating backup…",
+    restoring: "Restoring resources…",
+    transferring: "Transferring current resource…",
+    discovering: "Discovering devices…",
+    uploading: "Uploading changes…",
+    downloading: "Downloading changes…",
+    compacting: "Compacting history…",
+  },
   backup: {
     title: "Portable resource backup",
     description:

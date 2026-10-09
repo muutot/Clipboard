@@ -12,6 +12,11 @@
     type AutoTagHistoryPreview,
   } from "$lib/services/clipboard";
   import type { ClipboardKind } from "$lib/types/clipboard";
+  import {
+    createOperationMonitor,
+    isOperationCancelled,
+  } from "$lib/services/background-operations.svelte";
+  import BackgroundOperationStatus from "./BackgroundOperationStatus.svelte";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);
@@ -26,6 +31,8 @@
   let rules = $state<AutoTagRule[]>([]);
   let loading = $state(true);
   let rulesSaving = $state(false);
+  const operation = createOperationMonitor("tags");
+  const busy = $derived(rulesSaving || operation.active);
   let feedback = createFeedback(3000);
   let sampleText = $state("");
   let sampleSource = $state("");
@@ -56,7 +63,7 @@
     }));
 
   async function runPreview(mode: "sample" | "history" | "apply") {
-    if (rulesSaving) return;
+    if (busy) return;
     rulesSaving = true;
     try {
       const snapshot = snapshotRules();
@@ -69,9 +76,17 @@
         feedback.show(_t("autoTags.applied", { count: result.changedCount }));
       }
     } catch (error) {
-      feedback.show(error instanceof Error ? error.message : String(error), false);
+      feedback.show(
+        isOperationCancelled(error)
+          ? _t("operations.cancelled")
+          : error instanceof Error
+            ? error.message
+            : String(error),
+        isOperationCancelled(error),
+      );
     } finally {
       rulesSaving = false;
+      await operation.refresh();
     }
   }
 
@@ -100,7 +115,7 @@
   }
 
   async function saveRules() {
-    if (rulesSaving) return;
+    if (busy) return;
     rulesSaving = true;
     try {
       const saved = await setAutoTagRules(snapshotRules());
@@ -139,7 +154,7 @@
       <p class="settings-state">{_t("storage.readingConfig")}</p>
     {:else}
       {#each rules as rule, index (index)}
-        <fieldset disabled={rulesSaving}>
+        <fieldset disabled={busy}>
           <div class="autotag-row">
             <input
               class="autotag-pattern"
@@ -177,20 +192,20 @@
               value={rule.kind ?? ""}
               options={[{ value: "", label: _t("autoTags.allTypes") }, ...kindOptions]}
               ariaLabel={_t("autoTags.kind")}
-              disabled={rulesSaving}
+              disabled={busy}
               onchange={(value) => (rule.kind = (value || null) as ClipboardKind | null)}
             />
           </div>
         </fieldset>
       {/each}
       <div class="autotag-actions">
-        <button type="button" class="autotag-add" disabled={rulesSaving} onclick={addRule}>
+        <button type="button" class="autotag-add" disabled={busy} onclick={addRule}>
           {_t("tags.autoTagAdd")}
         </button>
         <button
           type="button"
           class="autotag-save"
-          disabled={rulesSaving || !isTauriRuntime()}
+          disabled={busy || !isTauriRuntime()}
           onclick={() => void saveRules()}
         >
           {_t("tags.autoTagSave")}
@@ -208,7 +223,7 @@
         </div>
       </div>
       <textarea
-        disabled={rulesSaving}
+        disabled={busy}
         class="settings-text-input sample-text"
         maxlength={10000}
         bind:value={sampleText}
@@ -218,14 +233,14 @@
         <input
           class="settings-text-input autotag-source"
           bind:value={sampleSource}
-          disabled={rulesSaving}
+          disabled={busy}
           maxlength={256}
           aria-label={_t("autoTags.sampleSource")}
           placeholder={_t("autoTags.sampleSource")}
         />
         <CustomSelect
           value={sampleKind}
-          disabled={rulesSaving}
+          disabled={busy}
           options={kindOptions}
           ariaLabel={_t("autoTags.kind")}
           onchange={(value) => (sampleKind = value as ClipboardKind)}
@@ -234,7 +249,7 @@
       <div class="autotag-actions">
         <button
           class="settings-action-btn"
-          disabled={rulesSaving || !isTauriRuntime()}
+          disabled={busy || !isTauriRuntime()}
           onclick={() => runPreview("sample")}>{_t("autoTags.test")}</button
         >
       </div>
@@ -252,15 +267,16 @@
       <div class="autotag-actions">
         <button
           class="settings-action-btn"
-          disabled={rulesSaving || !isTauriRuntime()}
+          disabled={busy || !isTauriRuntime()}
           onclick={() => runPreview("history")}>{_t("autoTags.previewHistory")}</button
         >
         <button
           class="settings-action-btn"
-          disabled={rulesSaving || !preview?.changedCount || !isTauriRuntime()}
+          disabled={busy || !preview?.changedCount || !isTauriRuntime()}
           onclick={() => runPreview("apply")}>{_t("autoTags.applyHistory")}</button
         >
       </div>
+      <BackgroundOperationStatus {operation} />
       {#if preview}
         <p class="preview-result">
           {_t("autoTags.counts", { matched: preview.matchedCount, changed: preview.changedCount })}
