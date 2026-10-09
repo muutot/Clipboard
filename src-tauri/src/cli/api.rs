@@ -272,6 +272,12 @@ fn handle_connection(
     copy_context: &CopyContext,
     on_change: &(dyn Fn() + Send + Sync),
 ) -> Result<(), String> {
+    // Accepted sockets may inherit the listener's nonblocking flag on Windows.
+    // Connection workers use bounded blocking reads; otherwise a delayed first
+    // packet fails with WouldBlock instead of observing READ_TIMEOUT.
+    stream
+        .set_nonblocking(false)
+        .map_err(|error| error.to_string())?;
     stream
         .set_read_timeout(Some(READ_TIMEOUT))
         .map_err(|error| error.to_string())?;
@@ -948,6 +954,61 @@ mod tests {
             assert_eq!(count.load(Ordering::SeqCst), expected);
         }
         server.stop().unwrap();
+    }
+
+    #[test]
+    fn accepted_nonblocking_connection_waits_for_delayed_request_bytes() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let mut client = TcpStream::connect(("127.0.0.1", port)).unwrap();
+        client
+            .set_read_timeout(Some(Duration::from_secs(3)))
+            .unwrap();
+        let (stream, _) = listener.accept().unwrap();
+        // Windows accepted sockets can inherit nonblocking mode from the listener.
+        // Force it explicitly so every platform exercises the same precondition.
+        stream.set_nonblocking(true).unwrap();
+        thread::scope(|scope| {
+            let (finished, result) = mpsc::channel();
+            let (ready, started) = mpsc::channel();
+            let worker = scope.spawn(move || {
+                let database = Database::open_in_memory().unwrap();
+                ready.send(()).unwrap();
+                finished
+                    .send(handle_connection(
+                        stream,
+                        &database,
+                        500,
+                        500,
+                        "test",
+                        port,
+                        &CopyContext::default(),
+                        &|| {},
+                    ))
+                    .unwrap();
+            });
+            started.recv_timeout(Duration::from_secs(3)).unwrap();
+            assert!(
+                matches!(
+                    result.recv_timeout(Duration::from_millis(100)),
+                    Err(mpsc::RecvTimeoutError::Timeout)
+                ),
+                "the server must wait for bytes instead of immediately returning WouldBlock"
+            );
+            write!(
+                client,
+                "GET /health HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n"
+            )
+            .unwrap();
+            let mut response = String::new();
+            client.read_to_string(&mut response).unwrap();
+            assert!(response.starts_with("HTTP/1.1 200"));
+            result
+                .recv_timeout(Duration::from_secs(3))
+                .unwrap()
+                .unwrap();
+            worker.join().unwrap();
+        });
     }
 
     #[test]

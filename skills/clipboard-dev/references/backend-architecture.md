@@ -239,6 +239,11 @@ Window opacity/effects are posted to the UI thread. `apply_webview_transparency`
 
 ## CLI and loopback API
 
+Accepted API sockets explicitly switch to blocking mode before applying read/write timeouts.
+Windows may inherit the listener's nonblocking flag; a timeout alone does not clear it, so
+delayed request bytes would otherwise cause an immediate `WouldBlock` disconnect. The
+delayed-request regression forces this socket mode on every platform.
+
 `main.rs` separates GUI and process CLI execution. `cli/mod.rs` implements list/search/copy/paste/delete/export/stats over the same configured database path as the GUI. `cli/api.rs` starts only on explicit command, binds to `127.0.0.1`, enforces configured limits, and retains a stoppable listener/thread lifecycle. `item_operations.rs` owns `CopyContext`, complete-record copy/usage ordering and single-item
 membership operations for native default GUI copy, CLI and API. Text/link copy writes plain
 text; media resolves existing originals/managed resources through the same resolver. Missing
