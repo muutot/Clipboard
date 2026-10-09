@@ -260,6 +260,8 @@ const zhCN: LocaleDefinition = {
     ocrTitle: "文字识别",
     ocrDescription: "OCR 引擎选择与状态",
     configPath: "配置文件固定在项目目录；图片、文件和数据库可切换到其他数据目录。",
+    configLoadFailed: "无法读取配置，请重试后修改这些设置。",
+    retryLoad: "重试",
     readingConfig: "正在读取本地配置…",
     loadingSettingsPanel: "正在加载设置面板…",
     settingsPanelLoadFailed: "无法加载此设置面板，请重新打开设置后重试。",

@@ -271,6 +271,8 @@ const en: LocaleDefinition = {
     ocrDescription: "Choose the OCR engine and inspect its status",
     configPath:
       "Config files are fixed in the project directory. Images, files, and databases can use a custom data directory.",
+    configLoadFailed: "Could not load configuration. Retry to edit these settings.",
+    retryLoad: "Retry",
     readingConfig: "Reading local configuration...",
     loadingSettingsPanel: "Loading settings panel...",
     settingsPanelLoadFailed: "Unable to load this settings panel. Reopen settings and try again.",

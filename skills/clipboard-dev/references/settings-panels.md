@@ -111,6 +111,8 @@ Every settings panel is a lazy import that `StorageSettingsDialog` destroys and 
 - **Shared store (preferred for app-global config):** load once into a module-level writable store in the owning service (`generalSettings`, `windowConfig`) and subscribe in the panel. The value is ready before first paint and cached across remounts. Keep `ensureLoaded()` idempotent and `update()` optimistic with rollback on failure.
 - **Load gate:** while the async value is pending, render the shared `.settings-state` line (e.g. `storage.readingConfig`) instead of the control, then render the control with the real value once it resolves. This is what `KeyboardSettingsPanel`, `TagManagementSettingsPanel`, `IconCacheSettingsPanel`, `IgnoredAppsSettingsPanel`, `OcrSettingsPanel`, `StorageLimitsPanel`, `SyncPanel`, `SensitiveContentSettingsPanel`, and `TagRulesSettingsPanel` do for backend-loaded config.
 
+A rejected or empty configuration response must keep the load gate closed. `OcrSettingsPanel` and the file-copy limit in `IgnoredAppsSettingsPanel` show the shared failure state with an explicit retry; readiness is set only after successful hydration. Late results after unmount are ignored. OCR task polling never reloads editable detection thresholds.
+
 Do not fetch per mount and correct later. When only part of a panel is async, gate just the affected control (or the smallest wrapping block) so the rest stays visible.
 
 ## Canonical card patterns

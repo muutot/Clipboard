@@ -250,6 +250,8 @@ export interface LocaleDefinition {
     ocrTitle: string;
     ocrDescription: string;
     configPath: string;
+    configLoadFailed: string;
+    retryLoad: string;
     readingConfig: string;
     loadingSettingsPanel: string;
     settingsPanelLoadFailed: string;

@@ -47,6 +47,9 @@
   // The stored copy-size arrives from the backend; hold the input until then so
   // it does not show the 50 MB placeholder and then jump to the real value.
   let fileCopySizeLoaded = $state(false);
+  let fileCopySizeLoading = $state(false);
+  let fileCopySizeLoadFailed = $state(false);
+  let disposed = false;
   let maxTextCaptureSize = $state(500 * 1024);
   let maxTextCaptureSizeUnit = $state<"byte" | "KB" | "MB" | "GB">("KB");
   let maxTextCaptureDisplay = $state(500);
@@ -77,19 +80,28 @@
     );
     void loadSettings();
     void loadStorageConfig();
+    return () => {
+      disposed = true;
+    };
   });
 
   async function loadStorageConfig() {
+    if (disposed || fileCopySizeLoading) return;
+    fileCopySizeLoading = true;
+    fileCopySizeLoadFailed = false;
     try {
       const result = await getStorageConfig();
-      if (result) {
-        maxFileCopySize = result.maxFileCopySizeBytes;
-        maxFileCopyDisplay = toDisplaySize(result.maxFileCopySizeBytes, maxFileCopySizeUnit);
-      }
+      if (disposed) return;
+      if (!result) throw new Error("Missing storage configuration");
+      maxFileCopySize = result.maxFileCopySizeBytes;
+      maxFileCopyDisplay = toDisplaySize(result.maxFileCopySizeBytes, maxFileCopySizeUnit);
+      fileCopySizeLoaded = true;
     } catch (error) {
+      if (disposed) return;
+      fileCopySizeLoadFailed = true;
       console.error("Unable to load storage config", error);
     } finally {
-      fileCopySizeLoaded = true;
+      if (!disposed) fileCopySizeLoading = false;
     }
   }
 
@@ -214,7 +226,19 @@
 
 <div class="settings-scroll">
   {#if !fileCopySizeLoaded}
-    <div class="settings-state">{_t("storage.readingConfig")}</div>
+    <div class="settings-state" role="status">
+      {#if fileCopySizeLoadFailed}
+        <p>{_t("storage.configLoadFailed")}</p>
+        <button
+          type="button"
+          class="settings-action-btn"
+          disabled={fileCopySizeLoading}
+          onclick={loadStorageConfig}>{_t("storage.retryLoad")}</button
+        >
+      {:else}
+        {_t("storage.readingConfig")}
+      {/if}
+    </div>
   {:else}
     <section
       class="setting-card setting-card-row"

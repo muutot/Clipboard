@@ -23,8 +23,9 @@
   let ocrStatusLoading = $state(false);
   // The engine/model/detection controls must not render the placeholder
   // defaults and then jump to the stored values once `loadOcrStatus`
-  // resolves; gate them until the first load finishes.
+  // resolves; gate them until configuration and engine status load successfully.
   let ocrReady = $state(false);
+  let ocrLoadFailed = $state(false);
   let ocrTotal = $state(0);
   let ocrPending = $state(0);
   let ocrCompleted = $state(0);
@@ -95,10 +96,11 @@
   }
 
   async function loadOcrTaskStatus() {
-    if (ocrStatusLoading) return;
+    if (destroyed || ocrStatusLoading || !ocrReady) return;
     ocrStatusLoading = true;
     try {
-      applyOcrTaskStatus(await invoke<OcrStatusResult>("get_ocr_status"));
+      const result = await invoke<OcrStatusResult>("get_ocr_status");
+      if (!destroyed) applyOcrTaskStatus(result);
     } catch {
       /* ignore */
     } finally {
@@ -107,13 +109,18 @@
   }
 
   async function loadOcrStatus() {
-    if (ocrStatusLoading) return;
+    if (destroyed || ocrStatusLoading) return;
     ocrStatusLoading = true;
+    ocrLoadFailed = false;
     try {
       const [statusResult, configResult] = await Promise.allSettled([
         invoke<OcrStatusResult>("get_ocr_status"),
         invoke<OcrConfigResult>("get_ocr_config"),
       ]);
+      if (destroyed) return;
+      if (statusResult.status === "rejected") throw statusResult.reason;
+      if (configResult.status === "rejected") throw configResult.reason;
+      if (!statusResult.value || !configResult.value) throw new Error("Missing OCR configuration");
       if (statusResult.status === "fulfilled") {
         const result = statusResult.value;
         applyOcrTaskStatus(result);
@@ -146,9 +153,14 @@
           }
         }
       }
-    } finally {
-      ocrStatusLoading = false;
       ocrReady = true;
+    } catch (error) {
+      if (destroyed) return;
+      ocrReady = false;
+      ocrLoadFailed = true;
+      onfeedback(error instanceof Error ? error.message : String(error), false);
+    } finally {
+      if (!destroyed) ocrStatusLoading = false;
     }
   }
 
@@ -263,7 +275,19 @@
 
 <div class="settings-scroll">
   {#if !ocrReady}
-    <div class="settings-state">{_t("storage.readingConfig")}</div>
+    <div class="settings-state" role="status">
+      {#if ocrLoadFailed}
+        <p>{_t("storage.configLoadFailed")}</p>
+        <button
+          type="button"
+          class="settings-action-btn"
+          disabled={ocrStatusLoading}
+          onclick={loadOcrStatus}>{_t("storage.retryLoad")}</button
+        >
+      {:else}
+        {_t("storage.readingConfig")}
+      {/if}
+    </div>
   {:else}
     <SelectEntry
       searchId="ocr.engine"
