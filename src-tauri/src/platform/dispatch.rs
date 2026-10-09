@@ -17,6 +17,13 @@ use super::windows_clipboard::WindowsPlatform;
 //  PlatformClipboard trait — the per-platform clipboard contract
 // ---------------------------------------------------------------------------
 
+/// Image representation is explicit: encoded bytes can have any pixel-sized length.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ClipboardImageData {
+    Png(Vec<u8>),
+    Rgba(Vec<u8>),
+}
+
 /// The clipboard/app contract every platform must satisfy. Each platform
 /// implements it in its own adapter module and `platform()` returns the
 /// adapter active for the running target.
@@ -26,7 +33,7 @@ use super::windows_clipboard::WindowsPlatform;
 pub trait PlatformClipboard {
     fn get_foreground_app(&self) -> ForegroundApp;
     fn read_clipboard_text(&self) -> Option<String>;
-    fn read_clipboard_image(&self) -> Option<(Vec<u8>, u32, u32)>;
+    fn read_clipboard_image(&self) -> Option<(ClipboardImageData, u32, u32)>;
     fn read_clipboard_file_paths(&self) -> Vec<String>;
     fn write_clipboard_text_with_self_trigger(&self, text: &str) -> Result<(), String>;
     /// Writes file references (CF_HDROP on Windows) so paste into a file

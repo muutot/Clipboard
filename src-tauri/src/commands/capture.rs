@@ -42,17 +42,23 @@ pub fn foreground_app_name(app: &platform::ForegroundApp) -> Option<String> {
 
 /// Normalizes a platform clipboard image payload into encoded PNG bytes.
 ///
-/// The Windows adapter re-encodes DIB data to PNG, but the Linux and macOS
-/// adapters hand back raw RGBA pixel buffers (exactly width × height × 4
-/// bytes). Persisting raw pixels verbatim as `{hash}.png` produces files no
-/// image decoder can open, which silently breaks previews, thumbnails, OCR,
-/// and re-copy on every non-Windows platform. Raw-shaped buffers are
-/// re-encoded here; any other payload is returned unchanged so malformed
-/// captures keep their deterministic byte-hash identity.
-pub fn normalize_platform_image_to_png(data: Vec<u8>, width: u32, height: u32) -> Vec<u8> {
-    let expected = width as usize * height as usize * 4;
-    if expected == 0 || data.len() != expected {
-        return data;
+/// Windows supplies encoded PNG; Linux/macOS supply raw RGBA. The adapter
+/// labels the representation so equal byte lengths cannot corrupt encoded images.
+/// Invalid raw dimensions/buffers are rejected rather than stored as a PNG.
+pub fn normalize_platform_image_to_png(
+    data: platform::ClipboardImageData,
+    width: u32,
+    height: u32,
+) -> Vec<u8> {
+    let data = match data {
+        platform::ClipboardImageData::Png(data) => return data,
+        platform::ClipboardImageData::Rgba(data) => data,
+    };
+    let expected = (width as usize)
+        .checked_mul(height as usize)
+        .and_then(|n| n.checked_mul(4));
+    if expected == Some(0) || expected != Some(data.len()) {
+        return Vec::new();
     }
     let Some(frame) = image::RgbaImage::from_raw(width, height, data) else {
         // Unreachable: the byte count was validated above.
@@ -1049,13 +1055,49 @@ mod tests {
     }
 
     #[test]
+    fn normalize_platform_image_preserves_png_with_raw_pixel_byte_length() {
+        let image = image::RgbaImage::from_pixel(10, 10, image::Rgba([10, 20, 30, 255]));
+        let mut png = Vec::new();
+        image
+            .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+            .unwrap();
+        // A valid ancillary tEXt chunk makes the encoded file exactly 400 bytes.
+        let mut text = b"Comment\0".to_vec();
+        text.resize(400 - png.len() - 12, b'x');
+        let mut chunk = (text.len() as u32).to_be_bytes().to_vec();
+        chunk.extend_from_slice(b"tEXt");
+        chunk.extend(text);
+        let mut crc = !0u32;
+        for byte in &chunk[4..] {
+            crc ^= u32::from(*byte);
+            for _ in 0..8 {
+                crc = (crc >> 1) ^ (0xedb88320 & 0u32.wrapping_sub(crc & 1));
+            }
+        }
+        chunk.extend_from_slice(&(!crc).to_be_bytes());
+        png.splice(png.len() - 12..png.len() - 12, chunk);
+        assert_eq!(png.len(), 400);
+        assert_eq!(image::load_from_memory(&png).unwrap().to_rgba8(), image);
+        let normalized =
+            normalize_platform_image_to_png(crate::platform::ClipboardImageData::Png(png), 10, 10);
+        assert_eq!(
+            image::load_from_memory(&normalized).unwrap().to_rgba8(),
+            image
+        );
+    }
+
+    #[test]
     fn normalize_platform_image_reencodes_raw_rgba_buffers() {
         // 2x2 opaque red pixels — the exact shape the Linux/macOS adapters
         // return (`rgba.into_raw()`).
         let raw = vec![
             255u8, 0, 0, 255, 255, 0, 0, 255, 255, 0, 0, 255, 255, 0, 0, 255,
         ];
-        let png = normalize_platform_image_to_png(raw.clone(), 2, 2);
+        let png = normalize_platform_image_to_png(
+            crate::platform::ClipboardImageData::Rgba(raw.clone()),
+            2,
+            2,
+        );
         assert_ne!(png, raw, "raw pixels must be re-encoded");
         let decoded = image::load_from_memory(&png).expect("normalized payload must decode");
         assert_eq!((decoded.width(), decoded.height()), (2, 2));
@@ -1063,7 +1105,7 @@ mod tests {
     }
 
     #[test]
-    fn normalize_platform_image_keeps_encoded_and_malformed_payloads() {
+    fn normalize_platform_image_keeps_encoded_and_rejects_malformed_raw_payloads() {
         // An already-encoded PNG (the Windows adapter shape) passes through
         // untouched even when dimensions are provided.
         let image = image::RgbaImage::from_pixel(3, 2, image::Rgba([10, 20, 30, 255]));
@@ -1074,14 +1116,27 @@ mod tests {
                 image::ImageFormat::Png,
             )
             .expect("encode fixture");
-        let passthrough =
-            normalize_platform_image_to_png(encoded.clone(), image.width(), image.height());
+        let passthrough = normalize_platform_image_to_png(
+            crate::platform::ClipboardImageData::Png(encoded.clone()),
+            image.width(),
+            image.height(),
+        );
         assert_eq!(passthrough, encoded);
 
-        // Empty payloads and length/dimension mismatches are not reinterpreted.
-        assert!(normalize_platform_image_to_png(Vec::new(), 2, 2).is_empty());
+        // Empty raw payloads and length/dimension mismatches are rejected.
+        assert!(normalize_platform_image_to_png(
+            crate::platform::ClipboardImageData::Rgba(Vec::new()),
+            2,
+            2
+        )
+        .is_empty());
         let short = vec![0u8; 4];
-        assert_eq!(normalize_platform_image_to_png(short.clone(), 2, 2), short);
+        assert!(normalize_platform_image_to_png(
+            crate::platform::ClipboardImageData::Rgba(short),
+            2,
+            2
+        )
+        .is_empty());
     }
 
     #[test]

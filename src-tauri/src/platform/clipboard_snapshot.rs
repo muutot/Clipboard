@@ -1,13 +1,13 @@
 //! Bounded multi-format reads. Native revisions protect Windows/macOS; on
 //! displays without one, two equal reads provide a best-effort stable sample.
-use super::PlatformClipboard;
+use super::{ClipboardImageData, PlatformClipboard};
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct ClipboardSnapshot {
     pub text: Option<String>,
     pub html: Option<String>,
     pub rtf: Option<String>,
-    pub image: Option<(Vec<u8>, u32, u32)>,
+    pub image: Option<(ClipboardImageData, u32, u32)>,
     pub files: Vec<String>,
 }
 
@@ -86,7 +86,7 @@ mod tests {
         fn read_clipboard_html(&self) -> Option<String> {
             Some(self.reads.get().min(self.settle_after).to_string())
         }
-        fn read_clipboard_image(&self) -> Option<(Vec<u8>, u32, u32)> {
+        fn read_clipboard_image(&self) -> Option<(ClipboardImageData, u32, u32)> {
             None
         }
         fn read_clipboard_file_paths(&self) -> Vec<String> {

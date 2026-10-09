@@ -73,7 +73,7 @@ use std::path::Path;
 // ---------------------------------------------------------------------------
 
 pub use autostart::{decide_autostart_action, sync_autostart, AutostartAction};
-pub use dispatch::{platform, PlatformClipboard};
+pub use dispatch::{platform, ClipboardImageData, PlatformClipboard};
 pub use monitor::ClipboardMonitor;
 pub use platform_info::{
     current_capabilities, get_platform_info, runtime_info, ClipboardPlatform, ForegroundApp,
@@ -162,7 +162,7 @@ pub struct ClipboardPollState {
     first_tick: bool,
     text: Option<String>,
     files: Vec<String>,
-    image: Option<(Vec<u8>, u32, u32)>,
+    image: Option<(ClipboardImageData, u32, u32)>,
 }
 
 impl ClipboardPollState {
@@ -180,7 +180,7 @@ impl ClipboardPollState {
         &mut self,
         text: Option<String>,
         files: Vec<String>,
-        image: Option<(Vec<u8>, u32, u32)>,
+        image: Option<(ClipboardImageData, u32, u32)>,
     ) -> bool {
         let changed = if text.is_some() {
             self.text != text
@@ -486,8 +486,8 @@ mod tests {
     #[test]
     fn poll_state_detects_non_text_copies_without_a_text_transition() {
         let mut state = ClipboardPollState::new();
-        let image_a = Some((vec![1, 2, 3], 2, 2));
-        let image_b = Some((vec![4, 5, 6], 2, 2));
+        let image_a = Some((ClipboardImageData::Rgba(vec![1, 2, 3]), 2, 2));
+        let image_b = Some((ClipboardImageData::Rgba(vec![4, 5, 6]), 2, 2));
 
         // Startup image is ignored; a different image while the clipboard
         // stays text-free is still reported.
@@ -507,7 +507,11 @@ mod tests {
         let mut state = ClipboardPollState::new();
         assert!(state.observe(Some("text".to_owned()), vec![], None));
         // Text -> image must report even though the image itself was unseen.
-        assert!(state.observe(None, vec![], Some((vec![9], 1, 1))));
+        assert!(state.observe(
+            None,
+            vec![],
+            Some((ClipboardImageData::Rgba(vec![9]), 1, 1))
+        ));
         // Image -> text must report.
         assert!(state.observe(Some("again".to_owned()), vec![], None));
     }

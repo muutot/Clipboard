@@ -40,8 +40,9 @@ impl crate::platform::PlatformClipboard for LinuxX11Platform {
         read_clipboard_text()
     }
 
-    fn read_clipboard_image(&self) -> Option<(Vec<u8>, u32, u32)> {
+    fn read_clipboard_image(&self) -> Option<(crate::platform::ClipboardImageData, u32, u32)> {
         read_clipboard_image()
+            .map(|(data, w, h)| (crate::platform::ClipboardImageData::Rgba(data), w, h))
     }
 
     fn read_clipboard_file_paths(&self) -> Vec<String> {
