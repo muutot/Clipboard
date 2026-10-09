@@ -511,10 +511,23 @@ impl ConfigStore {
         // (unreachable OS store), the previous plaintext behavior is kept and
         // logged so the fallback is visible instead of silent; legacy
         // plaintext values are upgraded on their next save.
-        use crate::platform::secret_store::{is_protected, protect_secret, SecretAccount};
+        use crate::platform::secret_store::{
+            discard_secret, is_protected, protect_secret, unprotect_secret, SecretAccount,
+        };
+        let previous = self.config.sync.clone();
+        let mut prepared = Vec::new();
         if let Some(secret) = &sync.s3_secret_key {
             if !secret.is_empty() && !is_protected(secret) {
-                match protect_secret(SecretAccount::S3SecretKey, secret) {
+                let retained = previous
+                    .s3_secret_key
+                    .as_ref()
+                    .filter(|stored| unprotect_secret(stored).as_deref() == Some(secret))
+                    .cloned();
+                match retained.or_else(|| {
+                    let protected = protect_secret(SecretAccount::S3SecretKey, secret);
+                    if let Some(stored) = &protected { prepared.push(stored.clone()); }
+                    protected
+                }) {
                     Some(protected) => sync.s3_secret_key = Some(protected),
                     None => crate::log_warn!(
                         "[config] credential store unavailable; keeping sync.s3SecretKey in plaintext"
@@ -524,7 +537,16 @@ impl ConfigStore {
         }
         if let Some(password) = &sync.sync_password {
             if !password.is_empty() && !is_protected(password) {
-                match protect_secret(SecretAccount::SyncPassword, password) {
+                let retained = previous
+                    .sync_password
+                    .as_ref()
+                    .filter(|stored| unprotect_secret(stored).as_deref() == Some(password))
+                    .cloned();
+                match retained.or_else(|| {
+                    let protected = protect_secret(SecretAccount::SyncPassword, password);
+                    if let Some(stored) = &protected { prepared.push(stored.clone()); }
+                    protected
+                }) {
                     Some(protected) => sync.sync_password = Some(protected),
                     None => crate::log_warn!(
                         "[config] credential store unavailable; keeping sync.syncPassword in plaintext"
@@ -532,9 +554,11 @@ impl ConfigStore {
                 }
             }
         }
-        let previous = self.config.sync.clone();
         self.config.sync = sync;
         if let Err(error) = self.save() {
+            for stored in &prepared {
+                discard_secret(stored);
+            }
             self.config.sync = previous;
             return Err(error);
         }

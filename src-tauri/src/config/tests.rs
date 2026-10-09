@@ -818,6 +818,45 @@ fn failed_save_rolls_back_the_in_memory_value() {
     fs::remove_dir_all(project).unwrap();
 }
 
+#[test]
+fn sync_secret_updates_preserve_profiles_and_failed_save_values() {
+    let project = temporary_test_directory("secret-generations");
+    let other_project = temporary_test_directory("other-secret-generations");
+    let mut store = ConfigStore::load(&project).unwrap();
+    let mut other = ConfigStore::load(&other_project).unwrap();
+    let mut sync = store.sync_config();
+    sync.s3_secret_key = Some("first fixture key".into());
+    sync.sync_password = Some("first fixture password".into());
+    store.set_sync_config(sync.clone()).unwrap();
+    let first_bytes = fs::read(store.path()).unwrap();
+    // Re-saving ordinary sync settings must reuse unchanged protected entries.
+    store.set_sync_config(sync.clone()).unwrap();
+    let saved: Value = serde_json::from_slice(&fs::read(store.path()).unwrap()).unwrap();
+    let first: Value = serde_json::from_slice(&first_bytes).unwrap();
+    assert_eq!(saved["sync"]["s3SecretKey"], first["sync"]["s3SecretKey"]);
+    assert_eq!(saved["sync"]["syncPassword"], first["sync"]["syncPassword"]);
+    let mut changed = sync.clone();
+    changed.s3_secret_key = Some("second fixture key".into());
+    changed.sync_password = Some("second fixture password".into());
+    other.set_sync_config(changed.clone()).unwrap();
+    assert_eq!(store.sync_config().sync_password, sync.sync_password);
+    fs::rename(project.join("conf"), project.join("saved-conf")).unwrap();
+    assert!(store.set_sync_config(changed).is_err());
+    assert_eq!(store.sync_config().s3_secret_key, sync.s3_secret_key);
+    assert_eq!(store.sync_config().sync_password, sync.sync_password);
+    fs::rename(project.join("saved-conf"), project.join("conf")).unwrap();
+    assert_eq!(fs::read(store.path()).unwrap(), first_bytes);
+    assert_eq!(
+        ConfigStore::load(&project)
+            .unwrap()
+            .sync_config()
+            .sync_password,
+        sync.sync_password
+    );
+    fs::remove_dir_all(project).unwrap();
+    fs::remove_dir_all(other_project).unwrap();
+}
+
 fn temporary_test_directory(label: &str) -> PathBuf {
     let unique = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)

@@ -7,8 +7,8 @@
 //! | Platform | Backend | At-rest form in `conf.json` |
 //! | -------- | ------- | --------------------------- |
 //! | Windows | DPAPI user scope (`dpapi`) | `dpapi1:<hex>` envelope |
-//! | macOS | login Keychain (`apple-native-keyring-store`) | `oskey1:<account>` marker |
-//! | Linux | Secret Service (`dbus-secret-service-keyring-store`) | `oskey1:<account>` marker |
+//! | macOS | login Keychain (`apple-native-keyring-store`) | `oskey1:<account>:<uuid>` marker |
+//! | Linux | Secret Service (`dbus-secret-service-keyring-store`) | `oskey1:<account>:<uuid>` marker |
 //!
 //! Markers never contain secret material; the value lives in the OS store
 //! under service `clipboard-desktop`. When the OS store is unreachable
@@ -36,7 +36,17 @@ impl SecretAccount {
     }
 
     fn from_marker(value: &str) -> Option<Self> {
-        match value.strip_prefix(OS_MARKER_PREFIX)? {
+        let account = value.strip_prefix(OS_MARKER_PREFIX)?;
+        let name = if let Some((name, generation)) = account.split_once(':') {
+            let id = uuid::Uuid::parse_str(generation).ok()?;
+            if id.to_string() != generation {
+                return None;
+            }
+            name
+        } else {
+            account
+        };
+        match name {
             "sync.s3SecretKey" => Some(Self::S3SecretKey),
             "sync.syncPassword" => Some(Self::SyncPassword),
             _ => None,
@@ -71,7 +81,7 @@ pub fn protect_secret(account: SecretAccount, plain: &str) -> Option<String> {
     }
     #[cfg(not(target_os = "windows"))]
     {
-        os_backend::store(account, plain).then(|| format!("{OS_MARKER_PREFIX}{}", account.as_str()))
+        os_backend::protect(account, plain)
     }
 }
 
@@ -89,8 +99,7 @@ pub fn unprotect_secret(stored: &str) -> Option<String> {
     }
     #[cfg(not(target_os = "windows"))]
     {
-        let account = SecretAccount::from_marker(stored)?;
-        os_backend::load(account)
+        os_backend::unprotect(stored)
     }
 }
 
@@ -99,10 +108,46 @@ pub fn unprotect_secret(stored: &str) -> Option<String> {
 /// round-trip runs on every platform.
 #[cfg(any(test, not(target_os = "windows")))]
 mod os_backend {
-    use super::{SecretAccount, SERVICE_NAME};
+    use super::{SecretAccount, OS_MARKER_PREFIX, SERVICE_NAME};
 
-    /// Registers the platform credential store once per process. No-op under
-    /// `cfg(test)`: tests install the mock store explicitly.
+    pub(super) fn protect(account: SecretAccount, plain: &str) -> Option<String> {
+        ensure_platform_store();
+        // Immutable generations preserve old config/backup markers even when
+        // the following config save fails or another profile changes a secret.
+        let name = format!("{}:{}", account.as_str(), uuid::Uuid::new_v4());
+        let entry = keyring_core::Entry::new(SERVICE_NAME, &name).ok()?;
+        entry.set_password(plain).ok()?;
+        Some(format!("{OS_MARKER_PREFIX}{name}"))
+    }
+
+    pub(super) fn unprotect(stored: &str) -> Option<String> {
+        SecretAccount::from_marker(stored)?;
+        ensure_platform_store();
+        keyring_core::Entry::new(SERVICE_NAME, stored.strip_prefix(OS_MARKER_PREFIX)?)
+            .and_then(|entry| entry.get_password())
+            .ok()
+    }
+
+    pub(super) fn discard(stored: &str) {
+        if SecretAccount::from_marker(stored).is_none() {
+            return;
+        }
+        let name = stored.strip_prefix(OS_MARKER_PREFIX).unwrap();
+        // Never remove legacy shared slots: another profile may still use one.
+        if !name.contains(':') {
+            return;
+        }
+        ensure_platform_store();
+        if keyring_core::Entry::new(SERVICE_NAME, name)
+            .and_then(|entry| entry.delete_credential())
+            .is_err()
+        {
+            crate::log_warn!("[config] could not discard an uncommitted credential generation");
+        }
+    }
+
+    /// Registers the platform credential store once per process. Tests share
+    /// a mock store and never open the user's native credential store.
     #[cfg(not(test))]
     fn ensure_platform_store() {
         #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -121,26 +166,49 @@ mod os_backend {
     }
 
     #[cfg(test)]
-    fn ensure_platform_store() {}
-
-    pub(super) fn store(account: SecretAccount, plain: &str) -> bool {
-        ensure_platform_store();
-        keyring_core::Entry::new(SERVICE_NAME, account.as_str())
-            .and_then(|entry| entry.set_password(plain))
-            .is_ok()
+    fn ensure_platform_store() {
+        super::initialize_mock_store();
     }
+}
 
-    pub(super) fn load(account: SecretAccount) -> Option<String> {
-        ensure_platform_store();
-        keyring_core::Entry::new(SERVICE_NAME, account.as_str())
-            .and_then(|entry| entry.get_password())
-            .ok()
-    }
+/// Removes only a newly prepared OS-store generation after config persistence fails.
+/// DPAPI envelopes have no external object to roll back.
+pub fn discard_secret(stored: &str) {
+    #[cfg(not(target_os = "windows"))]
+    os_backend::discard(stored);
+    #[cfg(target_os = "windows")]
+    let _ = stored;
+}
+
+#[cfg(test)]
+pub(crate) fn initialize_mock_store() {
+    static INIT: std::sync::Once = std::sync::Once::new();
+    INIT.call_once(|| keyring_core::set_default_store(keyring_core::mock::Store::new().unwrap()));
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn prepared_secret_preserves_the_previous_configuration_marker() {
+        initialize_mock_store();
+        let old = os_backend::protect(SecretAccount::S3SecretKey, "previous fixture").unwrap();
+        let next = os_backend::protect(SecretAccount::S3SecretKey, "new fixture").unwrap();
+        // Preparing a save must not change the value the old config still names.
+        assert_eq!(
+            os_backend::unprotect(&old).as_deref(),
+            Some("previous fixture")
+        );
+        assert_eq!(os_backend::unprotect(&next).as_deref(), Some("new fixture"));
+        assert_ne!(old, next);
+        os_backend::discard(&next);
+        assert!(os_backend::unprotect(&next).is_none());
+        assert_eq!(
+            os_backend::unprotect(&old).as_deref(),
+            Some("previous fixture")
+        );
+    }
 
     #[test]
     fn markers_cover_both_accounts_and_reject_unknown_values() {
@@ -151,17 +219,22 @@ mod tests {
         }
         assert!(!is_protected("plaintext-secret"));
         assert_eq!(SecretAccount::from_marker("oskey1:unknown"), None);
+        assert_eq!(
+            SecretAccount::from_marker("oskey1:sync.syncPassword:invalid"),
+            None
+        );
     }
 
     #[test]
     fn os_backend_round_trips_through_the_mock_store() {
-        keyring_core::set_default_store(keyring_core::mock::Store::new().unwrap());
-        assert!(os_backend::store(SecretAccount::S3SecretKey, "s3-secret"));
-        assert_eq!(
-            os_backend::load(SecretAccount::S3SecretKey).as_deref(),
-            Some("s3-secret")
-        );
-        assert!(os_backend::load(SecretAccount::SyncPassword).is_none());
+        initialize_mock_store();
+        let entry =
+            keyring_core::Entry::new(SERVICE_NAME, SecretAccount::S3SecretKey.as_str()).unwrap();
+        entry.set_password("s3-secret").unwrap();
+        let marker = "oskey1:sync.s3SecretKey";
+        assert_eq!(os_backend::unprotect(marker).as_deref(), Some("s3-secret"));
+        os_backend::discard(marker);
+        assert_eq!(os_backend::unprotect(marker).as_deref(), Some("s3-secret"));
     }
 
     /// Full facade round-trip through the mock store. The `protect_secret` /
@@ -170,7 +243,7 @@ mod tests {
     #[cfg(not(target_os = "windows"))]
     #[test]
     fn facade_round_trips_markers_through_the_mock_store() {
-        keyring_core::set_default_store(keyring_core::mock::Store::new().unwrap());
+        initialize_mock_store();
         let marker =
             protect_secret(SecretAccount::SyncPassword, "pw").expect("mock store always protects");
         assert!(is_protected(&marker));
