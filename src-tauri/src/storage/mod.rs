@@ -25,8 +25,8 @@ pub use recovery::{
     DatabaseRecoveryReport,
 };
 pub use repository::{
-    AutoTagHistoryPreview, ClipboardRepository, HistoryCursor, HistoryFilter, KindDeleteResult,
-    KindDeleteScope, KindStorageStats, StorageFileReferences, TagInfo, TextItemUpdate,
-    TransactionalSaveSummary,
+    AutoTagHistoryPreview, AutoTagPhase, AutoTagProgress, ClipboardRepository, HistoryCursor,
+    HistoryFilter, KindDeleteResult, KindDeleteScope, KindStorageStats, StorageFileReferences,
+    TagInfo, TextItemUpdate, TransactionalSaveSummary,
 };
 pub use search_repository::{SearchDocument, SearchOperation, SearchOutboxEvent, SearchRepository};

@@ -59,6 +59,15 @@ Plain-text import recognizes a `---` delimiter line with LF or CRLF endings, whi
 
 ## Synchronization
 
+Historical auto tags use `Database::with_task_connection`: an existing file is reopened
+without schema initialization, with a small cache and file-backed temporary storage. The
+in-memory test path retains its single connection. Matching reads one WAL snapshot and
+stores only candidate identities/tags in a temporary table. The subsequent immediate
+transaction verifies matching inputs and rereads manual tags before additive writes;
+changed inputs or a progress callback error roll back every update. Cancellation is
+checked at phase/row boundaries and immediately before commit. A single regex or SQLite
+busy wait is not preempted. The temporary plan is removed on success/failure.
+
 Synchronization is split between the Tauri-independent `src-tauri/crates/clipboard-sync/` crate
 and the desktop integration in `src-tauri/src/sync/`:
 

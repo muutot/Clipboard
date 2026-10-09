@@ -2257,3 +2257,101 @@ fn historical_auto_tag_failure_rolls_back_every_record() {
     assert!(db.list_all_tags().unwrap().is_empty());
     assert!(db.get_item("a").unwrap().unwrap().metadata_json.is_none());
 }
+
+#[test]
+fn auto_tag_snapshot_releases_gui_connection_and_preserves_concurrent_manual_tags() {
+    use crate::storage::AutoTagPhase;
+    let root = std::env::temp_dir().join(format!("clipboard-auto-tags-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir(&root).unwrap();
+    let db = Database::open(root.join("history.db")).unwrap();
+    for id in ["a", "b"] {
+        db.save_item(&text_item(id, id, 1)).unwrap();
+    }
+    let rules = crate::tags::compile_auto_tag_rules(&[crate::config::AutoTagRule {
+        pattern: "content".into(),
+        tag: "auto".into(),
+        ..Default::default()
+    }]);
+    let mut inserted = false;
+    let mut tagged = false;
+    let result = db
+        .auto_tag_history_with_progress(&rules, true, |progress| {
+            if progress.phase == AutoTagPhase::Scanning && progress.completed == 1 && !inserted {
+                // This would deadlock on the former shared-connection scan. The existing snapshot
+                // must also remain stable while another connection adds matching content.
+                db.save_item(&text_item("new", "new", 2))?;
+                inserted = true;
+            }
+            if progress.phase == AutoTagPhase::Applying && progress.completed == 0 && !tagged {
+                db.set_tags("a", &["manual".into()])?;
+                tagged = true;
+            }
+            Ok(())
+        })
+        .unwrap();
+    assert!(inserted && tagged);
+    assert_eq!(result.matched_count, 2);
+    assert_eq!(result.changed_count, 2);
+    assert!(db.get_item("new").unwrap().unwrap().metadata_json.is_none());
+    let metadata: serde_json::Value =
+        serde_json::from_str(&db.get_item("a").unwrap().unwrap().metadata_json.unwrap()).unwrap();
+    assert_eq!(metadata["tags"], serde_json::json!(["manual", "auto"]));
+    drop(db);
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn auto_tag_cancellation_at_final_apply_row_rolls_back_and_allows_retry() {
+    use crate::storage::AutoTagPhase;
+    let db = Database::open_in_memory().unwrap();
+    for id in ["a", "b"] {
+        db.save_item(&text_item(id, id, 1)).unwrap();
+    }
+    let rules = crate::tags::compile_auto_tag_rules(&[crate::config::AutoTagRule {
+        pattern: "content".into(),
+        tag: "auto".into(),
+        ..Default::default()
+    }]);
+    let result = db.auto_tag_history_with_progress(&rules, true, |progress| {
+        if progress.phase == AutoTagPhase::Applying && progress.completed == progress.total {
+            return Err(StorageError::Io(std::io::Error::other("cancelled")));
+        }
+        Ok(())
+    });
+    assert!(result.unwrap_err().to_string().contains("cancelled"));
+    assert!(db.list_all_tags().unwrap().is_empty());
+    assert_eq!(db.auto_tag_history(&rules, true).unwrap().changed_count, 2);
+}
+
+#[test]
+fn auto_tag_changed_matching_inputs_abort_application_without_partial_tags() {
+    use crate::storage::AutoTagPhase;
+    let root =
+        std::env::temp_dir().join(format!("clipboard-auto-tags-race-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir(&root).unwrap();
+    let db = Database::open(root.join("history.db")).unwrap();
+    for id in ["a", "b"] {
+        db.save_item(&text_item(id, id, 1)).unwrap();
+    }
+    let rules = crate::tags::compile_auto_tag_rules(&[crate::config::AutoTagRule {
+        pattern: "content".into(),
+        tag: "auto".into(),
+        ..Default::default()
+    }]);
+    let result = db.auto_tag_history_with_progress(&rules, true, |progress| {
+        if progress.phase == AutoTagPhase::Applying && progress.completed == 0 {
+            db.with_connection(|conn| {
+                conn.execute(
+                    "UPDATE clipboard_items SET source_app = 'changed' WHERE id = 'b'",
+                    [],
+                )?;
+                Ok(())
+            })?;
+        }
+        Ok(())
+    });
+    assert!(result.unwrap_err().to_string().contains("history changed"));
+    assert!(db.list_all_tags().unwrap().is_empty());
+    drop(db);
+    std::fs::remove_dir_all(root).unwrap();
+}

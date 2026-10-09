@@ -120,6 +120,29 @@ impl Database {
         action(&mut connection)
     }
 
+    /// Long tasks use their own WAL connection, without rerunning schema setup.
+    /// In-memory test databases cannot be reopened, so they retain the same connection.
+    pub(crate) fn with_task_connection<T>(
+        &self,
+        action: impl FnOnce(&mut Connection) -> Result<T, StorageError>,
+    ) -> Result<T, StorageError> {
+        let path = self.with_connection(|connection| {
+            Ok(connection
+                .path()
+                .filter(|path| !path.is_empty())
+                .map(str::to_owned))
+        })?;
+        let Some(path) = path else {
+            return self.with_connection(action);
+        };
+        let mut connection = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_WRITE)?;
+        connection.busy_timeout(Duration::from_secs(5))?;
+        connection.execute_batch(
+            "PRAGMA foreign_keys = ON; PRAGMA temp_store = FILE; PRAGMA cache_size = -2000;",
+        )?;
+        action(&mut connection)
+    }
+
     pub fn vacuum_into(&self, target_path: impl AsRef<Path>) -> Result<(), StorageError> {
         self.with_connection(|conn| {
             conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE)")?;
