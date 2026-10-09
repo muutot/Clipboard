@@ -303,6 +303,158 @@ fn run_sync(store: &S3ObjectStore, device: &SmokeDevice, scope: &SmokeScope) -> 
     )
     .expect("real-S3 sync run must succeed")
 }
+
+/// All I/O reaches the real server. Interrupt only after an immutable PUT has
+/// completed, exercising the orphan/publication boundary deterministically.
+struct CancelAfterPut<'a> {
+    store: &'a S3ObjectStore,
+    fragment: &'a str,
+    token: clipboard_sync::cancellation::CancellationToken,
+}
+
+impl CancelAfterPut<'_> {
+    fn interrupt(&self, key: &str, outcome: &PutOutcome) {
+        if key.contains(self.fragment) && matches!(outcome, PutOutcome::Stored { .. }) {
+            self.token.cancel();
+        }
+    }
+}
+
+impl ObjectStore for CancelAfterPut<'_> {
+    fn list(&self, prefix: &str, after: Option<&str>) -> Result<Vec<ObjectInfo>, String> {
+        self.store.list(prefix, after)
+    }
+    fn get(&self, key: &str) -> Result<Option<DownloadedObject>, String> {
+        self.store.get(key)
+    }
+    fn head(&self, key: &str) -> Result<Option<ObjectMetadata>, String> {
+        self.store.head(key)
+    }
+    fn get_to_file(
+        &self,
+        key: &str,
+        path: &std::path::Path,
+        max: u64,
+    ) -> Result<Option<DownloadedFile>, String> {
+        self.store.get_to_file(key, path, max)
+    }
+    fn put(
+        &self,
+        key: &str,
+        bytes: Vec<u8>,
+        condition: PutCondition,
+    ) -> Result<PutOutcome, String> {
+        let outcome = self.store.put(key, bytes, condition)?;
+        self.interrupt(key, &outcome);
+        Ok(outcome)
+    }
+    fn put_file(
+        &self,
+        key: &str,
+        path: &std::path::Path,
+        sha256: &str,
+        size: u64,
+        condition: PutCondition,
+    ) -> Result<PutOutcome, String> {
+        let outcome = self.store.put_file(key, path, sha256, size, condition)?;
+        self.interrupt(key, &outcome);
+        Ok(outcome)
+    }
+    fn delete(&self, key: &str) -> Result<(), String> {
+        self.store.delete(key)
+    }
+}
+
+#[test]
+#[ignore = "requires a disposable S3-compatible server; run scripts/sync-s3-test.ps1"]
+fn real_s3_cancelled_publications_retry_without_losing_pending_records() {
+    use clipboard_sync::cancellation::CancellationToken;
+    let config = require_config!();
+    let scope = SmokeScope::new(&config, "cancel-publication");
+    scope.ensure_bucket();
+    let store = scope.store(None);
+    let source = SmokeDevice::new("cancel-source");
+    let target = SmokeDevice::new("cancel-target");
+    let root = CancellationToken::default();
+
+    for (index, fragment) in ["/snapshots/", "/segments/"].into_iter().enumerate() {
+        source.save_text(
+            &format!("cancel-{index}"),
+            &format!("synthetic record {index}"),
+        );
+        let head_key = head_object_key(&source.database().get_sync_device_id().unwrap()).unwrap();
+        let previous_head = store.get(&head_key).unwrap();
+        let token = root.child_token();
+        let interrupted = CancelAfterPut {
+            store: &store,
+            fragment,
+            token: token.clone(),
+        };
+        let outcome = sync_database_cancellable(
+            &interrupted,
+            source.database(),
+            &source.engine_paths(),
+            &scope.remote_scope,
+            scope.session_key().as_ref(),
+            options(),
+            &token,
+        );
+        assert_eq!(outcome.unwrap_err(), "sync cancelled");
+        assert!(
+            token.is_cancelled(),
+            "the real immutable PUT must trigger cancellation"
+        );
+        assert!(!root.is_cancelled());
+        assert_eq!(
+            store.get(&head_key).unwrap(),
+            previous_head,
+            "unpublished work must not advance the head"
+        );
+        assert!(store
+            .list("", None)
+            .unwrap()
+            .iter()
+            .any(|object| object.key.contains(fragment)));
+        if index == 0 {
+            assert!(
+                !source
+                    .database()
+                    .get_or_create_sync_remote_state(&scope.remote_scope)
+                    .unwrap()
+                    .initialized
+            );
+        } else {
+            assert!(source
+                .database()
+                .get_sync_outbox_batch_for_scope(&scope.remote_scope, 100)
+                .unwrap()
+                .is_some());
+        }
+        run_sync(&store, &source, &scope);
+        assert!(source
+            .database()
+            .get_sync_outbox_batch_for_scope(&scope.remote_scope, 100)
+            .unwrap()
+            .is_none());
+        run_sync(&scope.store(None), &target, &scope);
+        assert_eq!(target.database().item_count().unwrap(), (index + 1) as u64);
+        assert_eq!(
+            target
+                .database()
+                .get_item(&format!("cancel-{index}"))
+                .unwrap()
+                .unwrap()
+                .text_content,
+            Some(format!("synthetic record {index}"))
+        );
+    }
+    assert_eq!(run_sync(&store, &source, &scope).uploaded_entries, 0);
+    assert_eq!(
+        run_sync(&scope.store(None), &target, &scope).applied_entries,
+        0
+    );
+}
+
 #[test]
 #[ignore = "requires a disposable S3-compatible server; run scripts/sync-s3-test.ps1"]
 fn real_s3_two_device_convergence_over_the_wire() {

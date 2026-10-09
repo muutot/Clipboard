@@ -428,6 +428,12 @@ partial-download removal, publication cancellation before heads, orphan retry an
 rollback at the terminal snapshot/checkpoint batch. Real cloud interruption and native app
 exit timing remain separate integration checks.
 
+The opt-in real-S3 smoke additionally cancels after successful snapshot and segment PUTs:
+the head remains unchanged, pending local entries survive, and retry converges two devices
+without duplicate records. All four smoke cases passed on local rustfs on 2026-10-09.
+This deterministic publication-boundary test is separate from cancellation of an in-flight
+WAN transfer or measurement of native process exit.
+
 ### Real S3 benchmark commands
 
 The server and bucket are opt-in. Never point these tests at a prefix containing user data.
