@@ -51,7 +51,7 @@ impl AutoSyncWorker {
                         };
                         // Read the two values, then drop the guard so it no
                         // longer borrows the config state across the loop body.
-                        let enabled = guard.auto_sync();
+                        let enabled = guard.auto_sync() && !guard.privacy_local_only();
                         let interval_secs = guard.auto_sync_interval_secs();
                         drop(guard);
                         (enabled, interval_secs)

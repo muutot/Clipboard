@@ -93,6 +93,7 @@ pub fn get_privacy_settings(
 #[tauri::command]
 pub fn set_privacy_settings(
     config: tauri::State<'_, Mutex<ConfigStore>>,
+    sync_cancellation: tauri::State<'_, crate::commands::sync::SyncCancellation>,
     privacy: tauri::State<'_, Mutex<PrivacyManager>>,
     capture: tauri::State<'_, CaptureState>,
     local_only: Option<bool>,
@@ -114,6 +115,9 @@ pub fn set_privacy_settings(
             config
                 .set_privacy_local_only(value)
                 .map_err(|error| error.to_string())?;
+            if value {
+                sync_cancellation.cancel_active();
+            }
         }
         sensitive_patterns
             .map(|patterns| {

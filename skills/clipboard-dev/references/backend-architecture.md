@@ -75,6 +75,17 @@ and the desktop integration in `src-tauri/src/sync/`:
   localized `cancelled` status. Custom ObjectStore implementations must supply their own
   interruptible transport if they block internally.
 
+`commands/sync/policy.rs` registers active manual, automatic, connection-test and
+materialization tokens while the configuration mutex is held. Local-only mode
+rejects sync/test entry and returns the local record for materialization without
+network access. Saving local-only=true cancels all registered runs before releasing
+that same mutex, closing the snapshot/register race. It does not cancel the auto
+worker or root, so later opt-in enables fresh runs. A completed request/commit can
+win the cancellation race; cancellation cannot retract already delivered bytes.
+Connection testing uses the blocking pool because the synchronous S3 facade must
+not block Tauri's async executor. Tests include a stalled loopback HTTP response
+interrupted by the privacy policy.
+
 There is no WebDAV transport, baseline/oplog archive implementation, legacy resource pool, fallback encryption path, or historical wire reader in the source tree.
 
 ## Storage paths and ownership

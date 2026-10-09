@@ -16,9 +16,9 @@ use crate::storage::{ClipboardRepository, Database, StoragePaths};
 use crate::sync::{self, v1};
 
 mod auto;
+mod policy;
 
-#[derive(Default)]
-pub(crate) struct SyncCancellation(pub clipboard_sync::cancellation::CancellationToken);
+pub use policy::SyncCancellation;
 
 /// Manual and automatic runs share one local publication state and therefore
 /// cannot overlap. A second caller fails fast instead of queueing behind a
@@ -323,24 +323,36 @@ pub fn set_sync_config(
 /// before invoking this command, so write-only secrets never cross back to the
 /// frontend after initial entry.
 ///
-/// Async: the blocking S3 round-trip runs on the async runtime instead of the
-/// main thread, which would otherwise freeze the window event loop.
+/// The synchronous S3 facade runs on the blocking pool, with the same privacy
+/// gate and cancellation registration as synchronization and materialization.
 #[tauri::command]
 pub async fn test_sync_connection(
     config: tauri::State<'_, Mutex<ConfigStore>>,
+    cancellation: tauri::State<'_, SyncCancellation>,
 ) -> Result<sync::S3TestResult, String> {
-    let settings = {
+    let (settings, token) = {
         let guard = lock_state(&config, "configuration lock is poisoned")?;
-        SyncSettings::validated_from_sync_config(&guard.sync_config())?
+        let token = cancellation.register(guard.privacy_local_only(), &cancellation.0)?;
+        (
+            SyncSettings::validated_from_sync_config(&guard.sync_config())?,
+            token,
+        )
     };
-    settings.object_store()?;
-    Ok(sync::test_s3_connection(
-        &settings.endpoint,
-        &settings.region,
-        &settings.bucket,
-        &settings.access_key,
-        &settings.secret_key,
-    ))
+    tauri::async_runtime::spawn_blocking(move || {
+        token.run(|| {
+            token.check()?;
+            settings.object_store()?;
+            Ok(sync::test_s3_connection(
+                &settings.endpoint,
+                &settings.region,
+                &settings.bucket,
+                &settings.access_key,
+                &settings.secret_key,
+            ))
+        })
+    })
+    .await
+    .map_err(|error| format!("connection test task join failed: {error}"))?
 }
 
 /// Async: a full sync run performs blocking S3 I/O and must not occupy the
@@ -389,6 +401,7 @@ fn usable_sync_settings(sync: &SyncConfig) -> Option<SyncSettings> {
 pub fn materialize_clipboard_item(
     id: String,
     config: tauri::State<'_, Mutex<ConfigStore>>,
+    cancellation: tauri::State<'_, SyncCancellation>,
     database: tauri::State<'_, Database>,
     paths: tauri::State<'_, StoragePaths>,
     thumbnail_worker: tauri::State<'_, Mutex<ThumbnailWorker>>,
@@ -402,9 +415,15 @@ pub fn materialize_clipboard_item(
         .map_err(|error| error.to_string())?
         .ok_or_else(|| "clipboard item was not found".to_string())?;
 
-    let sync_config = {
+    let (sync_config, token) = {
         let guard = lock_state(&config, "configuration lock is poisoned")?;
-        guard.sync_config()
+        if guard.privacy_local_only() {
+            return Ok(current);
+        }
+        (
+            guard.sync_config(),
+            cancellation.register(false, &cancellation.0)?,
+        )
     };
     let Some(settings) = usable_sync_settings(&sync_config) else {
         return Ok(current);
@@ -428,16 +447,18 @@ pub fn materialize_clipboard_item(
         }
     };
     let session_key = settings.session_key(&remote_scope)?;
-    let (updated, changed) = materialize_item_resources(
-        &store,
-        database.inner(),
-        paths.inner(),
-        &settings,
-        &remote_scope,
-        &id,
-        refs,
-        session_key.as_ref(),
-    )?;
+    let (updated, changed) = token.run(|| {
+        materialize_item_resources(
+            &store,
+            database.inner(),
+            paths.inner(),
+            &settings,
+            &remote_scope,
+            &id,
+            refs,
+            session_key.as_ref(),
+        )
+    })?;
 
     if changed && updated.kind == ClipboardKind::Image {
         if let Some(resource_path) = updated.resource_path.as_deref() {
@@ -564,9 +585,12 @@ pub(super) fn run_sync_cancellable(
     let database = app.state::<Database>();
     let paths = app.state::<StoragePaths>();
 
-    let settings = {
+    let (settings, cancellation) = {
         let guard = lock_state(&config, "configuration lock is poisoned")?;
-        SyncSettings::from_config(&guard)?
+        let token = app
+            .state::<SyncCancellation>()
+            .register(guard.privacy_local_only(), cancellation)?;
+        (SyncSettings::from_config(&guard)?, token)
     };
     let remote_scope = settings.remote_scope_id();
     let session_key = settings.session_key(&remote_scope)?;
@@ -580,7 +604,7 @@ pub(super) fn run_sync_cancellable(
         &remote_scope,
         session_key.as_ref(),
         settings.engine_options(),
-        cancellation,
+        &cancellation,
     );
     crate::item_operations::invalidate_desktop(app);
     let now_ms = current_time_ms();

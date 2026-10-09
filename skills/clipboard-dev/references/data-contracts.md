@@ -104,6 +104,11 @@ Schema changes require a deliberate new schema marker, one registered adjacent m
 
 ## Configuration contracts
 
+`privacy.localOnly` gates every desktop S3 entry (manual/automatic sync, connection
+test and resource materialization). Saving it true cancels registered active
+transfers; switching it off permits new runs without restarting the worker.
+The extra cancellation state is injected by Tauri, with no new frontend arguments.
+
 ### `conf/conf.json`
 
 `src-tauri/src/config.rs` owns `AppConfig` groups: storage, history, privacy, permissions, window, general, export, OCR, sync, and tags. Config structs use `#[serde(default, rename_all = "camelCase")]`; several also flatten unknown fields so newer frontend settings survive round-trips. The `tags` group holds `autoTagRules` (`{pattern, tag, sourceApp, kind}` rules, default empty): `set_auto_tag_rules` trims, drops blanks/duplicates, and caps at 100 rules after up-front regex validation; capture applies conjunctive regex/source/type rules to every kind (media use titles) via additive `Database::add_tags`. Sample and history preview commands share validation; history apply uses a single transaction, preserving manual tags and metadata. It streams rows with 20 bounded samples but holds the database lock until completion, then invalidates history and tag views.
