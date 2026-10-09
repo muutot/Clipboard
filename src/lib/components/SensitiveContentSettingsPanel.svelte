@@ -108,8 +108,8 @@
     if (!privacy) return false;
     try {
       const updated = await setPrivacySettings({ localOnly: next });
-      privacy = updated;
-      patternsText = updated.sensitivePatterns.join("\n");
+      // The response is a snapshot; another setting may have changed meanwhile.
+      privacy = { ...privacy!, localOnly: updated.localOnly };
       return true;
     } catch (error) {
       feedback.show(error instanceof Error ? error.message : String(error), false);
@@ -120,14 +120,17 @@
   async function savePatterns() {
     if (!privacy || patternsSaving) return;
     patternsSaving = true;
-    const lines = patternsText
+    const submittedText = patternsText;
+    const lines = submittedText
       .split("\n")
       .map((line) => line.trim())
       .filter((line) => line.length > 0);
     try {
       const updated = await setPrivacySettings({ sensitivePatterns: lines });
-      privacy = updated;
-      patternsText = updated.sensitivePatterns.join("\n");
+      privacy = { ...privacy!, sensitivePatterns: updated.sensitivePatterns };
+      if (patternsText === submittedText) {
+        patternsText = updated.sensitivePatterns.join("\n");
+      }
       feedback.show(_t("capture.sensitivePatternsSaved"), true);
     } catch (error) {
       feedback.show(error instanceof Error ? error.message : String(error), false);
