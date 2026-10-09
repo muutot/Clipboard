@@ -15,6 +15,63 @@ use crate::{
 const REMOTE_SCOPE: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
 #[test]
+fn portable_backup_restored_shared_media_remains_publishable() {
+    use crate::export::backup;
+    let paths = temp_paths("backup-source");
+    let restored_paths = temp_paths("backup-restored");
+    let source = Database::open_in_memory().unwrap();
+    let restored = Database::open_in_memory().unwrap();
+    let binary = paths.images.join("shared.png");
+    image::RgbaImage::from_pixel(2, 2, image::Rgba([10, 20, 30, 255]))
+        .save(&binary)
+        .unwrap();
+    let expected = fs::read(&binary).unwrap();
+    let image = image_item("image", &binary);
+    let mut file = image_item("file", &binary);
+    file.kind = ClipboardKind::File;
+    file.text_content = Some(serde_json::json!([binary]).to_string());
+    source.save_item(&image).unwrap();
+    source.save_item(&file).unwrap();
+    let archive = paths.project.join("shared.clipbackup");
+    backup::create(&source, &archive).unwrap();
+    let preview = backup::preview(&archive, &restored).unwrap();
+    assert_eq!(preview.resource_count, 1);
+    backup::restore(&archive, &preview.fingerprint, &restored, &restored_paths).unwrap();
+    let mut mutations = MutationBatch {
+        upserts: Vec::new(),
+        tombstones: Vec::new(),
+    };
+    for id in ["image", "file"] {
+        mutations.upserts.push(ReplicatedItem {
+            item: restored.get_item(id).unwrap().unwrap().into(),
+            version: RecordVersion {
+                modified_at_ms: 1,
+                writer_device_id: restored.get_sync_device_id().unwrap(),
+            },
+        });
+    }
+    let store = MemoryStore::default();
+    let roots = SyncEnginePaths::from(&restored_paths).resource_roots;
+    let stats = prepare_mutation_resources(
+        &store,
+        &mut mutations,
+        &roots,
+        options().resource_limits,
+        None,
+    )
+    .unwrap();
+    assert_eq!(stats.skipped_resources, 0);
+    assert_eq!(stats.transferred_resources, 2);
+    for (row, category) in mutations.upserts.iter().zip(["image", "file"]) {
+        let key = row.item.resource_path.as_ref().unwrap();
+        assert!(key.starts_with(&format!("v1/resources/{category}/")));
+        assert_eq!(store.objects.lock().unwrap().get(key), Some(&expected));
+    }
+    fs::remove_dir_all(paths.project).unwrap();
+    fs::remove_dir_all(restored_paths.project).unwrap();
+}
+
+#[test]
 fn namespace_upgrade_preserves_legacy_encryption_and_accepts_rotated_credentials() {
     use clipboard_sync::v1::namespace::{resolve_namespace, Namespace, NAMESPACE_KEY};
     let store = MemoryStore::default();

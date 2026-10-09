@@ -520,31 +520,36 @@ pub fn restore_with_progress(
         committed: false,
     };
     let prefix = uuid::Uuid::new_v4();
-    let mut local_paths = HashMap::new();
-    for (name, source) in &validated.resources {
-        progress(
-            OperationPhase::Restoring,
-            local_paths.len() as u64,
-            Some(validated.resources.len() as u64),
-        )?;
-        let target = paths.files.join(format!(
-            "backup-{prefix}-{}",
-            name.strip_prefix("resources/").ok_or("invalid resource")?
-        ));
-        atomic_output(&target, |out| {
-            let input = File::open(source).map_err(err)?;
-            transfer(input, out, MAX_RESOURCE, progress)?;
-            Ok(())
-        })?;
-        published.paths.push(target.clone());
-        local_paths.insert(name.clone(), target.to_string_lossy().into_owned());
-    }
+    let mut local_paths = HashMap::<(bool, String), String>::new();
     for item in &mut validated.items {
+        // Sync validates resources against their role's root. One archive entry
+        // may serve both an image and a file record, so cache per role as well
+        // as entry name instead of making either role reference the wrong root.
+        let image = item.kind == ClipboardKind::Image;
+        let root = if image { &paths.images } else { &paths.files };
         remap_item(item, &mut |name| {
-            local_paths
+            let key = (image, name.to_owned());
+            if let Some(path) = local_paths.get(&key) {
+                return Ok(path.clone());
+            }
+            let source = validated
+                .resources
                 .get(name)
-                .cloned()
-                .ok_or_else(|| "missing restored resource".into())
+                .ok_or("missing restored resource")?;
+            progress(OperationPhase::Restoring, local_paths.len() as u64, None)?;
+            let target = root.join(format!(
+                "backup-{prefix}-{}",
+                name.strip_prefix("resources/").ok_or("invalid resource")?
+            ));
+            atomic_output(&target, |out| {
+                let input = File::open(source).map_err(err)?;
+                transfer(input, out, MAX_RESOURCE, progress)?;
+                Ok(())
+            })?;
+            published.paths.push(target.clone());
+            let path = target.to_string_lossy().into_owned();
+            local_paths.insert(key, path.clone());
+            Ok(path)
         })?;
     }
     let result = database
@@ -571,6 +576,15 @@ mod scale_bench;
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn assert_no_published_resources(paths: &StoragePaths) {
+        for root in [&paths.images, &paths.files] {
+            assert!(!fs::read_dir(root).unwrap().any(|entry| entry
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .starts_with("backup-")));
+        }
+    }
     pub(super) fn item(id: &str, kind: ClipboardKind, path: Option<String>) -> ClipboardItem {
         ClipboardItem {
             id: id.into(),
@@ -644,7 +658,7 @@ mod tests {
         );
         let restored = target.get_item("image").unwrap().unwrap();
         let path = Path::new(restored.resource_path.as_ref().unwrap());
-        assert!(path.starts_with(&paths.files));
+        assert!(path.starts_with(&paths.images));
         assert_eq!(fs::read(path).unwrap(), b"synthetic image bytes");
         assert_eq!(restored.preview_path, None);
         let restored = target.get_item("text").unwrap().unwrap();
@@ -789,11 +803,7 @@ mod tests {
         target.with_connection(|c| { c.execute_batch("CREATE TRIGGER reject_a BEFORE INSERT ON clipboard_items WHEN NEW.id = 'a' BEGIN SELECT RAISE(ABORT, 'injected'); END;")?; Ok(()) }).unwrap();
         assert!(restore(&archive, &checked.fingerprint, &target, &paths).is_err());
         assert_eq!(target.item_count().unwrap(), 0);
-        assert!(!fs::read_dir(&paths.files).unwrap().any(|entry| entry
-            .unwrap()
-            .file_name()
-            .to_string_lossy()
-            .starts_with("backup-")));
+        assert_no_published_resources(&paths);
     }
 
     #[test]
@@ -858,11 +868,7 @@ mod tests {
         .unwrap_err();
         assert!(error.contains("cancelled"));
         assert_eq!(target.item_count().unwrap(), 0);
-        assert!(!fs::read_dir(&paths.files).unwrap().any(|entry| entry
-            .unwrap()
-            .file_name()
-            .to_string_lossy()
-            .starts_with("backup-")));
+        assert_no_published_resources(&paths);
         assert_eq!(
             restore(&archive, &checked.fingerprint, &target, &paths)
                 .unwrap()

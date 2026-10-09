@@ -286,6 +286,13 @@ Local filesystem calls and a single SQLite busy wait remain non-preemptible.
 
 ### Portable backups and file staging
 
+Restored originals are published into the record role's managed root: image records
+use `paths.images`, file records use `paths.files`. A shared archive entry used by
+both roles gets one copy per root; remapping is cached by role and entry name.
+This preserves the sync uploader's root-containment contract. Publication is lazy
+over referenced entries, and cancellation/transaction rollback removes new files
+from both roots. Derived previews/icons are still discarded.
+
 Portable-backup validation distinguishes preview from restore. Both validate every row,
 including duplicates, and retain identity sets for cross-row uniqueness. Preview drops each
 body after validation/counting; restore retains it for the atomic apply. Progress uses a
@@ -293,6 +300,6 @@ separate processed-row counter, so EOF cancellation and manifest counts do not d
 the retained vector length. The opt-in `export/backup/scale_bench.rs` measures actual
 preview RSS/time with synthetic archives; see `docs/PERFORMANCE_V1_8.md` for limits.
 
-`export::backup` implements version-1 `.clipbackup` ZIP bundles of active records and original resource bytes. Export uses the snapshot visitor, streams binaries and spools JSONL to disk. Derived previews/icons and configuration are excluded. Restore first copies the archive to private scratch space, validates entry names/counts, SHA-256, expanded sizes and record constraints, then remaps every known resource reference to newly published flat files under the managed file root. A strict SQLite transaction skips duplicate content and rolls back on any other failure; rollback removes the newly published files. The Tauri restore command holds storage_maintenance_lock against cleanup, clears the search result cache and invalidates history/tags after success. It reports retention limits without truncating during restore. The snapshot visitor holds the DB mutex during export; very large exports may delay capture.
+`export::backup` implements version-1 `.clipbackup` ZIP bundles of active records and original resource bytes. Export uses the snapshot visitor, streams binaries and spools JSONL to disk. Derived previews/icons and configuration are excluded. Restore first copies the archive to private scratch space, validates entry names/counts, SHA-256, expanded sizes and record constraints, then remaps every known resource reference to newly published flat files under the matching managed image/file root. A strict SQLite transaction skips duplicate content and rolls back on any other failure; rollback removes the newly published files. The Tauri restore command holds storage_maintenance_lock against cleanup, clears the search result cache and invalidates history/tags after success. It reports retention limits without truncating during restore. The snapshot visitor holds the DB mutex during export; very large exports may delay capture.
 
 `FileStore::save_file` now hashes while streaming source bytes into an exclusively created staging file (64 KiB buffer), avoiding a second full read. Hash and size describe exactly the bytes written when the file is published. If a live source grows past the copy cap, staging stops at/below that cap and the remaining source is hashed for the existing pass-through fallback; the partial stage is removed. Flush/fsync and atomic publication remain unchanged. Read/write failures remove only the owned stage. This bounds staging writes, not the lifetime or total reads of an unbounded growing source.
