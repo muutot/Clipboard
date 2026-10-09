@@ -1,9 +1,11 @@
 <script lang="ts">
+  import { onDestroy } from "svelte";
   import AppIcon from "$lib/components/AppIcon.svelte";
   import type { ClipboardItem } from "$lib/types/clipboard";
   import { messages, resolvePath } from "$lib/i18n";
   import { formatBytes, assetUrl } from "$lib/utils/format";
   import { isTauriRuntime } from "$lib/services/runtime";
+  import { FILE_PREVIEW_LIMIT, loadFilePreview } from "$lib/utils/file-preview";
 
   interface Props {
     item: ClipboardItem;
@@ -14,7 +16,6 @@
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);
 
-  const FILE_PREVIEW_LIMIT = 512 * 1024;
   const TEXT_FILE_EXTENSIONS = new Set([
     "c",
     "cc",
@@ -54,6 +55,11 @@
   let filePreviewTruncated = $state(false);
   let filePreviewRequest = 0;
   let loadedPreviewKey = "";
+  let previewController: AbortController | undefined;
+  onDestroy(() => {
+    filePreviewRequest++;
+    previewController?.abort();
+  });
 
   function isTextFile(target: ClipboardItem): boolean {
     const mime = target.mimeType?.toLowerCase() ?? "";
@@ -99,6 +105,7 @@
       : "";
     if (previewKey === loadedPreviewKey) return;
     loadedPreviewKey = previewKey;
+    previewController?.abort();
 
     const request = ++filePreviewRequest;
     filePreviewText = "";
@@ -122,13 +129,9 @@
     }
 
     filePreviewState = "loading";
-    void fetch(url)
-      .then(async (response) => {
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const buffer = await response.arrayBuffer();
-        const truncated = buffer.byteLength > FILE_PREVIEW_LIMIT;
-        const bytes = truncated ? buffer.slice(0, FILE_PREVIEW_LIMIT) : buffer;
-        const text = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+    previewController = new AbortController();
+    void loadFilePreview(url, previewController.signal)
+      .then(({ text, truncated }) => {
         if (request !== filePreviewRequest) return;
         filePreviewText = text;
         filePreviewTruncated = truncated;
