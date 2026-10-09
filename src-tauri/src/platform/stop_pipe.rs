@@ -26,21 +26,10 @@ pub(crate) struct StopPipePair {
 impl StopPipePair {
     pub(crate) fn new() -> io::Result<Self> {
         let mut fds = [0 as libc::c_int; 2];
-        if unsafe { libc::pipe(fds.as_mut_ptr()) } != 0 {
+        // Atomically set both flags: neither an intermediate fcntl failure nor
+        // a concurrent child spawn may leak one of these descriptors.
+        if unsafe { libc::pipe2(fds.as_mut_ptr(), libc::O_NONBLOCK | libc::O_CLOEXEC) } != 0 {
             return Err(io::Error::last_os_error());
-        }
-        // Non-blocking so the stop write can never block even if the monitor
-        // thread already exited.
-        for fd in fds {
-            let flags = unsafe { libc::fcntl(fd, libc::F_GETFL, 0) };
-            if flags < 0 || unsafe { libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK) } < 0
-            {
-                let error = io::Error::last_os_error();
-                unsafe {
-                    libc::close(fd);
-                }
-                return Err(error);
-            }
         }
         Ok(Self {
             read_fd: fds[0],
@@ -102,5 +91,44 @@ impl Drop for StopPipeWriter {
         if self.fd >= 0 {
             unsafe { libc::close(self.fd) };
         }
+    }
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stop_pipe_is_nonblocking_close_on_exec_and_delivers_stop() {
+        let pair = StopPipePair::new().unwrap();
+        for fd in [pair.read_fd, pair.write_fd] {
+            assert_ne!(
+                unsafe { libc::fcntl(fd, libc::F_GETFL) } & libc::O_NONBLOCK,
+                0
+            );
+            assert_ne!(
+                unsafe { libc::fcntl(fd, libc::F_GETFD) } & libc::FD_CLOEXEC,
+                0
+            );
+        }
+        let read_fd = pair.reader_fd();
+        let mut byte = 0u8;
+        assert_eq!(
+            unsafe { libc::read(read_fd, (&mut byte as *mut u8).cast(), 1) },
+            -1
+        );
+        assert_eq!(io::Error::last_os_error().kind(), io::ErrorKind::WouldBlock);
+        pair.into_writer().trigger();
+        assert_eq!(
+            unsafe { libc::read(read_fd, (&mut byte as *mut u8).cast(), 1) },
+            1
+        );
+        assert_eq!(byte, b'x');
+        assert_eq!(
+            unsafe { libc::read(read_fd, (&mut byte as *mut u8).cast(), 1) },
+            0
+        );
+        // into_writer transfers this end to the monitor, represented here.
+        assert_eq!(unsafe { libc::close(read_fd) }, 0);
     }
 }
