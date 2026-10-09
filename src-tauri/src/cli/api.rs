@@ -1,5 +1,5 @@
 use std::io::{Read, Write};
-use std::net::{TcpListener, TcpStream};
+use std::net::{Shutdown, TcpListener, TcpStream};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{mpsc, Arc};
 use std::thread::{self, JoinHandle};
@@ -189,6 +189,47 @@ struct ServeContext {
     on_change: Arc<dyn Fn() + Send + Sync>,
 }
 
+/// Retain sockets as well as joins so shutdown can interrupt blocked IO before
+/// waiting for handlers. Drop also drains them if the listener unwinds.
+#[derive(Default)]
+struct Connections(Vec<(TcpStream, JoinHandle<()>)>);
+
+impl Connections {
+    fn reap(&mut self) {
+        let mut index = 0;
+        while index < self.0.len() {
+            if self.0[index].1.is_finished() {
+                let (_, handle) = self.0.swap_remove(index);
+                if handle.join().is_err() {
+                    crate::log_error!("[local-api] connection thread panicked");
+                }
+            } else {
+                index += 1;
+            }
+        }
+    }
+}
+
+impl Drop for Connections {
+    fn drop(&mut self) {
+        for (stream, _) in &self.0 {
+            let _ = stream.shutdown(Shutdown::Both);
+        }
+        for (_, handle) in self.0.drain(..) {
+            if handle.join().is_err() {
+                crate::log_error!("[local-api] connection thread panicked during shutdown");
+            }
+        }
+    }
+}
+
+struct ConnectionSlot(Arc<AtomicUsize>);
+impl Drop for ConnectionSlot {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::SeqCst);
+    }
+}
+
 fn serve(listener: TcpListener, stop_receiver: mpsc::Receiver<()>, context: ServeContext) {
     let ServeContext {
         database,
@@ -200,7 +241,9 @@ fn serve(listener: TcpListener, stop_receiver: mpsc::Receiver<()>, context: Serv
         copy_context,
         on_change,
     } = context;
+    let mut connections = Connections::default();
     loop {
+        connections.reap();
         if matches!(
             stop_receiver.try_recv(),
             Ok(()) | Err(mpsc::TryRecvError::Disconnected)
@@ -228,9 +271,18 @@ fn serve(listener: TcpListener, stop_receiver: mpsc::Receiver<()>, context: Serv
                 let copy_context = copy_context.clone();
                 let on_change = on_change.clone();
                 let connection_counter = Arc::clone(&active_connections);
+                let retained_stream = match stream.try_clone() {
+                    Ok(stream) => stream,
+                    Err(error) => {
+                        active_connections.fetch_sub(1, Ordering::SeqCst);
+                        crate::log_error!("[local-api] failed to retain connection: {error}");
+                        continue;
+                    }
+                };
                 let spawned = thread::Builder::new()
                     .name("clipboard-local-api-conn".to_owned())
                     .spawn(move || {
+                        let _slot = ConnectionSlot(connection_counter);
                         if let Err(error) = handle_connection(
                             stream,
                             &database,
@@ -243,11 +295,13 @@ fn serve(listener: TcpListener, stop_receiver: mpsc::Receiver<()>, context: Serv
                         ) {
                             crate::log_error!("[local-api] request failed: {error}");
                         }
-                        connection_counter.fetch_sub(1, Ordering::SeqCst);
                     });
-                if let Err(error) = spawned {
-                    active_connections.fetch_sub(1, Ordering::SeqCst);
-                    crate::log_error!("[local-api] failed to spawn connection thread: {error}");
+                match spawned {
+                    Ok(handle) => connections.0.push((retained_stream, handle)),
+                    Err(error) => {
+                        active_connections.fetch_sub(1, Ordering::SeqCst);
+                        crate::log_error!("[local-api] failed to spawn connection thread: {error}");
+                    }
                 }
             }
             Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
@@ -1009,6 +1063,48 @@ mod tests {
                 .unwrap();
             worker.join().unwrap();
         });
+    }
+
+    #[test]
+    fn stop_closes_accepted_clients_before_they_can_submit_a_write() {
+        let database = Arc::new(Database::open_in_memory().unwrap());
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let active = Arc::new(AtomicUsize::new(0));
+        let (stop_tx, stop_rx) = mpsc::channel();
+        let context = ServeContext {
+            database: Arc::clone(&database),
+            page_size_limit: 500,
+            search_page_size_limit: 500,
+            token: Arc::new("fixture-token".into()),
+            port,
+            active_connections: Arc::clone(&active),
+            copy_context: CopyContext::default(),
+            on_change: Arc::new(|| {}),
+        };
+        let server = thread::spawn(move || serve(listener, stop_rx, context));
+        let mut client = TcpStream::connect(("127.0.0.1", port)).unwrap();
+        client
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        let body = br#"{"text":"late write"}"#;
+        client.write_all(format!(
+            "POST /paste HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nAuthorization: Bearer fixture-token\r\nContent-Length: {}\r\n\r\n",
+            body.len(),
+        ).as_bytes()).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while active.load(Ordering::SeqCst) != 1 {
+            assert!(Instant::now() < deadline);
+            thread::sleep(Duration::from_millis(5));
+        }
+        stop_tx.send(()).unwrap();
+        server.join().unwrap();
+        let _ = client.write_all(body);
+        let mut response = Vec::new();
+        let _ = client.read_to_end(&mut response);
+        assert_eq!(active.load(Ordering::SeqCst), 0);
+        assert_eq!(database.item_count().unwrap(), 0);
     }
 
     #[test]

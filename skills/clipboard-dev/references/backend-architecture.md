@@ -247,6 +247,12 @@ Window opacity/effects are posted to the UI thread. `apply_webview_transparency`
 
 ## CLI and loopback API
 
+The listener owns every accepted connection's socket clone and join handle.
+Stop closes all retained sockets before joining handlers, interrupting delayed
+request reads and response writes; an already executing database operation may
+complete, but no handler outlives a successful stop. Finished handlers are reaped
+during normal serving, and connection slots are released on unwinding as well.
+
 Accepted API sockets explicitly switch to blocking mode before applying read/write timeouts.
 Windows may inherit the listener's nonblocking flag; a timeout alone does not clear it, so
 delayed request bytes would otherwise cause an immediate `WouldBlock` disconnect. The
