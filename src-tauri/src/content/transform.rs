@@ -86,17 +86,18 @@ fn is_tracking_key(key: &str) -> bool {
 /// Removes known tracking parameters from a single URL, preserving parameter
 /// order and any fragment.
 fn strip_url_tracking_params_from_url(url: &str) -> String {
-    let Some(question_index) = url.find('?') else {
+    // A '?' after '#' belongs to the fragment (often an SPA route), not to
+    // the URL query. Preserve that fragment byte-for-byte.
+    let (before_fragment, fragment) = match url.find('#') {
+        Some(index) => (&url[..index], &url[index..]),
+        None => (url, ""),
+    };
+    let Some(question_index) = before_fragment.find('?') else {
         return url.to_owned();
     };
 
-    let (scheme_and_path, query_and_fragment) = url.split_at(question_index);
-    let query_and_fragment = &query_and_fragment[1..];
-
-    let (query, fragment) = match query_and_fragment.find('#') {
-        Some(index) => (&query_and_fragment[..index], &query_and_fragment[index..]),
-        None => (query_and_fragment, ""),
-    };
+    let (scheme_and_path, query) = before_fragment.split_at(question_index);
+    let query = &query[1..];
 
     let kept = query
         .split('&')
@@ -182,6 +183,30 @@ fn sha512_hash(input: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tracking_cleanup_preserves_question_marks_inside_fragments() {
+        for (input, expected) in [
+            (
+                "https://example.com/#/page?utm_source=route&id=7",
+                "https://example.com/#/page?utm_source=route&id=7",
+            ),
+            (
+                "https://example.com/?utm_source=mail#/page?utm_source=route",
+                "https://example.com/#/page?utm_source=route",
+            ),
+            (
+                "https://example.com/?id=7&utm_source=mail#section?x=1",
+                "https://example.com/?id=7#section?x=1",
+            ),
+        ] {
+            assert_eq!(
+                TransformOperation::StripUrlTrackingParams.apply(input),
+                expected
+            );
+            assert_eq!(clean_paste(input), expected);
+        }
+    }
 
     #[test]
     fn strip_whitespace_removes_spaces_and_tabs() {

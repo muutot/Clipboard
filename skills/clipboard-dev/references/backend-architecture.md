@@ -199,6 +199,10 @@ source, including ungrouped amounts beyond three digits and decimal precision.
 Detection extracts text without interpreting locale-dependent numeric values;
 tests assert the actual copy payload rather than only a `has_currency` flag.
 
+URL tracking cleanup splits off `#fragment` before looking for a query string.
+Fragments, including SPA routes with their own `?` parameters, remain byte-for-byte
+unchanged in both the standalone transform and clean-paste pipeline.
+
 Thumbnail shutdown uses an independent atomic stop flag checked before each queued job. Stop wakes an idle receiver and joins the current job, then discards the backlog; enqueue handles reject new work after stop. A currently running decoder is not interrupted. Skipped jobs retain their original-image preview fallback. The controlled-job test covers a blocked current job plus 100 queued jobs without decoding large fixtures.
 
 `PlatformClipboard::read_clipboard_image` carries `ClipboardImageData::Png` (Windows) or `Rgba` (Linux/macOS), plus dimensions. Capture normalizes only explicitly raw pixels and rejects malformed raw dimensions/lengths. Never infer the representation from byte count: a valid encoded PNG can have exactly width × height × 4 bytes. Snapshot comparison and polling retain this representation tag. Native adapters still require their matching platform gate.
