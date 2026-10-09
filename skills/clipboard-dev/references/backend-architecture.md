@@ -202,6 +202,8 @@ The clipboard monitor produces change notifications; a capture thread reads plat
 
 macOS RTF capture reads `public.rtf` as NSData (16 MiB allocation ceiling), preserves non-ASCII code-page bytes as RTF hex escapes, and rejects raw `\\bin` runs because the stored RTF contract is a UTF-8 string. HTML/plain-text capture remains available when RTF is rejected. Native pasteboard behavior requires macOS verification.
 
+Windows native reads validate HGLOBAL sizes before copying: 64 MiB for text/HTML/RTF, 4 KiB for the private self-trigger marker and 512 MiB for DIB input. DIB and HBITMAP dimensions share the 16,384-axis and 512 MiB decoded RGBA ceiling; only declared pixel rows are converted. HBITMAP reads require all requested rows and use one DIB allocation. These are native safety ceilings; configured capture/persistence limits still apply afterwards. Synthetic DIB/header tests exercise the limits without touching the system clipboard.
+
 Linux `wl-paste`, `xclip` and foreground helpers use `platform/bounded_command.rs`:
 600 ms per subprocess and a 64 MiB stdout ceiling. Capture supplies a shared 3 s
 budget and stop flag across foreground sampling, formats and consistency retries;

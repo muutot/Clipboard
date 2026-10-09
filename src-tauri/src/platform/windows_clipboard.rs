@@ -73,6 +73,16 @@ pub const MOD_WIN: u32 = 0x0008;
 const APP_ICON_SIZE: u32 = 32;
 pub const SELF_TRIGGER_FORMAT_NAME: &str = "ClipboardDesktop.SelfTrigger.v1";
 
+// Native allocation ceilings precede configurable persistence limits. Text
+// matches the bounded Unix helpers; decoded pixels match the shared decoder.
+const MAX_NATIVE_TEXT_BYTES: usize = 64 * 1024 * 1024;
+const MAX_NATIVE_IMAGE_BYTES: usize = 512 * 1024 * 1024;
+const MAX_SELF_TRIGGER_BYTES: usize = 4096;
+
+fn native_payload_size_allowed(size: usize, limit: usize) -> bool {
+    size > 0 && size <= limit
+}
+
 /// Encodes all hashes that the capture pipeline may derive from a text write.
 /// Keeping the marker as a small private clipboard format lets a separate CLI
 /// process tell the running monitor that the next change originated here.
@@ -339,7 +349,7 @@ fn read_self_trigger_marker() -> Option<Vec<u8>> {
         }
 
         let size = GlobalSize(handle);
-        if size == 0 {
+        if !native_payload_size_allowed(size, MAX_SELF_TRIGGER_BYTES) {
             CloseClipboard();
             return None;
         }
@@ -722,6 +732,11 @@ pub fn read_clipboard_text() -> Option<String> {
             return None;
         }
 
+        let size = GlobalSize(handle);
+        if !native_payload_size_allowed(size, MAX_NATIVE_TEXT_BYTES) || !size.is_multiple_of(2) {
+            CloseClipboard();
+            return None;
+        }
         let ptr = GlobalLock(handle) as *const u16;
         if ptr.is_null() {
             CloseClipboard();
@@ -731,13 +746,13 @@ pub fn read_clipboard_text() -> Option<String> {
         // Bound the NUL-terminator scan to the real allocation size so a
         // producer that omits the terminator cannot cause an out-of-bounds
         // read past the locked global memory block.
-        let cap_u16 = GlobalSize(handle) / size_of::<u16>();
+        let cap_u16 = size / size_of::<u16>();
         let len = (0..cap_u16).take_while(|&i| *ptr.add(i) != 0).count();
-        let wide: Vec<u16> = std::slice::from_raw_parts(ptr, len).to_vec();
+        let text = String::from_utf16_lossy(std::slice::from_raw_parts(ptr, len));
         GlobalUnlock(handle);
         CloseClipboard();
 
-        Some(String::from_utf16_lossy(&wide))
+        Some(text)
     }
 }
 
@@ -851,7 +866,7 @@ pub fn read_clipboard_html() -> Option<String> {
         }
 
         let size = GlobalSize(handle);
-        if size == 0 {
+        if !native_payload_size_allowed(size, MAX_NATIVE_TEXT_BYTES) {
             CloseClipboard();
             return None;
         }
@@ -932,7 +947,7 @@ pub fn read_clipboard_rtf() -> Option<String> {
         }
 
         let size = GlobalSize(handle);
-        if size == 0 {
+        if !native_payload_size_allowed(size, MAX_NATIVE_TEXT_BYTES) {
             CloseClipboard();
             return None;
         }
@@ -1008,7 +1023,7 @@ pub fn read_clipboard_image() -> Option<(Vec<u8>, u32, u32)> {
             hbitmap_to_dib_bytes(handle).and_then(|dib| dib_to_png(&dib))
         } else {
             let size = GlobalSize(handle);
-            if size == 0 {
+            if !native_payload_size_allowed(size, MAX_NATIVE_IMAGE_BYTES) {
                 CloseClipboard();
                 return None;
             }
@@ -1017,9 +1032,9 @@ pub fn read_clipboard_image() -> Option<(Vec<u8>, u32, u32)> {
                 CloseClipboard();
                 return None;
             }
-            let data = std::slice::from_raw_parts(ptr, size).to_vec();
+            let result = dib_to_png(std::slice::from_raw_parts(ptr, size));
             GlobalUnlock(handle);
-            dib_to_png(&data)
+            result
         };
         CloseClipboard();
         result
@@ -1100,9 +1115,7 @@ unsafe fn hbitmap_to_dib_bytes(hbitmap: isize) -> Option<Vec<u8>> {
     }
     let width = bmp.bmWidth.unsigned_abs();
     let height = bmp.bmHeight.unsigned_abs();
-    let image_size = (width as usize)
-        .checked_mul(height as usize)?
-        .checked_mul(4)?;
+    let image_size = dib_32bpp_image_size(width, height)? as usize;
 
     let mut header = BITMAPINFOHEADER {
         biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
@@ -1123,7 +1136,9 @@ unsafe fn hbitmap_to_dib_bytes(hbitmap: isize) -> Option<Vec<u8>> {
     if dc == 0 {
         return None;
     }
-    let mut pixels = vec![0u8; image_size];
+    let header_size = std::mem::size_of::<BITMAPINFOHEADER>();
+    let mut dib = vec![0u8; header_size + image_size];
+    let pixels = &mut dib[header_size..];
     let copied = GetDIBits(
         dc,
         hbitmap,
@@ -1134,7 +1149,7 @@ unsafe fn hbitmap_to_dib_bytes(hbitmap: isize) -> Option<Vec<u8>> {
         DIB_RGB_COLORS,
     );
     ReleaseDC(0, dc);
-    if copied == 0 {
+    if copied != height as i32 {
         return None;
     }
 
@@ -1142,12 +1157,10 @@ unsafe fn hbitmap_to_dib_bytes(hbitmap: isize) -> Option<Vec<u8>> {
         pixel[3] = 255;
     }
 
-    let mut dib = Vec::with_capacity(std::mem::size_of::<BITMAPINFOHEADER>() + pixels.len());
-    dib.extend_from_slice(std::slice::from_raw_parts(
+    dib[..header_size].copy_from_slice(std::slice::from_raw_parts(
         (&header as *const BITMAPINFOHEADER) as *const u8,
-        std::mem::size_of::<BITMAPINFOHEADER>(),
+        header_size,
     ));
-    dib.extend_from_slice(&pixels);
     Some(dib)
 }
 
@@ -1172,6 +1185,7 @@ fn dib_to_png(dib: &[u8]) -> Option<(Vec<u8>, u32, u32)> {
     let raw_height = i32::from_le_bytes([dib[8], dib[9], dib[10], dib[11]]);
     let top_down = raw_height < 0;
     let height_abs = raw_height.unsigned_abs();
+    dib_32bpp_image_size(width, height_abs)?;
     let bit_count = u16::from_le_bytes([dib[14], dib[15]]);
 
     let header_size = header_size as usize;
@@ -1232,6 +1246,7 @@ fn dib_to_png(dib: &[u8]) -> Option<(Vec<u8>, u32, u32)> {
         return None;
     }
 
+    let pixel_data = &pixel_data[..usize::try_from(required_bytes).ok()?];
     let img = match bit_count {
         32 => {
             let rgba = bgra_to_rgba(pixel_data, width, height_abs, top_down);
@@ -1240,7 +1255,7 @@ fn dib_to_png(dib: &[u8]) -> Option<(Vec<u8>, u32, u32)> {
         }
         24 => {
             let rgb = bgr_to_rgb(pixel_data, width, height_abs, top_down);
-            let mut buf = Vec::with_capacity(rgb.len());
+            let mut buf = Vec::with_capacity(width as usize * height_abs as usize * 4);
             for chunk in rgb.as_chunks::<3>().0 {
                 buf.extend_from_slice(&[chunk[0], chunk[1], chunk[2], 255]);
             }
@@ -1275,7 +1290,7 @@ pub fn read_clipboard_image() -> Option<(Vec<u8>, u32, u32)> {
 
 #[cfg(target_os = "windows")]
 fn bgra_to_rgba(data: &[u8], width: u32, height: u32, top_down: bool) -> Vec<u8> {
-    let mut out = Vec::with_capacity(data.len());
+    let mut out = Vec::with_capacity(width as usize * height as usize * 4);
     let row_size = (width * 4) as usize;
     for index in 0..height {
         // Bottom-up DIBs store rows reversed in memory; top-down DIBs do not.
@@ -1291,7 +1306,7 @@ fn bgra_to_rgba(data: &[u8], width: u32, height: u32, top_down: bool) -> Vec<u8>
 
 #[cfg(target_os = "windows")]
 fn bgr_to_rgb(data: &[u8], width: u32, height: u32, top_down: bool) -> Vec<u8> {
-    let mut out = Vec::with_capacity(data.len());
+    let mut out = Vec::with_capacity(width as usize * height as usize * 3);
     let row_padded = (width * 3).div_ceil(4) * 4;
     for index in 0..height {
         // Mirror `bgra_to_rgba`: only bottom-up DIBs read rows in reverse.
@@ -1542,14 +1557,23 @@ pub fn extract_app_icon(
 }
 
 /// Byte size of a 32-bpp top-down DIB for `width`×`height` pixels. Returns
-/// `None` instead of wrapping when the dimensions overflow, so a corrupt
-/// bitmap is rejected rather than under-allocated.
+/// `None` when dimensions overflow or exceed the shared decode budget, so a
+/// corrupt bitmap is rejected before allocating or calling GetDIBits.
 #[cfg(target_os = "windows")]
 fn dib_32bpp_image_size(width: u32, height: u32) -> Option<u32> {
+    if width == 0
+        || height == 0
+        || width > crate::content::hash::MAX_DECODE_DIMENSION
+        || height > crate::content::hash::MAX_DECODE_DIMENSION
+    {
+        return None;
+    }
+
     let row_size = width
         .checked_mul(32)
         .and_then(|bits| bits.div_ceil(32).checked_mul(4))?;
-    row_size.checked_mul(height)
+    let size = row_size.checked_mul(height)?;
+    native_payload_size_allowed(size as usize, MAX_NATIVE_IMAGE_BYTES).then_some(size)
 }
 
 #[cfg(target_os = "windows")]
@@ -2166,6 +2190,28 @@ mod tests {
 
     #[cfg(target_os = "windows")]
     #[test]
+    fn dib_to_png_rejects_dimensions_above_the_shared_decode_ceiling() {
+        let width = crate::content::hash::MAX_DECODE_DIMENSION + 1;
+        let mut dib = vec![0u8; 40 + width as usize * 4];
+        dib[0..4].copy_from_slice(&40u32.to_le_bytes());
+        dib[4..8].copy_from_slice(&width.to_le_bytes());
+        dib[8..12].copy_from_slice(&1i32.to_le_bytes());
+        dib[12..14].copy_from_slice(&1u16.to_le_bytes());
+        dib[14..16].copy_from_slice(&32u16.to_le_bytes());
+        assert!(dib_to_png(&dib).is_none());
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn bgra_conversion_does_not_reserve_trailing_allocation_bytes() {
+        let bytes = vec![255; 1024 * 1024];
+        let rgba = bgra_to_rgba(&bytes, 1, 1, false);
+        assert_eq!(rgba, vec![255; 4]);
+        assert_eq!(rgba.capacity(), 4);
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
     fn dib_to_png_rejects_pixel_payload_shorter_than_header_claims() {
         let mut header = [0u8; 40];
         header[0..4].copy_from_slice(&40u32.to_le_bytes()); // biSize
@@ -2307,6 +2353,24 @@ mod tests {
         assert_eq!(dib_32bpp_image_size(2, 3), Some(24));
         assert_eq!(dib_32bpp_image_size(u32::MAX, 1), None);
         assert_eq!(dib_32bpp_image_size(1, u32::MAX), None);
+        assert_eq!(dib_32bpp_image_size(0, 1), None);
+        assert_eq!(dib_32bpp_image_size(16_384, 16_384), None);
+        assert_eq!(dib_32bpp_image_size(16_384, 8192), Some(512 * 1024 * 1024));
+    }
+
+    #[test]
+    fn native_payload_caps_reject_oversized_lengths_without_allocating() {
+        for limit in [
+            MAX_NATIVE_TEXT_BYTES,
+            MAX_NATIVE_IMAGE_BYTES,
+            MAX_SELF_TRIGGER_BYTES,
+        ] {
+            assert!(!native_payload_size_allowed(0, limit));
+            assert!(native_payload_size_allowed(limit, limit));
+            assert!(!native_payload_size_allowed(limit + 1, limit));
+            assert!(!native_payload_size_allowed(usize::MAX, limit));
+        }
+        assert!(self_trigger_marker_for_text("a\nb\nc").len() < MAX_SELF_TRIGGER_BYTES);
     }
 
     #[cfg(target_os = "windows")]
