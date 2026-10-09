@@ -36,6 +36,8 @@ The main search view always follows backend sort rules. Capture/content/membersh
 
 ### Float panel row operations
 
+Float deletion follows `generalSettings.useRecycleBin`: soft delete while enabled, direct active-record deletion while disabled, using the same services and backend favorite protection as the main route. Failed or rejected deletions retain the row and show failure feedback.
+
 `src/routes/float/+page.svelte` tracks in-flight copy and copy/paste actions with a reactive set of item IDs. Each row remains disabled until its own request completes; starting or finishing another row's operation must not release that guard. The mounted route tests in `src/routes/float/float-page.test.ts` cover concurrent completion as well as cross-window history reconciliation.
 
 The `detail` click action shows the main window and sends `clipboard-open-detail` with the view record. The main route reuses its detail/materialization path even when that record is absent from its current history filter; opening details must never overwrite the clipboard. `src/routes/main-detail.test.ts` mounts the real main route and verifies that a float-only record opens without being added to history.

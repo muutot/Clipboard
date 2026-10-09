@@ -17,6 +17,7 @@
     pasteClipboardItem,
     persistDelete,
     persistFavorite,
+    persistHardDelete,
   } from "$lib/services/clipboard";
   import { generalSettings } from "$lib/services/settings";
   import { applyGeneralSettingsToDocument } from "$lib/services/settings-bootstrap";
@@ -162,11 +163,14 @@
       return;
     }
     if (action === "delete") {
-      const ok = await persistDelete(id);
-      if (ok) {
+      try {
+        const ok = await ($generalSettings.useRecycleBin
+          ? persistDelete(id)
+          : persistHardDelete(id));
+        if (!ok) throw new Error("record was not deleted");
         itemStore.current = removeItems(itemStore.current, new Set([id]));
         showToast(_t("toast.deleteSuccess"), "success");
-      } else {
+      } catch {
         showToast(_t("app.deleteFailed"), "error");
       }
     }

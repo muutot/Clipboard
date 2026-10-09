@@ -8,6 +8,8 @@ const bridge = vi.hoisted(() => ({
   listeners: new Map<string, (event: { payload: unknown }) => void>(),
   load: vi.fn(),
   favorite: vi.fn(),
+  softDelete: vi.fn(),
+  hardDelete: vi.fn(),
   copy: vi.fn(),
   emit: vi.fn(),
   showMain: vi.fn(),
@@ -51,6 +53,8 @@ vi.mock("$lib/services/clipboard", async (original) => ({
   ...(await original<object>()),
   loadClipboardHistory: bridge.load,
   persistFavorite: bridge.favorite,
+  persistDelete: bridge.softDelete,
+  persistHardDelete: bridge.hardDelete,
   copyClipboardItem: bridge.copy,
 }));
 
@@ -74,6 +78,8 @@ beforeEach(() => {
   bridge.listeners.clear();
   bridge.load.mockReset().mockResolvedValue([item("a", true)]);
   bridge.favorite.mockReset().mockResolvedValue(true);
+  bridge.softDelete.mockReset().mockResolvedValue(true);
+  bridge.hardDelete.mockReset().mockResolvedValue(true);
   bridge.copy.mockReset();
   bridge.emit.mockReset().mockResolvedValue(undefined);
   bridge.showMain.mockReset().mockResolvedValue(undefined);
@@ -115,6 +121,35 @@ function changed(payload: Partial<ClipboardItemsChangedPayload>) {
 }
 
 describe("float history reconciliation", () => {
+  it.each([true, false])("honors useRecycleBin=%s when deleting", async (useRecycleBin) => {
+    generalSettings.update((settings) => ({
+      ...settings,
+      useRecycleBin,
+      floatPanelLeftClick: "delete",
+    }));
+    bridge.load.mockResolvedValue([item("a")]);
+    const page = await render();
+    page.rows()[0].click();
+    await settle();
+    expect(useRecycleBin ? bridge.softDelete : bridge.hardDelete).toHaveBeenCalledWith("a");
+    expect(useRecycleBin ? bridge.hardDelete : bridge.softDelete).not.toHaveBeenCalled();
+    expect(page.rows()).toHaveLength(0);
+  });
+
+  it("retains the row when permanent deletion fails", async () => {
+    generalSettings.update((settings) => ({
+      ...settings,
+      useRecycleBin: false,
+      floatPanelLeftClick: "delete",
+    }));
+    bridge.load.mockResolvedValue([item("a")]);
+    bridge.hardDelete.mockResolvedValue(false);
+    const page = await render();
+    page.rows()[0].click();
+    await settle();
+    expect(page.rows()).toHaveLength(1);
+  });
+
   it("opens details in the main window without copying the record", async () => {
     generalSettings.update((settings) => ({ ...settings, floatPanelLeftClick: "detail" }));
     const page = await render();
