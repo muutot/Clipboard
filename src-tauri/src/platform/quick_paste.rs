@@ -127,7 +127,7 @@ mod mac {
 }
 
 #[cfg(any(test, target_os = "linux"))]
-#[cfg_attr(all(test, target_os = "windows"), allow(dead_code))]
+#[cfg_attr(all(test, not(target_os = "linux")), allow(dead_code))]
 mod x11 {
     use super::*;
     use x11rb::{
