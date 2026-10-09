@@ -55,7 +55,17 @@ fn sway_target(node: &serde_json::Value) -> Option<Target> {
     }
     None
 }
-pub fn current() -> Option<Target> {
+fn hyprland_target(value: &serde_json::Value) -> Option<Target> {
+    let address = value.get("address")?.as_str()?.strip_prefix("0x")?;
+    Some(Target {
+        handle: isize::from_str_radix(address, 16).ok()?,
+        pid: u32::try_from(value.get("pid")?.as_u64()?).ok()?,
+    })
+}
+
+/// Queries the compositor identity, including our own window for capture
+/// attribution. Only quick paste excludes our own process.
+pub fn foreground_target() -> Option<Target> {
     let target = if sway() {
         sway_target(
             &serde_json::from_slice(&command("swaymsg", &["-t", "get_tree", "-r"]).ok()?).ok()?,
@@ -63,15 +73,15 @@ pub fn current() -> Option<Target> {
     } else if hyprland() {
         let value: serde_json::Value =
             serde_json::from_slice(&command("hyprctl", &["activewindow", "-j"]).ok()?).ok()?;
-        let address = value.get("address")?.as_str()?.strip_prefix("0x")?;
-        Target {
-            handle: isize::from_str_radix(address, 16).ok()?,
-            pid: u32::try_from(value.get("pid")?.as_u64()?).ok()?,
-        }
+        hyprland_target(&value)?
     } else {
         return None;
     };
-    (target.handle > 0 && target.pid > 0 && target.pid != std::process::id()).then_some(target)
+    (target.handle > 0 && target.pid > 0).then_some(target)
+}
+
+pub fn current() -> Option<Target> {
+    foreground_target().filter(|target| target.pid != std::process::id())
 }
 pub fn paste(target: Target) -> Result<(), String> {
     if !available() {
@@ -128,5 +138,24 @@ mod tests {
             })
         );
         assert!(sway_target(&serde_json::json!({"focused":false,"id":2,"pid":456})).is_none());
+    }
+
+    #[test]
+    fn compositor_pid_is_distinct_from_window_handle_and_accepts_our_process() {
+        let pid = std::process::id();
+        let value = serde_json::json!({"address":"0xabc123", "pid":pid});
+        assert_eq!(
+            hyprland_target(&value),
+            Some(Target {
+                handle: 0xabc123,
+                pid
+            })
+        );
+        assert!(hyprland_target(&serde_json::json!({"address":"0xabc123", "pid":-1})).is_none());
+        assert!(
+            hyprland_target(&serde_json::json!({"address":"0xabc123", "pid":4294967296u64}))
+                .is_none()
+        );
+        assert!(hyprland_target(&serde_json::json!({})).is_none());
     }
 }

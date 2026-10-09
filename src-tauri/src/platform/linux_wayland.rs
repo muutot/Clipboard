@@ -963,45 +963,10 @@ pub fn read_clipboard_file_paths() -> Vec<String> {
 /// Returns the foreground application on Wayland using `swaymsg` or `hyprctl`.
 #[cfg(target_os = "linux")]
 pub fn get_foreground_app() -> crate::platform::ForegroundApp {
-    // Try Sway first, then Hyprland, then fallback to /proc via xdotool (XWayland)
-    let pid = std::process::Command::new("swaymsg")
-        .args(["-t", "get_seats"])
-        .bounded_output(64 * 1024 * 1024)
-        .ok()
-        .and_then(|output| {
-            if output.status.success() {
-                // Parse JSON to get the focused view PID
-                let text = String::from_utf8(output.stdout).ok()?;
-                let json: serde_json::Value = serde_json::from_str(&text).ok()?;
-                json.as_array()?
-                    .first()?
-                    .get("focus")?
-                    .as_array()?
-                    .first()?
-                    .as_u64()
-            } else {
-                None
-            }
-        })
-        .or_else(|| {
-            // Hyprland
-            std::process::Command::new("hyprctl")
-                .args(["activewindow"])
-                .bounded_output(64 * 1024 * 1024)
-                .ok()
-                .and_then(|output| {
-                    if output.status.success() {
-                        let text = String::from_utf8(output.stdout).ok()?;
-                        // Parse "PID: 1234" from output
-                        for line in text.lines() {
-                            if let Some(pid_str) = line.strip_prefix("PID: ") {
-                                return pid_str.trim().parse::<u64>().ok();
-                            }
-                        }
-                    }
-                    None
-                })
-        })
+    // Compositor window ids are not OS process ids. Reuse the JSON query
+    // used by quick paste, but retain our own pid for source attribution.
+    let pid = super::wayland_paste::foreground_target()
+        .map(|target| u64::from(target.pid))
         .or_else(|| {
             // Fallback: use xdotool (works in XWayland sessions)
             std::process::Command::new("xdotool")
