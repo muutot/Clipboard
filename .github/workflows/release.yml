@@ -16,22 +16,40 @@ on:
 permissions:
   contents: read
 
-env:
-  # Tag push — use the pushed tag; manual dispatch — build the tag from the
-  # version input so `tauri-action` names the release/tag consistently.
-  RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || format('v{0}', inputs.version) }}
-
 jobs:
+  resolve:
+    name: Resolve release commit
+    runs-on: ubuntu-latest
+    outputs:
+      release_tag: ${{ steps.identity.outputs.release_tag }}
+      release_sha: ${{ steps.identity.outputs.release_sha }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: "24"
+      - name: Validate and resolve release tag
+        id: identity
+        run: node scripts/validate-release-version.mjs --resolve
+        env:
+          GITHUB_EVENT_INPUTS_VERSION: ${{ inputs.version }}
+
   verify:
     name: Verify
+    needs: resolve
     runs-on: ubuntu-latest
     env:
+      RELEASE_TAG: ${{ needs.resolve.outputs.release_tag }}
+      RELEASE_SHA: ${{ needs.resolve.outputs.release_sha }}
       RUSTFLAGS: -C link-arg=-fuse-ld=mold
       RUSTC_WRAPPER: sccache
       SCCACHE_GHA_ENABLED: "true"
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
+          ref: ${{ needs.resolve.outputs.release_sha }}
           fetch-depth: 0
 
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
@@ -65,11 +83,6 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Validate release identity
-        run: node scripts/validate-release-version.mjs
-        env:
-          GITHUB_EVENT_INPUTS_VERSION: ${{ inputs.version }}
-
       - name: Verify
         run: npm run verify
 
@@ -82,11 +95,13 @@ jobs:
 
   build:
     name: Build (${{ matrix.platform }})
-    needs: verify
+    needs: [resolve, verify]
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: write
     env:
+      RELEASE_TAG: ${{ needs.resolve.outputs.release_tag }}
+      RELEASE_SHA: ${{ needs.resolve.outputs.release_sha }}
       CARGO_PROFILE_RELEASE_LTO: "true"
       CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "1"
       CARGO_PROFILE_RELEASE_OPT_LEVEL: "3"
@@ -124,6 +139,7 @@ jobs:
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
+          ref: ${{ needs.resolve.outputs.release_sha }}
           fetch-depth: 0
 
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
@@ -283,7 +299,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_TAG: ${{ env.RELEASE_TAG }}
+          RELEASE_TAG: ${{ needs.resolve.outputs.release_tag }}
         run: |
           set -euo pipefail
           out="checksums-${{ matrix.platform }}.txt"
@@ -304,7 +320,7 @@ jobs:
 
   publish:
     name: Publish release
-    needs: build
+    needs: [resolve, build]
     if: success()
     runs-on: ubuntu-latest
     permissions:
@@ -317,7 +333,7 @@ jobs:
       - name: Publish the draft release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_TAG: ${{ env.RELEASE_TAG }}
+          RELEASE_TAG: ${{ needs.resolve.outputs.release_tag }}
         run: |
           set -euo pipefail
           gh release edit "$RELEASE_TAG" --draft=false --latest --repo "$GITHUB_REPOSITORY"

@@ -47,6 +47,8 @@ jobs:
 
       - run: npm run test
 
+      - run: node --test scripts/test-release-identity.mjs
+
       - run: npm run check
 
       - run: npm run build

@@ -46,7 +46,7 @@ The release commit must contain **exactly** the six release files and nothing el
    staged. **Always create the release commit through the script.** Hand-rolling
    `git reset --soft` + `git add` + `git commit` bypasses this guard, which is exactly how
    mixed release commits happen.
-2. **Remotely** — `scripts/validate-release-version.mjs` (release.yml Verify job) fails the
+2. **Remotely** — `scripts/validate-release-version.mjs` (release.yml Resolve job) fails the
    build when the tagged commit touches any file outside the six.
 
 ### Post-push CI failure recovery
@@ -235,6 +235,14 @@ The release script is **local-only** — it performs no remote operations. After
 3. Release commit + tag exist only locally; **the user pushes to origin manually** to trigger GitHub Actions (which builds artifacts automatically)
 
 ## CI/CD
+
+Manual dispatch and tag pushes resolve an existing `v<version>` tag through
+`scripts/validate-release-version.mjs --resolve`. Resolution reads the tagged tree,
+checks version files and the release-only commit rules, then exports its SHA.
+Verify and all build jobs check out that same SHA. Manual inputs accept either
+`x.y.z` or `vx.y.z`; selecting a newer dispatch branch does not change release
+contents. `node --test scripts/test-release-identity.mjs` verifies these rules in
+temporary Git repositories without publishing or changing project tags.
 
 When the release commit is pushed to the main branch (manually, by the user), CI still runs: `ci.yml` only ignores pushes that touch solely `CHANGELOG.md` / `RELEASE.md`; manifest and version files intentionally still trigger the full pipeline.
 

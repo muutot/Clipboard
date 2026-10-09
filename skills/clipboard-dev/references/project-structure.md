@@ -90,6 +90,11 @@ The resolver takes `$UninstallProjectRoot`. Before removing settings, uninstall 
 
 `scripts/sync_release.py` sends the GitCode bearer credential only to HTTPS upload URLs with the same origin as `GITCODE_API_BASE`. External presigned uploads use only the returned upload headers; explicit upload authorization takes precedence case-insensitively. Invalid or insecure upload URLs are rejected without printing signed URLs. `python scripts/test-sync-release.py` exercises the production upload functions with synthetic HTTP responses, without calling release services.
 
+Release workflow resolution uses `scripts/validate-release-version.mjs --resolve`
+to validate the requested tag tree and pass one immutable SHA to verify/build jobs.
+Its dispatch, tag, commit-scope and version regressions run with
+`node --test scripts/test-release-identity.mjs` in temporary Git repositories.
+
 ## High-coupling files
 
 Treat these as integration points and avoid concurrent edits:
