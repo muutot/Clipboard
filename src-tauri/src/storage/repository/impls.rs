@@ -1019,15 +1019,20 @@ impl ClipboardRepository for Database {
         })
     }
 
-    fn clear_all_non_favorite_items(&self) -> Result<u64, StorageError> {
+    fn clear_all_non_favorite_items(&self) -> Result<Vec<String>, StorageError> {
         self.with_connection(|connection| {
-            let deleted = connection.execute(
-                "UPDATE clipboard_items
-                 SET deleted = 1, deleted_at_ms = ?1
-                 WHERE is_favorite = 0 AND deleted = 0",
-                [current_time_ms()],
-            )?;
-            Ok(deleted as u64)
+            let tx = connection.transaction()?;
+            let ids = {
+                let mut statement = tx.prepare(
+                    "UPDATE clipboard_items
+                     SET deleted = 1, deleted_at_ms = ?1
+                     WHERE is_favorite = 0 AND deleted = 0 RETURNING id",
+                )?;
+                let rows = statement.query_map([current_time_ms()], |row| row.get(0))?;
+                rows.collect::<Result<Vec<String>, _>>()?
+            };
+            tx.commit()?;
+            Ok(ids)
         })
     }
 

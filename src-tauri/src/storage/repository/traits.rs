@@ -182,7 +182,7 @@ pub trait ClipboardRepository {
     /// Permanently removes requested soft-deleted records atomically.
     fn permanently_delete_batch(&self, ids: &[String]) -> Result<bool, StorageError>;
     fn permanently_delete_expired(&self, days: u32) -> Result<u64, StorageError>;
-    fn clear_all_non_favorite_items(&self) -> Result<u64, StorageError>;
+    fn clear_all_non_favorite_items(&self) -> Result<Vec<String>, StorageError>;
     fn count_by_kind(&self, kind: &str) -> Result<u64, StorageError>;
     fn size_by_kind(&self, kind: &str) -> Result<u64, StorageError>;
     /// Returns the count and logical byte size for one kind and explicit scope.

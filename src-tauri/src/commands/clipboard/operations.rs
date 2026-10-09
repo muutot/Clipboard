@@ -540,10 +540,28 @@ pub fn soft_delete_clipboard_item(
 }
 
 #[tauri::command]
-pub fn clear_all_non_favorite_items(database: tauri::State<'_, Database>) -> Result<u64, String> {
-    database
+pub fn clear_all_non_favorite_items(
+    app: AppHandle,
+    database: tauri::State<'_, Database>,
+) -> Result<u64, String> {
+    clear_non_favorite_records(&database, |payload| emit_items_changed(&app, payload))
+}
+
+fn clear_non_favorite_records(
+    database: &Database,
+    notify: impl FnOnce(ClipboardItemsChanged),
+) -> Result<u64, String> {
+    let ids = database
         .clear_all_non_favorite_items()
-        .map_err(|error| error.to_string())
+        .map_err(|error| error.to_string())?;
+    let count = ids.len() as u64;
+    if count > 0 {
+        notify(ClipboardItemsChanged {
+            deleted_ids: ids,
+            ..ClipboardItemsChanged::default()
+        });
+    }
+    Ok(count)
 }
 
 #[tauri::command]
@@ -1096,6 +1114,44 @@ mod tests {
             is_favorite: false,
             metadata_json: None,
         }
+    }
+
+    #[test]
+    fn clearing_history_announces_only_rows_soft_deleted_by_its_commit() {
+        let database = Database::open_in_memory().unwrap();
+        database.save_item(&item("active", "active")).unwrap();
+        database
+            .save_item(&item("already-deleted", "deleted"))
+            .unwrap();
+        database.soft_delete("already-deleted").unwrap();
+        let mut favorite = item("favorite", "favorite");
+        favorite.is_favorite = true;
+        database.save_item(&favorite).unwrap();
+        let count = super::clear_non_favorite_records(&database, |payload| {
+            assert_eq!(payload.deleted_ids, vec!["active"]);
+            assert!(payload.removed_ids.is_empty());
+            assert_eq!(database.list_deleted(10, 0).unwrap().len(), 2);
+            assert!(database.get_item("favorite").unwrap().unwrap().is_favorite);
+        })
+        .unwrap();
+        assert_eq!(count, 1);
+        assert_eq!(
+            super::clear_non_favorite_records(&database, |_| {
+                panic!("an unchanged history must not notify");
+            })
+            .unwrap(),
+            0
+        );
+        database
+            .with_connection(|connection| {
+                connection.execute_batch("DROP TABLE clipboard_items")?;
+                Ok(())
+            })
+            .unwrap();
+        assert!(super::clear_non_favorite_records(&database, |_| {
+            panic!("a failed clear must not notify");
+        })
+        .is_err());
     }
 
     #[test]
