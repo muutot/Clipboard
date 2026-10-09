@@ -1,9 +1,11 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import AppIcon from "$lib/components/AppIcon.svelte";
   import { messages, resolvePath } from "$lib/i18n";
   import {
     configureStorageDirectory,
+    getStorageConfig,
     setResourceOwnership,
     setResourceStoragePaths,
     type StorageDirectoryUpdate,
@@ -26,6 +28,8 @@
   let restartNeeded = $state(false);
   let imageStoragePath = $state("");
   let fileStoragePath = $state("");
+  let resourcePathsLoaded = $state(false);
+  let resourcePathsLoadFailed = $state(false);
   let savingResourceStorage = $state(false);
   let pendingResourceStorage = $state<{
     imageStoragePath: string;
@@ -36,6 +40,27 @@
   let ownershipEnabled = $state(false);
   let togglingOwnership = $state(false);
   let markerRestartNeeded = $state(false);
+
+  onMount(() => {
+    let disposed = false;
+    void getStorageConfig()
+      .then((config) => {
+        if (disposed) return;
+        // Persisted paths may already target the next launch; status describes
+        // the currently active roots and must only supply the placeholders.
+        imageStoragePath = config.imageStoragePath ?? "";
+        fileStoragePath = config.fileStoragePath ?? "";
+        resourcePathsLoaded = true;
+      })
+      .catch((error) => {
+        if (disposed) return;
+        resourcePathsLoadFailed = true;
+        onfeedback(error instanceof Error ? error.message : String(error), false);
+      });
+    return () => {
+      disposed = true;
+    };
+  });
 
   $effect(() => {
     dataDirectory = status?.dataDirectoryPath ?? "";
@@ -101,12 +126,16 @@
   }
 
   async function saveResourceStoragePaths() {
+    await saveResourcePaths(imageStoragePath.trim(), fileStoragePath.trim());
+  }
+
+  async function saveResourcePaths(imagePath: string, filePath: string) {
+    if (!resourcePathsLoaded || savingResourceStorage) return;
     savingResourceStorage = true;
     try {
-      const result = await setResourceStoragePaths(
-        imageStoragePath.trim() || null,
-        fileStoragePath.trim() || null,
-      );
+      const result = await setResourceStoragePaths(imagePath || null, filePath || null);
+      imageStoragePath = imagePath;
+      fileStoragePath = filePath;
       pendingResourceStorage = result;
       resourceStorageRestartNeeded = result.restartRequired;
       onfeedback(
@@ -124,9 +153,7 @@
   }
 
   async function restoreDefaultResourceStoragePaths() {
-    imageStoragePath = "";
-    fileStoragePath = "";
-    await saveResourceStoragePaths();
+    await saveResourcePaths("", "");
   }
 
   async function toggleOwnership(next: boolean) {
@@ -227,53 +254,61 @@
         <p>{_t("storage.resourcePathsDesc")}</p>
       </div>
     </div>
-    <div class="resource-path-grid">
-      <label for="image-storage-path">
-        <span>{_t("storage.imageStoragePath")}</span>
-        <input
-          id="image-storage-path"
-          bind:value={imageStoragePath}
-          autocomplete="off"
-          spellcheck="false"
-          placeholder={status?.imagePath ?? ""}
-        />
-      </label>
-      <label for="file-storage-path">
-        <span>{_t("storage.fileStoragePath")}</span>
-        <input
-          id="file-storage-path"
-          bind:value={fileStoragePath}
-          autocomplete="off"
-          spellcheck="false"
-          placeholder={status?.filesPath ?? ""}
-        />
-      </label>
-    </div>
-    <div class="dir-input-row resource-path-actions">
-      <span>{_t("storage.resourcePathsRestartHint")}</span>
-      <button
-        type="button"
-        disabled={savingResourceStorage}
-        onclick={restoreDefaultResourceStoragePaths}>{_t("storage.restoreDefault")}</button
-      >
-      <button type="button" disabled={savingResourceStorage} onclick={saveResourceStoragePaths}
-        >{savingResourceStorage ? _t("storage.saving") : _t("storage.saveDirectory")}</button
-      >
-    </div>
-    {#if pendingResourceStorage}
-      <div class="resource-path-summary">
-        <code title={pendingResourceStorage.imageStoragePath}
-          >{_t("storage.imageStoragePath")}: {pendingResourceStorage.imageStoragePath}</code
-        >
-        <code title={pendingResourceStorage.fileStoragePath}
-          >{_t("storage.fileStoragePath")}: {pendingResourceStorage.fileStoragePath}</code
-        >
-        {#if resourceStorageRestartNeeded}
-          <button class="restart-btn" type="button" onclick={restartApp}>
-            {_t("storage.restartNow")}
-          </button>
-        {/if}
+    {#if resourcePathsLoaded}
+      <div class="resource-path-grid">
+        <label for="image-storage-path">
+          <span>{_t("storage.imageStoragePath")}</span>
+          <input
+            id="image-storage-path"
+            disabled={savingResourceStorage}
+            bind:value={imageStoragePath}
+            autocomplete="off"
+            spellcheck="false"
+            placeholder={status?.imagePath ?? ""}
+          />
+        </label>
+        <label for="file-storage-path">
+          <span>{_t("storage.fileStoragePath")}</span>
+          <input
+            id="file-storage-path"
+            disabled={savingResourceStorage}
+            bind:value={fileStoragePath}
+            autocomplete="off"
+            spellcheck="false"
+            placeholder={status?.filesPath ?? ""}
+          />
+        </label>
       </div>
+      <div class="dir-input-row resource-path-actions">
+        <span>{_t("storage.resourcePathsRestartHint")}</span>
+        <button
+          type="button"
+          disabled={savingResourceStorage}
+          onclick={restoreDefaultResourceStoragePaths}>{_t("storage.restoreDefault")}</button
+        >
+        <button type="button" disabled={savingResourceStorage} onclick={saveResourceStoragePaths}
+          >{savingResourceStorage ? _t("storage.saving") : _t("storage.saveDirectory")}</button
+        >
+      </div>
+      {#if pendingResourceStorage}
+        <div class="resource-path-summary">
+          <code title={pendingResourceStorage.imageStoragePath}
+            >{_t("storage.imageStoragePath")}: {pendingResourceStorage.imageStoragePath}</code
+          >
+          <code title={pendingResourceStorage.fileStoragePath}
+            >{_t("storage.fileStoragePath")}: {pendingResourceStorage.fileStoragePath}</code
+          >
+          {#if resourceStorageRestartNeeded}
+            <button class="restart-btn" type="button" onclick={restartApp}>
+              {_t("storage.restartNow")}
+            </button>
+          {/if}
+        </div>
+      {/if}
+    {:else}
+      <p class="settings-state" role="status">
+        {_t(resourcePathsLoadFailed ? "storage.storageUnavailable" : "storage.readingConfig")}
+      </p>
     {/if}
   </section>
 
