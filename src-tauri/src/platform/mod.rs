@@ -59,6 +59,8 @@ pub mod single_instance;
 #[cfg(target_os = "linux")]
 pub mod stop_pipe;
 pub mod ui;
+#[cfg(target_os = "linux")]
+mod wayland_dispatch;
 #[cfg(any(test, target_os = "linux"))]
 pub mod wayland_paste;
 #[cfg(any(test, target_os = "linux"))]

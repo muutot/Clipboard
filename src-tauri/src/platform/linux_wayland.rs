@@ -1083,9 +1083,9 @@ pub(crate) fn try_spawn_data_control_monitor(
     std::thread::JoinHandle<()>,
     crate::platform::stop_pipe::StopPipeWriter,
 )> {
+    use super::wayland_dispatch::dispatch_once;
     use crate::platform::stop_pipe::StopPipePair;
-    use std::os::fd::{AsFd, AsRawFd};
-    use wayland_client::protocol::{wl_registry, wl_seat};
+    use wayland_client::protocol::{wl_callback, wl_registry, wl_seat};
     use wayland_client::{Connection, Dispatch, QueueHandle};
     use wayland_protocols::ext::data_control::v1::client::{
         ext_data_control_device_v1::{self, ExtDataControlDeviceV1},
@@ -1160,6 +1160,38 @@ pub(crate) fn try_spawn_data_control_monitor(
         device: Option<DataControlDevice>,
         offers: Vec<Offer>,
         sequence: u32,
+        roundtrip_done: bool,
+    }
+
+    impl Dispatch<wl_callback::WlCallback, ()> for DataControlState {
+        fn event(
+            state: &mut Self,
+            _: &wl_callback::WlCallback,
+            _: wl_callback::Event,
+            _: &(),
+            _: &Connection,
+            _: &QueueHandle<Self>,
+        ) {
+            state.roundtrip_done = true;
+        }
+    }
+
+    fn bounded_roundtrip(
+        connection: &Connection,
+        queue: &mut wayland_client::EventQueue<DataControlState>,
+        state: &mut DataControlState,
+        stop: i32,
+    ) -> std::io::Result<()> {
+        state.roundtrip_done = false;
+        connection.display().sync(&queue.handle(), ());
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        while !state.roundtrip_done {
+            dispatch_once(queue, state, stop, Some(deadline))?;
+            if std::time::Instant::now() >= deadline {
+                return Err(std::io::ErrorKind::TimedOut.into());
+            }
+        }
+        Ok(())
     }
 
     impl Dispatch<wl_registry::WlRegistry, ()> for DataControlState {
@@ -1346,9 +1378,10 @@ pub(crate) fn try_spawn_data_control_monitor(
         device: None,
         offers: Vec::new(),
         sequence: 0,
+        roundtrip_done: false,
     };
     // Collect the initial globals.
-    if event_queue.roundtrip(&mut state).is_err() {
+    if bounded_roundtrip(&connection, &mut event_queue, &mut state, stop.reader_fd()).is_err() {
         return None;
     }
     let (manager, seat) = match (state.manager.take(), state.seat.take()) {
@@ -1359,49 +1392,15 @@ pub(crate) fn try_spawn_data_control_monitor(
     let device = manager.get_data_device(&seat, &qh);
     state.device = Some(device);
     // Flush the get_data_device request before the thread takes over.
-    if event_queue.roundtrip(&mut state).is_err() {
+    if bounded_roundtrip(&connection, &mut event_queue, &mut state, stop.reader_fd()).is_err() {
         return None;
     }
 
-    let wayland_fd = connection.as_fd().as_raw_fd();
     let stop_reader_fd = stop.reader_fd();
     let spawn_result = std::thread::Builder::new()
         .name("wayland-clipboard-monitor".to_owned())
         .spawn(move || {
-            let mut fds = [
-                libc::pollfd {
-                    fd: wayland_fd,
-                    events: libc::POLLIN,
-                    revents: 0,
-                },
-                libc::pollfd {
-                    fd: stop_reader_fd,
-                    events: libc::POLLIN,
-                    revents: 0,
-                },
-            ];
-            loop {
-                // SAFETY: both fds are valid for the lifetime of the loop.
-                let ready = unsafe { libc::poll(fds.as_mut_ptr(), 2, -1) };
-                if ready < 0 {
-                    let error = std::io::Error::last_os_error();
-                    if error.kind() == std::io::ErrorKind::Interrupted {
-                        continue;
-                    }
-                    break;
-                }
-                if fds[1].revents != 0 {
-                    break; // stop requested
-                }
-                if fds[0].revents & libc::POLLIN == 0 {
-                    continue;
-                }
-                // Dispatch whatever the compositor sent; a roundtrip also
-                // flushes our side of the connection.
-                if event_queue.roundtrip(&mut state).is_err() {
-                    break;
-                }
-            }
+            while dispatch_once(&mut event_queue, &mut state, stop_reader_fd, None).is_ok() {}
             if let Some(device) = state.device.take() {
                 device.destroy();
             }

@@ -198,6 +198,10 @@ including macOS; Linux production code keeps normal dead-code diagnostics.
 
 Linux monitor stop pipes use `pipe2(O_NONBLOCK | O_CLOEXEC)` so both flags are
 set atomically and no partial initialization or child exec can leak a pipe end.
+Wayland monitor setup bounds each protocol handshake to two seconds. Its event
+loop uses prepare/read/dispatch with stop-pipe polling instead of blocking
+roundtrips, and exits on compositor disconnect. A synthetic Wayland socket test
+covers callback delivery, a stalled peer, stop wakeup, and disconnect.
 
 CI rust-cache must point to `src-tauri -> target`; `cache-targets` is a boolean,
 not a profile-directory list. Otherwise cache discovery looks for the absent
