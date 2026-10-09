@@ -793,6 +793,7 @@ pub fn save_clipboard_item_as_new_record(
 pub fn rename_item(
     app: AppHandle,
     database: tauri::State<'_, Database>,
+    paths: tauri::State<'_, StoragePaths>,
     capture: tauri::State<'_, CaptureState>,
     id: String,
     new_name: String,
@@ -805,7 +806,7 @@ pub fn rename_item(
         &capture.storage_maintenance_lock,
         "storage maintenance lock is poisoned",
     )?;
-    let renamed = rename_item_record(&database, id, new_name)?;
+    let renamed = rename_item_record(&database, &paths, id, new_name)?;
     // Other windows render the title and paths, so they need the renamed row.
     broadcast_content_changed(&app, &database, std::slice::from_ref(&renamed.id));
     Ok(renamed)
@@ -813,6 +814,7 @@ pub fn rename_item(
 
 fn rename_item_record(
     database: &Database,
+    paths: &StoragePaths,
     id: String,
     new_name: String,
 ) -> Result<ClipboardItem, String> {
@@ -843,7 +845,7 @@ fn rename_item_record(
                 .resource_reference_count(old_path, &id)
                 .map_err(|e| e.to_string())?
                 > 0;
-            if old.exists() && !shared {
+            if is_owned_rename_source(paths, old) && !shared {
                 let ext = old.extension().unwrap_or_default().to_string_lossy();
                 let parent = old.parent().unwrap_or(std::path::Path::new("."));
                 // The new name arrives from the webview and must never be able
@@ -911,6 +913,45 @@ fn rename_item_record(
     }
     database.save_item(&updated).map_err(|e| e.to_string())?;
     Ok(updated)
+}
+
+/// Pass-through originals and unclaimed roots are not ours to rename.
+/// Canonical containment rejects traversal and directory links escaping a root;
+/// symlink metadata rejects a linked leaf and directories themselves.
+fn is_owned_rename_source(paths: &StoragePaths, source: &std::path::Path) -> bool {
+    use crate::storage::{ResourceRootRole, RESOURCE_ROOT_MARKER};
+    if source
+        .file_name()
+        .is_some_and(|name| name == RESOURCE_ROOT_MARKER)
+        || !std::fs::symlink_metadata(source).is_ok_and(|meta| meta.file_type().is_file())
+    {
+        return false;
+    }
+    let Ok(source) = source.canonicalize() else {
+        return false;
+    };
+    [
+        (
+            &paths.images,
+            paths.image_cleanup_enabled,
+            paths.image_marker_required,
+            ResourceRootRole::Image,
+        ),
+        (
+            &paths.files,
+            paths.file_cleanup_enabled,
+            paths.file_marker_required,
+            ResourceRootRole::File,
+        ),
+    ]
+    .into_iter()
+    .any(|(root, enabled, marker_required, role)| {
+        enabled
+            && (!marker_required || paths.resource_root_marker_valid(role))
+            && root
+                .canonicalize()
+                .is_ok_and(|root| source.starts_with(root))
+    })
 }
 
 /// Restricts a webview-provided file name stem to characters that cannot
@@ -1006,16 +1047,16 @@ fn replace_path_strings(value: &mut serde_json::Value, old_path: &str, new_path:
 mod tests {
     use super::{
         apply_sort_rules, cmp_by_field, duplicate_clipboard_item_record, generated_clipboard_title,
-        metadata_custom_title, record_item_usage, rename_item_record, resolve_custom_title,
-        rewrite_stored_resource_paths, sanitize_file_stem, save_clipboard_item_as_new_record,
-        set_custom_title_metadata,
+        is_owned_rename_source, metadata_custom_title, record_item_usage, rename_item_record,
+        resolve_custom_title, rewrite_stored_resource_paths, sanitize_file_stem,
+        save_clipboard_item_as_new_record, set_custom_title_metadata,
     };
     use crate::commands::clipboard::types::{
         SearchResultCache, SearchSortDirection, SearchSortField, SearchSortRule,
     };
     use crate::domain::{ClipboardItem, ClipboardKind};
     use crate::storage::ClipboardRepository;
-    use crate::storage::Database;
+    use crate::storage::{Database, StoragePaths};
 
     fn item(id: &str, title: &str) -> ClipboardItem {
         ClipboardItem {
@@ -1188,7 +1229,7 @@ mod tests {
         let paths = crate::storage::StoragePaths::initialize(project.clone()).unwrap();
         let database = Database::open(&paths.database).unwrap();
 
-        let images_dir = project.join("images");
+        let images_dir = paths.images.clone();
         std::fs::create_dir_all(&images_dir).unwrap();
         let old_path = images_dir.join("old.png");
         std::fs::write(&old_path, b"png").unwrap();
@@ -1202,7 +1243,8 @@ mod tests {
         record.preview_path = Some("/store/previews/thumb.jpg".to_owned());
         database.save_item(&record).unwrap();
 
-        let renamed = rename_item_record(&database, "img-1".to_owned(), "new".to_owned()).unwrap();
+        let renamed =
+            rename_item_record(&database, &paths, "img-1".to_owned(), "new".to_owned()).unwrap();
         let new_path = images_dir.join("new.png");
         assert_eq!(
             renamed.resource_path.as_deref(),
@@ -1224,7 +1266,7 @@ mod tests {
         fallback.preview_path = fallback.resource_path.clone();
         database.save_item(&fallback).unwrap();
         let renamed2 =
-            rename_item_record(&database, "img-2".to_owned(), "new2".to_owned()).unwrap();
+            rename_item_record(&database, &paths, "img-2".to_owned(), "new2".to_owned()).unwrap();
         let new2 = images_dir.join("new2.png");
         assert_eq!(
             renamed2.preview_path.as_deref(),
@@ -1233,6 +1275,72 @@ mod tests {
 
         drop(database);
         std::fs::remove_dir_all(project).unwrap();
+    }
+
+    #[test]
+    fn rename_preserves_external_directories_unclaimed_and_shared_files() {
+        let project =
+            std::env::temp_dir().join(format!("clipboard-rename-owned-{}", uuid::Uuid::new_v4()));
+        let paths = StoragePaths::initialize(project.clone()).unwrap();
+        let database = Database::open_in_memory().unwrap();
+        let external = project.join("external.txt");
+        std::fs::write(&external, b"original bytes").unwrap();
+        let directory = paths.files.join("folder");
+        std::fs::create_dir_all(&directory).unwrap();
+        std::fs::write(directory.join("child"), b"keep").unwrap();
+        let shared = paths.files.join("shared.txt");
+        std::fs::write(&shared, b"shared bytes").unwrap();
+        let mut other = item("other", "other");
+        other.resource_path = Some(shared.display().to_string());
+        database.save_item(&other).unwrap();
+        let custom = project.with_extension("custom");
+        let custom_paths = StoragePaths::initialize_with_resource_directories(
+            project.clone(),
+            None,
+            None,
+            Some(custom.clone()),
+        )
+        .unwrap();
+        let unclaimed = custom.join("unclaimed.txt");
+        std::fs::write(&unclaimed, b"custom bytes").unwrap();
+        for (id, source, roots) in [
+            ("external", &external, &paths),
+            ("directory", &directory, &paths),
+            ("shared", &shared, &paths),
+            ("unclaimed", &unclaimed, &custom_paths),
+        ] {
+            let mut record = item(id, id);
+            record.kind = ClipboardKind::File;
+            record.resource_path = Some(source.display().to_string());
+            // Metadata cannot grant ownership of a pass-through path.
+            record.metadata_json = Some(r#"{"copied":true}"#.into());
+            database.save_item(&record).unwrap();
+            let renamed =
+                rename_item_record(&database, roots, id.into(), "display only".into()).unwrap();
+            assert_eq!(renamed.title, "display only");
+            assert_eq!(renamed.resource_path, record.resource_path);
+            assert!(source.exists());
+        }
+        assert_eq!(std::fs::read(&external).unwrap(), b"original bytes");
+        assert_eq!(std::fs::read(directory.join("child")).unwrap(), b"keep");
+        // A claimed custom root works, but revoking its marker takes effect immediately.
+        custom_paths
+            .claim_resource_root(crate::storage::ResourceRootRole::File)
+            .unwrap();
+        let claimed = StoragePaths::initialize_with_resource_directories(
+            project.clone(),
+            None,
+            None,
+            Some(custom.clone()),
+        )
+        .unwrap();
+        assert!(is_owned_rename_source(&claimed, &unclaimed));
+        claimed
+            .remove_resource_root_marker(crate::storage::ResourceRootRole::File)
+            .unwrap();
+        assert!(!is_owned_rename_source(&claimed, &unclaimed));
+        std::fs::remove_dir_all(project).unwrap();
+        std::fs::remove_dir_all(custom).unwrap();
     }
 
     fn rule(field: SearchSortField, direction: SearchSortDirection) -> SearchSortRule {
