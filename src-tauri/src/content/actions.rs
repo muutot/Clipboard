@@ -170,6 +170,25 @@ mod tests {
     }
 
     #[test]
+    fn currency_copy_payload_preserves_all_digits_and_separators() {
+        for amount in [
+            "$1234.56",
+            "12345元",
+            "USD 1234567.8901",
+            "€1.234,56",
+            "$1,234.56",
+        ] {
+            let actions = detect_actions(&detect_markers(&format!("amount: {amount}")));
+            let amounts: Vec<_> = actions
+                .iter()
+                .filter(|action| action.label.starts_with("Copy amount "))
+                .map(|action| action.payload.as_str())
+                .collect();
+            assert_eq!(amounts, vec![amount], "{amount}");
+        }
+    }
+
+    #[test]
     fn detects_ip_action() {
         let markers = detect_markers("server at 192.168.1.1");
         let actions = detect_actions(&markers);

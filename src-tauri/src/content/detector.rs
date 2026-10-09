@@ -160,6 +160,9 @@ fn extract_colors(text: &str) -> Vec<String> {
 static RE_CURRENCY: LazyLock<regex_lite::Regex> = LazyLock::new(|| {
     let symbols = ["¥", "$", "€", "£", "USD", "CNY", "EUR", "GBP", "JPY"];
     let suffix_labels = ["元", "美元", "欧元", "英镑", "日元", "円"];
+    // Extract the complete lexical amount without interpreting decimal/grouping
+    // conventions. A three-digit prefix would silently change the copy payload.
+    let amount = r"\d+(?:[,.]\d+)*";
     let mut pattern = String::from("(");
     // Prefix symbols: e.g. ¥100, $99.99
     for (i, s) in symbols.iter().enumerate() {
@@ -167,12 +170,14 @@ static RE_CURRENCY: LazyLock<regex_lite::Regex> = LazyLock::new(|| {
             pattern.push('|');
         }
         pattern.push_str(&regex_lite::escape(s));
-        pattern.push_str(r"\s*\d{1,3}(?:[,.]\d{3})*(?:\.\d{2})?");
+        pattern.push_str(r"\s*");
+        pattern.push_str(amount);
     }
     // Suffix labels: e.g. 100元, 99.99美元
     for label in suffix_labels.iter() {
         pattern.push('|');
-        pattern.push_str(r"\d{1,3}(?:[,.]\d{3})*(?:\.\d{2})?\s*");
+        pattern.push_str(amount);
+        pattern.push_str(r"\s*");
         pattern.push_str(label);
     }
     pattern.push(')');
