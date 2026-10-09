@@ -292,7 +292,10 @@ pub(crate) fn store_atomically(
     );
     let temporary = target.with_file_name(temporary_name);
 
-    populate(&temporary)?;
+    if let Err(error) = populate(&temporary) {
+        let _ = fs::remove_file(&temporary);
+        return Err(StorageError::Io(error));
+    }
     sync_and_replace(&temporary, target)?;
     Ok(())
 }
@@ -479,7 +482,10 @@ mod tests {
 
         // A failing populate must not leave the temporary file behind either.
         let failing = temp.join("failing.png");
-        let result = store_atomically(&failing, |_| Err(std::io::Error::other("populate failed")));
+        let result = store_atomically(&failing, |temporary| {
+            fs::write(temporary, b"partial private payload")?;
+            Err(std::io::Error::other("populate failed"))
+        });
         assert!(result.is_err());
         assert!(!failing.exists());
         let leftovers: Vec<_> = fs::read_dir(&temp)
@@ -488,6 +494,14 @@ mod tests {
             .filter(|name| name.contains(".tmp-"))
             .collect();
         assert!(leftovers.is_empty(), "leftover temp files: {leftovers:?}");
+
+        let result = store_atomically(&target, |temporary| {
+            fs::write(temporary, b"partial replacement")?;
+            Err(std::io::Error::other("populate failed"))
+        });
+        assert!(result.is_err());
+        assert_eq!(fs::read(&target).unwrap(), b"payload");
+        assert_eq!(fs::read_dir(&temp).unwrap().count(), 1);
 
         let _ = fs::remove_dir_all(&temp);
     }

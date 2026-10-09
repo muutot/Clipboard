@@ -308,6 +308,10 @@ Local filesystem calls and a single SQLite busy wait remain non-preemptible.
 
 ### Portable backups and file staging
 
+`content::file_store::store_atomically` removes its owned temporary file when
+population fails, including after a partial write, and leaves any existing target
+untouched. Flush/publication failures use the same cleanup guarantee.
+
 Restored originals are published into the record role's managed root: image records
 use `paths.images`, file records use `paths.files`. A shared archive entry used by
 both roles gets one copy per root; remapping is cached by role and entry name.
