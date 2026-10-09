@@ -199,6 +199,10 @@ including macOS; Linux production code keeps normal dead-code diagnostics.
 Linux monitor stop pipes use `pipe2(O_NONBLOCK | O_CLOEXEC)` so both flags are
 set atomically and no partial initialization or child exec can leak a pipe end.
 
+CI rust-cache must point to `src-tauri -> target`; `cache-targets` is a boolean,
+not a profile-directory list. Otherwise cache discovery looks for the absent
+root Cargo.toml and dependency artifacts are rebuilt on each CI run.
+
 Wayland source attribution shares the Sway `get_tree` / Hyprland `activewindow -j`
 PID parser with quick paste. Capture includes the application's own PID; paste
 filters it out. A compositor window ID must never be used as a `/proc` PID.

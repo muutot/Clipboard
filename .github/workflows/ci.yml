@@ -77,15 +77,13 @@ jobs:
 
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
+          workspaces: src-tauri -> target
           cache-on-failure: true
           # Cache key already covers RUSTFLAGS/CARGO_* via the default
           # `env-vars` prefixes (RUST, CARGO, ...); the `env-cache-key` input
           # we used to pass here does not exist and was silently ignored.
-          # CI only ever builds the `ci` profile (clippy/test), never `release`,
-          # so caching just those target dirs keeps the cache entry small and fast.
-          cache-targets: |
-            debug
-            ci
+          # This input is a boolean, not a list of profile directories.
+          cache-targets: true
 
       - name: Check formatting
         # --all covers every workspace member (e.g. crates/clipboard-sync),
