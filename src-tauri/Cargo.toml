@@ -85,6 +85,8 @@ wayland-protocols-wlr = { version = "0.3", features = ["client"] }
 global-hotkey = "0.8"
 
 [dev-dependencies]
+# Exercise calendar boundaries in real DST zones without changing the host timezone.
+chrono-tz = "0.10"
 global-hotkey = "0.8"
 x11rb = { version = "0.13", features = ["xtest"] }
 clipboard-sync = { path = "crates/clipboard-sync", features = ["engine-test-support"] }

@@ -1,4 +1,4 @@
-use chrono::{DateTime, Datelike, Days, Duration, Local, NaiveDate};
+use chrono::{DateTime, Datelike, Days, Local, NaiveDate, TimeZone};
 
 /// Relative-date periods understood from a free-text search query.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -90,8 +90,7 @@ fn period_range_at(period: DatePeriod, now: DateTime<Local>) -> (i64, i64) {
         }
         DatePeriod::ThisWeek => {
             // Weeks start on Monday (ISO 8601), matching Chinese convention.
-            let days_from_monday = now.weekday().num_days_from_monday() as i64;
-            let monday = (now - Duration::days(days_from_monday)).date_naive();
+            let monday = week_start_date(now);
             let end = monday
                 .checked_add_days(Days::new(7))
                 .map(local_midnight)
@@ -115,10 +114,52 @@ fn period_range_at(period: DatePeriod, now: DateTime<Local>) -> (i64, i64) {
     }
 }
 
+fn week_start_date<Tz: TimeZone>(now: DateTime<Tz>) -> NaiveDate {
+    // Absolute 24-hour subtraction can land on Tuesday after a fall-back
+    // transition late on Sunday. Select the calendar date before subtracting.
+    let today = now.date_naive();
+    today
+        .checked_sub_days(Days::new(u64::from(today.weekday().num_days_from_monday())))
+        .unwrap_or(today)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use chrono::TimeZone;
+
+    #[test]
+    fn week_start_uses_calendar_days_across_dst_transitions() {
+        let cases = [
+            (
+                chrono_tz::America::New_York,
+                (2026, 11, 1, 23),
+                (2026, 10, 26),
+            ),
+            (
+                chrono_tz::Europe::Berlin,
+                (2026, 10, 25, 23),
+                (2026, 10, 19),
+            ),
+            (
+                chrono_tz::Australia::Lord_Howe,
+                (2026, 4, 5, 23),
+                (2026, 3, 30),
+            ),
+            (chrono_tz::America::New_York, (2026, 3, 8, 12), (2026, 3, 2)),
+        ];
+        for (zone, (year, month, day, hour), (y, m, d)) in cases {
+            let now = zone
+                .with_ymd_and_hms(year, month, day, hour, 45, 0)
+                .single()
+                .unwrap();
+            assert_eq!(
+                week_start_date(now),
+                NaiveDate::from_ymd_opt(y, m, d).unwrap(),
+                "{zone} at {now}"
+            );
+        }
+    }
 
     #[test]
     fn no_phrase_keeps_original_text_and_no_range() {
