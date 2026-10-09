@@ -53,7 +53,7 @@ Duplicate imports are not double-counted: `import_rows` first materializes all r
 
 `insert_item_row` scopes its upsert explicitly with `ON CONFLICT (kind, content_hash) DO UPDATE`. A bare `ON CONFLICT` would also match an `id` primary-key collision, so an imported record that reuses an existing `id` with a different content hash silently rewrote and un-deleted the unrelated victim row (the SET list deliberately omits `kind`/`content_hash`). With the explicit target, an `id` collision is a normal constraint error: the transactional import counts it as a per-row skip, and `save_item` returns it to the caller instead of corrupting a row.
 
-Short repository read-modify-write transactions (`save_items_transactional`, `set_tags`, `rename_tag`, `delete_tag`, `delete_kind_records`, the batch soft-delete/restore/permanent-delete paths, and the migration path rewrite) begin with `BEGIN IMMEDIATE`. The app opens several independent connections (main, OCR, thumbnail, cleanup, search-sync, local API) to the same WAL database; a DEFERRED transaction that reads first and upgrades to a write returns `SQLITE_BUSY_SNAPSHOT` when another connection commits in between, which `busy_timeout` cannot resolve. Long-running sync apply transactions stay DEFERRED on purpose so they do not hold the write lock for their whole duration. Snapshot/checkpoint apply also decodes the entire downloaded pack (the `batches` iterator is collected into a `Vec`) before `BEGIN`, so decompression never runs while the shared connection mutex and the SQLite transaction are held.
+Short repository read-modify-write transactions (`save_item`, `save_items_transactional`, `set_tags`, `rename_tag`, `delete_tag`, `delete_kind_records`, the batch soft-delete/restore/permanent-delete paths, and the migration path rewrite) begin with `BEGIN IMMEDIATE`. The app opens several independent connections (main, OCR, thumbnail, cleanup, search-sync, local API) to the same WAL database; a DEFERRED transaction that reads first and upgrades to a write returns `SQLITE_BUSY_SNAPSHOT` when another connection commits in between, which `busy_timeout` cannot resolve. Sync pack application folds decoded batches lazily inside its rollback-safe transaction; it does not collect the whole pack before applying. See the pack memory/lock tradeoff below.
 
 ## SQLite schema
 
@@ -270,6 +270,13 @@ Event payloads also use camelCase where Rust structs are serialized. Register li
 - Resource files are content-hash-named and may be shared by several records (dedup, duplicates). `rename_item` renames the physical file only when the record is its sole owner (`resource_reference_count(path, id) == 0`); a shared file keeps its hash name and only the display title changes, so renaming one record never breaks another. The count includes direct `resource_path`/`preview_path` references and the non-first files of multi-file records (the ordered `text_content` JSON list). A successful rename also rewrites every exact occurrence of the old path inside `metadata_json` (`resourcePath`/`previewPath`/`storagePath`, per-file `files[].storagePath`) and the multi-file `text_content` list, because the detail panel and multi-file paste read those fields before `resource_path`; skipping them would point the UI at a file that no longer exists.
 
 ## Tags
+
+`save_item` commits the main-row upsert and derived tag mirror in one immediate
+transaction. `save_items_transactional` uses a savepoint per accepted row so a
+caught tag/index failure rolls back that entire row before reporting it skipped;
+a rollback/commit failure aborts the batch. A connection mutex alone does not
+provide this atomicity. Fault-injection tests cover inserts, existing-row upserts,
+partial tags, and a rejected row followed by a successful import.
 
 Tags are stored as an array of strings under `metadata_json.tags` (no dedicated column or schema migration; the `metadata_json` column already exists and defaults to `{}`). `ClipboardRepository::set_tags` reads and writes the row inside one transaction, trims each tag, deduplicates (preserving order), writes the array, or removes the `tags` key entirely when the resulting list is empty; a missing record is a no-op returning `false`. The dedup upsert (`insert_item_row`) merges `metadata_json` with `json_patch(existing, excluded)` rather than replacing it, so a re-captured image/file whose metadata omits `tags` keeps the existing tags instead of silently diverging from `item_tags`.
 

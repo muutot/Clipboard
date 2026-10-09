@@ -53,6 +53,62 @@ fn dedup_upsert_preserves_existing_tags() {
 }
 
 #[test]
+fn save_rolls_back_record_and_tags_on_derived_index_failure() {
+    let database = Database::open_in_memory().unwrap();
+    let existing = text_item("existing", "hash-existing", 100);
+    database.save_item(&existing).unwrap();
+    database.set_tags("existing", &["keep".into()]).unwrap();
+    let before = database.get_item("existing").unwrap().unwrap();
+    database
+        .with_connection(|connection| {
+            connection.execute_batch(
+                "CREATE TRIGGER reject_test_tag BEFORE INSERT ON item_tags
+             WHEN NEW.tag = 'reject'
+             BEGIN SELECT RAISE(ABORT, 'injected tag failure'); END;",
+            )?;
+            Ok(())
+        })
+        .unwrap();
+    for mut row in [before.clone(), text_item("new", "hash-new", 200)] {
+        row.title = "must roll back".into();
+        row.metadata_json = Some(r#"{"tags":["partial","reject"]}"#.into());
+        assert!(database.save_item(&row).is_err());
+    }
+    assert_eq!(database.get_item("existing").unwrap().unwrap(), before);
+    assert!(database.get_item("new").unwrap().is_none());
+    let tags = database.list_all_tags().unwrap();
+    assert_eq!(tags.len(), 1);
+    assert_eq!(tags[0].name, "keep");
+
+    let mut rejected = text_item("rejected", "hash-rejected", 300);
+    rejected.metadata_json = Some(r#"{"tags":["partial","reject"]}"#.into());
+    let summary = database
+        .save_items_transactional(&[
+            ("rejected".into(), rejected),
+            (
+                "accepted".into(),
+                text_item("accepted", "hash-accepted", 400),
+            ),
+        ])
+        .unwrap();
+    assert_eq!((summary.imported_count, summary.skipped_count), (1, 1));
+    assert!(database.get_item("rejected").unwrap().is_none());
+    assert!(database.get_item("accepted").unwrap().is_some());
+    assert_eq!(database.list_all_tags().unwrap()[0].name, "keep");
+    database
+        .with_connection(|connection| {
+            let leaked: i64 = connection.query_row(
+                "SELECT COUNT(*) FROM item_tags WHERE tag = 'partial'",
+                [],
+                |row| row.get(0),
+            )?;
+            assert_eq!(leaked, 0);
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[test]
 fn bulk_import_does_not_overwrite_a_row_on_id_collision() {
     let database = Database::open_in_memory().unwrap();
     let mut victim = text_item("shared-id", "hash-victim", 100);

@@ -94,7 +94,7 @@ impl Database {
     ) -> Result<TransactionalSaveSummary, StorageError> {
         let upper_bound = current_time_ms().saturating_add(MAX_IMPORT_FUTURE_SKEW_MS);
         self.with_connection(|connection| {
-            let transaction =
+            let mut transaction =
                 connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
             let mut summary = TransactionalSaveSummary::default();
 
@@ -114,9 +114,16 @@ impl Database {
                     summary.skipped_count += 1;
                     continue;
                 }
-                match insert_item_row(&transaction, item, size_bytes) {
-                    Ok(_) => summary.imported_count += 1,
+                // A failed derived-tag write must not leave an imported row
+                // behind when this batch intentionally continues after errors.
+                let mut row = transaction.savepoint()?;
+                match insert_item_row(&row, item, size_bytes) {
+                    Ok(_) => {
+                        row.commit()?;
+                        summary.imported_count += 1;
+                    }
                     Err(error) => {
+                        row.rollback()?;
                         summary.skipped_count += 1;
                         summary
                             .errors
@@ -199,7 +206,13 @@ impl ClipboardRepository for Database {
                 field: "size_bytes",
             })?;
 
-        self.with_connection(|connection| insert_item_row(connection, item, size_bytes))
+        self.with_connection(|connection| {
+            let transaction =
+                connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+            let id = insert_item_row(&transaction, item, size_bytes)?;
+            transaction.commit()?;
+            Ok(id)
+        })
     }
 
     fn content_exists(
