@@ -12,7 +12,7 @@ No version bump, tag, push or release is implied.
 | 4. Native desktop         | Exercise clipboard, multiple windows and visual combinations using isolated data.                   | Necessary, unverified: a user app is running and the native CF_HDROP test overwrites the system clipboard. Keep the native matrix below open.                                                              |
 | 5. Platforms and network  | Check matching platform CI and real S3 interruption/exit evidence.                                  | Partial: all 4 real-S3 smoke tests pass, including snapshot/segment publication cancellation and retry. Existing CI covers three OSes; final-branch remote results and native exit timing are unavailable. |
 | 6. Large-data performance | Measure before selecting further memory or throughput changes.                                      | Preview memory optimized after measuring 1k/10k/100k synthetic rows: extra RSS at 100k falls from 267.37 to 18.55 MiB. Seven backup regressions pass. See PERFORMANCE_V1_8.md for timing and scope limits. |
-| 7. Local gates            | Make Vitest worker limits reproducible without omitting tests.                                      | Pending configuration.                                                                                                                                                                                     |
+| 7. Local gates            | Make Vitest worker limits reproducible without omitting tests.                                      | Complete: Vitest defaults to two workers; plain npm test passes all 356 tests with isolation retained. CLI worker overrides remain available.                                                              |
 
 Checks describe only the exercised environment. Missing native, remote or visual evidence
 must remain explicit; a passing unit test does not complete those rows.
@@ -45,3 +45,21 @@ survives, then retries and checks exact two-device convergence and idle no-op be
 This proves publication-boundary recovery over S3; it does not measure WAN interruption
 latency or native application exit. Stalled HTTP transport cancellation has separate tests.
 The helper stopped its own server after completion.
+
+## Final local integration evidence
+
+- Plain `npm test`: 356 passed, one opt-in frontend benchmark skipped.
+- Rust workspace: 849 passed, 10 ignored opt-in checks, one native CF_HDROP check
+  explicitly excluded. Command:
+  `npm run test:rust -- -- --skip platform::windows_clipboard::tests::read_clipboard_file_paths_reads_a_cf_hdrop`.
+- Svelte check: zero errors/warnings. Frontend build, workspace Clippy and format pass.
+- Real S3 smoke: 4 passed separately; backup preview benchmarks ran at 1k/10k/100k rows.
+
+The full Rust run exposed an existing Windows API connection race: accepted sockets
+could retain nonblocking mode and reject delayed request bytes with `WouldBlock`.
+A regression failed before the fix and passed after accepted sockets explicitly switched
+to bounded blocking I/O. All 14 API tests and the full workspace then passed.
+
+The necessary implementation work is committed on v1.8.0. Native verification and final
+remote CI remain open as listed above; version metadata, tags and remote branches have
+not been changed by this follow-up.

@@ -9,5 +9,7 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     include: ["src/**/*.test.ts"],
+    // Bound per-file jsdom processes on desktop machines; CLI --maxWorkers can override.
+    maxWorkers: 2,
   },
 });

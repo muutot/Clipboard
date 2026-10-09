@@ -67,6 +67,9 @@ Do not promote a niche exception into a general rule. Record newly discovered lo
 
 ## 7. Verify in proportion to risk
 
+- Vitest defaults to two workers in `vitest.config.ts` to bound concurrent jsdom processes.
+  Plain `npm test`, `verify` and `ci:local` inherit this limit. For an explicit larger
+  machine experiment, `npm test -- --maxWorkers=N` overrides it; keep test isolation enabled.
 - Run focused unit tests or static checks while iterating.
 - Run `npm run check` for Svelte/TypeScript work and `npm run build` for frontend integration.
 - Run focused Cargo tests, then `npm run test:rust` for Rust behavior.
