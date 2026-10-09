@@ -1710,6 +1710,10 @@ fn item_count_includes_restored_items() {
 #[test]
 fn restore_refreshes_retention_baseline_against_cleanup() {
     let database = Database::open_in_memory().unwrap();
+    let recent_time = super::helpers::current_time_ms() - 1_000;
+    database
+        .save_item(&text_item("recent", "hash-recent", recent_time))
+        .unwrap();
     // Created far inside the retention window's past.
     database
         .save_item(&text_item("ancient", "hash-ancient", 1_000))
@@ -1726,6 +1730,11 @@ fn restore_refreshes_retention_baseline_against_cleanup() {
         .unwrap()
         .expect("restored record must survive retention cleanup");
     assert!(restored.created_at_ms > 1_000);
+    assert_eq!(restored.last_used_at_ms, Some(restored.created_at_ms));
+    assert_eq!(
+        database.list_recent(1, 0, &Default::default()).unwrap()[0].id,
+        "ancient"
+    );
 
     // Batch restore carries the same guarantee.
     database
@@ -1736,7 +1745,12 @@ fn restore_refreshes_retention_baseline_against_cleanup() {
         .restore_deleted_batch(&["ancient-2".to_owned()])
         .unwrap();
     assert_eq!(database.delete_older_than(30).unwrap(), 0);
-    assert!(database.get_item("ancient-2").unwrap().is_some());
+    let batch_restored = database.get_item("ancient-2").unwrap().unwrap();
+    assert_eq!(
+        batch_restored.last_used_at_ms,
+        Some(batch_restored.created_at_ms)
+    );
+    assert!(batch_restored.last_used_at_ms.unwrap() > recent_time);
 }
 
 #[test]

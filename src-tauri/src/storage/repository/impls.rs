@@ -898,7 +898,7 @@ impl ClipboardRepository for Database {
             // row resurfaces at the top of history, matching user intent).
             let affected = connection.execute(
                 "UPDATE clipboard_items
-                 SET deleted = 0, deleted_at_ms = NULL, created_at_ms = ?2
+                 SET deleted = 0, deleted_at_ms = NULL, created_at_ms = ?2, last_used_at_ms = ?2
                  WHERE id = ?1 AND deleted = 1",
                 params![id, current_time_ms()],
             )?;
@@ -930,12 +930,13 @@ impl ClipboardRepository for Database {
 
             // Same retention-baseline refresh as `restore_deleted`: without it
             // the scheduled cleanup would hard-delete restored old records.
+            let restored_at = current_time_ms();
             for id in &ids {
                 transaction.execute(
                     "UPDATE clipboard_items
-                     SET deleted = 0, deleted_at_ms = NULL, created_at_ms = ?2
+                     SET deleted = 0, deleted_at_ms = NULL, created_at_ms = ?2, last_used_at_ms = ?2
                      WHERE id = ?1 AND deleted = 1",
-                    params![id, current_time_ms()],
+                    params![id, restored_at],
                 )?;
             }
             transaction.commit()?;

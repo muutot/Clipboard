@@ -95,6 +95,7 @@ Core invariants:
 - Re-capturing content that already exists as a soft-deleted row resurrects that row (`deleted=0`, `deleted_at_ms=NULL`) so the copied item reappears in the active list instead of silently staying hidden.
 - Re-capturing existing content freezes `created_at_ms` and stamps `last_used_at_ms` instead, so a repeated copy promotes the entry by recency without rewriting its capture time; `last_used_at_ms` is device-local and unwatched by the sync triggers, so a pure re-copy emits no sync traffic. Saves that echo the stored timestamp (rename, rollback) leave both fields untouched.
 - Favorites are protected from normal deletion and history cleanup until explicitly unfavorited.
+- Single and batch recycle-bin restore refresh both creation (retention baseline) and last-use (history order) to the same restore timestamp. Batch members share one timestamp; ID stabilizes ties.
 - Soft-delete and permanent-delete paths must keep OCR, search outbox/index, resource references, and frontend invalidation consistent.
 - Binary image/file content lives in managed files; SQLite stores paths and metadata, not blobs.
 - Tantivy is derived and rebuildable; SQLite plus owned resource files are the primary data.
