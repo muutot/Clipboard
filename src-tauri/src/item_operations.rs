@@ -134,6 +134,8 @@ pub fn change_membership(
 /// Pass-through files that exceed the copy-size limit keep their original
 /// absolute location and are accepted here: the paths originate from the
 /// record, never from the webview.
+/// Directory captures also remain references to the original directory; only
+/// file-kind records may resolve directories (images must be regular files).
 ///
 /// The error type doubles as the command's rejection payload, so "the files are
 /// gone" reaches the frontend as a distinct kind rather than as prose.
@@ -159,7 +161,7 @@ pub(crate) fn resolve_clipboard_file_paths(
                     // with a database, the latest copy of the same content then
                     // donates its recorded original name.
                     if let Some(original) = original {
-                        if std::path::Path::new(&original).is_file() {
+                        if is_copyable_path(std::path::Path::new(&original), item.kind) {
                             candidates.push(original);
                             continue;
                         }
@@ -199,10 +201,10 @@ pub(crate) fn resolve_clipboard_file_paths(
             [&paths.images, &paths.files, &paths.storage]
                 .iter()
                 .map(|root| root.join(raw))
-                .find(|candidate| candidate.is_file())
+                .find(|candidate| is_copyable_path(candidate, item.kind))
                 .unwrap_or_else(|| paths.storage.join(raw))
         };
-        if path.is_file() {
+        if is_copyable_path(&path, item.kind) {
             resolved.push(path);
         }
     }
@@ -213,6 +215,12 @@ pub(crate) fn resolve_clipboard_file_paths(
         ));
     }
     Ok(resolved)
+}
+
+fn is_copyable_path(path: &std::path::Path, kind: ClipboardKind) -> bool {
+    path.metadata().is_ok_and(|metadata| {
+        metadata.is_file() || (kind == ClipboardKind::File && metadata.is_dir())
+    })
 }
 
 /// Locates the original file recorded by the most recent copy of the same
@@ -401,6 +409,37 @@ mod tests {
                 Some(1)
             );
         }
+    }
+    #[test]
+    fn captured_directories_remain_copyable_without_becoming_image_resources() {
+        let root = std::env::temp_dir().join(format!("clipboard-folders-{}", uuid::Uuid::new_v4()));
+        let paths = StoragePaths::initialize(root.join("managed")).unwrap();
+        let directory = root.join("original-folder");
+        std::fs::create_dir(&directory).unwrap();
+        std::fs::write(directory.join("child.txt"), b"keep").unwrap();
+        let inputs = vec![directory.to_string_lossy().into_owned()];
+        let refs =
+            crate::commands::capture::store_captured_file_references(&inputs, &paths.files, 1024);
+        let mut row = record();
+        row.kind = ClipboardKind::File;
+        row.resource_path = Some(refs[0].storage_path.clone());
+        row.metadata_json = Some(crate::commands::capture::captured_file_metadata(&refs));
+        assert_eq!(
+            resolve_clipboard_file_paths(&row, &paths, None).unwrap(),
+            vec![directory.clone()]
+        );
+        row.metadata_json = None; // Legacy single-path records follow the same contract.
+        assert_eq!(
+            resolve_clipboard_file_paths(&row, &paths, None).unwrap(),
+            vec![directory.clone()]
+        );
+        row.kind = ClipboardKind::Image;
+        assert!(matches!(
+            resolve_clipboard_file_paths(&row, &paths, None),
+            Err(CopyError::ResourceMissing(_))
+        ));
+        assert_eq!(std::fs::read(directory.join("child.txt")).unwrap(), b"keep");
+        std::fs::remove_dir_all(root).unwrap();
     }
     #[test]
     fn failed_write_removes_the_shared_capture_marker() {

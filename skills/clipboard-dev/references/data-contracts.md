@@ -98,6 +98,7 @@ Core invariants:
 - Single and batch recycle-bin restore refresh both creation (retention baseline) and last-use (history order) to the same restore timestamp. Batch members share one timestamp; ID stabilizes ties.
 - Soft-delete and permanent-delete paths must keep OCR, search outbox/index, resource references, and frontend invalidation consistent.
 - Binary image/file content lives in managed files; SQLite stores paths and metadata, not blobs.
+- File-kind clipboard records may also reference existing directories. Copy resolves both files and directories without recursively materializing a directory; image-kind resources must remain regular files. Missing resources still reject copy.
 - Tantivy is derived and rebuildable; SQLite plus owned resource files are the primary data.
 
 Schema changes require a deliberate new schema marker, one registered adjacent migration, row mapping, migration and repository tests, recovery/backup consideration, derived-data behavior, and an update to this reference. Pre-v1 historical readers remain intentionally out of scope; that one-time reset boundary must not be reused for changes after v1.
