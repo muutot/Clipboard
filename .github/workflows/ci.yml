@@ -15,6 +15,13 @@ on:
   pull_request:
 
 jobs:
+  glibc-compat:
+    name: Linux compatibility ABI
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - run: bash scripts/test-glibc-compat.sh
+
   frontend:
     name: Frontend (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

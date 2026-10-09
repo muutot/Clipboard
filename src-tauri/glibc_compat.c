@@ -110,19 +110,22 @@ int __isoc23_vscanf(const char *fmt, va_list ap) { return vscanf(fmt, ap); }
 
 /* ---- GCC 13 libstdc++ basic_string<char>::_M_replace_cold --------------- */
 
-void clipboard__replace_cold(char *p, unsigned long len1, const char *s,
+void clipboard__replace_cold(void *self, char *p, unsigned long len1, const char *s,
                              unsigned long len2, unsigned long how_much);
 
 /* Alias to the same-TU implementation below, exported under the mangled
  * name the GCC-13-compiled ort objects reference (verified against GCC's
  * libstdc++ ABI baseline, GLIBCXX_3.4.31). */
 void _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE15_M_replace_coldEPcmPKcmm(
-    char *p, unsigned long len1, const char *s, unsigned long len2,
+    void *self, char *p, unsigned long len1, const char *s, unsigned long len2,
     unsigned long how_much)
     __attribute__((alias("clipboard__replace_cold")));
 
-void clipboard__replace_cold(char *p, unsigned long len1, const char *s,
+void clipboard__replace_cold(void *self, char *p, unsigned long len1, const char *s,
                              unsigned long len2, unsigned long how_much) {
+  /* A non-static C++ member receives this before its explicit arguments.
+   * The mangled name omits this, but the ABI does not. */
+  (void)self;
   /* Work in-place; verbatim port of GCC 13.3 basic_string.tcc:480-506
    * (_S_move -> memmove, _S_copy -> memcpy for char_traits<char>). */
   if (len2 && len2 <= len1)
@@ -145,7 +148,7 @@ void clipboard__replace_cold(char *p, unsigned long len1, const char *s,
 
 /* ---- GCC 13 libstdc++ basic_string<wchar_t>::_M_replace_cold ------------ */
 
-void clipboard__replace_cold_wide(wchar_t *p, unsigned long len1,
+void clipboard__replace_cold_wide(void *self, wchar_t *p, unsigned long len1,
                                   const wchar_t *s, unsigned long len2,
                                   unsigned long how_much);
 
@@ -154,13 +157,14 @@ void clipboard__replace_cold_wide(wchar_t *p, unsigned long len1,
  * the wchar_t instantiation, identical to the char version with
  * c -> w). */
 void _ZNSt7__cxx1112basic_stringIwSt11char_traitsIwESaIwEE15_M_replace_coldEPwmPKwmm(
-    wchar_t *p, unsigned long len1, const wchar_t *s, unsigned long len2,
+    void *self, wchar_t *p, unsigned long len1, const wchar_t *s, unsigned long len2,
     unsigned long how_much)
     __attribute__((alias("clipboard__replace_cold_wide")));
 
-void clipboard__replace_cold_wide(wchar_t *p, unsigned long len1,
+void clipboard__replace_cold_wide(void *self, wchar_t *p, unsigned long len1,
                                   const wchar_t *s, unsigned long len2,
                                   unsigned long how_much) {
+  (void)self;
   /* Work in-place; verbatim port of GCC 13.3 basic_string.tcc:480-506
    * (_S_move -> wmemmove, _S_copy -> wmemcpy for char_traits<wchar_t>). */
   if (len2 && len2 <= len1)
