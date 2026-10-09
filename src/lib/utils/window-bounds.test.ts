@@ -222,4 +222,28 @@ describe("createWindowBoundsController", () => {
     expect(save).toHaveBeenCalledTimes(2);
     expect(savedPositions(save)[1]).toEqual(savedPositions(save)[0]);
   });
+  it("retries newer queued bounds instead of an older failed write", async () => {
+    let fail!: (error: Error) => void;
+    const save = vi
+      .fn<(position: WindowPosition) => Promise<void>>()
+      .mockImplementationOnce(
+        () =>
+          new Promise((_, reject) => {
+            fail = reject;
+          }),
+      )
+      .mockResolvedValue(undefined);
+    const { options } = makeOptions({ save });
+    const target = options.appWindow as StubWindow;
+    const controller = createWindowBoundsController(options);
+    controller.scheduleSave();
+    await vi.advanceTimersByTimeAsync(60);
+    target.position = { x: 300, y: 400 };
+    controller.scheduleSave();
+    await vi.advanceTimersByTimeAsync(60);
+    fail(new Error("older write failed"));
+    await vi.advanceTimersByTimeAsync(0);
+    await controller.flush();
+    expect(savedPositions(save).at(-1)).toMatchObject({ x: 300, y: 400 });
+  });
 });

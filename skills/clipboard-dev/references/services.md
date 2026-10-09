@@ -138,3 +138,5 @@ text or clipboard content is retained. Statistics uses existing metric-card prim
 
 Broad history invalidation clears the spare search cache before reloading so an external
 CLI deletion cannot be promoted from an obsolete cached page.
+
+Window-bounds persistence retains a failed write for retry only if no newer captured bounds are queued. An older IPC failure must not overwrite a later move/resize awaiting persistence; `window-bounds.test.ts` exercises that interleaving.

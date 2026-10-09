@@ -101,7 +101,8 @@ export function createWindowBoundsController(
         try {
           await savePosition(bounds);
         } catch (error) {
-          pendingBounds = bounds;
+          // A newer move/resize may already be queued while this write awaited IPC.
+          pendingBounds ??= bounds;
           throw error;
         }
       }
