@@ -498,6 +498,7 @@ pub fn restore_with_progress(
     paths: &StoragePaths,
     progress: Progress<'_>,
 ) -> Result<ImportSummary, String> {
+    let _resource_publication = database.begin_resource_write();
     let mut validated = validate(path, database, ValidationMode::Restore, progress)?;
     if validated.preview.fingerprint != fingerprint {
         return Err("backup changed since preview; preview it again".into());

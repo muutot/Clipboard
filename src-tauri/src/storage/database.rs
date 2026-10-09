@@ -8,6 +8,7 @@ pub struct Database {
     pub(super) connection: Mutex<Connection>,
     schema_was_reset: bool,
     migration_writer: Mutex<Option<Connection>>,
+    resource_publication: std::sync::Arc<super::resource_publication::ResourcePublication>,
 }
 
 /// Holds SQLite's writer reservation across resource copy and config save.
@@ -54,13 +55,28 @@ impl Database {
         configure_connection(&connection)?;
         let schema = schema::initialize(&connection)?;
 
+        let resource_publication =
+            super::resource_publication::ResourcePublication::for_database(connection.path())?;
         let database = Self {
+            resource_publication,
             connection: Mutex::new(connection),
             schema_was_reset: schema.was_reset,
             migration_writer: Mutex::new(None),
         };
         database.ensure_sync_device_id()?;
         Ok(database)
+    }
+
+    /// Hold from before reading/reusing a managed resource until its DB reference
+    /// is committed (or the operation fails). Nested/parallel writers are allowed.
+    pub(crate) fn begin_resource_write(&self) -> super::resource_publication::ResourceWriteGuard {
+        self.resource_publication.begin_write()
+    }
+
+    pub(crate) fn resource_cleanup_snapshot(
+        &self,
+    ) -> Option<super::resource_publication::ResourceCleanupSnapshot> {
+        self.resource_publication.snapshot()
     }
 
     /// Changes only when another SQLite connection commits. Compare on the same connection.

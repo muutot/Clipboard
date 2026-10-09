@@ -7,6 +7,7 @@ mod ocr_repository;
 mod paths;
 mod recovery;
 mod repository;
+mod resource_publication;
 mod schema;
 mod search_repository;
 mod sync_namespace;

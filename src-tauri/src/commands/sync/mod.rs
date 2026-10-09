@@ -514,6 +514,7 @@ fn materialize_item_resources(
     refs: Vec<v1::SyncResourceRef>,
     session_key: Option<&v1::SessionKey>,
 ) -> Result<(ClipboardItem, bool), String> {
+    let _resource_publication = database.begin_resource_write();
     let mut materialized = Vec::with_capacity(refs.len());
     for reference in refs {
         let parsed = v1::parse_resource_key(&reference.object_key)?;
@@ -622,6 +623,7 @@ pub(super) fn run_sync_cancellable(
     let store = settings.object_store()?;
     let engine_paths = v1::SyncEnginePaths::from(paths.inner());
 
+    let _resource_publication = database.begin_resource_write();
     let outcome = operation.token().run(|| {
         operation.check()?;
         let stable_scope = settings.remote_scope_id();

@@ -688,6 +688,7 @@ pub fn duplicate_clipboard_item_record(
     database: &Database,
     id: &str,
 ) -> Result<ClipboardItem, String> {
+    let _resource_publication = database.begin_resource_write();
     let items = database
         .get_items_by_ids(&[id.to_owned()])
         .map_err(|e| e.to_string())?;

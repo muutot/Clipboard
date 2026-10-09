@@ -19,11 +19,9 @@ pub struct StorageCleanupResult {
     pub(crate) freed_bytes: u64,
 }
 
-/// Grace period that protects freshly written storage files from orphan
-/// cleanup while the capture loop sits between writing the file and saving
-/// its database record. The scheduled cleanup worker uses the same value;
-/// manual commands must not bypass it because, unlike the kind-delete path,
-/// they run without the ingestion lock that excludes concurrent captures.
+/// Extra retention for fresh files, including interrupted publication. Active
+/// resource writers are protected by the database's publication guard; mtime
+/// alone cannot protect reuse of an old content-addressed file.
 pub const ORPHAN_FILE_GRACE: Duration = Duration::from_secs(10 * 60);
 
 /// The retention inputs a cleanup run needs, snapshotted from configuration.
@@ -138,6 +136,82 @@ mod tests {
     }
 
     #[test]
+    fn cleanup_defers_active_publication_and_resumes_after_failure() {
+        let paths = policy_paths();
+        let database = Database::open(&paths.database).unwrap();
+        let writer = Database::open(&paths.database).unwrap();
+        let orphan = paths.files.join("pending.txt");
+        std::fs::write(&orphan, b"fixture").unwrap();
+        let guard = writer.begin_resource_write();
+        let result = cleanup_orphan_storage_files(&database, &paths).unwrap();
+        assert_eq!(result.removed_files, 0);
+        assert!(orphan.exists());
+        drop(guard); // Simulate a failed operation that did not publish a DB row.
+        let result = cleanup_orphan_storage_files(&database, &paths).unwrap();
+        assert_eq!(result.removed_files, 1);
+        assert!(!orphan.exists());
+        drop(writer);
+        drop(database);
+        std::fs::remove_dir_all(paths.project).unwrap();
+    }
+
+    #[test]
+    fn cleanup_preserves_old_resource_reused_after_reference_snapshot() {
+        use crate::content::FileStore;
+        use crate::domain::{ClipboardItem, ClipboardKind};
+        let paths = policy_paths();
+        let database = Database::open(&paths.database).unwrap();
+        let writer = Database::open(&paths.database).unwrap();
+        let source = paths.project.join("fixture.txt");
+        std::fs::write(&source, b"fixture").unwrap();
+        let stored = FileStore::save_file(&source, &paths.files, 0).unwrap();
+        std::fs::File::options()
+            .write(true)
+            .open(&stored.storage_path)
+            .unwrap()
+            .set_times(
+                std::fs::FileTimes::new()
+                    .set_modified(std::time::UNIX_EPOCH + Duration::from_secs(3600)),
+            )
+            .unwrap();
+        let result = cleanup_orphans_after_snapshot(&database, &paths, ORPHAN_FILE_GRACE, || {
+            let _publication = writer.begin_resource_write();
+            let reused = FileStore::save_file(&source, &paths.files, 0).unwrap();
+            assert_eq!(stored.storage_path, reused.storage_path);
+            writer
+                .save_item(&ClipboardItem {
+                    id: "reused".into(),
+                    kind: ClipboardKind::File,
+                    title: "fixture".into(),
+                    text_content: None,
+                    html_content: None,
+                    rtf_content: None,
+                    resource_path: Some(reused.storage_path),
+                    preview_path: None,
+                    content_hash: reused.content_hash,
+                    source_app: None,
+                    size_bytes: 7,
+                    created_at_ms: 1,
+                    last_used_at_ms: None,
+                    is_favorite: false,
+                    icon_path: None,
+                    metadata_json: None,
+                })
+                .unwrap();
+        })
+        .unwrap();
+        assert!(
+            Path::new(&stored.storage_path).is_file(),
+            "a newly referenced file must survive cleanup"
+        );
+        assert_eq!(result.removed_files, 0);
+        assert!(writer.get_item("reused").unwrap().is_some());
+        drop(writer);
+        drop(database);
+        std::fs::remove_dir_all(paths.project).unwrap();
+    }
+
+    #[test]
     fn cleanup_runs_from_a_snapshotted_policy_without_the_config_store() {
         let paths = policy_paths();
         let database = Database::open(&paths.database).expect("temporary database");
@@ -168,11 +242,27 @@ pub fn cleanup_orphan_storage_files_with_grace(
     paths: &StoragePaths,
     orphan_file_grace: Duration,
 ) -> Result<StorageCleanupResult, String> {
+    cleanup_orphans_after_snapshot(database, paths, orphan_file_grace, || {})
+}
+
+fn cleanup_orphans_after_snapshot(
+    database: &Database,
+    paths: &StoragePaths,
+    orphan_file_grace: Duration,
+    after_snapshot: impl FnOnce(),
+) -> Result<StorageCleanupResult, String> {
+    let Some(publication_snapshot) = database.resource_cleanup_snapshot() else {
+        return Ok(StorageCleanupResult {
+            removed_files: 0,
+            freed_bytes: 0,
+        });
+    };
     let references = database
         .list_storage_file_references()
         .map_err(|error| error.to_string())?;
     let icons = paths.storage.join("icons");
     let referenced_paths = resolve_storage_file_references(paths, &icons, references);
+    after_snapshot();
 
     let mut removed_files = 0u64;
     let mut freed_bytes = 0u64;
@@ -184,7 +274,7 @@ pub fn cleanup_orphan_storage_files_with_grace(
         (&icons, true),
     ];
 
-    for (dir, cleanup_enabled) in scan_dirs {
+    'roots: for (dir, cleanup_enabled) in scan_dirs {
         if !cleanup_enabled {
             crate::log_warn!(
                 "[cleanup] skipping unowned resource directory {}",
@@ -233,7 +323,14 @@ pub fn cleanup_orphan_storage_files_with_grace(
                 }
             }
             let size_bytes = metadata.len();
-            if let Err(e) = std::fs::remove_file(&entry_path) {
+            let Some(removal) =
+                publication_snapshot.remove_if_current(|| std::fs::remove_file(&entry_path))
+            else {
+                // A producer reused or published a resource since the snapshot.
+                // Defer remaining cleanup; never delete from obsolete references.
+                break 'roots;
+            };
+            if let Err(e) = removal {
                 crate::log_error!(
                     "[cleanup] failed to remove orphan file {}: {e}",
                     entry_path.display()

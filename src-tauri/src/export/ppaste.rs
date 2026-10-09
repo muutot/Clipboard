@@ -218,6 +218,8 @@ fn import_rows(
     let mut skipped = 0u64;
     let mut errors = Vec::new();
 
+    let _resource_publication = database.begin_resource_write();
+
     // First pass materializes resources (file I/O) before the write
     // transaction opens, so slow disk work never blocks capture-thread
     // database writes for the duration of a large import.

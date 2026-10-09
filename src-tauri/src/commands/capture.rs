@@ -545,6 +545,8 @@ pub(crate) fn run_capture_loop(
                     continue;
                 }
 
+                let _resource_publication = database.begin_resource_write();
+
                 // Extract and cache app icon
                 let icon_dir = storage_path.join("icons");
                 let icon_path = if let Some(source_name) = source_app.as_deref() {

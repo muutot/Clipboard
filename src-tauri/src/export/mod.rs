@@ -53,6 +53,7 @@ pub fn export_database(database: &Database, options: &ExportOptions) -> Result<S
     String::from_utf8(output).map_err(|error| error.to_string())
 }
 pub fn import_from_json(json: &str, database: &Database) -> Result<ImportSummary, String> {
+    let _resource_publication = database.begin_resource_write();
     let items: Vec<ClipboardItem> =
         serde_json::from_str(json).map_err(|e| format!("invalid JSON: {e}"))?;
 

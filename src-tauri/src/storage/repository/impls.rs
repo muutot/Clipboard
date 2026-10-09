@@ -34,6 +34,7 @@ impl Database {
         &self,
         entries: &[ClipboardItem],
     ) -> Result<TransactionalSaveSummary, StorageError> {
+        let _resource_publication = self.begin_resource_write();
         self.restore_items_transactional_with_progress(entries, |_, _| Ok(()))
     }
     pub fn restore_items_transactional_with_progress(
@@ -210,6 +211,7 @@ fn validate_imported_item(item: &ClipboardItem, upper_bound_ms: i64) -> Result<(
 
 impl ClipboardRepository for Database {
     fn save_item(&self, item: &ClipboardItem) -> Result<String, StorageError> {
+        let _resource_publication = self.begin_resource_write();
         let size_bytes =
             i64::try_from(item.size_bytes).map_err(|_| StorageError::ValueOutOfRange {
                 field: "size_bytes",

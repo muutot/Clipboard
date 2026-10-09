@@ -145,6 +145,7 @@ impl ThumbnailWorker {
                     image_path,
                 }) = receiver.recv()
                 {
+                    let _resource_publication = database.begin_resource_write();
                     match generator.generate(&image_path, &preview_dir) {
                         Ok(info) => {
                             let preview_path = &info.preview_path;

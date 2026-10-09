@@ -6,6 +6,7 @@ impl Database {
         item_id: &str,
         preview_path: &str,
     ) -> Result<bool, StorageError> {
+        let _resource_publication = self.begin_resource_write();
         self.with_connection(|connection| {
             let affected = connection.execute(
                 "UPDATE clipboard_items SET preview_path = ?2 WHERE id = ?1",
