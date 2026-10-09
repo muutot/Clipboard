@@ -48,7 +48,7 @@ pub fn capture_aborted() -> bool {
         })
     })
 }
-fn fail_capture() {
+pub(super) fn fail_capture() {
     BUDGET.with(|slot| {
         if let Some(budget) = slot.borrow_mut().as_mut() {
             budget.failed = true;

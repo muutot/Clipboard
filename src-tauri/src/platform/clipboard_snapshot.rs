@@ -40,7 +40,7 @@ pub fn read_consistent_snapshot(
         let before = platform.read_clipboard_sequence();
         let snapshot = ClipboardSnapshot::read(platform, limit);
         let after = platform.read_clipboard_sequence();
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
         if super::bounded_command::capture_aborted() {
             return None;
         }
@@ -48,7 +48,7 @@ pub fn read_consistent_snapshot(
             (Some(a), Some(b)) if a == b => return Some(snapshot),
             (None, None) => {
                 let repeated = ClipboardSnapshot::read(platform, limit);
-                #[cfg(target_os = "linux")]
+                #[cfg(any(target_os = "linux", target_os = "macos"))]
                 if super::bounded_command::capture_aborted() {
                     return None;
                 }

@@ -224,6 +224,16 @@ Privacy pause, ignored applications, and sensitive-source checks happen before p
 
 ## Platform adapters
 
+macOS capture tools (`pngpaste`, `imgpaste`, `osascript`, `sips`, and `plutil`)
+use `bounded_command`: 600 ms per subprocess, a shared 3 s capture budget, output
+caps and cancellation. Snapshot publication rejects an aborted budget.
+`platform::macos_image` owns image fallback and icon conversion. Image bytes are
+capped at 64 MiB before decoding; TIFF/PNG scratch files live in a unique owner-only
+directory and are removed on success/failure. Converted icons are validated before
+atomic publication. File size limits bound reads, not the helper's temporary disk
+writes before its deadline. Portable fixture tests cover orchestration/cleanup;
+native macOS tools and process-group behavior still require macOS CI/runtime.
+
 The Linux ONNX compatibility shim's `_M_replace_cold` exports must accept the
 implicit C++ `this` pointer before their five explicit arguments, for both char
 and wchar_t. `scripts/test-glibc-compat.sh` exercises actual C++ member-call ABI

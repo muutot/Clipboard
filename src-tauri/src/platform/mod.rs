@@ -34,7 +34,7 @@ pub mod windows_hotkey;
 // ---------------------------------------------------------------------------
 
 pub mod autostart;
-#[cfg(any(test, target_os = "linux"))]
+#[cfg(any(test, target_os = "linux", target_os = "macos"))]
 pub mod bounded_command;
 pub mod clipboard_snapshot;
 pub mod dispatch;
@@ -43,6 +43,8 @@ pub mod hotkey_common;
 pub mod linux_icons;
 #[cfg(any(test, not(target_os = "windows")))]
 pub mod local_wake;
+#[cfg(any(test, target_os = "macos"))]
+mod macos_image;
 #[cfg(any(test, not(target_os = "windows")))]
 pub mod modifier_input;
 pub mod monitor;

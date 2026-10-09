@@ -57,6 +57,10 @@ Read `components.md` and `services.md` for ownership and change gates inside tho
 
 Platform source files may contain detailed scaffolding or documented intended flows. Verify runtime wiring and tests before claiming platform completion.
 
+`platform/macos_image.rs` isolates bounded clipboard-image tool fallback, private
+scratch cleanup and atomic icon conversion from the Objective-C adapter. It is
+also compiled in portable tests with synthetic command outputs and files.
+
 ## Persistent layout
 
 ```text

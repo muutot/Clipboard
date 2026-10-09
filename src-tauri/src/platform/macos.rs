@@ -716,99 +716,10 @@ pub fn read_clipboard_rtf() -> Option<String> {
     None
 }
 
-/// Reads clipboard image data using macOS native tools.
+/// Reads clipboard images with bounded tools and private temporary files.
 #[cfg(target_os = "macos")]
 pub fn read_clipboard_image() -> Option<(Vec<u8>, u32, u32)> {
-    // Try pngpaste first (brew install pngpaste)
-    if let Some(data) = try_clipboard_image_tool("pngpaste", &["-"]) {
-        if let Some(img) = crate::content::hash::decode_image_bytes(&data) {
-            let rgba = img.to_rgba8();
-            let (w, h) = rgba.dimensions();
-            return Some((rgba.into_raw(), w, h));
-        }
-    }
-    // Try imgpaste (alternative tool)
-    if let Some(data) = try_clipboard_image_tool("imgpaste", &[]) {
-        if let Some(img) = crate::content::hash::decode_image_bytes(&data) {
-            let rgba = img.to_rgba8();
-            let (w, h) = rgba.dimensions();
-            return Some((rgba.into_raw(), w, h));
-        }
-    }
-
-    // Fallback: write clipboard TIFF via osascript, convert with sips.
-    // Each call gets unique file names: the capture loop polls every 500ms
-    // and re-entrant reads would otherwise overwrite each other's TIFF
-    // mid-conversion and corrupt the image.
-    static IMAGE_TEMP_SEQUENCE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-    let unique = format!(
-        "{}-{}-{}",
-        std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::SystemTime::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_nanos(),
-        IMAGE_TEMP_SEQUENCE.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-    );
-    let tiff_path = std::env::temp_dir().join(format!("clipboard_img_{unique}.tiff"));
-    let png_path = std::env::temp_dir().join(format!("clipboard_img_{unique}.png"));
-
-    let escaped = tiff_path
-        .to_string_lossy()
-        .replace('\\', "\\\\")
-        .replace('"', "\\\"");
-    let script = format!(
-        "set img to (the clipboard as picture)\n\
-         set fileRef to open for access POSIX file \"{escaped}\" with write permission\n\
-         write img to fileRef\n\
-         close access fileRef"
-    );
-    let ok = std::process::Command::new("osascript")
-        .args(["-e", &script])
-        .output()
-        .ok()
-        .is_some_and(|o| o.status.success() && tiff_path.exists());
-    if !ok {
-        return None;
-    }
-
-    let conv_ok = std::process::Command::new("sips")
-        .args([
-            "-s",
-            "format",
-            "png",
-            &tiff_path.to_string_lossy(),
-            "--out",
-            &png_path.to_string_lossy(),
-        ])
-        .output()
-        .ok()
-        .is_some_and(|o| o.status.success() && png_path.exists());
-    let _ = std::fs::remove_file(&tiff_path);
-    if !conv_ok {
-        return None;
-    }
-
-    let data = std::fs::read(&png_path).ok()?;
-    let _ = std::fs::remove_file(&png_path);
-
-    if let Some(img) = crate::content::hash::decode_image_bytes(&data) {
-        let rgba = img.to_rgba8();
-        let (w, h) = rgba.dimensions();
-        Some((rgba.into_raw(), w, h))
-    } else {
-        None
-    }
-}
-
-#[cfg(target_os = "macos")]
-fn try_clipboard_image_tool(cmd: &str, args: &[&str]) -> Option<Vec<u8>> {
-    let output = std::process::Command::new(cmd).args(args).output().ok()?;
-    if output.status.success() && !output.stdout.is_empty() {
-        Some(output.stdout)
-    } else {
-        None
-    }
+    super::macos_image::read_clipboard_image()
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -876,6 +787,8 @@ pub fn extract_app_icon(
     app_name: &str,
     exe_path: &str,
 ) -> Option<String> {
+    use super::bounded_command::BoundedCommandExt;
+
     let icon_key = crate::content::icon_key(app_name);
     let dest = icon_dir.join(format!("{}.png", icon_key));
     if dest.exists() {
@@ -892,7 +805,7 @@ pub fn extract_app_icon(
     }
     let plist_json = std::process::Command::new("plutil")
         .args(["-convert", "json", "-o", "-", &info_plist.to_string_lossy()])
-        .output()
+        .bounded_output(1024 * 1024)
         .ok()?;
     if !plist_json.status.success() {
         return None;
@@ -923,28 +836,9 @@ pub fn extract_app_icon(
 
     let icns_path = icns_path?;
 
-    // Create output directory
-    let _ = std::fs::create_dir_all(icon_dir);
-
-    // Convert icns to png using sips
-    let ok = std::process::Command::new("sips")
-        .args([
-            "-s",
-            "format",
-            "png",
-            &icns_path.to_string_lossy(),
-            "--out",
-            &dest.to_string_lossy(),
-        ])
-        .output()
-        .ok()
-        .is_some_and(|o| o.status.success() && dest.exists());
-
-    if ok {
-        Some(dest.to_string_lossy().to_string())
-    } else {
-        None
-    }
+    std::fs::create_dir_all(icon_dir).ok()?;
+    super::macos_image::convert_icon(&icns_path, &dest)?;
+    Some(dest.to_string_lossy().to_string())
 }
 
 #[cfg(not(target_os = "macos"))]
