@@ -15,6 +15,7 @@ import os
 import sys
 import tempfile
 import time
+from urllib.parse import urlsplit
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -243,6 +244,30 @@ def fetch_existing_gitcode_tags():
         return set()
 
 
+def url_origin(url):
+    """Validate an upload origin without exposing presigned URLs in errors."""
+    parsed = urlsplit(url)
+    if (
+        parsed.scheme != "https"
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+    ):
+        raise ValueError("Upload URL must be an absolute HTTPS URL without userinfo")
+    return parsed.scheme, parsed.hostname.lower(), parsed.port or 443
+
+
+def upload_headers_for(upload_url, supplied_headers):
+    """Keep API credentials inside the API origin; honor upload-specific auth."""
+    origin = url_origin(upload_url)
+    headers = dict(supplied_headers)
+    if origin == url_origin(GITCODE_API_BASE) and not any(
+        key.lower() == "authorization" for key in headers
+    ):
+        headers["Authorization"] = f"Bearer {GITCODE_TOKEN.strip()}"
+    return headers
+
+
 def upload_asset_to_gitcode_by_tag(tag_name, file_path, file_name):
     """通过 GitCode 的 upload_url 两步法上传附件（GET 拿地址 + PUT 上传）"""
     headers = {"Authorization": f"Bearer {GITCODE_TOKEN.strip()}"}
@@ -270,20 +295,27 @@ def upload_asset_to_gitcode_by_tag(tag_name, file_path, file_name):
     if isinstance(upload_info, str):
         upload_url = upload_info
         upload_headers = {}
-    else:
+    elif isinstance(upload_info, dict):
         upload_url = upload_info.get("upload_url") or upload_info.get("url")
         upload_headers = upload_info.get("headers") or {}
+    else:
+        print("    [x] 上传地址响应格式无效")
+        return False
 
     if not upload_url:
-        print(f"    [x] 响应中未找到 upload_url: {resp.text}")
+        print("    [x] 响应中未找到 upload_url")
+        return False
+
+    try:
+        put_headers = upload_headers_for(upload_url, upload_headers)
+    except (ValueError, TypeError, AttributeError):
+        print("    [x] 上传地址或请求头格式无效")
         return False
 
     # 2. PUT 上传文件内容（带上 OBS 要求的 headers）
     print(
         f"    [up] 正在上传至 GitCode: {file_name} ({file_size / (1024 * 1024):.2f} MB) ..."
     )
-    put_headers = {"Authorization": f"Bearer {GITCODE_TOKEN.strip()}"}
-    put_headers.update(upload_headers)
     with open(file_path, "rb") as f:
         resp = http.put(upload_url, headers=put_headers, data=f, timeout=(15, 600))
 
