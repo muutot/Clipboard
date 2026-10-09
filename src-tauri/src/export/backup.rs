@@ -295,7 +295,16 @@ struct Validated {
     resources: HashMap<String, PathBuf>,
     preview: BackupPreview,
 }
-fn validate(path: &Path, database: &Database, progress: Progress<'_>) -> Result<Validated, String> {
+enum ValidationMode {
+    Preview,
+    Restore,
+}
+fn validate(
+    path: &Path,
+    database: &Database,
+    mode: ValidationMode,
+    progress: Progress<'_>,
+) -> Result<Validated, String> {
     progress(OperationPhase::Validating, 0, None)?;
     let scratch = Scratch::at(&std::env::temp_dir())?;
     let mut file = File::options()
@@ -387,10 +396,11 @@ fn validate(path: &Path, database: &Database, progress: Progress<'_>) -> Result<
     let mut ids = HashSet::new();
     let mut hashes = std::collections::BTreeSet::new();
     let mut duplicates = 0;
+    let mut item_count = 0usize;
     loop {
         progress(
             OperationPhase::Validating,
-            items.len() as u64,
+            item_count as u64,
             Some(manifest.item_count as u64),
         )?;
         let mut line = Vec::new();
@@ -406,6 +416,7 @@ fn validate(path: &Path, database: &Database, progress: Progress<'_>) -> Result<
             return Err("record exceeds size limit".into());
         }
         let mut item: ClipboardItem = serde_json::from_slice(&line).map_err(err)?;
+        Database::validate_restore_items(std::slice::from_ref(&item)).map_err(err)?;
         if !ids.insert(item.id.clone()) || !hashes.insert((item.kind, item.content_hash.clone())) {
             return Err("duplicate record identity in backup".into());
         }
@@ -427,15 +438,18 @@ fn validate(path: &Path, database: &Database, progress: Progress<'_>) -> Result<
                 item.id
             ));
         }
-        items.push(item);
-        if items.len() > MAX_ITEMS {
+        item_count += 1;
+        if item_count > MAX_ITEMS {
             return Err("too many records".into());
         }
+        // A preview needs identities/counts, never the complete clipboard bodies.
+        if matches!(mode, ValidationMode::Restore) {
+            items.push(item);
+        }
     }
-    if items.len() != manifest.item_count {
+    if item_count != manifest.item_count {
         return Err("record count does not match manifest".into());
     }
-    Database::validate_restore_items(&items).map_err(err)?;
     let resource_bytes = manifest
         .entries
         .iter()
@@ -465,7 +479,7 @@ pub fn preview_with_progress(
     database: &Database,
     progress: Progress<'_>,
 ) -> Result<BackupPreview, String> {
-    Ok(validate(path, database, progress)?.preview)
+    Ok(validate(path, database, ValidationMode::Preview, progress)?.preview)
 }
 
 #[cfg(test)]
@@ -484,7 +498,7 @@ pub fn restore_with_progress(
     paths: &StoragePaths,
     progress: Progress<'_>,
 ) -> Result<ImportSummary, String> {
-    let mut validated = validate(path, database, progress)?;
+    let mut validated = validate(path, database, ValidationMode::Restore, progress)?;
     if validated.preview.fingerprint != fingerprint {
         return Err("backup changed since preview; preview it again".into());
     }
@@ -552,9 +566,12 @@ pub fn restore_with_progress(
 }
 
 #[cfg(test)]
+mod scale_bench;
+
+#[cfg(test)]
 mod tests {
     use super::*;
-    fn item(id: &str, kind: ClipboardKind, path: Option<String>) -> ClipboardItem {
+    pub(super) fn item(id: &str, kind: ClipboardKind, path: Option<String>) -> ClipboardItem {
         ClipboardItem {
             id: id.into(),
             kind,
@@ -681,6 +698,72 @@ mod tests {
         assert!(preview(&archive, &database).unwrap_err().contains("unsafe"));
         assert_eq!(database.item_count().unwrap(), 1);
         assert!(!root.0.join("escape").exists());
+    }
+
+    #[test]
+    fn preview_and_restore_validate_the_final_record_even_when_already_present() {
+        let root = Scratch::at(&std::env::temp_dir()).unwrap();
+        let database = Database::open_in_memory().unwrap();
+        let paths = StoragePaths::initialize(root.0.join("target")).unwrap();
+        let archive = root.0.join("bundle.clipbackup");
+        let first = item("first", ClipboardKind::Text, None);
+        let mut last = item("last", ClipboardKind::Text, None);
+        database.save_item(&first).unwrap();
+        database.save_item(&last).unwrap();
+        // Valid checksum and count, but the final duplicate row is invalid.
+        // Both modes must still reject it before any publication or database change.
+        last.created_at_ms = -1;
+        let records = format!(
+            "{}\n{}\n",
+            serde_json::to_string(&first).unwrap(),
+            serde_json::to_string(&last).unwrap()
+        );
+        let manifest = Manifest {
+            version: 1,
+            item_count: 2,
+            entries: vec![Entry {
+                name: "records.jsonl".into(),
+                bytes: records.len() as u64,
+                sha256: hex::encode(Sha256::digest(records.as_bytes())),
+            }],
+        };
+        let mut zip = ZipWriter::new(File::create(&archive).unwrap());
+        zip.start_file("records.jsonl", SimpleFileOptions::default())
+            .unwrap();
+        zip.write_all(records.as_bytes()).unwrap();
+        zip.start_file("manifest.json", SimpleFileOptions::default())
+            .unwrap();
+        zip.write_all(&serde_json::to_vec(&manifest).unwrap())
+            .unwrap();
+        zip.finish().unwrap();
+        assert!(preview(&archive, &database)
+            .unwrap_err()
+            .contains("negative"));
+        assert!(restore(&archive, "unused", &database, &paths)
+            .unwrap_err()
+            .contains("negative"));
+        assert_eq!(database.item_count().unwrap(), 2);
+    }
+
+    #[test]
+    fn preview_cancellation_at_eof_keeps_counts_and_database_intact() {
+        let root = Scratch::at(&std::env::temp_dir()).unwrap();
+        let database = Database::open_in_memory().unwrap();
+        database
+            .save_item(&item("text", ClipboardKind::Text, None))
+            .unwrap();
+        let archive = root.0.join("bundle.clipbackup");
+        create(&database, &archive).unwrap();
+        let result = preview_with_progress(&archive, &database, &mut |phase, completed, total| {
+            if matches!(phase, OperationPhase::Validating) && total == Some(1) && completed == 1 {
+                return Err("operation cancelled".into());
+            }
+            Ok(())
+        });
+        assert!(result.unwrap_err().contains("cancelled"));
+        let result = preview(&archive, &database).unwrap();
+        assert_eq!((result.item_count, result.duplicate_count), (1, 1));
+        assert_eq!(database.item_count().unwrap(), 1);
     }
     #[test]
     fn failed_restore_rolls_back_rows_and_published_files() {

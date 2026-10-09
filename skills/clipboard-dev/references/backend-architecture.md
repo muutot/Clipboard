@@ -273,6 +273,13 @@ Local filesystem calls and a single SQLite busy wait remain non-preemptible.
 
 ## Backend change checklist
 
+Portable-backup validation distinguishes preview from restore. Both validate every row,
+including duplicates, and retain identity sets for cross-row uniqueness. Preview drops each
+body after validation/counting; restore retains it for the atomic apply. Progress uses a
+separate processed-row counter, so EOF cancellation and manifest counts do not depend on
+the retained vector length. The opt-in `export/backup/scale_bench.rs` measures actual
+preview RSS/time with synthetic archives; see `docs/PERFORMANCE_V1_8.md` for limits.
+
 - keep business logic in focused modules and `lib.rs` as the boundary;
 - return explicit errors through Tauri and avoid partial cross-resource updates;
 - add focused Rust tests for repository, schema, hash, cache, worker, and path invariants;

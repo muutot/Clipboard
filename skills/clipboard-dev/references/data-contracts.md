@@ -321,6 +321,11 @@ Tag management runs in the separate settings WebviewWindow, so the tag panel emi
 
 ### Combined search filters
 
+Portable-backup preview validates rows incrementally and keeps only identities and resource
+metadata across rows. Restore still retains all decoded rows for atomic apply. Both enforce
+the same record, checksum, count, path and duplicate constraints; changing retention must
+not bypass validation of already-present records or the final cancellation boundary.
+
 `search_clipboard_items(query, limit?, offset?, sortRules?, filter?)` accepts the history
 filter payload. The cursor is ignored: search retains its sorted-result offset pagination.
 Filters constrain candidate selection before the limit and total count. Single-character
