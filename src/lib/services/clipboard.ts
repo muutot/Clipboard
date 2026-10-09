@@ -517,14 +517,6 @@ export async function copyClipboardItem(
   const t = (path: string, params?: Record<string, string | number>) =>
     resolvePath(messages, path, params);
 
-  try {
-    item = await hydrateClipboardItem(item);
-  } catch (error) {
-    logFrontendError("hydrate clipboard item for copy", error);
-    showToast(t("toast.copyFailed"), "error");
-    return;
-  }
-
   if (item.kind === "image" || item.kind === "file") {
     try {
       item = await materializeClipboardItem(item);
@@ -548,6 +540,14 @@ export async function copyClipboardItem(
         "error",
       );
     }
+    return;
+  }
+
+  try {
+    item = await hydrateClipboardItem(item);
+  } catch (error) {
+    logFrontendError("hydrate clipboard item for copy", error);
+    showToast(t("toast.copyFailed"), "error");
     return;
   }
 

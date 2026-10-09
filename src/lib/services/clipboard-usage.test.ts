@@ -38,7 +38,7 @@ const stamps = () =>
 
 describe("successful usage recording", () => {
   it.each(["copy", "paste"])(
-    "hydrates complete text before %s and never writes a preview",
+    "resolves complete text in the owner of %s and never writes a preview",
     async (action) => {
       const full = "complete body ".repeat(1000);
       bridge.invoke.mockImplementation(async (command) =>
@@ -57,6 +57,7 @@ describe("successful usage recording", () => {
       else await pasteClipboardItem(summary, "plain");
       if (action === "copy") {
         expect(bridge.invoke).toHaveBeenCalledWith("copy_clipboard_item", { id: item.id });
+        expect(bridge.invoke).not.toHaveBeenCalledWith("get_clipboard_item", expect.anything());
         expect(bridge.write).not.toHaveBeenCalled();
       } else expect(bridge.write).toHaveBeenCalledWith(full);
     },
@@ -79,11 +80,12 @@ describe("successful usage recording", () => {
     bridge.invoke.mockResolvedValue(null);
     await expect(hydrateClipboardItem(summary)).rejects.toThrow("no longer exists");
   });
-  it("never copies a truncated preview if hydration fails", async () => {
+  it("never copies a truncated preview if the native record lookup fails", async () => {
     bridge.invoke.mockRejectedValue(new Error("unavailable"));
     await copyClipboardItem({ ...item, contentLoaded: false });
     expect(bridge.write).not.toHaveBeenCalled();
     expect(stamps()).toHaveLength(0);
+    expect(bridge.toast).toHaveBeenCalledWith(expect.any(String), "error");
   });
   it("waits for the OS write before stamping and moving a copied row", async () => {
     let finish!: () => void;

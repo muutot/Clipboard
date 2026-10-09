@@ -7,7 +7,8 @@ Read each component's current `Props` interface before changing a call site. Thi
 ### `ClipboardCard.svelte`
 
 Active list rows may be summaries (`contentLoaded: false`). Editing awaits the route's
-hydration before initializing its draft; copy/paste/detail also hydrate through their owners.
+hydration before initializing its draft; paste/detail hydrate through their owners, while
+native default text/link copy reads the complete record directly in the backend.
 Format actions use `hasHtml` so omitted rich-text bodies do not hide an available operation.
 A first drag of a summary cancels and requests hydration; retry uses complete plain/HTML data.
 

@@ -25,7 +25,9 @@ When changing settings, update normalization, valid unions, numeric ranges, clon
 ## `clipboard.ts`
 
 `hydrateClipboardItem` loads a summary through `get_clipboard_item`, coalesces only
-in-flight requests, and fails on missing records. Copy/paste hydrate before any OS write;
+in-flight requests, and fails on missing records. Native default text/link copy passes only
+the id to the backend, which reads the full record; it never hydrates a body into the WebView.
+Media materialization, formatted paste and browser copy hydrate where needed;
 the main route hydrates detail, inline editing and bulk copy. Format availability uses
 `hasHtml` on summaries. List summaries display persisted bytes rather than a truncated
 character count. First drag of an unhydrated row prepares its content and cancels that drag.
