@@ -413,9 +413,15 @@
       >
         {_t("detail.tags")}
       </button>
-      <button class:active={activeTab === "ocr"} type="button" onclick={() => (activeTab = "ocr")}>
-        {_t("detail.ocr")}
-      </button>
+      {#if item.kind === "image"}
+        <button
+          class:active={activeTab === "ocr"}
+          type="button"
+          onclick={() => (activeTab = "ocr")}
+        >
+          {_t("detail.ocr")}
+        </button>
+      {/if}
     </nav>
 
     <div class="detail-body">
@@ -564,7 +570,7 @@
         <DetailDetailsTab {item} kindLabel={getKindLabel(item.kind)} />
       {:else if activeTab === "tags"}
         <DetailTagsTab {item} {tagColors} {onsavetags} />
-      {:else if activeTab === "ocr"}
+      {:else if activeTab === "ocr" && item.kind === "image"}
         <DetailOcrTab {item} {onocrupdate} query={searchQuery} />
       {/if}
     </div>
