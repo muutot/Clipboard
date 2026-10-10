@@ -1,213 +1,24 @@
+//! The single `ClipboardRepository` implementation for `Database`.
+//!
+//! The trait itself is declared in `traits.rs`; Rust allows exactly one impl
+//! block per trait/type pair, so the whole contract lives here. The bulk
+//! restore/import funnels are in `transactions.rs`, and the shared free helpers
+//! (`history_predicates`, `rewrite_item_tags`, `is_valid_tag_color`) are in
+//! `helpers.rs`.
+
 use std::collections::HashMap;
 
 use rusqlite::{params, params_from_iter, OptionalExtension, TransactionBehavior};
 
 use super::{
-    content_exists_on_connection, current_time_ms, delete_kind_records, insert_item_row,
-    kind_to_storage, query_kind_storage_stats, unique_ids, ClipboardRepository, HistoryFilter,
-    KindDeleteResult, KindDeleteScope, KindStorageStats, StorageFileReferences,
-    StoredClipboardItem, TagInfo, TextItemUpdate, ITEM_COLUMNS, ITEM_LOOKUP_CHUNK_SIZE,
+    content_exists_on_connection, current_time_ms, delete_kind_records, history_predicates,
+    insert_item_row, is_valid_tag_color, kind_to_storage, query_kind_storage_stats,
+    rewrite_item_tags, unique_ids, ClipboardRepository, HistoryFilter, KindDeleteResult,
+    KindDeleteScope, KindStorageStats, StorageFileReferences, StoredClipboardItem, TagInfo,
+    TextItemUpdate, ITEM_COLUMNS, ITEM_LOOKUP_CHUNK_SIZE,
 };
 use crate::domain::{ClipboardItem, ClipboardKind};
 use crate::storage::{Database, StorageError};
-
-/// Outcome of [`Database::save_items_transactional`].
-#[derive(Debug, Default)]
-pub struct TransactionalSaveSummary {
-    pub imported_count: u64,
-    pub skipped_count: u64,
-    pub errors: Vec<String>,
-}
-
-impl Database {
-    pub fn validate_restore_items(entries: &[ClipboardItem]) -> Result<(), StorageError> {
-        let upper = current_time_ms().saturating_add(MAX_IMPORT_FUTURE_SKEW_MS);
-        for item in entries {
-            validate_imported_item(item, upper).map_err(|reason| {
-                StorageError::Io(std::io::Error::new(std::io::ErrorKind::InvalidData, reason))
-            })?;
-        }
-        Ok(())
-    }
-    /// Restore a validated bundle atomically; duplicates are skipped, any invalid row aborts.
-    pub fn restore_items_transactional(
-        &self,
-        entries: &[ClipboardItem],
-    ) -> Result<TransactionalSaveSummary, StorageError> {
-        let _resource_publication = self.begin_resource_write();
-        self.restore_items_transactional_with_progress(entries, |_, _| Ok(()))
-    }
-    pub fn restore_items_transactional_with_progress(
-        &self,
-        entries: &[ClipboardItem],
-        mut progress: impl FnMut(u64, u64) -> Result<(), StorageError>,
-    ) -> Result<TransactionalSaveSummary, StorageError> {
-        self.with_connection(|connection| {
-            let tx = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
-            let mut summary = TransactionalSaveSummary::default();
-            for (index, item) in entries.iter().enumerate() {
-                progress(index as u64, entries.len() as u64)?;
-                validate_imported_item(
-                    item,
-                    current_time_ms().saturating_add(MAX_IMPORT_FUTURE_SKEW_MS),
-                )
-                .map_err(|reason| {
-                    StorageError::Io(std::io::Error::new(std::io::ErrorKind::InvalidData, reason))
-                })?;
-                if content_exists_on_connection(&tx, item.kind, &item.content_hash)? {
-                    summary.skipped_count += 1;
-                    continue;
-                }
-                let size =
-                    i64::try_from(item.size_bytes).map_err(|_| StorageError::ValueOutOfRange {
-                        field: "size_bytes",
-                    })?;
-                insert_item_row(&tx, item, size)?;
-                summary.imported_count += 1;
-            }
-            progress(entries.len() as u64, entries.len() as u64)?;
-            tx.commit()?;
-            Ok(summary)
-        })
-    }
-    /// Reads only IDs for combined search filters, before Tantivy top-k selection.
-    pub fn search_filter_ids(&self, filter: &HistoryFilter) -> Result<Vec<String>, StorageError> {
-        self.with_connection(|connection| {
-            let (conditions, args) = history_predicates(filter);
-            let sql = format!(
-                "SELECT id FROM clipboard_items WHERE {}",
-                conditions.join(" AND ")
-            );
-            let mut statement = connection.prepare_cached(&sql)?;
-            let ids = statement
-                .query_map(params_from_iter(args), |row| row.get(0))?
-                .collect::<Result<Vec<String>, _>>()?;
-            Ok(ids)
-        })
-    }
-    /// Saves many items inside a single transaction so a bulk import commits
-    /// once instead of producing one fsync per row. Rows whose
-    /// `(kind, content_hash)` already exists are counted as skipped (a
-    /// duplicate import neither duplicates nor rewrites records); per-row
-    /// failures are collected instead of aborting the whole batch.
-    /// The single funnel for every importer (JSON, CSV, and the replication
-    /// mirror), so bounds belong here rather than in three parsers.
-    ///
-    /// An imported row is attacker-controlled data with respect to the rest of
-    /// the system: `created_at_ms` becomes the replication version, and an
-    /// unbounded `text_content` bypasses the capture limit that protects the
-    /// search index. Each entry is validated independently and a rejected one is
-    /// reported in `errors` instead of failing the whole batch.
-    pub fn save_items_transactional(
-        &self,
-        entries: &[(String, ClipboardItem)],
-    ) -> Result<TransactionalSaveSummary, StorageError> {
-        let upper_bound = current_time_ms().saturating_add(MAX_IMPORT_FUTURE_SKEW_MS);
-        self.with_connection(|connection| {
-            let mut transaction =
-                connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
-            let mut summary = TransactionalSaveSummary::default();
-
-            for (label, item) in entries {
-                if let Err(reason) = validate_imported_item(item, upper_bound) {
-                    summary.skipped_count += 1;
-                    summary.errors.push(format!("skipped {label}: {reason}"));
-                    continue;
-                }
-                let size_bytes =
-                    i64::try_from(item.size_bytes).map_err(|_| StorageError::ValueOutOfRange {
-                        field: "size_bytes",
-                    })?;
-                let already_exists =
-                    content_exists_on_connection(&transaction, item.kind, &item.content_hash)?;
-                if already_exists {
-                    summary.skipped_count += 1;
-                    continue;
-                }
-                // A failed derived-tag write must not leave an imported row
-                // behind when this batch intentionally continues after errors.
-                let mut row = transaction.savepoint()?;
-                match insert_item_row(&row, item, size_bytes) {
-                    Ok(_) => {
-                        row.commit()?;
-                        summary.imported_count += 1;
-                    }
-                    Err(error) => {
-                        row.rollback()?;
-                        summary.skipped_count += 1;
-                        summary
-                            .errors
-                            .push(format!("failed to import {label}: {error}"));
-                    }
-                }
-            }
-
-            transaction.commit()?;
-            Ok(summary)
-        })
-    }
-}
-
-/// How far past the current wall clock an imported `created_at_ms` may sit.
-///
-/// Generous enough for a device whose clock runs a little fast, tight enough
-/// that a saturated version clock is still far away.
-const MAX_IMPORT_FUTURE_SKEW_MS: i64 = 24 * 60 * 60 * 1000;
-
-/// Hard ceiling for one imported text payload.
-///
-/// `ConfigStore::max_text_capture_bytes` clamps to 10 MB, so an import is never
-/// stricter than what capture itself would have accepted, and the capture limit
-/// can never be widened past what the import funnel admits.
-const MAX_IMPORT_TEXT_BYTES: usize = 10_000_000;
-
-/// Hard ceiling for an imported title. Titles are rendered in list rows, card
-/// headers, and the search index, and never approach this size legitimately.
-const MAX_IMPORT_TITLE_BYTES: usize = 4_096;
-
-/// Rejects an imported row that would poison the version clock or the search
-/// index. The bounds are intentionally independent of the replication version:
-/// `created_at_ms` is validated because it becomes that version.
-fn validate_imported_item(item: &ClipboardItem, upper_bound_ms: i64) -> Result<(), String> {
-    if item.created_at_ms < 0 {
-        return Err(format!("created_at_ms {} is negative", item.created_at_ms));
-    }
-    if item.created_at_ms > upper_bound_ms {
-        return Err(format!(
-            "created_at_ms {} is too far in the future",
-            item.created_at_ms
-        ));
-    }
-    for (field, value) in [
-        ("title", item.title.as_str()),
-        (
-            "text_content",
-            item.text_content.as_deref().unwrap_or_default(),
-        ),
-        (
-            "html_content",
-            item.html_content.as_deref().unwrap_or_default(),
-        ),
-        (
-            "rtf_content",
-            item.rtf_content.as_deref().unwrap_or_default(),
-        ),
-    ] {
-        if value.len() > MAX_IMPORT_TEXT_BYTES {
-            return Err(format!(
-                "{field} is {} bytes, over the {MAX_IMPORT_TEXT_BYTES} byte import limit",
-                value.len()
-            ));
-        }
-    }
-    if item.title.len() > MAX_IMPORT_TITLE_BYTES {
-        return Err(format!(
-            "title is {} bytes, over the {MAX_IMPORT_TITLE_BYTES} byte import limit",
-            item.title.len()
-        ));
-    }
-    Ok(())
-}
 
 impl ClipboardRepository for Database {
     fn save_item(&self, item: &ClipboardItem) -> Result<String, StorageError> {
@@ -1207,109 +1018,20 @@ impl ClipboardRepository for Database {
     }
 }
 
-/// Rewrites `metadata_json.tags` on every active record, replacing `target`
-/// with `replacement` (or removing it when `replacement` is `None`), preserving
-/// order and de-duplicating. Returns the number of records whose tags changed.
-fn rewrite_item_tags(
-    connection: &rusqlite::Connection,
-    target: &str,
-    replacement: Option<&str>,
-) -> Result<u64, StorageError> {
-    let mut statement =
-        connection.prepare("SELECT id, metadata_json FROM clipboard_items WHERE deleted = 0")?;
-    let rows = statement.query_map([], |row| {
-        Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?))
-    })?;
-
-    let mut updated = 0u64;
-    for row in rows {
-        let (id, json) = row?;
-        let Some(json) = json else { continue };
-        let Ok(serde_json::Value::Object(object)) =
-            serde_json::from_str::<serde_json::Value>(&json)
-        else {
-            continue;
-        };
-        let Some(serde_json::Value::Array(tags)) = object.get("tags") else {
-            continue;
-        };
-        let contains = tags
-            .iter()
-            .filter_map(serde_json::Value::as_str)
-            .any(|tag| tag.trim() == target);
-        if !contains {
-            continue;
-        }
-
-        let mut seen = std::collections::HashSet::new();
-        let mut rewritten: Vec<serde_json::Value> = Vec::new();
-        for tag in tags.iter().filter_map(serde_json::Value::as_str) {
-            let trimmed = tag.trim();
-            if trimmed == target {
-                if let Some(next) = replacement {
-                    if next.is_empty() || !seen.insert(next.to_owned()) {
-                        continue;
-                    }
-                    rewritten.push(serde_json::Value::String(next.to_owned()));
-                }
-                continue;
-            }
-            if !trimmed.is_empty() && seen.insert(trimmed.to_owned()) {
-                rewritten.push(serde_json::Value::String(trimmed.to_owned()));
-            }
-        }
-
-        let mut updated_object = object.clone();
-        if rewritten.is_empty() {
-            updated_object.remove("tags");
-        } else {
-            updated_object.insert("tags".to_owned(), serde_json::Value::Array(rewritten));
-        }
-        let updated_json = serde_json::to_string(&updated_object).map_err(StorageError::Json)?;
-        connection.execute(
-            "UPDATE clipboard_items SET metadata_json = ?2 WHERE id = ?1 AND deleted = 0",
-            params![id, updated_json],
-        )?;
-        updated += 1;
+impl Database {
+    /// Reads only IDs for combined search filters, before Tantivy top-k selection.
+    pub fn search_filter_ids(&self, filter: &HistoryFilter) -> Result<Vec<String>, StorageError> {
+        self.with_connection(|connection| {
+            let (conditions, args) = history_predicates(filter);
+            let sql = format!(
+                "SELECT id FROM clipboard_items WHERE {}",
+                conditions.join(" AND ")
+            );
+            let mut statement = connection.prepare_cached(&sql)?;
+            let ids = statement
+                .query_map(params_from_iter(args), |row| row.get(0))?
+                .collect::<Result<Vec<String>, _>>()?;
+            Ok(ids)
+        })
     }
-    Ok(updated)
-}
-
-fn is_valid_tag_color(color: &str) -> bool {
-    let bytes = color.as_bytes();
-    bytes.len() == 7 && bytes[0] == b'#' && bytes[1..].iter().all(u8::is_ascii_hexdigit)
-}
-
-pub(super) fn history_predicates(
-    filter: &HistoryFilter,
-) -> (Vec<String>, Vec<Box<dyn rusqlite::types::ToSql>>) {
-    let mut conditions: Vec<String> = vec!["deleted = 0".to_owned()];
-    let mut args: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
-    if let Some(kind) = filter.kind {
-        conditions.push("kind = ?".to_owned());
-        args.push(Box::new(kind_to_storage(kind)));
-    }
-    if filter.favorite_only {
-        conditions.push("is_favorite = 1".to_owned());
-    }
-    if let Some(tag) = &filter.tag {
-        conditions.push(
-            "EXISTS (SELECT 1 FROM item_tags WHERE item_id = clipboard_items.id AND tag = ?)"
-                .to_owned(),
-        );
-        args.push(Box::new(tag.clone()));
-    }
-    if let Some(app) = &filter.source_app {
-        conditions.push("source_app = ?".to_owned());
-        args.push(Box::new(app.clone()));
-    }
-    if let Some(from) = filter.date_from_ms {
-        conditions.push("created_at_ms >= ?".to_owned());
-        args.push(Box::new(from));
-    }
-    if let Some(to) = filter.date_to_ms {
-        conditions.push("created_at_ms <= ?".to_owned());
-        args.push(Box::new(to));
-    }
-    (conditions, args)
 }
