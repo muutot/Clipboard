@@ -11,17 +11,12 @@
   import { messages, resolvePath } from "$lib/i18n";
   import { formatRelativeTime } from "$lib/utils/content/time";
   import { isTauriRuntime } from "$lib/services/runtime";
-  import {
-    detectContentActions,
-    type QuickAction,
-    writeClipboardText,
-  } from "$lib/services/clipboard";
+  import { writeClipboardText } from "$lib/services/clipboard";
   import { SOURCE_TONE_COLORS } from "$lib/services/clipboard/mapping";
   import { getDisplayRemainingLines, getDisplayTitle } from "$lib/utils/content/display-text";
   import { trimTrailingBlankLines } from "$lib/utils/layout/virtual-scroll";
   import { assetUrl as baseAssetUrl } from "$lib/utils/content/format";
-  import { detectQuickActions, parseIsoDate, quickActionKind } from "$lib/utils/content/patterns";
-  import { invoke, convertFileSrc } from "@tauri-apps/api/core";
+  import { convertFileSrc } from "@tauri-apps/api/core";
   import { iconsDir } from "$lib/services/paths";
   import {
     onContextMenuOpened,
@@ -29,6 +24,7 @@
     trackContextMenuOpen,
   } from "$lib/services/context-menu";
   import { showToast } from "$lib/services/toast";
+  import { createQuickActionsController } from "./quick-actions.svelte";
 
   let iconsBase = $derived($iconsDir);
 
@@ -285,101 +281,14 @@
       item.kind === "file") &&
       (!item.fileMeta || item.fileMeta.length <= 1),
   );
-  let contentActions = $state<QuickAction[]>([]);
-  let contentActionRequest = 0;
-  let dateView = $state<{ isoDate: string; formattedDate: string; label: string } | null>(null);
-
-  let contentActionsLoaded = $state(false);
-
-  function loadContentActions() {
-    if (contentActionsLoaded) return;
-    contentActionsLoaded = true;
-    const text = item.textContent || [item.title, item.preview].filter(Boolean).join("\n");
-    const request = ++contentActionRequest;
-    if (!isTauriRuntime()) {
-      contentActions = detectQuickActions(text, true);
-      return;
-    }
-    void detectContentActions(text)
-      .then((actions) => {
-        if (request === contentActionRequest) {
-          const raw = actions ?? detectQuickActions(text, true);
-          const seen = new Set<string>();
-          contentActions = raw.filter((a) => {
-            const key = `${a.actionType}:${a.payload}`;
-            if (seen.has(key)) return false;
-            seen.add(key);
-            return true;
-          });
-        }
-      })
-      .catch(() => {
-        if (request === contentActionRequest) {
-          contentActions = detectQuickActions(text, true);
-        }
-      });
-  }
-
-  $effect(() => {
-    const id = item.id;
-    contentActionsLoaded = false;
-    contentActions = [];
-    contentActionRequest = 0;
+  // Quick actions detected from the item text, and the date popover they open,
+  // live in `quick-actions.svelte.ts`.
+  const quickActions = createQuickActionsController({
+    get id() {
+      return item.id;
+    },
+    sourceText: () => item.textContent || [item.title, item.preview].filter(Boolean).join("\n"),
   });
-
-  let displayContentActions = $derived.by(() => {
-    const seenKinds = new Set<string>();
-    return contentActions.filter((action) => {
-      const kind = quickActionKind(action);
-      if (seenKinds.has(kind)) return false;
-      seenKinds.add(kind);
-      return true;
-    });
-  });
-
-  function showDateDialog(action: QuickAction) {
-    const date = parseIsoDate(action.payload);
-    if (!date) {
-      // Never log the payload: it is clipboard-derived content and does not
-      // belong in diagnostics output.
-      console.warn("Ignored invalid date action payload");
-      return;
-    }
-
-    dateView = {
-      isoDate: action.payload,
-      formattedDate: new Intl.DateTimeFormat(undefined, {
-        dateStyle: "full",
-        timeZone: "UTC",
-      }).format(date),
-      label: action.label,
-    };
-  }
-
-  async function handleAction(event: MouseEvent, action: QuickAction) {
-    event.stopPropagation();
-    switch (action.actionType) {
-      case "open":
-        try {
-          await invoke("open_external_url", { url: action.payload });
-        } catch {
-          window.open(action.payload, "_blank");
-        }
-        return;
-      case "copy":
-        void writeClipboardText(action.payload).catch((err) =>
-          console.error("Copy to clipboard failed:", err),
-        );
-        return;
-      case "viewDate":
-        await showDateDialog(action);
-        return;
-      default: {
-        const unsupportedAction: never = action.actionType;
-        console.warn("Ignored unsupported quick action", unsupportedAction);
-      }
-    }
-  }
 
   function handleDoubleClick(event: MouseEvent) {
     event.preventDefault();
@@ -595,7 +504,7 @@
   }
 
   function handleMouseEnter() {
-    loadContentActions();
+    quickActions.load();
   }
 
   // The card's select surface is a full-size overlay <button>. A mouse click
@@ -608,7 +517,7 @@
   let suppressFocusSelect = false;
 
   function handleFocus() {
-    loadContentActions();
+    quickActions.load();
     if (suppressFocusSelect) return;
     onselect(item.id);
   }
@@ -806,11 +715,11 @@
           {item}
           {index}
           {quickCopyBadgeAlwaysVisible}
-          contentActions={displayContentActions}
-          dateViewIso={dateView?.isoDate ?? null}
+          contentActions={quickActions.actions}
+          dateViewIso={quickActions.dateView?.isoDate ?? null}
           {canEdit}
           canRestore={!!onrestore}
-          onquickaction={handleAction}
+          onquickaction={quickActions.handleAction}
           onrunaction={runCardAction}
           onsaveas={handleSaveAsClick}
         />
@@ -867,7 +776,7 @@
   {/if}
 </div>
 
-<CardDateDialog {dateView} ondismiss={() => (dateView = null)} />
+<CardDateDialog dateView={quickActions.dateView} ondismiss={quickActions.dismissDate} />
 
 {#if contextMenu}
   <ContextMenu

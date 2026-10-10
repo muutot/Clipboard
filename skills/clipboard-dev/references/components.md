@@ -12,7 +12,7 @@ native default text/link copy reads the complete record directly in the backend.
 Format actions use `hasHtml` so omitted rich-text bodies do not hide an available operation.
 A first drag of a summary cancels and requests hydration; retry uses complete plain/HTML data.
 
-Owns one list item: text/link/image/file rendering, source metadata, quick/content actions, context-menu actions, inline editing, favorite/delete/restore/copy/detail/plain-paste/format-paste/clean-paste callbacks, card layout, and measurement reporting.
+Owns one list item: text/link/image/file rendering, source metadata, quick/content actions, context-menu actions, inline editing, favorite/delete/restore/copy/detail/plain-paste/format-paste/clean-paste callbacks, card layout, and measurement reporting. Quick-action detection, its kind-deduped display list, and the date popover live in `src/lib/components/card/quick-actions.svelte.ts`.
 
 Key contracts:
 
