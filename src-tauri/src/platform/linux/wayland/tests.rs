@@ -9,6 +9,72 @@ fn wayland_capabilities_summary_is_not_empty() {
 }
 
 #[test]
+fn classify_rejects_non_wayland_sessions() {
+    let caps = WaylandCapabilities::classify("x11", "GNOME", false, false);
+    assert_eq!(caps, WaylandCapabilities::unknown());
+}
+
+#[test]
+fn classify_sway_uses_the_wlroots_profile() {
+    let caps = WaylandCapabilities::classify("wayland", "sway", true, false);
+    assert_eq!(caps.compositor, "Sway");
+    assert!(caps.clipboard_read);
+    assert!(!caps.requires_config);
+}
+
+#[test]
+fn classify_falls_back_to_the_sway_socket_name() {
+    // Some sessions export a generic desktop string but still own sway's IPC
+    // socket; the socket is the stronger signal.
+    let caps = WaylandCapabilities::classify("wayland", "wlroots", true, false);
+    assert_eq!(caps.compositor, "Sway");
+    assert!(caps.clipboard_write);
+}
+
+#[test]
+fn classify_hyprland_from_its_instance_signature() {
+    let caps = WaylandCapabilities::classify("wayland", "", false, true);
+    assert_eq!(caps.compositor, "Hyprland");
+    assert!(caps.global_shortcuts);
+    assert!(!caps.requires_config);
+}
+
+#[test]
+fn classify_kde_plasma_has_no_primary_selection() {
+    let caps = WaylandCapabilities::classify("wayland", "KDE", false, false);
+    assert_eq!(caps.compositor, "KDE Plasma");
+    assert!(caps.clipboard_read);
+    assert!(caps.clipboard_write);
+    assert!(!caps.primary_selection);
+    assert!(!caps.requires_config);
+}
+
+#[test]
+fn classify_gnome_blocks_clipboard_and_requires_config() {
+    let caps = WaylandCapabilities::classify("wayland", "ubuntu:GNOME", false, false);
+    assert_eq!(caps.compositor, "GNOME Shell");
+    assert!(!caps.clipboard_read);
+    assert!(!caps.clipboard_write);
+    assert!(caps.global_shortcuts);
+    assert!(caps.requires_config);
+    assert_eq!(caps.notes.len(), 2);
+}
+
+#[test]
+fn classify_unknown_compositor_stays_conservative() {
+    let caps = WaylandCapabilities::classify("wayland", "niri", false, false);
+    assert_eq!(caps.compositor, "niri (unverified)");
+    assert!(!caps.clipboard_read);
+    assert!(caps.requires_config);
+}
+
+#[test]
+fn classify_blank_compositor_falls_back_to_unknown() {
+    let caps = WaylandCapabilities::classify("wayland", "", false, false);
+    assert_eq!(caps, WaylandCapabilities::unknown());
+}
+
+#[test]
 fn wlroots_capabilities_have_full_support() {
     let caps = WaylandCapabilities::wlroots_based("sway");
     assert!(caps.clipboard_read);

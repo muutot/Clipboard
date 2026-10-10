@@ -45,65 +45,80 @@ impl WaylandCapabilities {
     /// - `SWAYSOCK` — Sway IPC socket
     /// - `HYPRLAND_INSTANCE_SIGNATURE` — Hyprland runtime ID
     pub fn detect() -> Self {
-        // Implementation outline:
-        //
-        // let session_type = std::env::var("XDG_SESSION_TYPE").unwrap_or_default();
-        // if session_type != "wayland" {
-        //     return Self::empty();
-        // }
-        //
-        // let desktop = std::env::var("XDG_CURRENT_DESKTOP")
-        //     .unwrap_or_default()
-        //     .to_lowercase();
-        //
-        // match desktop.as_str() {
-        //     s if s.contains("sway") => Self {
-        //         compositor: "Sway".into(),
-        //         clipboard_read: true,
-        //         clipboard_write: true,
-        //         primary_selection: true,
-        //         global_shortcuts: true,  // via swaymsg / IPC
-        //         system_tray: true,       // via SNI
-        //         requires_config: false,
-        //         notes: vec!["Global shortcuts configured in Sway config".into()],
-        //     },
-        //     s if s.contains("hyprland") => Self {
-        //         compositor: "Hyprland".into(),
-        //         clipboard_read: true,
-        //         clipboard_write: true,
-        //         primary_selection: true,
-        //         global_shortcuts: true,  // via hyprctl dispatcher
-        //         system_tray: true,
-        //         requires_config: false,
-        //         notes: vec!["Global shortcuts configured in hyprland.conf".into()],
-        //     },
-        //     s if s.contains("kde") || s.contains("plasma") => Self {
-        //         compositor: "KDE Plasma".into(),
-        //         clipboard_read: true,
-        //         clipboard_write: true,
-        //         primary_selection: false,
-        //         global_shortcuts: true,  // via KGlobalAccel / Portal
-        //         system_tray: true,
-        //         requires_config: false,
-        //         notes: vec![],
-        //     },
-        //     s if s.contains("gnome") => Self {
-        //         compositor: "GNOME Shell".into(),
-        //         clipboard_read: false,   // restricted without extension
-        //         clipboard_write: false,
-        //         primary_selection: false,
-        //         global_shortcuts: true,  // via Portal
-        //         system_tray: false,      // hidden by default
-        //         requires_config: true,
-        //         notes: vec![
-        //             "Clipboard access is restricted in GNOME Wayland. \
-        //              Install a clipboard provider extension.".into(),
-        //             "System tray requires 'AppIndicator' GNOME Shell extension.".into(),
-        //         ],
-        //     },
-        //     _ => Self::unknown(),
-        // }
-        Self::unknown()
+        let session_type = std::env::var("XDG_SESSION_TYPE").unwrap_or_default();
+        let desktop = std::env::var("XDG_CURRENT_DESKTOP").unwrap_or_default();
+        let sway_socket = std::env::var_os("SWAYSOCK").is_some();
+        let hyprland_signature = std::env::var_os("HYPRLAND_INSTANCE_SIGNATURE").is_some();
+
+        Self::classify(&session_type, &desktop, sway_socket, hyprland_signature)
+    }
+
+    /// Maps session and compositor signals onto a capability profile.
+    ///
+    /// Split out from `detect()` so the mapping is testable without mutating
+    /// the process environment. The socket flags are the tie-breakers for
+    /// compositors whose `XDG_CURRENT_DESKTOP` is generic or unset.
+    pub fn classify(
+        session_type: &str,
+        desktop: &str,
+        sway_socket: bool,
+        hyprland_signature: bool,
+    ) -> Self {
+        if !session_type.eq_ignore_ascii_case("wayland") {
+            return Self::unknown();
+        }
+
+        let desktop = desktop.to_ascii_lowercase();
+
+        if hyprland_signature || desktop.contains("hyprland") {
+            return Self {
+                compositor: "Hyprland".into(),
+                clipboard_read: true,
+                clipboard_write: true,
+                primary_selection: true,
+                global_shortcuts: true,
+                system_tray: true,
+                requires_config: false,
+                notes: vec!["Global shortcuts are configured in hyprland.conf.".into()],
+            };
+        }
+
+        if sway_socket || desktop.contains("sway") {
+            return Self::wlroots_based("Sway");
+        }
+
+        if desktop.contains("kde") || desktop.contains("plasma") {
+            return Self {
+                compositor: "KDE Plasma".into(),
+                clipboard_read: true,
+                clipboard_write: true,
+                primary_selection: false,
+                global_shortcuts: true,
+                system_tray: true,
+                requires_config: false,
+                notes: vec!["Global shortcuts are registered through KGlobalAccel.".into()],
+            };
+        }
+
+        if desktop.contains("gnome") {
+            return Self {
+                compositor: "GNOME Shell".into(),
+                clipboard_read: false,
+                clipboard_write: false,
+                primary_selection: false,
+                global_shortcuts: true,
+                system_tray: false,
+                requires_config: true,
+                notes: vec![
+                    "Clipboard access is restricted in GNOME Wayland. Install a clipboard \
+                     provider extension."
+                        .into(),
+                    "System tray requires the 'AppIndicator' GNOME Shell extension.".into(),
+                ],
+            };
+        }
+
+        Self::unverified(&desktop)
     }
 
     /// Returns capabilities for an unknown compositor (conservative defaults).
@@ -119,6 +134,21 @@ impl WaylandCapabilities {
             notes: vec!["Compositor not recognized. Clipboard and global shortcuts \
                  may not function."
                 .into()],
+        }
+    }
+
+    /// Returns the conservative profile for a compositor outside the matrix.
+    ///
+    /// Keeps the `unknown()` flags — nothing about this compositor has been
+    /// verified — but carries the detected desktop name so `platform_notes` can
+    /// name what the session actually reported.
+    pub fn unverified(compositor: &str) -> Self {
+        if compositor.is_empty() {
+            return Self::unknown();
+        }
+        Self {
+            compositor: format!("{compositor} (unverified)"),
+            ..Self::unknown()
         }
     }
 
