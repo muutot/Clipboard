@@ -154,7 +154,7 @@
   >
 </div>
 <span class="shortcut" class:shortcut-resident={quickCopyBadgeAlwaysVisible}
-  >{index < 9 ? `⌘${index + 1}` : `#${index + 1}`}</span
+  >{index < 9 ? `Ctrl+${index + 1}` : `#${index + 1}`}</span
 >
 
 <style>
@@ -194,8 +194,8 @@
   }
 
   .shortcut {
-    flex: 0 0 38px;
-    width: 38px;
+    flex: 0 0 44px;
+    width: 44px;
     margin-left: 2px;
     text-align: right;
     overflow: hidden;

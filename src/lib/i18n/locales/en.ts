@@ -947,7 +947,7 @@ const en: LocaleDefinition = {
     groupDisplayModeTextOnly: "Text only",
     quickCopyBadge: "Quick Copy #N Marks",
     quickCopyBadgeDescription:
-      "Always show the #N marks on every item without focusing them first; the first nine items show ⌘1-⌘9 quick copy marks",
+      "Always show the #N marks on every item without focusing them first; the first nine items show Ctrl+1-Ctrl+9 quick copy marks",
     searchHistory: "Recent Search Terms",
     searchHistoryDescription: "Show and record queries that you submit from the search box",
     searchPlaceholder: "Search Box Hint",
