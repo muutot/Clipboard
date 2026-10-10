@@ -245,10 +245,10 @@ impl WindowsClipboardMonitor {
             crate::platform::linux::stop_pipe::StopPipeWriter,
         )> = match crate::platform::Platform::detect() {
             crate::platform::Platform::LinuxX11 => {
-                crate::platform::linux_x11::try_spawn_xfixes_monitor(sender_for_thread.clone())
+                crate::platform::linux::x11::try_spawn_xfixes_monitor(sender_for_thread.clone())
             }
             crate::platform::Platform::LinuxWayland => {
-                crate::platform::linux_wayland::try_spawn_data_control_monitor(
+                crate::platform::linux::wayland::try_spawn_data_control_monitor(
                     sender_for_thread.clone(),
                 )
             }

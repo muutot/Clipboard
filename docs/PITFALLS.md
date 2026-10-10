@@ -335,6 +335,7 @@ error[E0658]: use of unstable library feature `int_roundings`
 - 改 `#[cfg(target_os = ...)]` 后的代码，**必须**看对应平台的 CI job 结果再算通过；本地无法用 `cargo check --target x86_64-unknown-linux-gnu` 替代，因为 `cc-rs` 之类原生依赖需要交叉 C 工具链。
 - 整数取整优先在**无符号域**做（`(n / d) + (n % d != 0) as u64` 或稳定的 `u64::div_ceil`），最后再 cast；不要为了对齐累加器类型而把无符号量先转成有符号。
 - 用 C 字符串字面量 `c"NAME"` 时注意 `c_char` 在 aarch64 Linux 是无符号的，而手写 FFI 常声明 `*const i8`——保留 `.cast()`，别让"更干净"的写法破坏可移植性。
+- 搬移或重命名这类模块时，全仓搜旧路径：只在 Linux/macOS 编译的调用点对本机不可见。实例：`platform/linux_x11.rs` 收成 `platform/linux/x11/mod.rs` 后，`platform/windows/monitor.rs` 的 `#[cfg(target_os = "linux")]` 事件监视分支仍写 `crate::platform::linux_x11::try_spawn_xfixes_monitor`，Linux 上直接 E0433（Wayland 同处一行之隔），本地三关依旧全绿。
 
 ## Rust 模块结构
 
