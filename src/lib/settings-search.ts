@@ -1,4 +1,4 @@
-import type { SettingsSection, StatisticsTab } from "$lib/settings-navigation";
+import type { FontSubsection, SettingsSection, StatisticsTab } from "$lib/settings-navigation";
 import { defaultShortcutsFor } from "$lib/keyboard-defaults";
 
 export {
@@ -12,6 +12,8 @@ export {
 export interface SettingsSearchTarget {
   section: SettingsSection;
   statisticsTab?: StatisticsTab;
+  /** Sub-tab within a multi-tab panel, e.g. the font panel's interface/card split. */
+  fontSection?: FontSubsection;
 }
 
 export interface SettingsSearchI18nText {
@@ -493,35 +495,35 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
 
   entry(
     "font.base",
-    { section: "font" },
+    { section: "font", fontSection: "interface" },
     i18n("general.fontSizeBaseLabel"),
     i18n("general.fontSizeBaseDescription"),
     ["界面基础", "base font", "基础字号"],
   ),
   entry(
     "font.secondary",
-    { section: "font" },
+    { section: "font", fontSection: "interface" },
     i18n("general.fontSizeSecondaryLabel"),
     i18n("general.fontSizeSecondaryDescription"),
     ["描述文字", "secondary font", "描述字号"],
   ),
   entry(
     "font.tiny",
-    { section: "font" },
+    { section: "font", fontSection: "interface" },
     i18n("general.fontSizeTinyLabel"),
     i18n("general.fontSizeTinyDescription"),
     ["备注文字", "tiny font", "备注字号"],
   ),
   entry(
     "font.card-title",
-    { section: "font" },
+    { section: "font", fontSection: "card" },
     i18n("general.fontSizeCardTitleLabel"),
     i18n("general.fontSizeCardTitleDescription"),
     ["条目标题", "card title font", "标题字号"],
   ),
   entry(
     "font.card-preview",
-    { section: "font" },
+    { section: "font", fontSection: "card" },
     i18n("general.fontSizeCardPreviewLabel"),
     i18n("general.fontSizeCardPreviewDescription"),
     ["条目辅助文字", "card preview font", "辅助字号"],
@@ -1162,6 +1164,7 @@ export function resolveSettingsSearchItems(
       id: template.id,
       section: template.section,
       statisticsTab: template.statisticsTab,
+      fontSection: template.fontSection,
       title,
       description,
       aliases,

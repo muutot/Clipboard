@@ -12,14 +12,31 @@
   interface Props {
     onclose: () => void;
     showHeader?: boolean;
+    /** Controlled sub-tab; the parent owns it so search navigation can target it. */
+    fontSection?: "interface" | "card";
+    onselectfontsection?: (section: "interface" | "card") => void;
   }
 
-  let { onclose, showHeader = true }: Props = $props();
+  let {
+    onclose,
+    showHeader = true,
+    fontSection = "interface",
+    onselectfontsection,
+  }: Props = $props();
 
   let s = $state($generalSettings);
-  let fontSection = $state<"interface" | "card">("interface");
+  // Controlled when the parent supplies a handler (the settings dialog does),
+  // otherwise fall back to local state so the panel stays usable on its own.
+  let fallbackFontSection = $state<"interface" | "card">("interface");
+  const currentFontSection = $derived(onselectfontsection ? fontSection : fallbackFontSection);
+
+  function selectFontSection(section: "interface" | "card") {
+    if (onselectfontsection) onselectfontsection(section);
+    else fallbackFontSection = section;
+  }
 
   function sliderEntry(
+    id: string,
     key: keyof typeof s.fontSizes,
     icon: string,
     label: string,
@@ -29,6 +46,7 @@
   ): SettingEntryConfig {
     return {
       type: "slider",
+      id,
       icon: icon as any,
       label,
       desc,
@@ -48,6 +66,7 @@
 
   const interfaceSliders: SettingEntryConfig[] = $derived([
     sliderEntry(
+      "font.base",
       "base",
       "type",
       _t("general.fontSizeBaseLabel"),
@@ -56,6 +75,7 @@
       20,
     ),
     sliderEntry(
+      "font.secondary",
       "secondary",
       "info",
       _t("general.fontSizeSecondaryLabel"),
@@ -64,6 +84,7 @@
       16,
     ),
     sliderEntry(
+      "font.tiny",
       "tiny",
       "ruler",
       _t("general.fontSizeTinyLabel"),
@@ -75,6 +96,7 @@
 
   const cardSliders: SettingEntryConfig[] = $derived([
     sliderEntry(
+      "font.card-title",
       "cardTitle",
       "text",
       _t("general.fontSizeCardTitleLabel"),
@@ -83,6 +105,7 @@
       20,
     ),
     sliderEntry(
+      "font.card-preview",
       "cardPreview",
       "info",
       _t("general.fontSizeCardPreviewLabel"),
@@ -118,15 +141,16 @@
 
 <div class="settings-scroll">
   <nav class="font-subnav">
-    <button class:active={fontSection === "interface"} onclick={() => (fontSection = "interface")}
-      >{_t("general.fontSizeInterfaceTab")}</button
+    <button
+      class:active={currentFontSection === "interface"}
+      onclick={() => selectFontSection("interface")}>{_t("general.fontSizeInterfaceTab")}</button
     >
-    <button class:active={fontSection === "card"} onclick={() => (fontSection = "card")}
+    <button class:active={currentFontSection === "card"} onclick={() => selectFontSection("card")}
       >{_t("general.fontSizeCardTab")}</button
     >
   </nav>
 
-  {#if fontSection === "interface"}
+  {#if currentFontSection === "interface"}
     {#each interfaceSliders as slider}
       <SettingEntry config={slider} />
     {/each}

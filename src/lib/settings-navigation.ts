@@ -36,6 +36,10 @@ export const STATISTICS_TABS = ["storage", "performance", "memory"] as const;
 
 export type StatisticsTab = (typeof STATISTICS_TABS)[number];
 
+export const FONT_SUBSECTIONS = ["interface", "card"] as const;
+
+export type FontSubsection = (typeof FONT_SUBSECTIONS)[number];
+
 export type SettingsNavGroupId =
   | "general"
   | "appearance"

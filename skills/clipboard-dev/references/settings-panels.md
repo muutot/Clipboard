@@ -185,6 +185,12 @@ Do not wrap the range input merely for styling. Initialize/update `--slider-pct`
 
 Panels that render cards only after async/conditional data (e.g. keyboard config, statistics metrics, tags) are handled by a retry poll in `openSettingsSearchResult`; keep the target card mounted while loading so it is locatable.
 
+Panels with internal sub-tabs drive the visible sub-tab from dialog-owned state so a search jump lands on the right one:
+`StatisticsSettingsPanel` receives `activeTab`, and `FontSizeSettingsPanel` receives `fontSection` plus
+`onselectfontsection`. The matching sub-tab travels on `SettingsSearchTarget` (`statisticsTab`, `fontSection`),
+`resolveSettingsSearchItems` must forward it, and `openSettingsSearchResult` must apply it before locating the
+target; otherwise the jump opens the panel's default sub-tab and the highlight misses.
+
 ## Shared versus panel-specific CSS
 
 Shared base classes belong in `settings-shared.css`, which is imported by the `/settings` route rather than global `app.css` so settings-only rules do not increase or leak into the main-page stylesheet. Panel-specific examples include theme color inputs/presets, keyboard binding chips, font numeric inputs, general sort-rule controls, and the ignored-app transfer board.

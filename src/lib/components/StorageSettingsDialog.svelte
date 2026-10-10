@@ -11,6 +11,7 @@
   import {
     SETTINGS_NAV_GROUP_DEFINITIONS,
     resolveSettingsNavPath,
+    type FontSubsection,
     type SettingsNavGroupId,
     type SettingsSection,
     type StatisticsTab,
@@ -95,7 +96,12 @@
     {
       sections: ["font"],
       load: () => import("$lib/components/FontSizeSettingsPanel.svelte"),
-      props: () => ({ onclose, showHeader: false }),
+      props: () => ({
+        onclose,
+        showHeader: false,
+        fontSection: activeFontSection,
+        onselectfontsection: (section: FontSubsection) => (activeFontSection = section),
+      }),
     },
     {
       sections: ["theme"],
@@ -319,6 +325,9 @@
     ),
   );
   let activeStatisticsTab = $state<StatisticsTab>("storage");
+  // The font panel splits interface vs. card sliders. The dialog owns the
+  // selected sub-tab so a settings-search jump can land on the right one.
+  let activeFontSection = $state<FontSubsection>("interface");
 
   const settingsNavGroups = $derived.by((): SettingsNavGroup[] =>
     SETTINGS_NAV_GROUP_DEFINITIONS.map((group) => ({
@@ -345,6 +354,9 @@
   }
 
   function activateSettingsNavTarget(target: SettingsNavTarget): void {
+    // Reset the font sub-tab only when entering the section, so re-clicking
+    // the active tab keeps the user's current sub-tab.
+    if (target.section === "font" && activeSection !== "font") activeFontSection = "interface";
     activeSection = target.section;
     if (target.statisticsTab !== undefined) activeStatisticsTab = target.statisticsTab;
   }
@@ -490,6 +502,7 @@
   async function openSettingsSearchResult(item: SettingsSearchItem): Promise<void> {
     activeSection = item.section;
     if (item.statisticsTab) activeStatisticsTab = item.statisticsTab;
+    if (item.fontSection) activeFontSection = item.fontSection;
     settingsSearch = "";
     await tick();
     await tick();
