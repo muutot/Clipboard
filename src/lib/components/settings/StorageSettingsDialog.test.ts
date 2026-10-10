@@ -22,13 +22,17 @@ async function settle(rounds = 24) {
   }
 }
 
-async function waitFor<T>(find: () => T | null, rounds = 40): Promise<T> {
-  for (let i = 0; i < rounds; i++) {
+// The lazy panel chunk resolves on real macrotasks, so wait on the clock instead
+// of a fixed tick count: the old 40-tick budget is barely 0.2 s and expires
+// before the chunk arrives on a loaded CI runner.
+async function waitFor<T>(find: () => T | null, timeoutMs = 2000): Promise<T> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
     const found = find();
     if (found) return found;
+    if (Date.now() >= deadline) throw new Error("element did not appear");
     await settle(1);
   }
-  throw new Error("element did not appear");
 }
 
 describe("StorageSettingsDialog settings search", () => {
@@ -47,17 +51,18 @@ describe("StorageSettingsDialog settings search", () => {
     });
     await settle();
 
-    const input = target.querySelector<HTMLInputElement>("#settings-search-input");
-    expect(input).not.toBeNull();
-    input!.value = t("general.fontSizeCardTitleLabel");
-    input!.dispatchEvent(new Event("input", { bubbles: true }));
-    await settle();
-
-    const result = target.querySelector<HTMLButtonElement>(
-      '.settings-search-results [data-settings-search-id="font.card-title"]',
+    const input = await waitFor(() =>
+      target.querySelector<HTMLInputElement>("#settings-search-input"),
     );
-    expect(result).not.toBeNull();
-    result!.click();
+    input.value = t("general.fontSizeCardTitleLabel");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+
+    const result = await waitFor(() =>
+      target.querySelector<HTMLButtonElement>(
+        '.settings-search-results [data-settings-search-id="font.card-title"]',
+      ),
+    );
+    result.click();
 
     // The card sub-tab is active and its slider (which carries the search id)
     // is the one now rendered, not the interface sliders.
@@ -70,14 +75,14 @@ describe("StorageSettingsDialog settings search", () => {
 
     // A second jump while already on the font section must also move the
     // sub-tab, which exercises the dialog-owned prop update.
-    input!.value = t("general.fontSizeBaseLabel");
-    input!.dispatchEvent(new Event("input", { bubbles: true }));
-    await settle();
-    target
-      .querySelector<HTMLButtonElement>(
+    input.value = t("general.fontSizeBaseLabel");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    const baseResult = await waitFor(() =>
+      target.querySelector<HTMLButtonElement>(
         '.settings-search-results [data-settings-search-id="font.base"]',
-      )!
-      .click();
+      ),
+    );
+    baseResult.click();
     const interfaceTab = await waitFor(() => {
       const button = target.querySelector<HTMLButtonElement>(".font-subnav button.active");
       return button?.textContent?.trim() === t("general.fontSizeInterfaceTab") ? button : null;

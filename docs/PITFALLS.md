@@ -363,6 +363,10 @@ error: could not compile `ort-sys` (lib) due to 1 previous error
 
 GitHub 默认每个 job 上限 6 小时。`ci.yml` 的 `frontend` / `rust` 因此显式设了 `timeout-minutes`（20 / 45；历史全绿耗时分别约 1–2 分钟与 4–11 分钟），让卡住的测试尽快变成 job 失败，而不是把 run 长时间留在 `in_progress`。判断是「卡住」还是「排队」看 Test 步骤尾部的 `SLOW [>Ns]` 行就够（见上一节的 `local_wake` 实例）。
 
+## 等异步 UI 用时钟，不要用固定轮数
+
+`settle(n)` 每轮只推进一个宏任务，40 轮在本地约 0.2 s：CI 负载一高，懒加载 chunk 还没到就已经耗尽，于是变成「本地从不红、CI 偶发红」的假失败（`StorageSettingsDialog.test.ts` 的 `waitFor`，同一提交在 ubuntu 上四跑两红）。等条件的上限要按 `Date.now()` 算（该文件取 2 s），命中就立刻返回；断言也从「`settle()` 若干轮 + `!` 直接取」换成同一个等候函数，别让等待轮数成为隐式的断言。
+
 ## Rust 模块结构
 
 添加新功能时按模块归属放置：
