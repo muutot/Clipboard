@@ -56,12 +56,35 @@
   let dateDropdownOpen = $state(false);
   let sourceAppDropdownEl: HTMLDivElement | undefined = $state();
   let dateDropdownEl: HTMLDivElement | undefined = $state();
+  let sourceAppButtonEl: HTMLButtonElement | undefined = $state();
+  let dateButtonEl: HTMLButtonElement | undefined = $state();
 
   const filteredSourceApps = $derived(
     sourceAppSearch
       ? sourceApps.filter((a) => a.toLowerCase().includes(sourceAppSearch.toLowerCase()))
       : sourceApps,
   );
+
+  // Escape closes the open dropdown before the route's Escape chain can hide
+  // the window, regardless of where focus sits (the route registers its window
+  // keydown capture earlier in the template, and it does not stop the event, so
+  // this capture handler always gets a turn; stopImmediatePropagation then
+  // keeps hide-window and other route Escape actions out of the same press).
+  // Focus returns to the toggle so keyboard flow stays in place.
+  function closeOpenDropdownOnEscape(event: KeyboardEvent) {
+    if (event.key !== "Escape") return;
+    if (sourceAppDropdownOpen) {
+      event.stopImmediatePropagation();
+      event.preventDefault();
+      sourceAppDropdownOpen = false;
+      sourceAppButtonEl?.focus();
+    } else if (dateDropdownOpen) {
+      event.stopImmediatePropagation();
+      event.preventDefault();
+      dateDropdownOpen = false;
+      dateButtonEl?.focus();
+    }
+  }
 
   $effect(() => {
     if (!sourceAppDropdownOpen) return;
@@ -77,6 +100,8 @@
     tick().then(() => alignDropdownOptionText(el));
   });
 </script>
+
+<svelte:window onkeydowncapture={closeOpenDropdownOnEscape} />
 
 <div
   class="toolbar"
@@ -120,6 +145,7 @@
         <button
           type="button"
           class="filter-dropdown-btn"
+          bind:this={sourceAppButtonEl}
           onclick={() => (sourceAppDropdownOpen = !sourceAppDropdownOpen)}
           aria-label={_t("sourceApp.all")}
           aria-haspopup="menu"
@@ -181,6 +207,7 @@
         <button
           type="button"
           class="filter-dropdown-btn"
+          bind:this={dateButtonEl}
           onclick={() => (dateDropdownOpen = !dateDropdownOpen)}
           aria-label={_t("dateFilter.all")}
           aria-haspopup="menu"
