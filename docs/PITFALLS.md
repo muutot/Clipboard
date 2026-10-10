@@ -339,6 +339,8 @@ error[E0658]: use of unstable library feature `int_roundings`
 - 用 C 字符串字面量 `c"NAME"` 时注意 `c_char` 在 aarch64 Linux 是无符号的，而手写 FFI 常声明 `*const i8`——保留 `.cast()`，别让"更干净"的写法破坏可移植性。
 - 搬移或重命名这类模块时，全仓搜旧路径：只在 Linux/macOS 编译的调用点对本机不可见。实例：`platform/linux_x11.rs` 收成 `platform/linux/x11/mod.rs` 后，`platform/windows/monitor.rs` 的 `#[cfg(target_os = "linux")]` 事件监视分支仍写 `crate::platform::linux_x11::try_spawn_xfixes_monitor`，Linux 上直接 E0433（Wayland 同处一行之隔），本地三关依旧全绿。
 - 拆分模块时，`pub(crate)` 的项**不能**用 `pub use` 重新导出：只在目标平台编译的那份代码会报 E0364（`is only public within the crate, and cannot be re-exported outside`），本机三关照旧全绿。改成 `pub(crate) use`，或把该项提到 `pub`。
+- 把文件移进子目录后，文件里 `super::X` 指向的父级也跟着变了：`platform/ui.rs` 收成 `platform/ui/{mod,window,disk,tray}.rs` 之后，`window.rs` 里原本表示 `platform::Platform` 和 `platform::macos::objc` 的 `super::…` 变成了 `platform::ui::…`。两处都藏在 `#[cfg(target_os = "linux"/"macos")]` 分支里，Windows 编译看不见，Linux/macOS 直接 E0433/E0432。移动文件后要么改用 `crate::platform::…` 全路径，要么逐个确认 `super::` 的新父级。
+- 把整块 Windows 代码拆成 `windows/{a,b,c}.rs` 时，子模块靠 `use super::*;` 取父模块的常量和助手；非 Windows 目标上这些项几乎全被 cfg 掉，父模块的 `use a::*;` 与子模块的 `use super::*;` 就都成了 unused import，再加上 `pub use` 里混进被 cfg 掉的函数（如 `foreground::get_foreground_app`），`-D warnings` 会在 Linux/macOS 上一并打红。这类模块要么给子模块加 `#![cfg_attr(not(target_os = "windows"), allow(unused_imports))]` 并注明原因，要么让子模块本身只在 Windows 编译。
 - 同一个父模块下的**兄弟子模块**默认互相不可见：把 `a.rs` 拆成 `a/{b,c}.rs` 后，`b` 里私有的项在 `c` 中直接 E0603/E0425。跨文件共享的常量、结构体、函数要标 `pub(super)`（或从 `crate::...` 全路径引用）。实例：`cli/api.rs` 拆成 `cli/api/{mod,http,routes}.rs` 时，`http` 与 `routes` 互引的项都改成了 `pub(super)`；`LocalApiServer` 仍留在 `mod.rs`，所以 `cli` 的 `pub use api::LocalApiServer` 不受影响。
 
 ## Rust 模块结构

@@ -5,6 +5,10 @@
 //! no behavior, signatures or test expectations changed.
 
 #![allow(non_snake_case, dead_code)]
+// On non-Windows targets nearly every item in this module is compiled out,
+// which leaves the submodules' `use super::*` imports unused. Keep the lint
+// enabled on Windows, where those imports are real.
+#![cfg_attr(not(target_os = "windows"), allow(unused_imports))]
 
 pub struct WindowsPlatform;
 
@@ -143,7 +147,9 @@ mod tests;
 
 pub use bitmap::read_clipboard_image;
 pub use files::read_clipboard_file_paths;
-pub use foreground::{extract_app_icon, get_foreground_app};
+pub use foreground::extract_app_icon;
+#[cfg(target_os = "windows")]
+pub use foreground::get_foreground_app;
 pub use html::read_clipboard_html;
 pub use monitor::{ClipboardChange, ClipboardMonitor, WindowsClipboardMonitor};
 pub use read_text::read_clipboard_text;

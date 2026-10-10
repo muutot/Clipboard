@@ -87,7 +87,7 @@ pub fn apply_webview_transparency<R: Runtime>(
     }
     #[cfg(target_os = "macos")]
     {
-        use super::macos::objc;
+        use crate::platform::macos::objc;
         let native = window.ns_window().map_err(|e| e.to_string())?;
         if native.is_null() {
             return Err("native window unavailable".into());
@@ -207,7 +207,7 @@ pub fn apply_window_effect<R: Runtime>(
 ) -> Result<(), String> {
     use raw_window_handle::{HasWindowHandle, RawWindowHandle};
     let enabled = matches!(effect, "acrylic" | "mica");
-    if super::Platform::detect().is_wayland() {
+    if crate::platform::Platform::detect().is_wayland() {
         return if enabled {
             Err("Wayland backdrop blur is controlled by the compositor; window opacity remains available".into())
         } else {

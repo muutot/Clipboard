@@ -3,7 +3,9 @@
 use super::*;
 
 use html::parse_cf_html;
+#[cfg(target_os = "windows")]
 use read_text::format_id_to_name;
+#[cfg(target_os = "windows")]
 use write::build_drop_files_bytes;
 
 #[cfg(target_os = "windows")]
