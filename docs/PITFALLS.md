@@ -356,6 +356,7 @@ error: could not compile `ort-sys` (lib) due to 1 previous error
 ```
 
 而 `cargo fmt` / `cargo clippy`（不链接）与 Windows job（那份构建脚本恰好重跑）依旧全绿，很容易误判成平台专属代码的问题。`ci.yml` 与 `release.yml` 因此在构建前执行 `cargo clean -p ort-sys [--profile …]`，强制构建脚本重跑、重新下载或复用二进制。凡是「构建脚本把 `$HOME` 下的下载目录写进缓存输出」的依赖都适用同一处理。
+
 ## Rust 模块结构
 
 添加新功能时按模块归属放置：
