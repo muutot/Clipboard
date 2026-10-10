@@ -87,6 +87,17 @@ jobs:
           # This input is a boolean, not a list of profile directories.
           cache-targets: true
 
+      # `ort-sys` downloads its prebuilt ONNX Runtime into a per-user cache
+      # directory and bakes that absolute path into the build script output.
+      # The output rides inside `target/`, which the Rust cache restores, but
+      # the referenced directory does not — so a fresh runner replays a still
+      # "fresh" build script that points at a path which does not exist, and
+      # only the test link fails (`could not find native static library
+      # onnxruntime`). Dropping the crate's artifacts makes the script run
+      # again and fetch (or reuse) the binaries before anything links.
+      - name: Refresh the ONNX Runtime link
+        run: cargo clean -p ort-sys --profile ci --manifest-path src-tauri/Cargo.toml
+
       - name: Check formatting
         # --all covers every workspace member (e.g. crates/clipboard-sync),
         # not just the root package.

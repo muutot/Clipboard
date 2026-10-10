@@ -73,6 +73,12 @@ jobs:
           # green even if the cache upload is refused; the build still succeeds.
           cache-on-failure: true
 
+      # See the CI note on `ort-sys`: its cached build script output points at
+      # a download directory the fresh runner does not have, so it must be
+      # regenerated before anything links.
+      - name: Refresh the ONNX Runtime link
+        run: cargo clean -p ort-sys --manifest-path src-tauri/Cargo.toml
+
       - name: Install system dependencies
         run: |
           sudo apt-get update
@@ -162,6 +168,12 @@ jobs:
           # entry exceeds GitHub's 10GB limit the upload is skipped but the job
           # still passes.
           cache-on-failure: true
+
+      # See the CI note on `ort-sys`: its cached build script output points at
+      # a download directory the fresh runner does not have, so it must be
+      # regenerated before the bundle links.
+      - name: Refresh the ONNX Runtime link
+        run: cargo clean -p ort-sys --profile release --manifest-path src-tauri/Cargo.toml
 
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
