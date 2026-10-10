@@ -1,0 +1,578 @@
+<script lang="ts">
+  import { onMount, onDestroy } from "svelte";
+  import { createFeedback } from "$lib/utils/feedback.svelte";
+  import { invoke } from "@tauri-apps/api/core";
+  import { listen } from "@tauri-apps/api/event";
+  import AppIcon from "$lib/components/card/AppIcon.svelte";
+  import type { IconName } from "$lib/types/clipboard";
+  import {
+    configureKeyboardShortcuts,
+    getKeyboardConfig,
+    resetKeyboardConfig,
+    type KeyboardConfig,
+  } from "$lib/services/keyboard";
+  import { defaultShortcutsFor } from "$lib/keyboard-defaults";
+  import { getRuntimeInfo, isTauriRuntime } from "$lib/services/runtime";
+  import {
+    HOTKEY_ACTIONS,
+    type HotkeyActionDef,
+    type HotkeyCategory,
+  } from "$lib/keyboard-registry";
+  import { messages, resolvePath } from "$lib/i18n";
+
+  const _t = (path: string, params?: Record<string, string | number>) =>
+    resolvePath($messages, path, params);
+
+  interface Props {
+    onclose: () => void;
+    showHeader?: boolean;
+    category?: HotkeyCategory;
+    resetToken?: number;
+    configPath?: string | null;
+  }
+
+  let {
+    onclose,
+    showHeader = true,
+    category = "item",
+    resetToken = 0,
+    configPath = null,
+  }: Props = $props();
+  let config = $state<KeyboardConfig | null>(null);
+  let loading = $state(true);
+  const feedback = createFeedback(2000);
+  // Registration conflicts need longer on screen than a save confirmation:
+  // the message names an action and a reason the user has to read and act on.
+  const conflictFeedback = createFeedback(10000);
+  let unlistenRegistrationFailure: (() => void) | undefined;
+  let recordingAction = $state("");
+  let recordingTimer: ReturnType<typeof setTimeout> | undefined;
+  let configRequestId = 0;
+  let componentDestroyed = false;
+  // Optimistic default: assume global shortcuts work so the note only appears
+  // once the backend has said otherwise. The flag is stable for the process
+  // lifetime, so there is no flash of a wrong notice the way an async-loaded
+  // control value would have.
+  let globalShortcutSupported = $state(true);
+
+  interface SystemAction {
+    id: string;
+    labelKey?: string;
+    descKey?: string;
+    description: string;
+    icon: IconName;
+    defaults: string[];
+    cat: HotkeyCategory;
+    system?: boolean;
+    searchId?: string | null;
+  }
+
+  // Display metadata comes from the single action registry
+  // (`$lib/keyboard-registry.ts`): a new shortcut appears here with no panel
+  // edits once its registry row (+ `keyboard-defaults.json` default) lands.
+  const SYSTEM_ACTIONS: SystemAction[] = HOTKEY_ACTIONS.map((def: HotkeyActionDef) => ({
+    id: def.id,
+    labelKey: def.labelKey,
+    descKey: def.descKey,
+    description: "",
+    icon: def.icon,
+    defaults: defaultShortcutsFor(def.id),
+    cat: def.category,
+    system: def.system,
+    searchId: def.searchId ?? null,
+  }));
+
+  const categoryActions = $derived.by(() => {
+    return SYSTEM_ACTIONS.filter((a) => a.cat === category);
+  });
+
+  function actionLabel(action: SystemAction): string {
+    if (action.labelKey) {
+      const label = _t(action.labelKey as keyof typeof $messages);
+      if (label) return label;
+    }
+    const m = action.id.match(/^quickCopy(\d+)$/);
+    if (m) return _t("keyboard.quickCopyDesc", { n: Number(m[1]) });
+    return action.id;
+  }
+
+  function settingsSearchIdForAction(action: SystemAction): string | null {
+    return action.searchId ?? null;
+  }
+
+  function actionDesc(action: SystemAction): string {
+    if (action.descKey) {
+      const m = action.id.match(/^quickCopy(\d+)$/);
+      if (m) return _t(action.descKey as keyof typeof $messages, { n: Number(m[1]) });
+      return _t(action.descKey as keyof typeof $messages);
+    }
+    return action.description;
+  }
+
+  function bindingsFor(action: string): string[] {
+    if (!config) return [];
+    return config.shortcuts[action] ?? [];
+  }
+
+  const ARROW_GLYPHS: Record<string, string> = {
+    Arrowup: "↑",
+    Arrowdown: "↓",
+    Arrowright: "→",
+    Arrowleft: "←",
+  };
+
+  function arrowGlyph(shortcut: string): string | null {
+    return ARROW_GLYPHS[shortcut] ?? null;
+  }
+
+  function shortcutLabel(shortcut: string): string {
+    return arrowGlyph(shortcut) ?? shortcut;
+  }
+
+  onMount(() => {
+    void loadConfig();
+    void loadGlobalShortcutSupport();
+    // The backend skips chords the OS refuses (another app owns the
+    // shortcut) and reports each one here; without this listener the chip
+    // keeps looking active while every press is silently dropped.
+    interface RegistrationFailure {
+      action: string;
+      error: string;
+    }
+    listen<RegistrationFailure>("hotkey-registration-failed", (event) => {
+      const { action } = event.payload;
+      const known = SYSTEM_ACTIONS.find((a) => a.id === action);
+      const label = known ? actionLabel(known) : action;
+      conflictFeedback.show(_t("keyboard.registrationConflict", { action: label }), false);
+    }).then((unlisten) => {
+      if (componentDestroyed) unlisten();
+      else unlistenRegistrationFailure = unlisten;
+    });
+  });
+
+  $effect(() => {
+    resetToken;
+    if (resetToken > 0) void loadConfig();
+  });
+
+  /**
+   * Whether the running OS actually registers a global shortcut.
+   *
+   * Only Windows has a real backend; every other target compiles the
+   * non-Windows hotkey stub, whose registration loop never fires. Without
+   * this the Global tab invites the user to bind Alt+C on macOS or Linux and
+   * the binding silently does nothing, because the settings are stored and
+   * reported as saved either way.
+   */
+  async function loadGlobalShortcutSupport() {
+    if (!isTauriRuntime()) return;
+    const runtime = await getRuntimeInfo();
+    if (componentDestroyed || !runtime) return;
+    globalShortcutSupported = runtime.capabilities.globalShortcut;
+  }
+
+  async function loadConfig() {
+    const requestId = ++configRequestId;
+    loading = true;
+    feedback.clear();
+
+    try {
+      const loadedConfig = await getKeyboardConfig();
+      if (componentDestroyed || requestId !== configRequestId) return;
+      config = loadedConfig;
+      if (!loadedConfig) feedback.show(_t("keyboard.browserUnavailable"), false);
+    } catch (error) {
+      if (!componentDestroyed && requestId === configRequestId) {
+        feedback.show(error instanceof Error ? error.message : String(error), false);
+      }
+    } finally {
+      if (!componentDestroyed && requestId === configRequestId) loading = false;
+    }
+  }
+
+  async function handleResetConfig() {
+    try {
+      const resetConfig = await resetKeyboardConfig();
+      if (componentDestroyed) return;
+      config = resetConfig;
+    } catch (error) {
+      if (!componentDestroyed) {
+        feedback.show(error instanceof Error ? error.message : String(error), false);
+      }
+    }
+  }
+
+  async function addBinding(action: string, shortcut: string) {
+    if (!config) return;
+    const current = config.shortcuts[action] ?? [];
+    try {
+      const normalized = await configureKeyboardShortcuts(action, [...current, shortcut]);
+      if (componentDestroyed || !config) return;
+      config = { ...config, shortcuts: { ...config.shortcuts, [action]: normalized } };
+    } catch (error) {
+      if (!componentDestroyed) {
+        feedback.show(error instanceof Error ? error.message : String(error), false);
+      }
+    }
+  }
+
+  async function removeBinding(action: string, shortcut: string) {
+    if (!config) return;
+    const current = config.shortcuts[action] ?? [];
+    try {
+      const normalized = await configureKeyboardShortcuts(
+        action,
+        current.filter((s) => s !== shortcut),
+      );
+      if (componentDestroyed || !config) return;
+      config = { ...config, shortcuts: { ...config.shortcuts, [action]: normalized } };
+    } catch (error) {
+      if (!componentDestroyed) {
+        feedback.show(error instanceof Error ? error.message : String(error), false);
+      }
+    }
+  }
+
+  function startRecording(action: string) {
+    stopRecording();
+    recordingAction = action;
+    // Capture phase so Escape (and every recorded key) is consumed before the
+    // settings shell's window keydown listener can close the whole window.
+    window.addEventListener("keydown", onRecordingKey, true);
+    recordingTimer = setTimeout(() => {
+      recordingTimer = undefined;
+      stopRecording();
+    }, 3000);
+  }
+
+  function stopRecording() {
+    if (recordingTimer !== undefined) {
+      clearTimeout(recordingTimer);
+      recordingTimer = undefined;
+    }
+    recordingAction = "";
+    window.removeEventListener("keydown", onRecordingKey, true);
+  }
+
+  function onRecordingKey(event: KeyboardEvent) {
+    event.preventDefault();
+    // Stop other window listeners (the settings shell) from also reacting.
+    event.stopImmediatePropagation();
+
+    if (event.key === "Escape") {
+      stopRecording();
+      return;
+    }
+
+    const modKeys = ["Control", "Alt", "Shift", "Meta"];
+    if (modKeys.includes(event.key)) return;
+
+    const pressed: string[] = [];
+    if (event.ctrlKey) pressed.push("Ctrl");
+    if (event.altKey) pressed.push("Alt");
+    if (event.shiftKey) pressed.push("Shift");
+    if (event.metaKey) pressed.push("Meta");
+
+    const ignored = ["AltGraph", "NumLock", "ScrollLock", "PrintScreen"];
+    if (!ignored.includes(event.key)) {
+      pressed.push(
+        event.key === " " ? "Space" : event.key.length === 1 ? event.key.toUpperCase() : event.key,
+      );
+    }
+
+    if (pressed.length === 0) return;
+    const action = recordingAction;
+    stopRecording();
+    if (action) void addBinding(action, pressed.join("+"));
+  }
+
+  onDestroy(() => {
+    componentDestroyed = true;
+    configRequestId += 1;
+    feedback.dispose();
+    conflictFeedback.dispose();
+    unlistenRegistrationFailure?.();
+    if (recordingTimer !== undefined) clearTimeout(recordingTimer);
+    // Match the capture flag from startRecording: without `true` the removal
+    // is a no-op, the listener survives the component, keeps swallowing every
+    // keydown, and writes stray bindings into the keyboard config.
+    window.removeEventListener("keydown", onRecordingKey, true);
+  });
+</script>
+
+{#if showHeader}
+  <header>
+    <div>
+      <span class="eyebrow">{_t("keyboard.settings")}</span>
+      <h2>{_t("keyboard.title")}</h2>
+      <p>{_t("keyboard.description")}</p>
+    </div>
+    <button class="close-button" type="button" aria-label={_t("actions.close")} onclick={onclose}
+      >×</button
+    >
+  </header>
+{/if}
+
+{#if loading}
+  <div class="settings-state">{_t("keyboard.readingConfig")}</div>
+{:else if config}
+  <div class="settings-scroll">
+    {#if category === "system"}
+      <section class="setting-card toggle-card" data-settings-search-id="keyboard.config-file">
+        <div class="setting-heading">
+          <span class="setting-icon"><AppIcon name="keyboard" size={17} /></span>
+          <div>
+            <strong>{_t("keyboard.shortcutConfigTitle")}</strong>
+            <p>{_t("storage.keyboardConfigNote")}</p>
+          </div>
+        </div>
+        <div class="config-bar-actions">
+          <button
+            type="button"
+            class="config-bar-btn"
+            onclick={() => {
+              if (!configPath) return;
+              invoke("reveal_in_explorer", { path: configPath }).catch((error) =>
+                feedback.show(String(error), false),
+              );
+            }}
+          >
+            <AppIcon name="file" size={13} />
+            {_t("keyboard.openFile")}
+          </button>
+          <button type="button" class="config-bar-btn" onclick={() => void handleResetConfig()}>
+            <AppIcon name="restore" size={13} />
+            {_t("storage.resetAll")}
+          </button>
+        </div>
+      </section>
+      {#if !globalShortcutSupported}
+        <p class="settings-platform-note">{_t("keyboard.globalShortcutUnsupported")}</p>
+      {/if}
+    {/if}
+    {#each categoryActions as action}
+      <section
+        class="setting-card toggle-card"
+        data-settings-search-id={settingsSearchIdForAction(action)}
+      >
+        <div class="setting-heading">
+          <span class="setting-icon"><AppIcon name={action.icon} size={17} /></span>
+          <div>
+            <strong>
+              {actionLabel(action)}
+              {#if action.system}
+                <span class="system-badge">{_t("keyboard.systemBadge")}</span>
+              {/if}
+            </strong>
+            <p>{actionDesc(action)}</p>
+          </div>
+        </div>
+        <div class="shortcut-bindings">
+          {#if bindingsFor(action.id).length > 0}
+            {#each bindingsFor(action.id) as shortcut}
+              <div class="binding-chip">
+                <kbd class:arrow={arrowGlyph(shortcut) !== null}>{shortcutLabel(shortcut)}</kbd>
+                <button
+                  type="button"
+                  class="binding-chip-close"
+                  onclick={() => removeBinding(action.id, shortcut)}>&minus;</button
+                >
+              </div>
+            {/each}
+          {:else if config && !(action.id in config.shortcuts) && action.defaults.length > 0}
+            {#each action.defaults as shortcut}
+              <div class="binding-chip default">
+                <kbd class:arrow={arrowGlyph(shortcut) !== null}>{shortcutLabel(shortcut)}</kbd>
+                <button
+                  type="button"
+                  class="binding-chip-close"
+                  onclick={() => removeBinding(action.id, shortcut)}>&minus;</button
+                >
+              </div>
+            {/each}
+          {:else}
+            <span class="binding-disabled">{_t("keyboard.bindingDisabled")}</span>
+          {/if}
+
+          {#if recordingAction === action.id}
+            <div class="binding-chip recording">
+              <kbd>{_t("keyboard.pressKey")}</kbd>
+              <button type="button" class="binding-chip-close" onclick={stopRecording}
+                >&times;</button
+              >
+            </div>
+          {:else}
+            <button type="button" class="binding-add" onclick={() => startRecording(action.id)}
+              >+</button
+            >
+          {/if}
+        </div>
+      </section>
+    {/each}
+  </div>
+{:else}
+  <div class="settings-state">{feedback.message || _t("keyboard.keyboardUnavailable")}</div>
+{/if}
+
+{#if feedback.message && config}
+  <div class:success={feedback.success} class="settings-feedback">{feedback.message}</div>
+{/if}
+
+{#if conflictFeedback.message && config}
+  <div class="settings-feedback">{conflictFeedback.message}</div>
+{/if}
+
+<style>
+  .config-bar-actions {
+    display: flex;
+    flex-shrink: 0;
+    gap: 6px;
+  }
+
+  .config-bar-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    padding: 5px 10px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--settings-control-radius, 6px);
+    color: var(--text-muted);
+    background: var(--card-bg);
+    font: inherit;
+    font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
+    line-height: 1;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .config-bar-btn:hover {
+    color: var(--text-secondary);
+    background: var(--hover-bg);
+  }
+
+  .system-badge {
+    display: inline-block;
+    padding: 1px 5px;
+    border: 1px solid var(--selection-color);
+    border-radius: 4px;
+    color: var(--selection-color);
+    font-size: 9px;
+    font-weight: 500;
+    vertical-align: middle;
+    margin-left: 4px;
+  }
+
+  .shortcut-bindings {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .binding-chip {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 30px;
+    padding: 0 10px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--settings-control-radius, 6px);
+    background: var(--input-bg);
+    box-sizing: border-box;
+  }
+
+  .binding-chip kbd {
+    font:
+      11px "Cascadia Code",
+      Consolas,
+      monospace;
+    color: var(--text-primary);
+  }
+
+  .binding-chip kbd.arrow {
+    font-size: clamp(
+      13px,
+      calc(var(--settings-control-size, var(--font-size-secondary, 11px)) + 4px),
+      15px
+    );
+    line-height: 1;
+  }
+
+  .binding-chip.recording {
+    border-color: var(--selection-color);
+    animation: pulse-recording 1s ease-in-out infinite;
+  }
+
+  @keyframes pulse-recording {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.5;
+    }
+  }
+
+  .binding-add {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border: 1px dashed var(--border-color);
+    border-radius: var(--settings-control-radius, 6px);
+    color: var(--text-muted);
+    background: transparent;
+    font-size: 17px;
+    cursor: pointer;
+    transition:
+      color 100ms ease,
+      border-color 100ms ease;
+  }
+
+  .binding-add:hover {
+    color: var(--text-secondary);
+    border-color: var(--text-muted);
+  }
+
+  .binding-disabled {
+    color: var(--text-faint);
+    font-size: var(--settings-description-size, var(--font-size-secondary, 11px));
+    font-style: italic;
+  }
+
+  .binding-chip-close {
+    position: absolute;
+    top: -7px;
+    right: -7px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    padding: 0;
+    border: 1px solid var(--border-color);
+    border-radius: 50%;
+    font-size: 10px;
+    line-height: 1;
+    color: var(--text-muted);
+    background: var(--card-bg);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 100ms ease;
+  }
+
+  .binding-chip:hover .binding-chip-close {
+    opacity: 1;
+  }
+
+  .binding-chip-close:hover {
+    color: var(--danger-color);
+    border-color: var(--danger-color);
+    background: color-mix(in srgb, var(--danger-color) 12%, transparent);
+  }
+</style>

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { getCurrentWindow } from "@tauri-apps/api/window";
-  import StorageSettingsDialog from "$lib/components/StorageSettingsDialog.svelte";
+  import StorageSettingsDialog from "$lib/components/settings/StorageSettingsDialog.svelte";
   import { generalSettings } from "$lib/services/settings";
   import { applyGeneralSettingsToDocument } from "$lib/services/settings-bootstrap";
 

@@ -6,19 +6,19 @@
   import { flushSync, onMount, tick, untrack } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { getCurrentWindow } from "@tauri-apps/api/window";
-  import BulkBar from "$lib/components/BulkBar.svelte";
-  import StatusBar from "$lib/components/StatusBar.svelte";
-  import Toolbar from "$lib/components/Toolbar.svelte";
-  import HistoryList from "$lib/components/HistoryList.svelte";
-  import SearchHeader from "$lib/components/SearchHeader.svelte";
-  import DetailPanel from "$lib/components/DetailPanel.svelte";
-  import ImageFullscreenOverlay from "$lib/components/ImageFullscreenOverlay.svelte";
-  import TagEditDialog from "$lib/components/TagEditDialog.svelte";
-  import SavedSearchDialog from "$lib/components/SavedSearchDialog.svelte";
+  import BulkBar from "$lib/components/layout/BulkBar.svelte";
+  import StatusBar from "$lib/components/layout/StatusBar.svelte";
+  import Toolbar from "$lib/components/layout/Toolbar.svelte";
+  import HistoryList from "$lib/components/layout/HistoryList.svelte";
+  import SearchHeader from "$lib/components/layout/SearchHeader.svelte";
+  import DetailPanel from "$lib/components/detail/DetailPanel.svelte";
+  import ImageFullscreenOverlay from "$lib/components/detail/ImageFullscreenOverlay.svelte";
+  import TagEditDialog from "$lib/components/card/TagEditDialog.svelte";
+  import SavedSearchDialog from "$lib/components/common/SavedSearchDialog.svelte";
   import { hydrateClipboardItem } from "$lib/services/clipboard";
   import type { SavedSearch } from "$lib/utils/saved-searches";
   import type { HistoryDateFilter } from "$lib/utils/history-filter";
-  import Toast from "$lib/components/Toast.svelte";
+  import Toast from "$lib/components/common/Toast.svelte";
   import { demoClipboardItems } from "$lib/data/demo-items";
   import {
     persistDelete,

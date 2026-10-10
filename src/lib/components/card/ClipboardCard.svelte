@@ -1,0 +1,1321 @@
+<script lang="ts">
+  import AppIcon from "$lib/components/card/AppIcon.svelte";
+  import CardDateDialog from "$lib/components/card/CardDateDialog.svelte";
+  import CardActions from "$lib/components/card/CardActions.svelte";
+  import Checkbox from "$lib/components/common/Checkbox.svelte";
+  import TagChip from "$lib/components/card/TagChip.svelte";
+  import type { IconName } from "$lib/types/clipboard";
+  import ContextMenu from "$lib/components/common/ContextMenu.svelte";
+  import type { ContextMenuItem } from "$lib/components/common/ContextMenu.svelte";
+  import { CARD_ACTION_IDS, type ClipboardItem, type CardActionId } from "$lib/types/clipboard";
+  import { messages, resolvePath } from "$lib/i18n";
+  import { formatRelativeTime } from "$lib/utils/time";
+  import { isTauriRuntime } from "$lib/services/runtime";
+  import {
+    detectContentActions,
+    type QuickAction,
+    writeClipboardText,
+    getDisplayTitle,
+    getDisplayRemainingLines,
+    SOURCE_TONE_COLORS,
+  } from "$lib/services/clipboard";
+  import { trimTrailingBlankLines } from "$lib/utils/virtual-scroll";
+  import { assetUrl as baseAssetUrl } from "$lib/utils/format";
+  import { detectQuickActions, parseIsoDate, quickActionKind } from "$lib/utils/patterns";
+  import { invoke, convertFileSrc } from "@tauri-apps/api/core";
+  import { iconsDir } from "$lib/services/paths";
+  import {
+    onContextMenuOpened,
+    notifyContextMenuOpened,
+    trackContextMenuOpen,
+  } from "$lib/services/context-menu";
+  import { showToast } from "$lib/services/toast";
+
+  let iconsBase = $derived($iconsDir);
+
+  const _t = (path: string, params?: Record<string, string | number>) =>
+    resolvePath($messages, path, params);
+
+  const assetUrlCache = new Map<string, string | undefined>();
+  const MAX_CACHE_SIZE = 500;
+
+  function assetUrl(filePath: string | null | undefined): string | undefined {
+    if (!filePath) return undefined;
+    const cached = assetUrlCache.get(filePath);
+    if (cached !== undefined) return cached;
+    const url = baseAssetUrl(filePath);
+    if (url && assetUrlCache.size >= MAX_CACHE_SIZE) {
+      const first = assetUrlCache.keys().next().value;
+      if (first !== undefined) assetUrlCache.delete(first);
+    }
+    assetUrlCache.set(filePath, url);
+    return url;
+  }
+
+  const appIconUrlCache = new Map<string, string | undefined>();
+
+  function appIconUrl(iconFileName: string | null | undefined): string | undefined {
+    if (!iconFileName || !isTauriRuntime() || !iconsBase) return undefined;
+    const cached = appIconUrlCache.get(iconFileName);
+    if (cached !== undefined) return cached;
+    const fullPath = `${iconsBase}/${iconFileName}`.replace(/\\/g, "/");
+    const url = convertFileSrc(fullPath);
+    if (appIconUrlCache.size >= MAX_CACHE_SIZE) {
+      const first = appIconUrlCache.keys().next().value;
+      if (first !== undefined) appIconUrlCache.delete(first);
+    }
+    appIconUrlCache.set(iconFileName, url);
+    return url;
+  }
+
+  interface Props {
+    item: ClipboardItem;
+    index: number;
+    now: number;
+    selected: boolean;
+    checked: boolean;
+    showCheckbox: boolean;
+    cardPaddingTop?: number;
+    cardPaddingBottom?: number;
+    cardGap?: number;
+    cardBorderRadius?: number;
+    cardHeight?: number;
+    maxTextLines?: number;
+    showSecondaryText?: boolean;
+    hideActions?: boolean;
+    alwaysShowActions?: boolean;
+    quickCopyBadgeAlwaysVisible?: boolean;
+    hideMetaRow?: boolean;
+    onselect: (id: string, event?: MouseEvent) => void;
+    ontoggleSelect: (id: string) => void;
+    ontoggleFavorite: (id: string) => void;
+    ondelete: (id: string) => void;
+    oncopy: (id: string) => void;
+    onsave?: (id: string) => void;
+    ondetail: (id: string) => void;
+    onedit: (id: string) => void;
+    editingId?: string | null;
+    editDraft?: { content: string; title: string } | null;
+    oneditingdraftchange?: (id: string, content: string, title: string) => void;
+    onsaveedit: (id: string, content: string) => void | Promise<boolean>;
+    oncanceledit: (id: string) => void;
+    onplainpaste: (id: string) => void;
+    onformatpaste: (id: string) => void;
+    oncleanpaste: (id: string) => void;
+    ondblclickpaste: (id: string) => void;
+    doubleClickPaste?: boolean;
+    onsaveasnew: (id: string, title: string, content: string) => void;
+    onrestore?: (id: string) => void;
+    onimagefullscreen?: (id: string) => void;
+    oncopyPath?: (id: string) => void;
+    onmaterialize?: (id: string) => void;
+    onheightchange?: (id: string, height: number, immediate?: boolean) => void;
+    onsavetags?: (id: string, tags: string[]) => void;
+    ontoggleTagFilter?: (tag: string) => void;
+    oneditTag?: (tag: string) => void;
+    heightMeasurementKey?: string;
+    tagAddSignal?: number;
+    tagColors?: Record<string, string>;
+  }
+
+  const cardActionIds = CARD_ACTION_IDS;
+
+  let {
+    item,
+    index,
+    now,
+    selected,
+    checked,
+    showCheckbox,
+    cardPaddingTop = 1,
+    cardPaddingBottom = 1,
+    cardGap = 1,
+    cardBorderRadius = 5,
+    cardHeight = 0,
+    maxTextLines = 3,
+    showSecondaryText = true,
+    hideActions = false,
+    alwaysShowActions = false,
+    quickCopyBadgeAlwaysVisible = true,
+    hideMetaRow = false,
+    onselect,
+    ontoggleSelect,
+    ontoggleFavorite,
+    ondelete,
+    oncopy,
+    onsave,
+    ondetail,
+    onedit,
+    editingId = null,
+    editDraft = null,
+    oneditingdraftchange,
+    onsaveedit,
+    oncanceledit,
+    onplainpaste,
+    onformatpaste,
+    oncleanpaste,
+    ondblclickpaste,
+    doubleClickPaste = false,
+    onsaveasnew,
+    onrestore,
+    onimagefullscreen,
+    oncopyPath,
+    onmaterialize,
+    onheightchange,
+    onsavetags,
+    ontoggleTagFilter,
+    oneditTag,
+    heightMeasurementKey,
+    tagAddSignal = 0,
+    tagColors = {},
+  }: Props = $props();
+
+  let contextMenu = $state<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
+  let cardElement = $state<HTMLDivElement | null>(null);
+
+  $effect(() => {
+    const unsubscribe = onContextMenuOpened(() => {
+      contextMenu = null;
+    });
+    return unsubscribe;
+  });
+
+  // Report visibility so the route yields Escape to the open menu. The
+  // cleanup covers every close path (Escape, outside click, action dispatch,
+  // bus close from another card, unmount), keeping the global count exact.
+  $effect(() => {
+    if (!contextMenu) return;
+    return trackContextMenuOpen();
+  });
+
+  let editTextarea = $state<HTMLTextAreaElement | null>(null);
+
+  // The route owns the single active draft keyed by `editingId`. Deriving the
+  // editor's open state from the route keeps the draft alive when the card
+  // unmounts -- for example when a filter change or virtual scroll removes the
+  // row -- and guarantees only one card is in edit mode at a time.
+  const editing = $derived(editingId === item.id && editDraft != null);
+
+  let tagAdding = $state(false);
+  let tagDraft = $state("");
+  let tagAddInput = $state<HTMLInputElement | null>(null);
+
+  $effect(() => {
+    if (!tagAdding) return;
+    const input = tagAddInput;
+    queueMicrotask(() => input?.focus());
+  });
+
+  // Consume tagAddSignal as an edge: the parent only ever increments the
+  // sequence, so a plain level check would re-open the input every time
+  // `editing` flips back to false (or when this card mounts later under
+  // virtual scrolling). Track the highest sequence already handled.
+  let handledTagAddSeq = 0;
+  $effect(() => {
+    const seq = tagAddSignal;
+    if (seq <= handledTagAddSeq) return;
+    handledTagAddSeq = seq;
+    if (!editing) {
+      tagAdding = true;
+      tagDraft = "";
+    }
+  });
+
+  function confirmAddTag() {
+    const value = tagDraft.trim();
+    if (value && !(item.tags ?? []).includes(value)) {
+      onsavetags?.(item.id, [...(item.tags ?? []), value]);
+    }
+    tagDraft = "";
+    tagAdding = false;
+  }
+
+  function cancelAddTag() {
+    tagDraft = "";
+    tagAdding = false;
+  }
+
+  function removeTagCard(tag: string) {
+    onsavetags?.(
+      item.id,
+      (item.tags ?? []).filter((t) => t !== tag),
+    );
+  }
+
+  $effect(() => {
+    const element = cardElement;
+    const reportHeight = onheightchange;
+    const key = heightMeasurementKey;
+    if (!element || !reportHeight || typeof ResizeObserver === "undefined") return;
+
+    let lastHeight = -1;
+    const report = () => {
+      const height = Math.ceil(element.offsetHeight + cardGap);
+      if (height === lastHeight) return;
+      lastHeight = height;
+      reportHeight(item.id, height);
+    };
+    const observer = new ResizeObserver(report);
+    observer.observe(element);
+    report();
+    return () => observer.disconnect();
+  });
+
+  $effect(() => {
+    if (!editing || !editTextarea) return;
+    const textarea = editTextarea;
+    queueMicrotask(() => textarea.focus());
+  });
+
+  const contentChanged = $derived(
+    editDraft != null &&
+      (editDraft.content !== (item.textContent || item.title) || editDraft.title !== item.title),
+  );
+  const primaryPreviewText = $derived(
+    trimTrailingBlankLines(item.textContent) || trimTrailingBlankLines(item.title),
+  );
+  const primaryFirstLine = $derived(getDisplayTitle(primaryPreviewText));
+  const primaryRestLines = $derived(getDisplayRemainingLines(primaryPreviewText));
+  const secondaryPreviewText = $derived(
+    trimTrailingBlankLines(item.textContent) || trimTrailingBlankLines(item.preview),
+  );
+  const canEdit = $derived(
+    (item.kind === "text" ||
+      item.kind === "link" ||
+      item.kind === "image" ||
+      item.kind === "file") &&
+      (!item.fileMeta || item.fileMeta.length <= 1),
+  );
+  let contentActions = $state<QuickAction[]>([]);
+  let contentActionRequest = 0;
+  let dateView = $state<{ isoDate: string; formattedDate: string; label: string } | null>(null);
+
+  let contentActionsLoaded = $state(false);
+
+  function loadContentActions() {
+    if (contentActionsLoaded) return;
+    contentActionsLoaded = true;
+    const text = item.textContent || [item.title, item.preview].filter(Boolean).join("\n");
+    const request = ++contentActionRequest;
+    if (!isTauriRuntime()) {
+      contentActions = detectQuickActions(text, true);
+      return;
+    }
+    void detectContentActions(text)
+      .then((actions) => {
+        if (request === contentActionRequest) {
+          const raw = actions ?? detectQuickActions(text, true);
+          const seen = new Set<string>();
+          contentActions = raw.filter((a) => {
+            const key = `${a.actionType}:${a.payload}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          });
+        }
+      })
+      .catch(() => {
+        if (request === contentActionRequest) {
+          contentActions = detectQuickActions(text, true);
+        }
+      });
+  }
+
+  $effect(() => {
+    const id = item.id;
+    contentActionsLoaded = false;
+    contentActions = [];
+    contentActionRequest = 0;
+  });
+
+  let displayContentActions = $derived.by(() => {
+    const seenKinds = new Set<string>();
+    return contentActions.filter((action) => {
+      const kind = quickActionKind(action);
+      if (seenKinds.has(kind)) return false;
+      seenKinds.add(kind);
+      return true;
+    });
+  });
+
+  function showDateDialog(action: QuickAction) {
+    const date = parseIsoDate(action.payload);
+    if (!date) {
+      // Never log the payload: it is clipboard-derived content and does not
+      // belong in diagnostics output.
+      console.warn("Ignored invalid date action payload");
+      return;
+    }
+
+    dateView = {
+      isoDate: action.payload,
+      formattedDate: new Intl.DateTimeFormat(undefined, {
+        dateStyle: "full",
+        timeZone: "UTC",
+      }).format(date),
+      label: action.label,
+    };
+  }
+
+  async function handleAction(event: MouseEvent, action: QuickAction) {
+    event.stopPropagation();
+    switch (action.actionType) {
+      case "open":
+        try {
+          await invoke("open_external_url", { url: action.payload });
+        } catch {
+          window.open(action.payload, "_blank");
+        }
+        return;
+      case "copy":
+        void writeClipboardText(action.payload).catch((err) =>
+          console.error("Copy to clipboard failed:", err),
+        );
+        return;
+      case "viewDate":
+        await showDateDialog(action);
+        return;
+      default: {
+        const unsupportedAction: never = action.actionType;
+        console.warn("Ignored unsupported quick action", unsupportedAction);
+      }
+    }
+  }
+
+  function handleDoubleClick(event: MouseEvent) {
+    event.preventDefault();
+    if (doubleClickPaste) {
+      ondblclickpaste(item.id);
+      return;
+    }
+    runCardAction("detail", event);
+  }
+
+  function handleDragStart(event: DragEvent) {
+    if (!event.dataTransfer) return;
+    if (item.contentLoaded === false) {
+      event.preventDefault();
+      onmaterialize?.(item.id);
+      return;
+    }
+
+    if ((item.kind === "image" || item.kind === "file") && !item.resourcePath) {
+      event.preventDefault();
+      onmaterialize?.(item.id);
+      return;
+    }
+
+    if (item.kind === "text" || item.kind === "link") {
+      event.dataTransfer.setData("text/plain", item.textContent || item.title);
+      if (item.htmlContent) {
+        event.dataTransfer.setData("text/html", item.htmlContent);
+      }
+      event.dataTransfer.effectAllowed = "copy";
+    } else if (item.kind === "file" && item.resourcePath) {
+      const fileUri = item.resourcePath.startsWith("file://")
+        ? item.resourcePath
+        : `file://${item.resourcePath.replace(/\\/g, "/")}`;
+      event.dataTransfer.setData("text/uri-list", fileUri);
+      event.dataTransfer.setData("text/plain", item.resourcePath);
+      event.dataTransfer.effectAllowed = "copy";
+    } else if (item.kind === "image") {
+      event.dataTransfer.setData("text/plain", item.title);
+      if (item.resourcePath) {
+        const fileUri = item.resourcePath.startsWith("file://")
+          ? item.resourcePath
+          : `file://${item.resourcePath.replace(/\\/g, "/")}`;
+        event.dataTransfer.setData("text/uri-list", fileUri);
+      }
+      event.dataTransfer.effectAllowed = "copy";
+    }
+  }
+
+  async function beginEdit() {
+    await onedit(item.id);
+  }
+
+  /** Selected text in the inline editor, if the user highlighted any. */
+  function editSelection(): string | null {
+    if (!editing || !editTextarea) return null;
+    const { selectionStart, selectionEnd, value } = editTextarea;
+    if (selectionEnd <= selectionStart) return null;
+    return value.slice(selectionStart, selectionEnd);
+  }
+
+  function runCardAction(action: CardActionId, event?: Event) {
+    event?.stopPropagation();
+
+    switch (action) {
+      case "copy": {
+        // While editing, copy the highlighted text instead of the whole item so
+        // the context menu matches what the user selected in the editor.
+        const selected = editSelection();
+        if (selected) {
+          void writeClipboardText(selected)
+            .then(() => showToast(_t("toast.copySuccess"), "success"))
+            .catch((error) => {
+              console.error("Unable to copy the selected text", error);
+              showToast(_t("toast.copyFailed"), "error");
+            });
+          return;
+        }
+        oncopy(item.id);
+        return;
+      }
+      case "plainpaste":
+        onplainpaste(item.id);
+        return;
+      case "formatpaste":
+        onformatpaste(item.id);
+        return;
+      case "cleanpaste":
+        oncleanpaste(item.id);
+        return;
+      case "detail":
+        ondetail(item.id);
+        return;
+      case "edit":
+        beginEdit();
+        return;
+      case "favorite":
+        ontoggleFavorite(item.id);
+        return;
+      case "delete":
+        ondelete(item.id);
+        return;
+      case "restore":
+        onrestore?.(item.id);
+        return;
+      case "addTag":
+        tagAdding = true;
+        tagDraft = "";
+        return;
+      case "copyPath":
+        oncopyPath?.(item.id);
+        return;
+    }
+  }
+
+  async function saveEdit(event: Event) {
+    event.stopPropagation();
+    if (!editDraft) return;
+    await onsaveedit(item.id, editDraft.content);
+  }
+
+  function cancelEdit(event: Event) {
+    event.stopPropagation();
+    oncanceledit(item.id);
+  }
+
+  function saveAsNew(event: Event) {
+    event.stopPropagation();
+    if (!editDraft) return;
+    onsaveasnew(item.id, editDraft.title, editDraft.content);
+  }
+
+  function handleKeydown(event: KeyboardEvent) {
+    if (editing && event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      oncanceledit(item.id);
+    }
+  }
+
+  function handleContextMenu(event: MouseEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    notifyContextMenuOpened();
+    const items: ContextMenuItem[] = [
+      { id: "copy", label: _t("card.copy"), icon: "copy" },
+      ...(item.kind === "image" || item.kind === "file"
+        ? [{ id: "copyPath", label: _t("card.copyPath"), icon: "link" as IconName }]
+        : []),
+      ...(item.kind === "text" || item.kind === "link"
+        ? [
+            {
+              id: "paste",
+              label: _t("card.paste"),
+              icon: "clipboard" as IconName,
+              children: [
+                { id: "plainpaste", label: _t("card.pastePlain"), icon: "type" as IconName },
+                ...(item.htmlContent || item.hasHtml
+                  ? [
+                      {
+                        id: "formatpaste",
+                        label: _t("card.pasteFormat"),
+                        icon: "clipboard" as IconName,
+                      },
+                    ]
+                  : []),
+                { id: "cleanpaste", label: _t("card.cleanPaste"), icon: "scan" as IconName },
+              ],
+            },
+          ]
+        : []),
+      { id: "detail", label: _t("card.viewDetail"), icon: "eye" },
+      ...(canEdit
+        ? [
+            {
+              id: "edit",
+              label:
+                item.kind === "image" || item.kind === "file"
+                  ? _t("edit.editFileName")
+                  : _t("card.edit"),
+              icon: "edit" as IconName,
+            },
+          ]
+        : []),
+      {
+        id: "favorite",
+        label: item.favorite ? _t("card.unfavorite") : _t("card.favorite"),
+        icon: "star",
+      },
+      { id: "addTag", label: _t("card.addTag"), icon: "tag" },
+      ...(!item.favorite
+        ? [
+            {
+              id: "delete",
+              label: _t("card.delete"),
+              icon: "trash" as IconName,
+              destructive: true,
+            },
+          ]
+        : []),
+    ];
+    contextMenu = { x: event.clientX, y: event.clientY, items };
+  }
+
+  function closeContextMenu() {
+    contextMenu = null;
+  }
+
+  function handleContextAction(id: string) {
+    if (cardActionIds.includes(id as CardActionId)) {
+      runCardAction(id as CardActionId);
+    }
+  }
+
+  function handleMouseEnter() {
+    loadContentActions();
+  }
+
+  // The card's select surface is a full-size overlay <button>. A mouse click
+  // focuses it, which would make `isActivatableKeyboardTarget` treat Space and
+  // Enter as button activation instead of the item shortcuts, so "click a row
+  // then press Space" never opened the detail panel. Moving focus onto the
+  // card div restores the keyboard contract; the flag keeps the resulting
+  // onfocus from re-running onselect (which would clobber the shift-click
+  // anchor).
+  let suppressFocusSelect = false;
+
+  function handleFocus() {
+    loadContentActions();
+    if (suppressFocusSelect) return;
+    onselect(item.id);
+  }
+
+  function handleCardSelect(e: MouseEvent) {
+    onselect(item.id, e);
+    suppressFocusSelect = true;
+    cardElement?.focus({ preventScroll: true });
+    suppressFocusSelect = false;
+  }
+
+  function handleToggleSelect() {
+    ontoggleSelect(item.id);
+  }
+
+  function stopPropagation(e: MouseEvent) {
+    e.stopPropagation();
+  }
+
+  function handleImageFullscreenClick(e: MouseEvent) {
+    e.stopPropagation();
+    onimagefullscreen?.(item.id);
+  }
+
+  function handleEditKeydown(e: KeyboardEvent) {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      oncanceledit(item.id);
+    }
+  }
+
+  function handleSaveAsClick(event: MouseEvent) {
+    event.stopPropagation();
+    onsave?.(item.id);
+  }
+</script>
+
+{#snippet tagArea()}
+  <span class="tag-chips">
+    {#each item.tags ?? [] as tag (tag)}
+      <TagChip
+        {tag}
+        accent={tagColors[tag]}
+        compact
+        hoverReveal
+        onclick={ontoggleTagFilter}
+        oncontextmenu={oneditTag}
+        onremove={removeTagCard}
+        removeAriaLabel={_t("card.removeTag")}
+      />
+    {/each}
+    {#if tagAdding}
+      <input
+        class="tag-add-input"
+        bind:value={tagDraft}
+        bind:this={tagAddInput}
+        placeholder={_t("card.addTagPlaceholder")}
+        onkeydown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            e.stopPropagation();
+            confirmAddTag();
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            e.stopPropagation();
+            cancelAddTag();
+          }
+        }}
+        onblur={cancelAddTag}
+      />
+    {/if}
+  </span>
+{/snippet}
+
+<div
+  bind:this={cardElement}
+  role="option"
+  aria-selected={selected}
+  aria-label={item.title}
+  class:selected
+  class:checked
+  class:editing
+  class:actions-always={alwaysShowActions}
+  class:actions-hidden={hideActions}
+  class:no-meta={hideMetaRow}
+  class="clip-card"
+  onmouseenter={handleMouseEnter}
+  onfocus={handleFocus}
+  style:--cpt={`${cardPaddingTop}px`}
+  style:--cpb={`${cardPaddingBottom}px`}
+  style:--cg={`${cardGap}px`}
+  style:--cbr={`${cardBorderRadius}px`}
+  style:--max-text-lines={`${showSecondaryText ? maxTextLines : 1}`}
+  style:--image-preview-height={cardHeight
+    ? `${Math.max(24, cardHeight - cardPaddingTop - cardPaddingBottom - 4 - (hideMetaRow ? 0 : 24))}px`
+    : undefined}
+  style:height={editing ? "auto" : cardHeight ? `${cardHeight}px` : undefined}
+  tabindex="-1"
+  data-id={item.id}
+  draggable="true"
+  ondragstart={handleDragStart}
+  oncontextmenu={handleContextMenu}
+  onkeydown={handleKeydown}
+>
+  <button
+    class="card-select"
+    type="button"
+    aria-label={_t("card.selectItem", { title: item.title })}
+    aria-pressed={selected}
+    onclick={handleCardSelect}
+    ondblclick={(e) => handleDoubleClick(e)}
+  ></button>
+
+  {#if showCheckbox}
+    <label class="card-checkbox">
+      <Checkbox {checked} onchange={handleToggleSelect} onclick={stopPropagation} size={20} />
+    </label>
+  {/if}
+
+  {#if !editing}
+    <div class="content">
+      {#if item.kind === "image"}
+        {#if item.previewPath || item.resourcePath}
+          <div class="image-preview">
+            {#if assetUrl(item.previewPath || item.resourcePath)}
+              <img src={assetUrl(item.previewPath || item.resourcePath)} alt={item.preview || ""} />
+              <button
+                type="button"
+                class="image-fullscreen-btn"
+                onclick={handleImageFullscreenClick}
+                aria-label={_t("general.imageFullscreenButton")}
+              >
+                <AppIcon name="maximize" size={14} strokeWidth={2} />
+              </button>
+            {:else}
+              <AppIcon name="image" size={28} strokeWidth={1.5} />
+            {/if}
+          </div>
+        {:else}
+          <div class="image-preview image-placeholder">
+            <AppIcon name="image" size={28} strokeWidth={1.5} />
+          </div>
+        {/if}
+      {:else if item.kind === "file"}
+        <div class="file-title">
+          <span class="file-icon"><AppIcon name="file" size={15} /></span>
+          {#if item.fileMeta && item.fileMeta.length > 1}
+            <span
+              >{item.fileMeta[0].name}, {item.fileMeta[1].name}{item.fileMeta.length > 2
+                ? ` ${_t("card.fileCountSuffix", { count: item.fileMeta.length - 2 })}`
+                : ""}</span
+            >
+          {:else}
+            <span class="file-name">{item.fileName ?? item.title}</span>
+          {/if}
+          {@render tagArea()}
+        </div>
+      {:else}
+        <div class="title-line">
+          {#if item.customTitle}
+            <div class="text-preview custom-title">{item.title}</div>
+          {:else}
+            <div class="text-preview">{primaryFirstLine}</div>
+          {/if}
+          {@render tagArea()}
+        </div>
+        {#if item.customTitle}
+          {#if secondaryPreviewText}
+            <div class="content-preview">{secondaryPreviewText}</div>
+          {/if}
+        {:else}
+          {#if showSecondaryText && primaryRestLines}
+            <div class="content-preview">{primaryRestLines}</div>
+          {/if}
+        {/if}
+      {/if}
+    </div>
+
+    {#if !hideMetaRow}
+      <div class="meta-row">
+        <span class="source-mark">
+          {#if item.iconPath}
+            <img class="source-icon" src={appIconUrl(item.iconPath)} alt={item.sourceApp} />
+          {:else}
+            <span class="source-dot" style:color={SOURCE_TONE_COLORS[item.sourceTone]}></span>
+          {/if}
+        </span>
+        <span class="source-name">{item.sourceApp}</span>
+        <span>{item.sizeLabel}</span>
+        <span>{formatRelativeTime(item.createdAt, now)}</span>
+        {#if item.kind === "file"}<span class="file-count">{item.preview}</span>{/if}
+        {#if item.kind === "image"}{@render tagArea()}{/if}
+        <CardActions
+          {item}
+          {index}
+          {quickCopyBadgeAlwaysVisible}
+          contentActions={displayContentActions}
+          dateViewIso={dateView?.isoDate ?? null}
+          {canEdit}
+          canRestore={!!onrestore}
+          onquickaction={handleAction}
+          onrunaction={runCardAction}
+          onsaveas={handleSaveAsClick}
+        />
+      </div>
+    {/if}
+  {:else}
+    <div class="edit-area">
+      {#if item.customTitle}
+        <input
+          class="edit-title-input"
+          value={editDraft?.title ?? ""}
+          oninput={(event) =>
+            oneditingdraftchange?.(
+              item.id,
+              editDraft?.content ?? "",
+              (event.currentTarget as HTMLInputElement).value,
+            )}
+          placeholder={_t("card.editTitlePlaceholder")}
+        />
+      {/if}
+      <textarea
+        value={editDraft?.content ?? ""}
+        bind:this={editTextarea}
+        rows={Math.min(12, Math.max(3, (editDraft?.content ?? "").split("\n").length))}
+        placeholder={_t("edit.placeholder")}
+        oninput={(event) =>
+          oneditingdraftchange?.(
+            item.id,
+            (event.currentTarget as HTMLTextAreaElement).value,
+            editDraft?.title ?? "",
+          )}
+        onclick={stopPropagation}
+        onkeydown={handleEditKeydown}></textarea>
+      <div class="edit-actions">
+        <button type="button" class="edit-save" onclick={saveEdit}>
+          <AppIcon name="check" size={14} strokeWidth={2.5} />
+          {_t("edit.save")}
+        </button>
+        <button
+          type="button"
+          class="edit-save-as-new"
+          disabled={!contentChanged}
+          onclick={saveAsNew}
+        >
+          <AppIcon name="copy" size={14} strokeWidth={2.5} />
+          {_t("edit.saveAsNew")}
+        </button>
+        <button type="button" class="edit-cancel" onclick={cancelEdit}>
+          <AppIcon name="x" size={14} strokeWidth={2.5} />
+          {_t("edit.cancel")}
+        </button>
+      </div>
+    </div>
+  {/if}
+</div>
+
+<CardDateDialog {dateView} ondismiss={() => (dateView = null)} />
+
+{#if contextMenu}
+  <ContextMenu
+    x={contextMenu.x}
+    y={contextMenu.y}
+    items={contextMenu.items}
+    onclose={closeContextMenu}
+    onaction={handleContextAction}
+  />
+{/if}
+
+<style>
+  .clip-card {
+    position: relative;
+    padding: var(--cpt, 6px) 8px var(--cpb, 4px) 8px;
+    border: 1px solid transparent;
+    border-radius: var(--cbr, 7px);
+    color: var(--text-primary);
+    background: transparent;
+    cursor: default;
+    overflow: hidden;
+    outline: none;
+    transition: background 120ms ease;
+    margin-bottom: var(--cg, 5px);
+    box-sizing: border-box;
+  }
+
+  .clip-card.editing {
+    overflow: visible;
+    z-index: 2;
+  }
+
+  .clip-card .meta-row {
+    margin-top: 0;
+    gap: 5px;
+  }
+
+  .clip-card .meta-row span {
+    font-size: 12px;
+  }
+
+  .clip-card .content {
+    font-size: 12px;
+  }
+
+  .clip-card .text-preview {
+    font-size: var(--font-size-cardTitle, 13px);
+    line-height: 1.4;
+  }
+
+  .card-select {
+    position: absolute;
+    z-index: 0;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    border-radius: inherit;
+    background: transparent;
+    cursor: default;
+  }
+
+  .card-checkbox {
+    position: absolute;
+    z-index: 3;
+    left: 10px;
+    top: 13px;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 120ms ease;
+  }
+
+  .clip-card:hover .card-checkbox,
+  .clip-card.selected .card-checkbox,
+  .clip-card.checked .card-checkbox {
+    opacity: 1;
+  }
+
+  .clip-card:hover,
+  .clip-card:focus-within {
+    border-color: rgba(255, 255, 255, 0.035);
+    background: var(--hover-bg);
+  }
+
+  .clip-card.selected:not(.checked) {
+    border-color: rgba(255, 255, 255, 0.035);
+    background: var(--hover-bg);
+  }
+
+  .clip-card.selected.checked {
+    border-color: rgba(255, 255, 255, 0.035);
+    background: color-mix(in srgb, var(--selection-color) 18%, var(--hover-bg));
+  }
+
+  .content {
+    position: relative;
+    z-index: 1;
+    min-width: 0;
+    padding-left: 0;
+    pointer-events: none;
+  }
+
+  .clip-card:has(.card-checkbox) .content {
+    padding-left: 28px;
+  }
+
+  .clip-card.no-meta .content {
+    padding-right: 0;
+  }
+
+  .text-preview {
+    overflow: hidden;
+    display: block;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    max-width: 95%;
+    color: var(--text-primary);
+    font-size: var(--font-size-cardTitle, 13px);
+    line-height: 1.55;
+  }
+
+  .content-preview {
+    margin-top: 4px;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: var(--max-text-lines, 3);
+    line-clamp: var(--max-text-lines, 3);
+    color: var(--text-muted);
+    font-size: var(--font-size-cardPreview, 11px);
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+    text-overflow: ellipsis;
+  }
+
+  .file-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    overflow: hidden;
+    font-size: var(--font-size-cardTitle, 13px);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .file-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .title-line {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .title-line .text-preview {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: none;
+  }
+
+  .tag-chips {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    max-width: 55%;
+    overflow: hidden;
+    pointer-events: auto;
+  }
+
+  .meta-row .tag-chips {
+    max-width: 40%;
+  }
+
+  .tag-add-input {
+    width: 74px;
+    padding: 1px 5px;
+    border: 1px solid var(--text-faint);
+    border-radius: 4px;
+    color: var(--text-primary);
+    background: var(--input-bg);
+    font: inherit;
+    font-size: 10.5px;
+    outline: none;
+  }
+
+  .file-icon {
+    display: inline-flex;
+    color: var(--text-secondary);
+  }
+
+  .image-preview {
+    position: relative;
+    width: min(100%, 380px);
+    height: 90px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    background: var(--input-bg);
+    box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.3);
+  }
+
+  .clip-card .image-preview {
+    height: var(--image-preview-height, 90px);
+  }
+
+  .image-preview img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    border-radius: 6px;
+  }
+
+  .image-fullscreen-btn {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    z-index: 2;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    color: var(--text-secondary);
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(4px);
+    cursor: pointer;
+    pointer-events: auto;
+    transition: background 150ms ease;
+  }
+
+  .image-fullscreen-btn:hover {
+    color: var(--text-primary);
+    background: rgba(0, 0, 0, 0.75);
+  }
+
+  .clip-card .image-placeholder {
+    height: var(--image-preview-height, 82px);
+  }
+
+  .image-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 82px;
+    color: var(--text-faint);
+  }
+
+  .meta-row {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: nowrap;
+    gap: 8px;
+    min-width: 0;
+    margin-top: 5px;
+    overflow: hidden;
+    color: var(--text-muted);
+    font-size: var(--font-size-secondary, 11.5px);
+    white-space: nowrap;
+    pointer-events: none;
+  }
+
+  .meta-row > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .source-mark {
+    display: inline-flex;
+    flex: 0 0 16px;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    overflow: visible;
+    color: var(--warning-color);
+  }
+
+  .source-icon {
+    width: 16px;
+    height: 16px;
+    object-fit: contain;
+    border-radius: 2px;
+  }
+
+  .source-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 3px 6px 3px 6px;
+    background: currentColor;
+    transform: rotate(-12deg);
+  }
+  .source-name {
+    color: var(--text-muted);
+  }
+  .file-count {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .clip-card.actions-hidden :global(.actions) {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  .clip-card:hover :global(.actions),
+  .clip-card.selected :global(.actions),
+  .clip-card:focus-within :global(.actions),
+  .clip-card:hover :global(.shortcut),
+  .clip-card.selected :global(.shortcut),
+  .clip-card:focus-within :global(.shortcut),
+  .clip-card.actions-always :global(.actions),
+  .clip-card.actions-always :global(.shortcut),
+  .clip-card :global(.shortcut.shortcut-resident) {
+    opacity: 1;
+    visibility: visible;
+  }
+
+  .edit-area {
+    position: relative;
+    z-index: 1;
+    padding: 4px;
+  }
+
+  .edit-title-input {
+    width: 100%;
+    padding: 6px 8px;
+    margin-bottom: 6px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-primary);
+    background: var(--input-bg);
+    font: inherit;
+    font-size: 12px;
+    outline: none;
+    box-sizing: border-box;
+  }
+
+  .edit-title-input:focus {
+    border-color: var(--text-faint);
+  }
+
+  .edit-area textarea {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px 12px;
+    border: 1px solid var(--selection-color);
+    border-radius: 7px;
+    color: var(--text-primary);
+    background: var(--input-bg);
+    font:
+      12px/1.55 "Cascadia Code",
+      Consolas,
+      monospace;
+    resize: vertical;
+    outline: none;
+  }
+
+  .edit-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+    justify-content: flex-end;
+  }
+
+  .edit-save,
+  .edit-save-as-new,
+  .edit-cancel {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 5px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    font: inherit;
+    font-size: 11.5px;
+    line-height: 1;
+    cursor: pointer;
+    transition:
+      background 100ms ease,
+      border-color 100ms ease;
+  }
+
+  .edit-save {
+    color: var(--text-primary);
+    background: var(--hover-bg);
+    border-color: var(--text-faint);
+  }
+
+  .edit-save:hover {
+    color: #fff;
+    background: var(--border-color);
+    border-color: var(--text-faint);
+  }
+
+  .edit-save-as-new {
+    color: var(--text-muted);
+    background: var(--card-bg);
+    border-color: var(--border-color);
+  }
+
+  .edit-save-as-new:hover {
+    color: var(--text-secondary);
+    background: var(--hover-bg);
+    border-color: var(--text-faint);
+  }
+
+  .edit-save-as-new:disabled {
+    opacity: 0.35;
+    cursor: default;
+  }
+
+  .edit-cancel {
+    color: var(--text-muted);
+    background: var(--card-bg);
+  }
+
+  .edit-cancel:hover {
+    color: var(--text-secondary);
+    background: var(--hover-bg);
+  }
+
+  @media (max-width: 620px) {
+    .content {
+      padding-right: 40px;
+    }
+    :global(.actions) {
+      display: none;
+    }
+  }
+</style>

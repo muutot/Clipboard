@@ -6,8 +6,8 @@
   import { PhysicalPosition } from "@tauri-apps/api/dpi";
   import { showToast } from "$lib/services/toast";
   import { emitTo, listen } from "@tauri-apps/api/event";
-  import AppIcon from "$lib/components/AppIcon.svelte";
-  import Toast from "$lib/components/Toast.svelte";
+  import AppIcon from "$lib/components/card/AppIcon.svelte";
+  import Toast from "$lib/components/common/Toast.svelte";
   import { messages, resolvePath } from "$lib/i18n";
   import { isTauriRuntime } from "$lib/services/runtime";
   import {

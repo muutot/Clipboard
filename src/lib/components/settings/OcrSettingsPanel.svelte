@@ -1,0 +1,455 @@
+<script lang="ts">
+  import { onDestroy, untrack } from "svelte";
+  import { invoke } from "@tauri-apps/api/core";
+  import { listen } from "@tauri-apps/api/event";
+  import AppIcon from "$lib/components/card/AppIcon.svelte";
+  import CustomSelect from "$lib/components/common/CustomSelect.svelte";
+  import SelectEntry from "$lib/components/settings/settings-entries/SelectEntry.svelte";
+  import SliderEntry from "$lib/components/settings/settings-entries/SliderEntry.svelte";
+  import { messages, resolvePath } from "$lib/i18n";
+
+  const _t = (path: string, params?: Record<string, string | number>) =>
+    resolvePath($messages, path, params);
+
+  interface Props {
+    onfeedback: (message: string, success: boolean) => void;
+  }
+
+  let { onfeedback }: Props = $props();
+
+  let ocrEngine = $state("ppocr");
+  let ocrEngineAvailable = $state(false);
+  let ocrHasEngine = $state(false);
+  let ocrStatusLoading = $state(false);
+  // The engine/model/detection controls must not render the placeholder
+  // defaults and then jump to the stored values once `loadOcrStatus`
+  // resolves; gate them until configuration and engine status load successfully.
+  let ocrReady = $state(false);
+  let ocrLoadFailed = $state(false);
+  let ocrTotal = $state(0);
+  let ocrPending = $state(0);
+  let ocrCompleted = $state(0);
+  let ocrFailed = $state(0);
+  let installedVariants = $state<string[]>([]);
+  let activeVariant = $state<string>("");
+  let ocrInstalling = $state(false);
+  let ocrProgressLabel = $state("");
+  let ocrProgressPct = $state(-1);
+  let ocrProgressCurrent = $state(0);
+  let ocrProgressTotal = $state(0);
+  let modelVariant = $state("small");
+  let modelVariantInitialized = $state(false);
+  let ocrDownloadUnlisten: (() => void) | undefined;
+  let ocrInstallRequestId = 0;
+  let destroyed = false;
+  let detScoreThreshold = $state(0.3);
+  let detBoxThreshold = $state(0.6);
+  let detUnclipRatio = $state(1.5);
+
+  interface OcrStatusResult {
+    totalTasks: number;
+    pendingTasks: number;
+    completedTasks: number;
+    failedTasks: number;
+    engine: string;
+    engineAvailable: boolean;
+    hasEngine: boolean;
+    ppocrModelVariant: string;
+    installedVariants: string[];
+  }
+
+  interface OcrConfigResult {
+    engine: string;
+    ppocrModelVariant: string;
+    detScoreThreshold: number;
+    detBoxThreshold: number;
+    detUnclipRatio: number;
+  }
+
+  function releaseOcrDownloadListener(): void {
+    if (!ocrDownloadUnlisten) return;
+    ocrDownloadUnlisten();
+    ocrDownloadUnlisten = undefined;
+  }
+
+  onDestroy(() => {
+    destroyed = true;
+    ocrInstallRequestId += 1;
+    releaseOcrDownloadListener();
+  });
+
+  $effect(() => {
+    // Load once on mount. The call must be untracked: its synchronous guard
+    // reads/writes `ocrStatusLoading`, which would otherwise register a
+    // self-dependency, re-running this effect after every IPC round-trip and
+    // collapsing the 2 s task poll into an IPC-speed reload loop.
+    untrack(() => void loadOcrStatus());
+    const interval = setInterval(() => void loadOcrTaskStatus(), 2000);
+    return () => clearInterval(interval);
+  });
+
+  function applyOcrTaskStatus(result: OcrStatusResult): void {
+    ocrTotal = result.totalTasks;
+    ocrPending = result.pendingTasks;
+    ocrCompleted = result.completedTasks;
+    ocrFailed = result.failedTasks;
+  }
+
+  async function loadOcrTaskStatus() {
+    if (destroyed || ocrStatusLoading || !ocrReady) return;
+    ocrStatusLoading = true;
+    try {
+      const result = await invoke<OcrStatusResult>("get_ocr_status");
+      if (!destroyed) applyOcrTaskStatus(result);
+    } catch {
+      /* ignore */
+    } finally {
+      ocrStatusLoading = false;
+    }
+  }
+
+  async function loadOcrStatus() {
+    if (destroyed || ocrStatusLoading) return;
+    ocrStatusLoading = true;
+    ocrLoadFailed = false;
+    try {
+      const [statusResult, configResult] = await Promise.allSettled([
+        invoke<OcrStatusResult>("get_ocr_status"),
+        invoke<OcrConfigResult>("get_ocr_config"),
+      ]);
+      if (destroyed) return;
+      if (statusResult.status === "rejected") throw statusResult.reason;
+      if (configResult.status === "rejected") throw configResult.reason;
+      if (!statusResult.value || !configResult.value) throw new Error("Missing OCR configuration");
+      if (statusResult.status === "fulfilled") {
+        const result = statusResult.value;
+        applyOcrTaskStatus(result);
+        ocrEngine = result.engine;
+        ocrEngineAvailable = result.engineAvailable;
+        ocrHasEngine = result.hasEngine;
+        installedVariants = result.installedVariants;
+        activeVariant = result.ppocrModelVariant;
+        // Sync the selector to the configured variant once, before the user
+        // picks one; the previous `if (!modelVariant)` guard never fired
+        // because `modelVariant` defaulted to a truthy "small".
+        if (!modelVariantInitialized && result.ppocrModelVariant) {
+          modelVariant = result.ppocrModelVariant;
+          modelVariantInitialized = true;
+        }
+      } else {
+        installedVariants = [];
+      }
+      if (configResult.status === "fulfilled") {
+        const cfg = configResult.value;
+        ocrEngine = cfg.engine;
+        detScoreThreshold = cfg.detScoreThreshold;
+        detBoxThreshold = cfg.detBoxThreshold;
+        detUnclipRatio = cfg.detUnclipRatio;
+        if (cfg.ppocrModelVariant) {
+          activeVariant = cfg.ppocrModelVariant;
+          if (!modelVariantInitialized) {
+            modelVariant = cfg.ppocrModelVariant;
+            modelVariantInitialized = true;
+          }
+        }
+      }
+      ocrReady = true;
+    } catch (error) {
+      if (destroyed) return;
+      ocrReady = false;
+      ocrLoadFailed = true;
+      onfeedback(error instanceof Error ? error.message : String(error), false);
+    } finally {
+      if (!destroyed) ocrStatusLoading = false;
+    }
+  }
+
+  async function installPpocr() {
+    const requestId = ++ocrInstallRequestId;
+    releaseOcrDownloadListener();
+    ocrInstalling = true;
+    ocrProgressPct = -1;
+    ocrProgressLabel = "";
+    ocrProgressCurrent = 0;
+    ocrProgressTotal = 0;
+    try {
+      const unlisten = await listen<{
+        filename: string;
+        label: string;
+        current: number;
+        total: number;
+        percentage: number;
+      }>("ppocr-download-progress", (event) => {
+        if (destroyed || requestId !== ocrInstallRequestId) return;
+        ocrProgressLabel = event.payload.label;
+        ocrProgressPct = event.payload.percentage;
+        ocrProgressCurrent = event.payload.current;
+        ocrProgressTotal = event.payload.total;
+      });
+      if (destroyed || requestId !== ocrInstallRequestId) {
+        unlisten();
+        return;
+      }
+      ocrDownloadUnlisten = unlisten;
+      await invoke<string>("install_ppocr", { variant: modelVariant });
+      if (destroyed || requestId !== ocrInstallRequestId) return;
+      onfeedback(_t("storage.ocrModelInstalled", { variant: modelVariant }), true);
+      await loadOcrStatus();
+    } catch (e) {
+      if (!destroyed && requestId === ocrInstallRequestId) {
+        onfeedback(_t("storage.ocrModelInstallFailed", { error: String(e) }), false);
+      }
+    } finally {
+      if (requestId === ocrInstallRequestId) {
+        releaseOcrDownloadListener();
+        if (!destroyed) {
+          ocrInstalling = false;
+          ocrProgressPct = -1;
+        }
+      }
+    }
+  }
+
+  async function applyModel() {
+    if (activeVariant === modelVariant) {
+      onfeedback(_t("storage.ocrModelAlreadyApplied"), true);
+      return;
+    }
+    try {
+      await invoke("set_ocr_config", {
+        settings: {
+          engine: "ppocr",
+          ppocrModelVariant: modelVariant,
+        },
+      });
+      await loadOcrStatus();
+      ocrEngine = "ppocr";
+      onfeedback(_t("storage.ocrModelApplied"), true);
+    } catch (e) {
+      await loadOcrStatus();
+      onfeedback(_t("storage.ocrModelApplyFailed", { error: String(e) }), false);
+    }
+  }
+
+  async function saveOcrEngine(engine: string) {
+    try {
+      await invoke("set_ocr_config", {
+        settings: {
+          engine,
+          ...(engine === "ppocr" ? { ppocrModelVariant: modelVariant } : {}),
+        },
+      });
+      ocrEngine = engine;
+      await loadOcrStatus();
+      onfeedback(
+        _t("storage.ocrEngineChanged", {
+          engine: engine === "ppocr" ? "PP-OCRv6" : "Tesseract",
+        }),
+        true,
+      );
+    } catch (error) {
+      console.error("Unable to save OCR config", error);
+      await loadOcrStatus();
+      onfeedback(_t("storage.ocrEngineChangeFailed", { error: String(error) }), false);
+    }
+  }
+
+  async function saveDetConfig() {
+    try {
+      await invoke("set_ocr_config", {
+        settings: {
+          engine: ocrEngine,
+          detScoreThreshold,
+          detBoxThreshold,
+          detUnclipRatio,
+        },
+      });
+      onfeedback(_t("storage.ocrDetectionSaved"), true);
+    } catch (error) {
+      console.error("Unable to save detection config", error);
+      await loadOcrStatus();
+      onfeedback(_t("storage.ocrDetectionSaveFailed", { error: String(error) }), false);
+    }
+  }
+</script>
+
+<div class="settings-scroll">
+  {#if !ocrReady}
+    <div class="settings-state" role="status">
+      {#if ocrLoadFailed}
+        <p>{_t("storage.configLoadFailed")}</p>
+        <button
+          type="button"
+          class="settings-action-btn"
+          disabled={ocrStatusLoading}
+          onclick={loadOcrStatus}>{_t("storage.retryLoad")}</button
+        >
+      {:else}
+        {_t("storage.readingConfig")}
+      {/if}
+    </div>
+  {:else}
+    <SelectEntry
+      searchId="ocr.engine"
+      config={{
+        type: "select",
+        variant: "row",
+        icon: "eye",
+        label: _t("storage.ocrEngineLabel"),
+        options: [
+          { value: "ppocr", label: "PP-OCRv6" },
+          { value: "tesseract", label: "Tesseract" },
+        ],
+        get: () => ocrEngine,
+        set: (v) => saveOcrEngine(v as string),
+      }}
+    />
+
+    <section class="setting-card setting-card-row" data-settings-search-id="ocr.model">
+      <span class="setting-icon"><AppIcon name="download" size={17} /></span>
+      <span class="setting-label">{_t("storage.ocrModelLabel")}</span>
+      <CustomSelect
+        className="ocr-model-select"
+        value={modelVariant}
+        disabled={ocrInstalling}
+        options={[
+          {
+            value: "tiny",
+            label: `tiny (~6MB)${installedVariants.includes("tiny") ? " ?" : ""}`,
+          },
+          {
+            value: "small",
+            label: `small (~30MB)${installedVariants.includes("small") ? " ?" : ""}`,
+          },
+          {
+            value: "medium",
+            label: `medium (~135MB)${installedVariants.includes("medium") ? " ?" : ""}`,
+          },
+        ]}
+        onchange={(v) => (modelVariant = v as string)}
+      />
+      {#if installedVariants.includes(modelVariant)}
+        <button
+          type="button"
+          disabled={ocrInstalling || activeVariant === modelVariant}
+          onclick={applyModel}
+        >
+          {activeVariant === modelVariant
+            ? _t("storage.ocrModelApplied")
+            : _t("storage.ocrModelApply")}
+        </button>
+      {:else}
+        <button type="button" disabled={ocrInstalling} onclick={() => installPpocr()}>
+          {ocrInstalling
+            ? ocrProgressPct >= 0
+              ? `${ocrProgressLabel} ${Math.round(ocrProgressPct)}%`
+              : _t("storage.ocrModelInstalling")
+            : _t("storage.ocrModelDownload")}
+        </button>
+      {/if}
+    </section>
+
+    <section class="setting-card">
+      <div class="setting-heading">
+        <span class="setting-icon"><AppIcon name="search" size={17} /></span>
+        <div>
+          <strong>{_t("storage.ocrDetectionTitle")}</strong>
+          <p>{_t("storage.ocrDetectionDesc")}</p>
+        </div>
+      </div>
+      <div class="parameter-grid">
+        <div class="parameter-item">
+          <SliderEntry
+            config={{
+              type: "slider",
+              label: _t("storage.ocrScoreThreshold"),
+              min: 0.05,
+              max: 0.95,
+              step: 0.05,
+              display: (v) => v.toFixed(2),
+              scale: [_t("storage.ocrLow"), _t("storage.ocrHigh")],
+              get: () => detScoreThreshold,
+              set: (v) => (detScoreThreshold = v),
+              onchange: () => void saveDetConfig(),
+            }}
+          />
+        </div>
+        <div class="parameter-item">
+          <SliderEntry
+            config={{
+              type: "slider",
+              label: _t("storage.ocrBoxThreshold"),
+              min: 0.1,
+              max: 0.95,
+              step: 0.05,
+              display: (v) => v.toFixed(2),
+              scale: [_t("storage.ocrLow"), _t("storage.ocrHigh")],
+              get: () => detBoxThreshold,
+              set: (v) => (detBoxThreshold = v),
+              onchange: () => void saveDetConfig(),
+            }}
+          />
+        </div>
+        <div class="parameter-item">
+          <SliderEntry
+            config={{
+              type: "slider",
+              label: _t("storage.ocrUnclip"),
+              min: 1.0,
+              max: 4.0,
+              step: 0.1,
+              display: (v) => v.toFixed(1),
+              scale: [_t("storage.ocrSmall"), _t("storage.ocrLarge")],
+              get: () => detUnclipRatio,
+              set: (v) => (detUnclipRatio = v),
+              onchange: () => void saveDetConfig(),
+            }}
+          />
+        </div>
+      </div>
+    </section>
+
+    <section class="setting-card">
+      <div class="setting-heading">
+        <span class="setting-icon"><AppIcon name="search" size={17} /></span>
+        <div>
+          <strong>{_t("storage.ocrTaskStatus")}</strong>
+          <p>{_t("storage.ocrTaskStatusDesc")}</p>
+        </div>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <span class="stat-value">{ocrTotal}</span><span class="stat-label"
+            >{_t("statistics.ocrTotal")}</span
+          >
+        </div>
+        <div class="stat-item">
+          <span class="stat-value">{ocrPending}</span><span class="stat-label"
+            >{_t("statistics.ocrPending")}</span
+          >
+        </div>
+        <div class="stat-item">
+          <span class="stat-value">{ocrCompleted}</span><span class="stat-label"
+            >{_t("statistics.ocrCompleted")}</span
+          >
+        </div>
+        <div class="stat-item">
+          <span class="stat-value">{ocrFailed}</span><span class="stat-label"
+            >{_t("statistics.ocrFailed")}</span
+          >
+        </div>
+      </div>
+      <div class:available={ocrEngineAvailable} class="status-pill">
+        <span class="status-pill-label">{_t("statistics.ocrEngine")}</span>
+        <strong>{ocrEngine === "ppocr" ? "PP-OCRv6" : "Tesseract"}</strong>
+        <span class="status-pill-state">
+          {ocrEngineAvailable
+            ? _t("statistics.ocrEngineAvailable")
+            : ocrHasEngine
+              ? _t("statistics.ocrEngineUnavailable")
+              : _t("statistics.ocrNoEngine")}
+        </span>
+      </div>
+    </section>
+  {/if}
+</div>
