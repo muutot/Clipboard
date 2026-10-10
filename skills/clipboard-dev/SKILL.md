@@ -36,6 +36,30 @@ Update the matching reference in the same commit when the change affects any of 
 
 Keep stable workflow and routing rules in `SKILL.md`. Put module-specific facts, signatures, examples, and style details in the relevant reference. Do not edit documentation merely to create churn, but never commit a known-stale skill or reference.
 
+## Pre-commit hooks
+
+The repository ships Git hooks in `.githooks/`, enabled per clone by `npm run hooks:install`
+(`npm install` runs the same installer through `prepare`, and never fails an install). The hooks
+watch the mechanical rules below; they do not replace the judgement ones.
+
+Blocking checks:
+
+- `commit-msg` enforces the gitmoji contract in "Commit message format": one leading emoji, a
+  type from the mapping table, an emoji that maps to that type, a lowercase scope, and
+  English-only text. Generated subjects (`Merge`, `Revert`, `fixup!`, `squash!`, `amend!`) are skipped.
+- `pre-commit` rejects staged whitespace errors and conflict markers, Prettier violations in
+  staged files, `cargo fmt` drift when Rust files are staged, a version bump committed together
+  with anything outside the release artifact list, and a new or removed source module that
+  arrives without any `skills/clipboard-dev/` change.
+
+Advisory output (printed, never blocking): the references that probably need an update for the
+staged source files, and the pre-release gate commands when a version bump is staged. Set
+`CLIPBOARD_DOC_GATE=none` to waive the new-module documentation block for one commit.
+
+`git commit --no-verify` bypasses both hooks and must stay a deliberate exception. TODO
+evidence, one verified unit per commit, the documentation decision itself, and rendered, runtime
+or platform verification remain human work.
+
 ## Reference router
 
 | Task                                                                    | Read before editing                                                                                             |

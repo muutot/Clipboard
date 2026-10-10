@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite dev",
+    "hooks:install": "node scripts/install-git-hooks.mjs",
+    "prepare": "node scripts/install-git-hooks.mjs",
     "build": "vite build",
     "preview": "vite preview",
     "format": "npm run format:prettier && npm run format:rust",

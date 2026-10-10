@@ -1,0 +1,3 @@
+#!/bin/sh
+# Clipboard commit-msg gate. Rules: skills/clipboard-dev/SKILL.md.
+exec node "$(git rev-parse --show-toplevel)/scripts/hooks/commit-msg.mjs" "$1"

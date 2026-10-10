@@ -1,0 +1,3 @@
+#!/bin/sh
+# Clipboard pre-commit gate. Rules: skills/clipboard-dev/SKILL.md.
+exec node "$(git rev-parse --show-toplevel)/scripts/hooks/pre-commit.mjs"

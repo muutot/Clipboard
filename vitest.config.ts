@@ -8,7 +8,7 @@ export default defineConfig({
   resolve: { conditions: ["browser"] },
   test: {
     environment: "jsdom",
-    include: ["src/**/*.test.ts"],
+    include: ["src/**/*.test.ts", "scripts/**/*.test.mjs"],
     // Bound per-file jsdom processes on desktop machines; CLI --maxWorkers can override.
     maxWorkers: 2,
   },
