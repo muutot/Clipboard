@@ -4,7 +4,7 @@ Frontend services are the preferred Tauri boundary. Keep direct `invoke` calls i
 
 ## `settings.ts`
 
-`generalSettings` is a Svelte writable store with `updateSetting`, `merge`, `initialize`, `flush`, and `destroy` helpers. `windowConfig` is a separate module-level writable store (`launchAtStartup`/`closeToTray`/`singleInstance`) with `ensureLoaded` and an optimistic `update` that rolls back on failure. It loads once at import time so the lazy General panel reads the real value on first mount instead of flipping from the default; do not fetch window config per panel.
+`generalSettings` is a Svelte writable store with `updateSetting`, `merge`, `initialize`, `flush`, and `destroy` helpers. Field validation and normalization (`settings/validators.ts`, `settings/normalize.ts`), the localStorage fallback plus legacy migration (`settings/storage.ts`), and window config/position (`settings/window.ts`) live in `services/settings/`; `settings.ts` keeps the store, the general settings IPC calls, and the public re-exports. `windowConfig` is a separate module-level writable store (`launchAtStartup`/`closeToTray`/`singleInstance`) with `ensureLoaded` and an optimistic `update` that rolls back on failure. It loads once at import time so the lazy General panel reads the real value on first mount instead of flipping from the default; do not fetch window config per panel.
 
 Desktop flow:
 

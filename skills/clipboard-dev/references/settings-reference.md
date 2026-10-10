@@ -3,9 +3,9 @@
 Sources of truth:
 
 - Type shape: `src/lib/types/clipboard.ts::GeneralSettings`
-- Frontend defaults and normalization: `src/lib/services/settings.ts`
+- Frontend defaults: `src/lib/services/settings/defaults.ts`; normalization: `src/lib/services/settings/normalize.ts` (both re-exported from `services/settings.ts`)
 - Typed backend fields/defaults: `src-tauri/src/config/types.rs::GeneralConfig`
-- Persistence flow: `services/settings.ts` and Tauri `get_general_settings` / `set_general_settings`
+- Persistence flow: `services/settings.ts` with the localStorage fallback in `services/settings/storage.ts`, plus Tauri `get_general_settings` / `set_general_settings`
 
 Do not update this table from UI labels alone. Verify the type, default, normalizer, Rust config, and actual consumer.
 
