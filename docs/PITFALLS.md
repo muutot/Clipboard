@@ -328,6 +328,8 @@ error[E0658]: use of unstable library feature `int_roundings`
    | offset_units += (nitems as i64).div_ceil(4);
 ```
 
+（该文件现已按职责拆分为 `platform/linux/x11/` 下的多个子模块，`div_ceil` 那段现在位于 `clipboard.rs`；上面的日志按当时原样保留。）
+
 `div_ceil` **只对无符号整数稳定**（1.73），这里先 `as i64` 变成有符号就落到 nightly 特性上。修掉编译错误后，clippy 才刚跑起来，又陆续暴露 3 个同族问题：`private_interfaces` ×2（`pub fn` 返回 `pub(crate)` 类型）、`manual_c_str_literals`、以及我第一版修法自己引入的 `unnecessary_min_or_max`（`nitems` 其实是 `u64`，clamp 是死代码）。
 
 规则：
@@ -336,6 +338,7 @@ error[E0658]: use of unstable library feature `int_roundings`
 - 整数取整优先在**无符号域**做（`(n / d) + (n % d != 0) as u64` 或稳定的 `u64::div_ceil`），最后再 cast；不要为了对齐累加器类型而把无符号量先转成有符号。
 - 用 C 字符串字面量 `c"NAME"` 时注意 `c_char` 在 aarch64 Linux 是无符号的，而手写 FFI 常声明 `*const i8`——保留 `.cast()`，别让"更干净"的写法破坏可移植性。
 - 搬移或重命名这类模块时，全仓搜旧路径：只在 Linux/macOS 编译的调用点对本机不可见。实例：`platform/linux_x11.rs` 收成 `platform/linux/x11/mod.rs` 后，`platform/windows/monitor.rs` 的 `#[cfg(target_os = "linux")]` 事件监视分支仍写 `crate::platform::linux_x11::try_spawn_xfixes_monitor`，Linux 上直接 E0433（Wayland 同处一行之隔），本地三关依旧全绿。
+- 拆分模块时，`pub(crate)` 的项**不能**用 `pub use` 重新导出：只在目标平台编译的那份代码会报 E0364（`is only public within the crate, and cannot be re-exported outside`），本机三关照旧全绿。改成 `pub(crate) use`，或把该项提到 `pub`。
 
 ## Rust 模块结构
 
