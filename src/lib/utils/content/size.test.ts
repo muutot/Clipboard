@@ -1,12 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { BYTE_UNIT_MULTIPLIERS, fromDisplaySize, toDisplaySize } from "./unit-convert";
+import { SIZE_UNIT_MULTIPLIERS, SIZE_UNIT_OPTIONS, fromDisplaySize, toDisplaySize } from "./size";
 
-describe("unit-convert", () => {
+describe("size", () => {
   it("uses binary multipliers", () => {
-    expect(BYTE_UNIT_MULTIPLIERS.byte).toBe(1);
-    expect(BYTE_UNIT_MULTIPLIERS.KB).toBe(1024);
-    expect(BYTE_UNIT_MULTIPLIERS.MB).toBe(1024 ** 2);
-    expect(BYTE_UNIT_MULTIPLIERS.GB).toBe(1024 ** 3);
+    expect(SIZE_UNIT_MULTIPLIERS.byte).toBe(1);
+    expect(SIZE_UNIT_MULTIPLIERS.KB).toBe(1024);
+    expect(SIZE_UNIT_MULTIPLIERS.MB).toBe(1024 ** 2);
+    expect(SIZE_UNIT_MULTIPLIERS.GB).toBe(1024 ** 3);
+  });
+
+  it("exposes the display units used by size settings", () => {
+    expect(SIZE_UNIT_OPTIONS.map((option) => option.value)).toEqual(["byte", "KB", "MB", "GB"]);
   });
 
   it("round-trips bytes through a display unit", () => {

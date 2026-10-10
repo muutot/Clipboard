@@ -8,7 +8,7 @@
   import HeadingEntry from "$lib/components/settings/settings-entries/HeadingEntry.svelte";
   import { messages, resolvePath } from "$lib/i18n";
   import { isTauriRuntime } from "$lib/services/runtime";
-  import { fromDisplaySize, toDisplaySize } from "$lib/utils/content/unit-convert";
+  import { fromDisplaySize, toDisplaySize } from "$lib/utils/content/size";
   import {
     createOperationMonitor,
     isOperationCancelled,

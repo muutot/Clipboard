@@ -14,10 +14,15 @@ export const SIZE_UNIT_OPTIONS: { value: SizeUnit; label: string }[] = [
   { value: "GB", label: "GB" },
 ];
 
-export function toDisplaySize(bytes: number, unit: SizeUnit): number {
-  return Math.round(bytes / SIZE_UNIT_MULTIPLIERS[unit]);
+/** Unknown or empty units fall back to bytes so persisted values never yield NaN. */
+function unitFactor(unit: SizeUnit | string): number {
+  return SIZE_UNIT_MULTIPLIERS[unit as SizeUnit] ?? 1;
 }
 
-export function fromDisplaySize(value: number, unit: SizeUnit): number {
-  return Math.round(value * SIZE_UNIT_MULTIPLIERS[unit]);
+export function toDisplaySize(bytes: number, unit: SizeUnit | string): number {
+  return Math.round(bytes / unitFactor(unit));
+}
+
+export function fromDisplaySize(value: number, unit: SizeUnit | string): number {
+  return Math.round(value * unitFactor(unit));
 }
