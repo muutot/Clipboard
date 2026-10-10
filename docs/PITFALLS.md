@@ -359,6 +359,10 @@ error: could not compile `ort-sys` (lib) due to 1 previous error
 
 而 `cargo fmt` / `cargo clippy`（不链接）与 Windows job（那份构建脚本恰好重跑）依旧全绿，很容易误判成平台专属代码的问题。`ci.yml` 与 `release.yml` 因此在构建前执行 `cargo clean -p ort-sys [--profile …]`，强制构建脚本重跑、重新下载或复用二进制。凡是「构建脚本把 `$HOME` 下的下载目录写进缓存输出」的依赖都适用同一处理。
 
+## CI 作业有时间上限
+
+GitHub 默认每个 job 上限 6 小时。`ci.yml` 的 `frontend` / `rust` 因此显式设了 `timeout-minutes`（20 / 45；历史全绿耗时分别约 1–2 分钟与 4–11 分钟），让卡住的测试尽快变成 job 失败，而不是把 run 长时间留在 `in_progress`。判断是「卡住」还是「排队」看 Test 步骤尾部的 `SLOW [>Ns]` 行就够（见上一节的 `local_wake` 实例）。
+
 ## Rust 模块结构
 
 添加新功能时按模块归属放置：

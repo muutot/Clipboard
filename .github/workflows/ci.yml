@@ -25,6 +25,9 @@ jobs:
   frontend:
     name: Frontend (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    # The suite takes 1-2 min; the cap only exists so a hung test fails the job
+    # instead of holding it for the 6 h default and leaving the run `in_progress`.
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -56,6 +59,9 @@ jobs:
   rust:
     name: Rust (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    # 4-11 min with a warm cache. Same reason as the frontend cap: a test that
+    # parks in `accept()` must fail the job, not stall it for hours.
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
