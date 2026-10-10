@@ -1,6 +1,5 @@
 <script lang="ts">
   import { tick } from "svelte";
-  import type { Component } from "svelte";
   import { generalSettings } from "$lib/services/settings";
   import AppIcon from "$lib/components/card/AppIcon.svelte";
   import SearchField from "$lib/components/common/SearchField.svelte";
@@ -25,6 +24,7 @@
     resolveSettingsSearchItems,
     type SettingsSearchItem,
   } from "$lib/settings-search";
+  import { createLazyPanelRegistry } from "./lazy-panels";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);
@@ -50,242 +50,6 @@
     ariaLabel: string;
     preserveTabOnPrimary: boolean;
     tabs: SettingsNavTarget[];
-  }
-
-  // Lazily loaded panels share one homogenized dispatch: a descriptor maps
-  // section ids onto a cached dynamic import plus a render-time props builder,
-  // and the template awaits through a single generic block.
-  type LazyPanelModule = { default: Component<any> };
-
-  interface LazyPanelDescriptor {
-    sections: readonly string[];
-    load(): Promise<LazyPanelModule>;
-    props(): Record<string, unknown>;
-    /** Shared module-cache key when one panel serves several sections. */
-    cacheKey?: string;
-  }
-
-  const lazyPanelModules = new Map<string, Promise<LazyPanelModule>>();
-
-  const LAZY_PANEL_DESCRIPTORS: LazyPanelDescriptor[] = [
-    {
-      sections: ["general_general"],
-      load: () => import("$lib/components/settings/GeneralGeneralSettingsPanel.svelte"),
-      props: () => ({ onclose, showHeader: false }),
-    },
-    {
-      sections: ["general_window"],
-      load: () => import("$lib/components/settings/GeneralWindowSettingsPanel.svelte"),
-      props: () => ({ onclose, showHeader: false }),
-    },
-    {
-      sections: ["general_search"],
-      load: () => import("$lib/components/settings/GeneralSearchSettingsPanel.svelte"),
-      props: () => ({ onclose, showHeader: false }),
-    },
-    {
-      sections: ["general_items"],
-      load: () => import("$lib/components/settings/GeneralItemsSettingsPanel.svelte"),
-      props: () => ({ onclose, showHeader: false }),
-    },
-    {
-      sections: ["layout"],
-      load: () => import("$lib/components/settings/LayoutSettingsPanel.svelte"),
-      props: () => ({ onclose, showHeader: false }),
-    },
-    {
-      sections: ["font"],
-      load: () => import("$lib/components/settings/FontSizeSettingsPanel.svelte"),
-      props: () => ({
-        onclose,
-        showHeader: false,
-        fontSection: activeFontSection,
-        onselectfontsection: (section: FontSubsection) => (activeFontSection = section),
-      }),
-    },
-    {
-      sections: ["theme"],
-      load: () => import("$lib/components/settings/ThemeSettingsPanel.svelte"),
-      props: () => ({ onclose, showHeader: false }),
-    },
-    {
-      sections: ["custom_css"],
-      load: () => import("$lib/components/settings/CustomCssSettingsPanel.svelte"),
-      props: () => ({ onclose, showHeader: false }),
-    },
-    {
-      sections: ["icons"],
-      load: () => import("$lib/components/settings/IconColorsSettingsPanel.svelte"),
-      props: () => ({ onclose, showHeader: false }),
-    },
-    {
-      sections: ["capture"],
-      load: () => import("$lib/components/settings/IgnoredAppsSettingsPanel.svelte"),
-      props: () => ({ iconsDir: status?.iconsDir, onclose, showHeader: false }),
-    },
-    {
-      sections: ["capture_privacy"],
-      load: () => import("$lib/components/settings/SensitiveContentSettingsPanel.svelte"),
-      props: () => ({ onclose, showHeader: false }),
-    },
-    {
-      sections: ["capture_icons"],
-      load: () => import("$lib/components/settings/IconCacheSettingsPanel.svelte"),
-      props: () => ({
-        iconsDir: status?.iconsDir ?? "",
-        onfeedback: (message: string, success: boolean) => {
-          feedback = message;
-          feedbackSuccess = success;
-        },
-      }),
-    },
-    {
-      sections: ["tags"],
-      load: () => import("$lib/components/settings/TagManagementSettingsPanel.svelte"),
-      props: () => ({
-        onclose,
-        showHeader: false,
-        tagSearch,
-        ontagSearchChange: (value: string) => (tagSearch = value),
-      }),
-    },
-    {
-      sections: ["tags_rules"],
-      load: () => import("$lib/components/settings/TagRulesSettingsPanel.svelte"),
-      props: () => ({
-        onclose,
-        showHeader: false,
-      }),
-    },
-    {
-      sections: ["ocr"],
-      load: () => import("$lib/components/settings/OcrSettingsPanel.svelte"),
-      props: () => ({
-        onfeedback: (message: string, success: boolean) => {
-          feedback = message;
-          feedbackSuccess = success;
-        },
-      }),
-    },
-    {
-      sections: ["storage_paths"],
-      load: () => import("$lib/components/settings/StoragePathsPanel.svelte"),
-      props: () => ({
-        status: status as NonNullable<typeof status>,
-        onfeedback: (message: string, success: boolean) => {
-          feedback = message;
-          feedbackSuccess = success;
-        },
-      }),
-    },
-    {
-      sections: ["storage_limits"],
-      load: () => import("$lib/components/settings/StorageLimitsPanel.svelte"),
-      props: () => ({
-        onfeedback: (message: string, success: boolean) => {
-          feedback = message;
-          feedbackSuccess = success;
-        },
-      }),
-    },
-    {
-      sections: ["storage_tools"],
-      load: () => import("$lib/components/settings/StorageToolsPanel.svelte"),
-      props: () => ({
-        onfeedback: (message: string, success: boolean) => {
-          feedback = message;
-          feedbackSuccess = success;
-        },
-        onadjustlimit: () => (activeSection = "storage_limits"),
-      }),
-    },
-    {
-      sections: ["sync_cloud"],
-      cacheKey: "sync",
-      load: () => import("$lib/components/settings/SyncPanel.svelte"),
-      props: () => ({
-        tab: "cloud" as const,
-        onfeedback: (message: string, success: boolean) => {
-          feedback = message;
-          feedbackSuccess = success;
-        },
-      }),
-    },
-    {
-      sections: ["sync_advanced"],
-      cacheKey: "sync",
-      load: () => import("$lib/components/settings/SyncPanel.svelte"),
-      props: () => ({
-        tab: "advanced" as const,
-        onfeedback: (message: string, success: boolean) => {
-          feedback = message;
-          feedbackSuccess = success;
-        },
-      }),
-    },
-    {
-      sections: ["sync_s3"],
-      cacheKey: "sync",
-      load: () => import("$lib/components/settings/SyncPanel.svelte"),
-      props: () => ({
-        tab: "s3" as const,
-        onfeedback: (message: string, success: boolean) => {
-          feedback = message;
-          feedbackSuccess = success;
-        },
-      }),
-    },
-    {
-      sections: ["keyboard_item", "keyboard_quick", "keyboard_system", "keyboard_switch"],
-      load: () => import("$lib/components/settings/KeyboardSettingsPanel.svelte"),
-      props: () => ({
-        onclose,
-        category: activeSection.startsWith("keyboard_")
-          ? (activeSection.slice("keyboard_".length) as "item" | "quick" | "system" | "switch")
-          : "item",
-        showHeader: false,
-        configPath: status?.keyboardConfigPath ?? null,
-      }),
-    },
-    {
-      sections: ["keyboard_float"],
-      load: () => import("$lib/components/settings/FloatPanelClickSettingsPanel.svelte"),
-      props: () => ({
-        showHeader: false,
-      }),
-    },
-    {
-      sections: ["statistics"],
-      load: () => import("$lib/components/settings/StatisticsSettingsPanel.svelte"),
-      props: () => ({
-        activeTab: activeStatisticsTab,
-        status,
-        loading,
-        onrefreshStatus: refreshStorageStats,
-        onclose,
-      }),
-    },
-    {
-      sections: ["about"],
-      load: () => import("$lib/components/settings/AboutSettingsPanel.svelte"),
-      props: () => ({ appVersion, appExecutablePath, onclose }),
-    },
-  ];
-
-  function loadLazyPanelModule(section: string): Promise<LazyPanelModule> {
-    const descriptor = LAZY_PANEL_DESCRIPTORS.find((entry) => entry.sections.includes(section));
-    if (!descriptor) return Promise.reject(new Error(`no panel for ${section}`));
-    const cacheKey = descriptor.cacheKey ?? section;
-    let promise = lazyPanelModules.get(cacheKey);
-    if (!promise) {
-      promise = descriptor.load();
-      // Evict on rejection: a cached rejected promise would make every later
-      // navigation re-await the same failure, permanently breaking the panel
-      // after one transient chunk-load error until the window restarts.
-      promise.catch(() => lazyPanelModules.delete(cacheKey));
-      lazyPanelModules.set(cacheKey, promise);
-    }
-    return promise;
   }
 
   let { open, onclose, standalone = false }: Props = $props();
@@ -320,19 +84,60 @@
     if (!standalone) trapTabFocus(dialogEl, event);
   }
   let activeSection = $state<SettingsSection>("general_general");
-  /** Descriptor for the current section when it is a lazily imported panel.
-   *  Sections that additionally require loaded data fall back to the shell
-   *  until that data exists (e.g. storage_paths needs `status`). */
-  const lazyPanel = $derived(
-    LAZY_PANEL_DESCRIPTORS.find(
-      (entry) =>
-        entry.sections.includes(activeSection) && (activeSection !== "storage_paths" || status),
-    ),
-  );
   let activeStatisticsTab = $state<StatisticsTab>("storage");
   // The font panel splits interface vs. card sliders. The dialog owns the
   // selected sub-tab so a settings-search jump can land on the right one.
   let activeFontSection = $state<FontSubsection>("interface");
+
+  // Panel routing is a registry in `lazy-panels.ts`; hand it the live state the
+  // descriptors' render-time props builders read and write.
+  const lazyPanels = createLazyPanelRegistry({
+    get onclose() {
+      return onclose;
+    },
+    get status() {
+      return status;
+    },
+    get activeSection() {
+      return activeSection;
+    },
+    get activeStatisticsTab() {
+      return activeStatisticsTab;
+    },
+    get activeFontSection() {
+      return activeFontSection;
+    },
+    get tagSearch() {
+      return tagSearch;
+    },
+    get loading() {
+      return loading;
+    },
+    get appVersion() {
+      return appVersion;
+    },
+    get appExecutablePath() {
+      return appExecutablePath;
+    },
+    setActiveSection: (section) => (activeSection = section),
+    setFontSection: (section) => (activeFontSection = section),
+    setTagSearch: (value) => (tagSearch = value),
+    showFeedback: (message, success) => {
+      feedback = message;
+      feedbackSuccess = success;
+    },
+    refreshStorageStats,
+  });
+
+  /** Descriptor for the current section when it is a lazily imported panel.
+   *  Sections that additionally require loaded data fall back to the shell
+   *  until that data exists (e.g. storage_paths needs `status`). */
+  const lazyPanel = $derived(
+    lazyPanels.descriptors.find(
+      (entry) =>
+        entry.sections.includes(activeSection) && (activeSection !== "storage_paths" || status),
+    ),
+  );
 
   const settingsNavGroups = $derived.by((): SettingsNavGroup[] =>
     SETTINGS_NAV_GROUP_DEFINITIONS.map((group) => ({
@@ -810,7 +615,7 @@
         {/if}
       </div>
     {:else if lazyPanel}
-      {#await loadLazyPanelModule(activeSection)}
+      {#await lazyPanels.load(activeSection)}
         {@render loadingSettingsPanel()}
       {:then module}
         {#if lazyPanel}
