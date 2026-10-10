@@ -179,7 +179,7 @@ These preview surfaces have niche palettes recorded in `niche_ui_style.md`; do n
 This is the settings shell and an integration hotspot. It owns:
 
 - modal versus standalone sizing;
-- primary navigation, global settings search, result targeting, breadcrumb, secondary row, description, count, and optional close button;
+- primary navigation, global settings search, result targeting, breadcrumb, secondary row, description, count, and optional close button; the search mechanics it wires in (query state, filtered results, card lookup, highlight jump) live in `src/lib/components/settings/settings-search-controller.svelte.ts`;
 - the typed `settings-navigation.ts::SETTINGS_NAV_GROUP_DEFINITIONS` descriptor that drives primary buttons, secondary tabs, active-group matching, section title/description metadata, and breadcrumb resolution; section state reuses its `SettingsSection`/`StatisticsTab` types rather than declaring a parallel union;
 - composition of child settings panels with `showHeader={false}`;
 - every child panel — including the four General section panels — dynamically imported on first visit with cached module promises and shared loading/error states, so their JavaScript and scoped CSS stay out of the initial settings chunk; the section→panel descriptor table itself lives in `src/lib/components/settings/lazy-panels.ts`;

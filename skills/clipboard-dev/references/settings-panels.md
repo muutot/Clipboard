@@ -188,16 +188,16 @@ backend until completion or explicit cancellation.
 
 ## Settings search
 
-`src/lib/settings-search.ts` owns searchable setting-card metadata and targets; `src/lib/settings-navigation.ts` owns the target types and navigation paths. When adding, renaming, or moving a setting card:
+`src/lib/settings-search.ts` owns searchable setting-card metadata and targets; `src/lib/settings-navigation.ts` owns the target types and navigation paths; `src/lib/components/settings/settings-search-controller.svelte.ts` owns the dialog's query state, filtered result list, card lookup, and highlight jump. When adding, renaming, or moving a setting card:
 
 1. update the panel and translations;
 2. update settings-search metadata/section routing;
 3. ensure the target card exposes searchable text through its heading/description/label;
-4. for cards whose heading text cannot reliably match the search title (generic/renamed labels, cards outside `.settings-scroll`, or panel-level targets), set `data-settings-search-id` on the card to the search item id — `findSettingsElement` in `StorageSettingsDialog.svelte` prefers this id lookup, then falls back to heading/text matching, then to the section header;
+4. for cards whose heading text cannot reliably match the search title (generic/renamed labels, cards outside `.settings-scroll`, or panel-level targets), set `data-settings-search-id` on the card to the search item id — `findElement` in `src/lib/components/settings/settings-search-controller.svelte.ts` prefers this id lookup, then falls back to heading/text matching, then to the section header;
 5. verify result navigation selects the correct section and highlights the intended element;
 6. update item count/search result behavior if the card uses a nonstandard container.
 
-Panels that render cards only after async/conditional data (e.g. keyboard config, statistics metrics, tags) are handled by a retry poll in `openSettingsSearchResult`; keep the target card mounted while loading so it is locatable.
+Panels that render cards only after async/conditional data (e.g. keyboard config, statistics metrics, tags) are handled by a retry poll in `openResult`; keep the target card mounted while loading so it is locatable.
 
 Panels with internal sub-tabs drive the visible sub-tab from dialog-owned state so a search jump lands on the right one:
 `StatisticsSettingsPanel` receives `activeTab`, and `FontSizeSettingsPanel` receives `fontSection` plus

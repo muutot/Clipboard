@@ -9,7 +9,6 @@
   import { messages, resolvePath } from "$lib/i18n";
   import {
     SETTINGS_NAV_GROUP_DEFINITIONS,
-    resolveSettingsNavPath,
     type FontSubsection,
     type SettingsNavGroupId,
     type SettingsSection,
@@ -18,13 +17,8 @@
   import type { IconName } from "$lib/types/clipboard";
   import { formatBytes } from "$lib/utils/content/format";
   import { captureFocusRestore, trapTabFocus } from "$lib/utils/keyboard/focus";
-  import {
-    filterSettingsSearchItems,
-    normalizeSettingsSearch,
-    resolveSettingsSearchItems,
-    type SettingsSearchItem,
-  } from "$lib/settings-search";
   import { createLazyPanelRegistry } from "./lazy-panels";
+  import { createSettingsSearchController } from "./settings-search-controller.svelte";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);
@@ -206,135 +200,25 @@
   const settingsSectionDescription = $derived(settingsSectionMeta?.desc);
 
   let tagSearch = $state("");
-  let settingsSearch = $state("");
+  // The dialog binds this scroll container; the search controller reads it.
   let settingsContent = $state<HTMLElement | null>(null);
-  let settingsItemCount = $state(0);
-  let highlightedSettingsItem: HTMLElement | null = null;
-  let settingsHighlightTimer: ReturnType<typeof setTimeout> | undefined;
 
-  const resolvedSettingsSearchItems = $derived.by(() =>
-    resolveSettingsSearchItems((key) => _t(key)),
-  );
-  const normalizedSettingsQuery = $derived(normalizeSettingsSearch(settingsSearch));
-  const settingsSearchActive = $derived(Boolean(normalizedSettingsQuery));
-  const settingsSearchResults = $derived.by(() =>
-    normalizedSettingsQuery
-      ? filterSettingsSearchItems(resolvedSettingsSearchItems, normalizedSettingsQuery)
-      : [],
-  );
-
-  function settingsElementText(item: HTMLElement): string {
-    const labels = item.querySelectorAll<HTMLElement>(
-      "strong, p, label, .setting-label, .config-path, .column-heading, code",
-    );
-    const text = Array.from(labels)
-      .map((element) => element.textContent ?? "")
-      .join(" ");
-    return normalizeSettingsSearch(text || item.textContent || "");
-  }
-
-  function currentSettingsElements(): HTMLElement[] {
-    if (!settingsContent) return [];
-    return Array.from(
-      settingsContent.querySelectorAll<HTMLElement>(
-        ".settings-scroll .setting-card, .settings-scroll .filter-board",
-      ),
-    );
-  }
-
-  function updateSettingsItemCount(): void {
-    settingsItemCount = currentSettingsElements().length;
-  }
-
-  function clearSettingsSearch(): void {
-    settingsSearch = "";
-  }
-
-  function settingsSearchResultPath(item: SettingsSearchItem): string {
-    return resolveSettingsNavPath(_t, item.section, item.statisticsTab).join(" / ");
-  }
-
-  function findSettingsElement(item: SettingsSearchItem): HTMLElement | null {
-    if (settingsContent) {
-      const byId = settingsContent.querySelector<HTMLElement>(
-        `[data-settings-search-id="${item.id}"]`,
-      );
-      if (byId) return byId;
-    }
-    const title = normalizeSettingsSearch(item.title);
-    const elements = currentSettingsElements();
-    const match =
-      elements.find((element) => {
-        const heading = element.querySelector<HTMLElement>(
-          "strong, .setting-label, .column-heading",
-        );
-        return normalizeSettingsSearch(heading?.textContent ?? "") === title;
-      }) ??
-      elements.find((element) => settingsElementText(element).includes(title)) ??
-      null;
-    if (match) return match;
-    const header = settingsContent?.querySelector<HTMLElement>(".settings-section-header");
-    if (header && normalizeSettingsSearch(header.textContent ?? "").includes(title)) return header;
-    return null;
-  }
-
-  function highlightSettingsElement(element: HTMLElement): void {
-    if (settingsHighlightTimer !== undefined) clearTimeout(settingsHighlightTimer);
-    highlightedSettingsItem?.classList.remove("settings-search-target-highlight");
-    highlightedSettingsItem = element;
-    element.classList.add("settings-search-target-highlight");
-    element.scrollIntoView({ behavior: "smooth", block: "center" });
-    settingsHighlightTimer = setTimeout(() => {
-      element.classList.remove("settings-search-target-highlight");
-      if (highlightedSettingsItem === element) highlightedSettingsItem = null;
-      settingsHighlightTimer = undefined;
-    }, 1800);
-  }
-
-  function waitForSettingsElement(
-    item: SettingsSearchItem,
-    timeout = 2000,
-  ): Promise<HTMLElement | null> {
-    const deadline = Date.now() + timeout;
-    return new Promise((resolve) => {
-      const poll = () => {
-        const element = findSettingsElement(item);
-        if (element || Date.now() >= deadline) {
-          resolve(element);
-          return;
-        }
-        setTimeout(poll, 60);
-      };
-      poll();
-    });
-  }
-
-  async function openSettingsSearchResult(item: SettingsSearchItem): Promise<void> {
-    activeSection = item.section;
-    if (item.statisticsTab) activeStatisticsTab = item.statisticsTab;
-    if (item.fontSection) activeFontSection = item.fontSection;
-    settingsSearch = "";
-    await tick();
-    await tick();
-    updateSettingsItemCount();
-    const element = await waitForSettingsElement(item);
-    if (element) highlightSettingsElement(element);
-  }
-
-  $effect(() => {
-    const root = settingsContent;
-    if (!root || typeof MutationObserver === "undefined") return;
-
-    updateSettingsItemCount();
-    const observer = new MutationObserver(() => updateSettingsItemCount());
-    observer.observe(root, { childList: true, subtree: true });
-    return () => observer.disconnect();
-  });
-
-  $effect(() => {
-    activeSection;
-    activeStatisticsTab;
-    void tick().then(() => updateSettingsItemCount());
+  const settingsSearch = createSettingsSearchController({
+    get contentEl() {
+      return settingsContent;
+    },
+    get activeSection() {
+      return activeSection;
+    },
+    get activeStatisticsTab() {
+      return activeStatisticsTab;
+    },
+    translate: _t,
+    selectSection: (section, statisticsTab) => {
+      activeSection = section;
+      if (statisticsTab !== undefined) activeStatisticsTab = statisticsTab;
+    },
+    selectFontSection: (section) => (activeFontSection = section),
   });
 
   let appVersion = $state("");
@@ -455,14 +339,14 @@
       aria-label={_t("storage.settingsSearchLabel")}
     >
       <SearchField
-        value={settingsSearch}
-        oninput={(v) => (settingsSearch = v)}
+        value={settingsSearch.query}
+        oninput={(v) => (settingsSearch.query = v)}
         placeholder={_t("storage.settingsSearchPlaceholder")}
         ariaLabel={_t("storage.settingsSearchLabel")}
         id="settings-search-input"
         labelFor="settings-search-input"
         clearLabel={_t("storage.clearSettingsSearch")}
-        onclear={clearSettingsSearch}
+        onclear={settingsSearch.clear}
         autocomplete="off"
         spellcheck={false}
         fill
@@ -531,13 +415,13 @@
         <div id="settings-title" class="settings-breadcrumb">{settingsBreadcrumb}</div>
         <div class="settings-section-actions">
           <span class="settings-count" aria-live="polite">
-            {#if settingsSearchActive}
+            {#if settingsSearch.active}
               {_t("storage.settingsFilteredCount", {
-                matched: settingsSearchResults.length,
-                total: resolvedSettingsSearchItems.length,
+                matched: settingsSearch.results.length,
+                total: settingsSearch.totalItems,
               })}
             {:else}
-              {_t("storage.settingsCount", { count: settingsItemCount })}
+              {_t("storage.settingsCount", { count: settingsSearch.itemCount })}
             {/if}
           </span>
           {#if $generalSettings.showSettingsCloseButton}
@@ -591,17 +475,17 @@
       {/if}
     </section>
 
-    {#if settingsSearchActive}
+    {#if settingsSearch.active}
       <div class="settings-scroll settings-search-results" aria-live="polite">
-        {#if settingsSearchResults.length > 0}
-          {#each settingsSearchResults as result (result.id)}
+        {#if settingsSearch.results.length > 0}
+          {#each settingsSearch.results as result (result.id)}
             <button
               type="button"
               class="settings-search-result"
               data-settings-search-id={result.id}
-              onclick={() => void openSettingsSearchResult(result)}
+              onclick={() => void settingsSearch.openResult(result)}
             >
-              <span class="settings-search-result-path">{settingsSearchResultPath(result)}</span>
+              <span class="settings-search-result-path">{settingsSearch.resultPath(result)}</span>
               <strong>{result.title}</strong>
               {#if result.description}
                 <p>{result.description}</p>
@@ -610,7 +494,7 @@
           {/each}
         {:else}
           <div class="settings-search-empty" role="status">
-            {_t("storage.settingsSearchNoResults", { query: settingsSearch.trim() })}
+            {_t("storage.settingsSearchNoResults", { query: settingsSearch.query.trim() })}
           </div>
         {/if}
       </div>
