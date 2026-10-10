@@ -39,9 +39,9 @@ Read `components.md` and `services.md` for ownership and change gates inside tho
 | Path                     | Ownership                                                                                                                                                                  |
 | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `src-tauri/src/lib.rs`   | Runtime composition and Tauri boundary; keep business logic in focused modules when practical                                                                              |
-| `config.rs`              | `conf/conf.json` schema, defaults, validation, and atomic persistence                                                                                                      |
+| `config/`                | `conf/conf.json` schema, defaults, validation, and atomic persistence                                                                                                      |
 | `domain/`                | Shared Rust clipboard and OCR domain types                                                                                                                                 |
-| `storage/`               | SQLite connection/repositories, schema + forward migrations, storage paths, recovery/backups, integrity repair helpers                                                     |
+| `storage/`               | SQLite connection/repositories, schema + forward migrations, storage paths, sync replication state, recovery/backups, integrity repair helpers                             |
 | `search/`                | Tantivy schema/query/index, manifest, outbox synchronization                                                                                                               |
 | `ocr/`                   | Engine trait, PP-OCR/Tesseract/no-op engines, models, restartable worker manager                                                                                           |
 | `content/`               | Detection/actions, hashing/self-trigger rules, file storage, metadata, thumbnails, text transforms                                                                         |
@@ -105,7 +105,7 @@ Treat these as integration points and avoid concurrent edits:
 - `src/lib/services/settings.ts`
 - locale files plus `src/lib/i18n/types.ts`
 - `src-tauri/src/lib.rs`
-- `src-tauri/src/config.rs`
+- `src-tauri/src/config/store.rs` and `src-tauri/src/config/types.rs`
 - `src-tauri/src/storage/schema.rs`
 - `TODO.md`
 - `SKILL.md` and shared references
