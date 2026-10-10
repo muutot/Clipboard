@@ -3,9 +3,9 @@
   import AppIcon from "$lib/components/card/AppIcon.svelte";
   import type { ClipboardItem } from "$lib/types/clipboard";
   import { messages, resolvePath } from "$lib/i18n";
-  import { formatBytes, assetUrl } from "$lib/utils/format";
+  import { formatBytes, assetUrl } from "$lib/utils/content/format";
   import { isTauriRuntime } from "$lib/services/runtime";
-  import { FILE_PREVIEW_LIMIT, loadFilePreview } from "$lib/utils/file-preview";
+  import { FILE_PREVIEW_LIMIT, loadFilePreview } from "$lib/utils/content/file-preview";
 
   interface Props {
     item: ClipboardItem;

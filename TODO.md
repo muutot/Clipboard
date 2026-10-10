@@ -25,7 +25,7 @@
 - [x] PERF-01 Windows 内存探针复用 WinAPI — `performance/mod.rs:290-297`
 - [x] PERF-02 单遍 raw+normalized hash — `commands/capture.rs:451-468`
 - [x] PERF-03 PPaste 单事务导入 — `export/ppaste.rs:225-230`
-- [x] PERF-04 canvas 测量 memo + 字体失效 — `src/lib/utils/virtual-scroll.ts:105-128`
+- [x] PERF-04 canvas 测量 memo + 字体失效 — `src/lib/utils/layout/virtual-scroll.ts:105-128`
 - [x] TEST-01 Vitest 基建 + utils 覆盖；TEST-02 命令层补测（capture/operations/files/sync/export/update 均有 `#[test]`）
 - [x] TEST-03 CI 不再忽略依赖清单 — `ci.yml` paths-ignore 仅 CHANGELOG/RELEASE
 - [x] A11Y-01~05 可激活目标排除、toolbar 可达、焦点陷阱、隐藏按钮出 Tab 序、子菜单键盘 — `+page.svelte:2478-2496` 及 `focus.ts` 单测
@@ -60,7 +60,7 @@
 - [x] 热键纯逻辑去重：已由并行工作完成（`platform/hotkey_common.rs`，比提案更通用：多动作注册表 + `Forward` 转发），本分支跳过。
 - [x] 服务调用收敛：`invokeTauri`/`invokeTauriRequired`（`services/runtime.ts`），63 处守卫→单行，对象字面量/void/throw 全形态覆盖。
 - [x] 命令锁样板收敛：`commands/lock.rs::lock_state`（Deref 泛型，State/Arc 通吃），69 处→单行，消息逐字保留；`MaterializationStore` 自定义 `lock()` 保持原样。
-- [x] 面板 feedback 收敛：`utils/feedback.svelte.ts` 工厂（Keyboard/Sensitive/General；TagManagement 的 `{message,kind}|null` 形态不同，明确除外）。
+- [x] 面板 feedback 收敛：`utils/settings/feedback.svelte.ts` 工厂（Keyboard/Sensitive/General；TagManagement 的 `{message,kind}|null` 形态不同，明确除外）。
 - [x] 部分不做（已决议）：config store 宏化（伤显式错误类型）、`_t` 收敛（丢语言切换响应式）。`sync_state.rs` 拆分已于 v1.8.0 完成：按域拆为 `storage/sync_state/{device,outbox,resources,remote,checkpoints,apply}` + `tests.rs`（纯移动，无签名/行为变更）。
 
 ## 1.6 — 结构还债 + 平台渐进 + 用户功能
@@ -68,10 +68,10 @@
 > 1.6 功能阈值：除还债外，新增**托盘速粘**、**自动标签规则**与**悬浮剪贴板**（置顶窄窗 + 默认位置五档 + 悬浮显隐 + 标题栏拖拽）三个用户可见功能（标签页新增用户可配规则区，非系统内置）。
 
 - [x] MAINT-01 拆分巨型文件：`+page.svelte` ~3854 行、`DetailPanel.svelte` 2121 行、`ClipboardCard.svelte` 1555 行。先补 Vitest 基线再按视图区块拆（列表/筛选/批量/键盘导航），状态经 props/回调下发（与 BulkBar/StatusBar 既有约定一致）。已闭环：主路由拆出 Toolbar/StatusBar/BulkBar/HistoryList/SearchHeader 并下沉 paste/edit/历史合并/过滤等纯逻辑（3854→2535）；DetailPanel 拆出 EditActions/OcrTab/FilePreview/DetailsTab/ImagePreview（2121→755）；ClipboardCard 拆出 CardActions/CardDateDialog 并下沉 quickActionKind（1555→1236）。验收：`npm run verify` 全过、Vitest 189 passed；键盘导航由单测覆盖，真机手工回归未在本环境执行。
-- [x] MAINT-02 单一 source of truth：`Map<id, item>` + 派生 id 视图替代四副本手工同步。`src/lib/utils/item-store.ts` 以 `byId: ReadonlyMap<id, ClipboardItem>` 持有唯一记录，四视图（`historyIds`/`indexedIds`/`cacheIds`/`detailId`）只存 id；`item-store-view.svelte.ts` 用 `$state.raw` + `$derived`（getter 转发）持有唯一响应式声明并投影四视图，深代理不参与。验收：并集不变量（`byId` == 四视图并集、视图内无重复、视图不持有 map 已丢失的 id）在每个操作后断言，含 400 步确定性混合走查；rune 契约由 `item-store-view.test.ts` 经 `mount()` 挂载 `item-store-view.probe.svelte` 验证（投影随 store 替换重算、记录保持普通对象、就地写字段不触发更新），深代理/unowned derived/getter 快照三项取舍记录在 `docs/PITFALLS.md`「Svelte 5」。原 `item-sync.ts`/`search-cache.ts` 及其测试并入 `item-store.ts`（`trimLoadedItems`→`trimLoadedHistory`），`setDeletedFlags` 随四副本写入一并删除。
+- [x] MAINT-02 单一 source of truth：`Map<id, item>` + 派生 id 视图替代四副本手工同步。`src/lib/utils/store/item-store.ts` 以 `byId: ReadonlyMap<id, ClipboardItem>` 持有唯一记录，四视图（`historyIds`/`indexedIds`/`cacheIds`/`detailId`）只存 id；`item-store-view.svelte.ts` 用 `$state.raw` + `$derived`（getter 转发）持有唯一响应式声明并投影四视图，深代理不参与。验收：并集不变量（`byId` == 四视图并集、视图内无重复、视图不持有 map 已丢失的 id）在每个操作后断言，含 400 步确定性混合走查；rune 契约由 `item-store-view.test.ts` 经 `mount()` 挂载 `item-store-view.probe.svelte` 验证（投影随 store 替换重算、记录保持普通对象、就地写字段不触发更新），深代理/unowned derived/getter 快照三项取舍记录在 `docs/PITFALLS.md`「Svelte 5」。原 `item-sync.ts`/`search-cache.ts` 及其测试并入 `item-store.ts`（`trimLoadedItems`→`trimLoadedHistory`），`setDeletedFlags` 随四副本写入一并删除。
 - [x] 复制源文件 + 复制路径按钮：图片/文件主复制改写 CF_HDROP（Windows，DROPFILES 头 + UTF-16LE 双 NUL 路径表，另写 CF_UNICODETEXT + 自触发标记），资源管理器粘贴即复制源文件；卡片/右键菜单/详情面板新增"复制路径"（图片→存储路径，文件→逐项 originalPath 兜底 storagePath）；新增 `copy_clipboard_item_files(id)` 命令（仅传 id，路径由记录解析 + `is_file` 存在性校验，未重开 `copy_file_to` 任意复制原语）。同一内容改名后再次复制时，旧记录 originalPath 失效回退哈希名副本，现按 storagePath 继承最新一条 file 记录的 originalPath（`latest_file_record_referencing_storage` 由 `copy_clipboard_item_files` 写入时刷新），重复复制同路径亦经 upsert 自动刷新名称。验收：624 主线 + 8 集成 + 44 同步 Rust 单测、199+ Vitest、`svelte-check`/`clippy -D warnings`/`prettier` 全绿。真机 Explorer 粘贴回归待手工。
 - [x] MAINT-03 公共 API 注释：已闭环（`b1d7a56`），逐函数复核 `capture.rs`/`search/index.rs` 全部 `pub fn` 均有 `///`，无遗漏。
-- [x] 跨窗口条目状态收敛：悬浮窗原先自持一份 `items` 数组自行乐观更新，而 `set_clipboard_item_favorite`/`soft_delete_clipboard_item` 等命令签名里没有 `AppHandle`（物理上无法 emit），主页因此永远看不到悬浮窗的改动，只有切筛选/重载 webview 才全量刷新。现新增 `clipboard-items-changed` 事件（内容变更回读记录随事件下发；软删/恢复/永久删因 `deleted` 非记录列而单独传 id），11 个条目级命令带 `AppHandle` 广播；两个窗口统一经 `utils/item-changes.ts` 折叠，悬浮窗也改用 `item-store`（不再有独立写入路径）。验收：`item-changes.test.ts` 8 例（多视图同更、忽略未加载 id、软删标记不清除、恢复清标记、永久删出所有视图含缓存、关闭详情面板、删除优先于同事件内容更新、缺字段容错）、Rust 762 通过、clippy/fmt/prettier/svelte-check 全绿。**真机双窗口联动待手工验证**（本机无 GUI）。
+- [x] 跨窗口条目状态收敛：悬浮窗原先自持一份 `items` 数组自行乐观更新，而 `set_clipboard_item_favorite`/`soft_delete_clipboard_item` 等命令签名里没有 `AppHandle`（物理上无法 emit），主页因此永远看不到悬浮窗的改动，只有切筛选/重载 webview 才全量刷新。现新增 `clipboard-items-changed` 事件（内容变更回读记录随事件下发；软删/恢复/永久删因 `deleted` 非记录列而单独传 id），11 个条目级命令带 `AppHandle` 广播；两个窗口统一经 `utils/store/item-changes.ts` 折叠，悬浮窗也改用 `item-store`（不再有独立写入路径）。验收：`item-changes.test.ts` 8 例（多视图同更、忽略未加载 id、软删标记不清除、恢复清标记、永久删出所有视图含缓存、关闭详情面板、删除优先于同事件内容更新、缺字段容错）、Rust 762 通过、clippy/fmt/prettier/svelte-check 全绿。**真机双窗口联动待手工验证**（本机无 GUI）。
 - [x] macOS 文件路径捕获：`NSPasteboard NSFilenamesPboardType` 原生读取已实现（`platform/macos.rs`，缺席回退空列表=旧行为；所用 FFI 形状复用既有模块）+ mac-only 防崩溃冒烟测试。**待 mac CI 变绿后**再把 README 平台矩阵该格从 `❌` 翻为 `✅`（本地无 mac，不可提前宣称）。
 - [x] Linux 图标提取：freedesktop `.desktop` + 图标主题查找已实现并接线 X11/Wayland（`platform/linux_icons.rs`，fixture 单测全平台可跑）。
 - [x] Wayland 写入自触发标记缺失 + 非 Windows 500ms 轮询回环风险：README 平台矩阵与注释已覆盖现状；应用内在采集暂停开关下为非 Windows 桌面显示轮询说明（`GeneralSettingsPanel` + `capture.pollingNote` 中英双语，`getRuntimeInfo().operatingSystem` 判定）。

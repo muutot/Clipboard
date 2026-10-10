@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { defaultShortcutsFor } from "../keyboard-defaults";
+import { defaultShortcutsFor } from "../../keyboard-defaults";
 import {
   resolveActionBindings,
   resolveAllBindings,

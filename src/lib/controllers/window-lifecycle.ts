@@ -3,7 +3,7 @@ import { get } from "svelte/store";
 import { generalSettings, restoreWindowPosition, saveWindowPosition } from "$lib/services/settings";
 import { isTauriRuntime } from "$lib/services/runtime";
 import { applyGeneralSettingsToDocument } from "$lib/services/settings-bootstrap";
-import { createWindowBoundsController } from "$lib/utils/window-bounds";
+import { createWindowBoundsController } from "$lib/utils/layout/window-bounds";
 
 /** Handles both already-registered listeners and registrations that resolve after disposal. */
 export function createListenerScope() {

@@ -14,7 +14,7 @@ Search currently has three distinct pieces of state. Do not collapse them concep
 
 ## Frontend item store
 
-`src/lib/utils/item-store.ts` is the single source of truth for every loaded
+`src/lib/utils/store/item-store.ts` is the single source of truth for every loaded
 record. `ItemStore` holds `byId: ReadonlyMap<string, ClipboardItem>` plus four
 id-only views — `historyIds`, `indexedIds` (`null` = no search displayed),
 `cacheIds`, and the single `detailId` — so two views cannot disagree about a
@@ -46,7 +46,7 @@ Each WebviewWindow holds its own item store; the float panel cannot share the
 main route's instance (separate JS realms). Two mechanisms keep them in step:
 
 - `clipboard-items-changed` (see `data-contracts.md`) carries what a mutator
-  changed. Both routes fold it through `utils/item-changes.ts`, so a favorite
+  changed. Both routes fold it through `utils/store/item-changes.ts`, so a favorite
   toggled in the panel lands in the main window and vice versa.
 - The float panel derives visible rows from deletion/favorite state and reloads
   on focus, `clipboard-item-added`, membership/content changes in
@@ -125,7 +125,7 @@ When changing query, filter, sort, or mutation behavior, audit both first-page a
 
 ## Frontend spare-result cache
 
-The pure maintenance logic lives in `src/lib/utils/item-store.ts` (`mergeSearchCachePage`, `promoteFromCache`, `trimLoadedHistory`) with Vitest coverage in `item-store.test.ts`; the route's `updateSearchCache(results)` stores first and subsequent-page search results whose ids the loaded active-history view does not already hold.
+The pure maintenance logic lives in `src/lib/utils/store/item-store.ts` (`mergeSearchCachePage`, `promoteFromCache`, `trimLoadedHistory`) with Vitest coverage in `item-store.test.ts`; the route's `updateSearchCache(results)` stores first and subsequent-page search results whose ids the loaded active-history view does not already hold.
 
 - Capacity is `searchCacheSize` (normalized 200–2000; default 500). Reducing it trims immediately, including without another search page, while preserving records referenced by other views.
 - `cacheIds` records insertion order — the access order lives in the store now, so there is no second id list to keep in step.

@@ -10,7 +10,7 @@
   import { getMemoryDiagnostics } from "$lib/services/memory";
   import type { MemoryDiagnostics } from "$lib/types/memory";
   import type { StatisticsTab } from "$lib/settings-navigation";
-  import { formatBytes } from "$lib/utils/format";
+  import { formatBytes } from "$lib/utils/content/format";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);

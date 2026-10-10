@@ -11,7 +11,7 @@
     type IconCacheEntry,
   } from "$lib/services/storage";
   import { isTauriRuntime } from "$lib/services/runtime";
-  import { formatBytes } from "$lib/utils/format";
+  import { formatBytes } from "$lib/utils/content/format";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);

@@ -4,7 +4,7 @@
   import "$lib/styles/settings-shared.css";
   import { generalSettings } from "$lib/services/settings";
   import { applyGeneralSettingsToDocument } from "$lib/services/settings-bootstrap";
-  import { applyCustomCss, isCustomCssRecoveryShortcut } from "$lib/utils/custom-css";
+  import { applyCustomCss, isCustomCssRecoveryShortcut } from "$lib/utils/settings/custom-css";
   import { onMount } from "svelte";
 
   let { children } = $props();

@@ -3,7 +3,7 @@
   import OcrImageOverlay from "$lib/components/detail/OcrImageOverlay.svelte";
   import type { ClipboardItem } from "$lib/types/clipboard";
   import { messages, resolvePath } from "$lib/i18n";
-  import { assetUrl } from "$lib/utils/format";
+  import { assetUrl } from "$lib/utils/content/format";
 
   interface Props {
     item: ClipboardItem;

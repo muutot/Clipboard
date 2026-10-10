@@ -13,7 +13,7 @@
   import { messages, resolvePath } from "$lib/i18n";
   import { invoke, convertFileSrc } from "@tauri-apps/api/core";
   import { isTauriRuntime } from "$lib/services/runtime";
-  import { fromDisplaySize, toDisplaySize } from "$lib/utils/unit-convert";
+  import { fromDisplaySize, toDisplaySize } from "$lib/utils/content/unit-convert";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);

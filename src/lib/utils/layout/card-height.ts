@@ -5,7 +5,11 @@
 // Every kind shares one contract: the *-height settings are content heights
 // and cardPaddingTop/Bottom expand the estimated card height externally.
 
-import { itemHeight, measureVisualLines, trimTrailingBlankLines } from "$lib/utils/virtual-scroll";
+import {
+  itemHeight,
+  measureVisualLines,
+  trimTrailingBlankLines,
+} from "$lib/utils/layout/virtual-scroll";
 import { getDisplayRemainingLines } from "$lib/services/clipboard";
 
 export interface CardEstimateInputs {

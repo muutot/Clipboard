@@ -9,7 +9,7 @@
   import type { ContextMenuItem } from "$lib/components/common/ContextMenu.svelte";
   import { CARD_ACTION_IDS, type ClipboardItem, type CardActionId } from "$lib/types/clipboard";
   import { messages, resolvePath } from "$lib/i18n";
-  import { formatRelativeTime } from "$lib/utils/time";
+  import { formatRelativeTime } from "$lib/utils/content/time";
   import { isTauriRuntime } from "$lib/services/runtime";
   import {
     detectContentActions,
@@ -19,9 +19,9 @@
     getDisplayRemainingLines,
     SOURCE_TONE_COLORS,
   } from "$lib/services/clipboard";
-  import { trimTrailingBlankLines } from "$lib/utils/virtual-scroll";
-  import { assetUrl as baseAssetUrl } from "$lib/utils/format";
-  import { detectQuickActions, parseIsoDate, quickActionKind } from "$lib/utils/patterns";
+  import { trimTrailingBlankLines } from "$lib/utils/layout/virtual-scroll";
+  import { assetUrl as baseAssetUrl } from "$lib/utils/content/format";
+  import { detectQuickActions, parseIsoDate, quickActionKind } from "$lib/utils/content/patterns";
   import { invoke, convertFileSrc } from "@tauri-apps/api/core";
   import { iconsDir } from "$lib/services/paths";
   import {

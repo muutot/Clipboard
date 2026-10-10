@@ -1,12 +1,12 @@
 import type { ClipboardItem, GeneralSettings } from "$lib/types/clipboard";
-import type { ItemStoreView } from "$lib/utils/item-store-view.svelte";
+import type { ItemStoreView } from "$lib/utils/store/item-store-view.svelte";
 import type { createHistoryController } from "./history.svelte";
 import {
   applyItemPatches,
   removeItems,
   restoreAffectedItems,
   type AffectedItemSnapshot,
-} from "$lib/utils/item-store";
+} from "$lib/utils/store/item-store";
 import {
   hydrateClipboardItem,
   writeClipboardText,
@@ -17,7 +17,7 @@ import {
   persistHardDelete,
 } from "$lib/services/clipboard";
 import { showToast } from "$lib/services/toast";
-import { planBulkCopy, planBulkDelete } from "$lib/utils/bulk-actions";
+import { planBulkCopy, planBulkDelete } from "$lib/utils/store/bulk-actions";
 export interface BulkDependencies {
   itemStore: ItemStoreView;
   readonly settings: GeneralSettings;

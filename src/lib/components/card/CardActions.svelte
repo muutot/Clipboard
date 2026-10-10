@@ -3,7 +3,7 @@
   import type { ClipboardItem, CardActionId } from "$lib/types/clipboard";
   import type { QuickAction } from "$lib/services/clipboard";
   import { messages, resolvePath } from "$lib/i18n";
-  import { quickActionKind } from "$lib/utils/patterns";
+  import { quickActionKind } from "$lib/utils/content/patterns";
 
   interface Props {
     item: ClipboardItem;

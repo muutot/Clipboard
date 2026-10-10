@@ -10,7 +10,7 @@
   } from "$lib/services/storage";
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
-  import { formatBytes } from "$lib/utils/format";
+  import { formatBytes } from "$lib/utils/content/format";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);

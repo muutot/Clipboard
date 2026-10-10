@@ -8,7 +8,7 @@ import {
   startOfDay,
   endOfDay,
   startOfWeek,
-} from "$lib/utils/date-query";
+} from "$lib/utils/search/date-query";
 import type { ClipboardFilter, ClipboardItem, HistoryFilterArgs } from "$lib/types/clipboard";
 
 export type HistoryDateFilter = "all" | "today" | "yesterday" | "week" | "month";

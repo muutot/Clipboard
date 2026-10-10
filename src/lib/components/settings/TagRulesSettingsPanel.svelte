@@ -3,7 +3,7 @@
   import { messages, resolvePath } from "$lib/i18n";
   import { isTauriRuntime } from "$lib/services/runtime";
   import { getAutoTagRules, setAutoTagRules, type AutoTagRule } from "$lib/services/clipboard";
-  import { createFeedback } from "$lib/utils/feedback.svelte";
+  import { createFeedback } from "$lib/utils/settings/feedback.svelte";
   import CustomSelect from "$lib/components/common/CustomSelect.svelte";
   import {
     previewAutoTagRules,

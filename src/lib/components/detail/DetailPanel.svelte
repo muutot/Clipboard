@@ -15,9 +15,13 @@
   import MarkdownPreview from "$lib/components/detail/MarkdownPreview.svelte";
   import type { ClipboardItem, OcrTextBlock } from "$lib/types/clipboard";
   import { messages, resolvePath } from "$lib/i18n";
-  import { isEditableKeyboardTarget } from "$lib/utils/keyboard";
-  import { captureFocusRestore, getFocusableElements, trapTabFocus } from "$lib/utils/focus";
-  import { formatRelativeTime } from "$lib/utils/time";
+  import { isEditableKeyboardTarget } from "$lib/utils/keyboard/keyboard";
+  import {
+    captureFocusRestore,
+    getFocusableElements,
+    trapTabFocus,
+  } from "$lib/utils/keyboard/focus";
+  import { formatRelativeTime } from "$lib/utils/content/time";
   import { invoke } from "@tauri-apps/api/core";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { isTauriRuntime } from "$lib/services/runtime";

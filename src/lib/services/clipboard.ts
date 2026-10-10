@@ -13,7 +13,7 @@ import type {
   SortRule,
 } from "$lib/types/clipboard";
 import { getLocale, resolvePath } from "$lib/i18n";
-import { formatBytes } from "$lib/utils/format";
+import { formatBytes } from "$lib/utils/content/format";
 import zhCN from "$lib/i18n/locales/zh-CN";
 import en from "$lib/i18n/locales/en";
 

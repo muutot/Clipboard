@@ -1,7 +1,7 @@
 <script lang="ts">
   import { messages, resolvePath } from "$lib/i18n";
   import type { createOperationMonitor } from "$lib/services/background-operations.svelte";
-  import { formatBytes } from "$lib/utils/format";
+  import { formatBytes } from "$lib/utils/content/format";
   let { operation }: { operation: ReturnType<typeof createOperationMonitor> } = $props();
   const t = (key: string) => resolvePath($messages, key);
 </script>

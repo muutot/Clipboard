@@ -10,7 +10,7 @@
     extractPhones,
     extractColors,
     extractDates,
-  } from "$lib/utils/patterns";
+  } from "$lib/utils/content/patterns";
 
   interface Props {
     item: ClipboardItem;

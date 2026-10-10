@@ -1,6 +1,6 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { applyThemeColors } from "$lib/utils/theme";
-import { applyCustomCss } from "$lib/utils/custom-css";
+import { applyThemeColors } from "$lib/utils/settings/theme";
+import { applyCustomCss } from "$lib/utils/settings/custom-css";
 import { isTauriRuntime } from "$lib/services/runtime";
 import type {
   FontSizeSettings,

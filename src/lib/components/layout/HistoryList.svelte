@@ -2,7 +2,7 @@
   import AppIcon from "$lib/components/card/AppIcon.svelte";
   import ClipboardCard from "$lib/components/card/ClipboardCard.svelte";
   import type { ClipboardItem } from "$lib/types/clipboard";
-  import type { VirtualListResult } from "$lib/utils/virtual-scroll";
+  import type { VirtualListResult } from "$lib/utils/layout/virtual-scroll";
 
   interface Props {
     items: ClipboardItem[];

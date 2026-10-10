@@ -5,7 +5,7 @@
   import TagColorPicker from "$lib/components/card/TagColorPicker.svelte";
   import TagRow from "$lib/components/card/TagRow.svelte";
   import { messages, resolvePath } from "$lib/i18n";
-  import { resolveFixedPopoverPosition } from "$lib/utils/dropdown";
+  import { resolveFixedPopoverPosition } from "$lib/utils/settings/dropdown";
   import type { TagsChangedPayload } from "$lib/types/clipboard";
   import {
     deleteTag,

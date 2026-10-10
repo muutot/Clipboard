@@ -16,7 +16,7 @@ Desktop flow:
 6. debounce patches for 120 ms through `set_general_settings` (`{patch}`); nested objects merge, arrays replace, and `null` clears an optional field;
 7. apply the command response with any newer pending edits overlaid, and refresh after broadcasts skipped during a write. `flush()` drains edits arriving during that refresh too. Failed writes retain their fields underneath newer edits for an explicit retry or later edit; they never restore an older snapshot or spin on errors.
 
-`utils/settings-patch.ts` owns diff, composition (preserving deletion markers), and application. Migration uses the same patch queue and removes legacy keys only after a successful save. Backend patch merging uses the current config under the same serialization lock as worker transitions, persistence, live side effects, and broadcasts, so independent windows cannot overwrite untouched fields. The full `{settings}` command form remains available for explicit replacement.
+`utils/settings/settings-patch.ts` owns diff, composition (preserving deletion markers), and application. Migration uses the same patch queue and removes legacy keys only after a successful save. Backend patch merging uses the current config under the same serialization lock as worker transitions, persistence, live side effects, and broadcasts, so independent windows cannot overwrite untouched fields. The full `{settings}` command form remains available for explicit replacement.
 
 Browser-preview flow uses localStorage and the browser `storage` event. Do not describe localStorage as the desktop source of truth.
 
@@ -78,7 +78,7 @@ localized by the caller; the monitor retains no clipboard payload.
 
 ## UI-only services
 
-`utils/custom-css.ts` parses with CSSOM in a constructed stylesheet or an inert document,
+`utils/settings/custom-css.ts` parses with CSSOM in a constructed stylesheet or an inert document,
 promotes style declarations, caches the last compiled source and owns one style element.
 `applyGeneralSettingsToDocument` applies it after the theme/font values. The root layout
 also subscribes specifically to CSS settings so every WebView responds to saved changes;
@@ -128,7 +128,7 @@ Main-route controllers receive live settings/query/filter getters and a shared I
 
 ## Search interaction diagnostics
 
-`controllers/search.svelte.ts` starts `utils/search-paint-latency.ts` from the header input
+`controllers/search.svelte.ts` starts `utils/search/search-paint-latency.ts` from the header input
 callback. Only accepted first-page text searches report after Svelte tick plus two animation
 frames; stale, hidden, disposed and over-60-second observations are discarded. This is an
 approximate rendered-frame boundary, not an OS compositor measurement. `storage.ts` invokes

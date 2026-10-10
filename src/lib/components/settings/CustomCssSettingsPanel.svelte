@@ -3,8 +3,8 @@
   import { get } from "svelte/store";
   import { generalSettings } from "$lib/services/settings";
   import { messages, resolvePath } from "$lib/i18n";
-  import { compileCustomCss, MAX_CUSTOM_CSS_LENGTH } from "$lib/utils/custom-css";
-  import { createFeedback } from "$lib/utils/feedback.svelte";
+  import { compileCustomCss, MAX_CUSTOM_CSS_LENGTH } from "$lib/utils/settings/custom-css";
+  import { createFeedback } from "$lib/utils/settings/feedback.svelte";
 
   let { onclose, showHeader = true }: { onclose: () => void; showHeader?: boolean } = $props();
   const t = (key: string) => resolvePath($messages, "customCss." + key);

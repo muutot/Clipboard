@@ -8,7 +8,7 @@ import type { IconName } from "$lib/types/clipboard";
  * (`src-tauri/src/keyboard/actions.rs`): `scope: "global"` rows must stay in
  * 1:1 parity with that table (order included — it drives OS hotkey id
  * ranges), while `scope: "window"` rows are matched in-window by
- * `utils/keyboard-actions.ts`.
+ * `utils/keyboard/keyboard-actions.ts`.
  *
  * Adding a shortcut takes ~4 lines:
  * 1. one default entry in `keyboard-defaults.json` (the canonical source);

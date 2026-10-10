@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
-  import { createFeedback } from "$lib/utils/feedback.svelte";
+  import { createFeedback } from "$lib/utils/settings/feedback.svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
   import AppIcon from "$lib/components/card/AppIcon.svelte";

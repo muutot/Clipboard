@@ -6,14 +6,14 @@ import type {
   HistoryFilterArgs,
   GeneralSettings,
 } from "$lib/types/clipboard";
-import type { ItemStoreView } from "$lib/utils/item-store-view.svelte";
+import type { ItemStoreView } from "$lib/utils/store/item-store-view.svelte";
 import {
   appendItems,
   replaceViewItems,
   mergeDeletedHistoryPage,
   promoteFromCache as promoteCachedEntries,
   trimLoadedHistory,
-} from "$lib/utils/item-store";
+} from "$lib/utils/store/item-store";
 export interface HistoryDependencies {
   itemStore: ItemStoreView;
   readonly settings: GeneralSettings;

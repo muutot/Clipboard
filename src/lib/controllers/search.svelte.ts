@@ -1,16 +1,16 @@
 import { onDestroy, untrack, tick } from "svelte";
-import { createSearchPaintTracker } from "$lib/utils/search-paint-latency";
+import { createSearchPaintTracker } from "$lib/utils/search/search-paint-latency";
 import { recordSearchInteractionLatency } from "$lib/services/storage";
 import { searchClipboardHistory } from "$lib/services/clipboard";
 import { isTauriRuntime } from "$lib/services/runtime";
 import type { ClipboardItem, HistoryFilterArgs, GeneralSettings } from "$lib/types/clipboard";
-import type { ItemStoreView } from "$lib/utils/item-store-view.svelte";
+import type { ItemStoreView } from "$lib/utils/store/item-store-view.svelte";
 import {
   appendItems,
   closeSearchResults,
   replaceViewItems,
   mergeSearchCachePage,
-} from "$lib/utils/item-store";
+} from "$lib/utils/store/item-store";
 export interface SearchDependencies {
   itemStore: ItemStoreView;
   readonly settings: GeneralSettings;

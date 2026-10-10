@@ -16,8 +16,8 @@
   import TagEditDialog from "$lib/components/card/TagEditDialog.svelte";
   import SavedSearchDialog from "$lib/components/common/SavedSearchDialog.svelte";
   import { hydrateClipboardItem } from "$lib/services/clipboard";
-  import type { SavedSearch } from "$lib/utils/saved-searches";
-  import type { HistoryDateFilter } from "$lib/utils/history-filter";
+  import type { SavedSearch } from "$lib/utils/settings/saved-searches";
+  import type { HistoryDateFilter } from "$lib/utils/search/history-filter";
   import Toast from "$lib/components/common/Toast.svelte";
   import { demoClipboardItems } from "$lib/data/demo-items";
   import {
@@ -50,18 +50,21 @@
     editHeight,
     buildPositions,
     type VirtualScrollConfig,
-  } from "$lib/utils/virtual-scroll";
-  import type { CardEstimateInputs } from "$lib/utils/card-height";
-  import { createCardMeasurementCache, createHeightSequence } from "$lib/utils/card-measurements";
-  import { parseDateQuery } from "$lib/utils/date-query";
-  import { buildHistoryFilterArgs, filterHistoryItems } from "$lib/utils/history-filter";
+  } from "$lib/utils/layout/virtual-scroll";
+  import type { CardEstimateInputs } from "$lib/utils/layout/card-height";
+  import {
+    createCardMeasurementCache,
+    createHeightSequence,
+  } from "$lib/utils/layout/card-measurements";
+  import { parseDateQuery } from "$lib/utils/search/date-query";
+  import { buildHistoryFilterArgs, filterHistoryItems } from "$lib/utils/search/history-filter";
   import {
     resolveActionBindings,
     resolveFilterShortcutBindings,
     resolveNavigationBindings,
-  } from "$lib/utils/shortcut-bindings";
-  import { resolveKeyAction, type KeyAction } from "$lib/utils/keyboard-actions";
-  import { resolveSearchInputAction } from "$lib/utils/search-input-actions";
+  } from "$lib/utils/keyboard/shortcut-bindings";
+  import { resolveKeyAction, type KeyAction } from "$lib/utils/keyboard/keyboard-actions";
+  import { resolveSearchInputAction } from "$lib/utils/search/search-input-actions";
   import {
     applyItemPatches,
     captureAffectedItems,
@@ -77,10 +80,10 @@
     rewriteItemTags,
     setDetailItem,
     type AffectedItemSnapshot,
-  } from "$lib/utils/item-store";
-  import { createItemStoreView } from "$lib/utils/item-store-view.svelte";
-  import { applyItemsChangedEvent, sortRecentHistory } from "$lib/utils/item-changes";
-  import { isEditableKeyboardTarget } from "$lib/utils/keyboard";
+  } from "$lib/utils/store/item-store";
+  import { createItemStoreView } from "$lib/utils/store/item-store-view.svelte";
+  import { applyItemsChangedEvent, sortRecentHistory } from "$lib/utils/store/item-changes";
+  import { isEditableKeyboardTarget } from "$lib/utils/keyboard/keyboard";
   import {
     SEARCH_SUGGESTION_LIMIT,
     loadSearchHistory as loadStoredSearchHistory,
@@ -88,7 +91,7 @@
     normalizeSearchTerm,
     persistSearchHistory as persistStoredSearchHistory,
     suggestionCandidate,
-  } from "$lib/utils/search-history";
+  } from "$lib/utils/search/search-history";
   import { applyFontSizesToDocument } from "$lib/services/settings-bootstrap";
   import { listen } from "@tauri-apps/api/event";
   import type {
@@ -130,7 +133,7 @@
   // record once and the four views keep only ids. `$state.raw` inside the view
   // keeps the plain Map out of Svelte's deep proxy, and every mutation replaces
   // the whole store, so the projections recompute from a fresh map in one pass.
-  // See `utils/item-store-view.svelte.ts` and `docs/PITFALLS.md`.
+  // See `utils/store/item-store-view.svelte.ts` and `docs/PITFALLS.md`.
   const itemStore = createItemStoreView(
     createItemStore(isTauriRuntime() ? [] : demoClipboardItems.map((item) => ({ ...item }))),
   );
@@ -389,7 +392,7 @@
   ]);
 
   // Configured group-switch shortcuts (conf/keyboard.json), keyed by filter id.
-  // Resolution lives in $lib/utils/shortcut-bindings: an absent action falls
+  // Resolution lives in $lib/utils/keyboard/shortcut-bindings: an absent action falls
   // back to its default (Alt+<N>); an action explicitly configured to empty
   // disables the shortcut.
   let keyboardShortcuts = $state<Record<string, string[]>>({});
@@ -506,7 +509,7 @@
   }
 
   // --- Date range resolution ---
-  // resolveDateRange lives in $lib/utils/history-filter; the route only maps
+  // resolveDateRange lives in $lib/utils/search/history-filter; the route only maps
   // the dropdown id onto backend filter args below.
 
   function loadSearchHistory(): string[] {

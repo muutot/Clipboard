@@ -3,7 +3,7 @@ import { fromStore, writable } from "svelte/store";
 import { afterEach, expect, it, vi } from "vitest";
 import type { ClipboardItem } from "$lib/types/clipboard";
 import DetailFilePreview from "./DetailFilePreview.svelte";
-import { loadFilePreview } from "$lib/utils/file-preview";
+import { loadFilePreview } from "$lib/utils/content/file-preview";
 
 vi.mock("$lib/services/settings", async () => {
   const { writable } = await import("svelte/store");
@@ -14,7 +14,7 @@ vi.mock("$lib/services/runtime", () => ({
   isTauriRuntime: () => true,
   invokeTauri: async () => null,
 }));
-vi.mock("$lib/utils/format", async (original) => ({
+vi.mock("$lib/utils/content/format", async (original) => ({
   ...(await original<object>()),
   assetUrl: (path: string) => path,
 }));

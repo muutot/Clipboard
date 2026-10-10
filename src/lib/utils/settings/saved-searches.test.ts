@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { normalizeSavedSearches, saveNamedSearch, type SavedSearchState } from "./saved-searches";
-import { resolveDateRange } from "./history-filter";
+import { resolveDateRange } from "../search/history-filter";
 import { generalSettings } from "$lib/services/settings";
 import { get } from "svelte/store";
 

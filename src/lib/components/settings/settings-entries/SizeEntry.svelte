@@ -2,7 +2,7 @@
   import AppIcon from "$lib/components/card/AppIcon.svelte";
   import CustomSelect from "$lib/components/common/CustomSelect.svelte";
   import type { SizeEntryConfig, SizeUnit } from "$lib/types/settings-entry";
-  import { SIZE_UNIT_OPTIONS } from "$lib/utils/size";
+  import { SIZE_UNIT_OPTIONS } from "$lib/utils/content/size";
 
   interface Props {
     config: SizeEntryConfig;

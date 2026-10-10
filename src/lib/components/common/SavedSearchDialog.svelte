@@ -7,7 +7,7 @@
     saveNamedSearch,
     type SavedSearch,
     type SavedSearchState,
-  } from "$lib/utils/saved-searches";
+  } from "$lib/utils/settings/saved-searches";
   let {
     current,
     onapply,

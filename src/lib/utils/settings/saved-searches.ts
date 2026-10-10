@@ -1,5 +1,5 @@
 import type { ClipboardFilter, SortRule } from "$lib/types/clipboard";
-import type { HistoryDateFilter } from "./history-filter";
+import type { HistoryDateFilter } from "../search/history-filter";
 
 export interface SavedSearchState {
   query: string;

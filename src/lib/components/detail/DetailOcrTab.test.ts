@@ -12,8 +12,8 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: bridge.invoke,
   convertFileSrc: (p: string) => p,
 }));
-vi.mock("$lib/utils/format", async (original) => ({
-  ...(await original<typeof import("$lib/utils/format")>()),
+vi.mock("$lib/utils/content/format", async (original) => ({
+  ...(await original<typeof import("$lib/utils/content/format")>()),
   assetUrl: (path: string) => path,
 }));
 let target: HTMLDivElement;

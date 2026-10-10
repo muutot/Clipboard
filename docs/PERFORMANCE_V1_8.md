@@ -1,7 +1,7 @@
 # v1.8 performance evidence
 
 Synthetic benchmark on Windows, 2026-10-08, Node/Vitest in the development worktree.
-Run `src/lib/utils/history-performance.test.ts` explicitly:
+Run `src/lib/utils/layout/history-performance.test.ts` explicitly:
 
 ```powershell
 $env:CLIPBOARD_BENCHMARK = '1'

@@ -6,7 +6,7 @@
   import DatePicker from "$lib/components/common/DatePicker.svelte";
   import { messages, resolvePath } from "$lib/i18n";
   import { isTauriRuntime } from "$lib/services/runtime";
-  import { formatBytes } from "$lib/utils/format";
+  import { formatBytes } from "$lib/utils/content/format";
   import {
     exportToFile,
     getExportFormats,
@@ -15,7 +15,7 @@
     type ExportFormatInfo,
     type ImportFormatInfo,
   } from "$lib/services/storage";
-  import { endOfDay, startOfDay } from "$lib/utils/date-query";
+  import { endOfDay, startOfDay } from "$lib/utils/search/date-query";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);

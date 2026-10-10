@@ -9,7 +9,7 @@
     type PrivacySettings,
   } from "$lib/services/capture";
   import { messages, resolvePath } from "$lib/i18n";
-  import { createFeedback } from "$lib/utils/feedback.svelte";
+  import { createFeedback } from "$lib/utils/settings/feedback.svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
   import { getRuntimeInfo, isTauriRuntime } from "$lib/services/runtime";

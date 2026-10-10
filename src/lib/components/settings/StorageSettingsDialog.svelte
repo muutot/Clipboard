@@ -17,8 +17,8 @@
     type StatisticsTab,
   } from "$lib/settings-navigation";
   import type { IconName } from "$lib/types/clipboard";
-  import { formatBytes } from "$lib/utils/format";
-  import { captureFocusRestore, trapTabFocus } from "$lib/utils/focus";
+  import { formatBytes } from "$lib/utils/content/format";
+  import { captureFocusRestore, trapTabFocus } from "$lib/utils/keyboard/focus";
   import {
     filterSettingsSearchItems,
     normalizeSettingsSearch,

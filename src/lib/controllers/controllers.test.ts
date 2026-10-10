@@ -3,7 +3,7 @@ import { beforeEach, afterEach, expect, it, vi } from "vitest";
 import Probe, { type ProbeState } from "./controllers.probe.svelte";
 import { createListenerScope } from "./window-lifecycle";
 import * as service from "$lib/services/clipboard";
-import { appendItems } from "$lib/utils/item-store";
+import { appendItems } from "$lib/utils/store/item-store";
 import type { ClipboardItem } from "$lib/types/clipboard";
 vi.mock("$lib/services/runtime", async (original) => ({
   ...(await original<typeof import("$lib/services/runtime")>()),

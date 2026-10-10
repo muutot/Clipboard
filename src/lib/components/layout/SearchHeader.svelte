@@ -3,7 +3,7 @@
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import AppIcon from "$lib/components/card/AppIcon.svelte";
   import { messages, resolvePath } from "$lib/i18n";
-  import { normalizeSearchTerm } from "$lib/utils/search-history";
+  import { normalizeSearchTerm } from "$lib/utils/search/search-history";
 
   interface SearchOption {
     value: string;

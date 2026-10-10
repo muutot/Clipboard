@@ -31,9 +31,9 @@
     createItemStore,
     removeItems,
     replaceViewItems,
-  } from "$lib/utils/item-store";
-  import { createItemStoreView } from "$lib/utils/item-store-view.svelte";
-  import { applyItemsChangedEvent } from "$lib/utils/item-changes";
+  } from "$lib/utils/store/item-store";
+  import { createItemStoreView } from "$lib/utils/store/item-store-view.svelte";
+  import { applyItemsChangedEvent } from "$lib/utils/store/item-changes";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);

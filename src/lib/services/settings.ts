@@ -3,10 +3,10 @@ import {
   diffSettings,
   mergeSettingsPatches,
   type SettingsPatch,
-} from "$lib/utils/settings-patch";
+} from "$lib/utils/settings/settings-patch";
 import { listen } from "@tauri-apps/api/event";
-import { normalizeSavedSearches } from "$lib/utils/saved-searches";
-import { normalizeCustomCss } from "$lib/utils/custom-css";
+import { normalizeSavedSearches } from "$lib/utils/settings/saved-searches";
+import { normalizeCustomCss } from "$lib/utils/settings/custom-css";
 import { get, writable } from "svelte/store";
 import { setLocale } from "$lib/i18n";
 import { invokeTauri, isTauriRuntime } from "$lib/services/runtime";

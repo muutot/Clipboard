@@ -15,7 +15,7 @@ Read `AGENTS.md`, `skills/clipboard-dev/SKILL.md` and its maintenance workflow b
 
 | Concern                  | Starting points and checks                                                                                                                                                                          |
 | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| UI and state             | `src/routes/`, `src/lib/services/`, `src/lib/utils/item-store.ts`: initialization gates, cross-window events, out-of-order results, subscription cleanup, focus and pagination                      |
+| UI and state             | `src/routes/`, `src/lib/services/`, `src/lib/utils/store/item-store.ts`: initialization gates, cross-window events, out-of-order results, subscription cleanup, focus and pagination                |
 | IPC and local API        | `src-tauri/src/lib.rs`, `commands/`, `cli/`: registered commands, invoke names, argument/result casing, permissions, token/Host/Origin checks, validation before effects                            |
 | Persistence and deletion | `src-tauri/src/storage/`, `content/`, `export/`, `windows/installer.nsi`: atomicity, migrations, custom roots, ownership markers, favorites/recycle-bin preservation, import and uninstall behavior |
 | Search, OCR and sync     | `src-tauri/src/search/`, `ocr/`, `sync/`, `src-tauri/crates/clipboard-sync/`: derived-data invalidation, resource bounds, cancellation, writer shutdown, retries and convergence                    |

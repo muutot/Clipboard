@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { defaultShortcutsFor } from "../keyboard-defaults";
+import { defaultShortcutsFor } from "../../keyboard-defaults";
 import { resolveKeyAction, type KeyActionContext, type KeyActionItem } from "./keyboard-actions";
 
 function keyEvent(

@@ -7,7 +7,7 @@
     restoreResourceBackup,
     type BackupPreview,
   } from "$lib/services/storage";
-  import { formatBytes } from "$lib/utils/format";
+  import { formatBytes } from "$lib/utils/content/format";
   import {
     createOperationMonitor,
     isOperationCancelled,

@@ -4,7 +4,7 @@
   import type { GeneralSettings, Language } from "$lib/types/clipboard";
   import { generalSettings, windowConfig } from "$lib/services/settings";
   import { onDestroy } from "svelte";
-  import { createFeedback } from "$lib/utils/feedback.svelte";
+  import { createFeedback } from "$lib/utils/settings/feedback.svelte";
   import type { SettingEntryConfig } from "$lib/types/settings-entry";
 
   const _t = (path: string, params?: Record<string, string | number>) =>

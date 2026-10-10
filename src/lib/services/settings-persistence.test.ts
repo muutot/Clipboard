@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { get } from "svelte/store";
-import { applySettingsPatch, type SettingsPatch } from "$lib/utils/settings-patch";
+import { applySettingsPatch, type SettingsPatch } from "$lib/utils/settings/settings-patch";
 
 const bridge = vi.hoisted(() => ({
   invoke: vi.fn(),

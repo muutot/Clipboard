@@ -2,7 +2,7 @@
   import { createHistoryController } from "./history.svelte";
   import { createSearchController } from "./search.svelte";
   import { createBulkController } from "./bulk.svelte";
-  import { createItemStoreView, type ItemStoreView } from "$lib/utils/item-store-view.svelte";
+  import { createItemStoreView, type ItemStoreView } from "$lib/utils/store/item-store-view.svelte";
   export interface ProbeState {
     store?: ItemStoreView;
     history?: ReturnType<typeof createHistoryController>;
@@ -18,7 +18,7 @@
     createItemStore,
     captureAffectedItems,
     restoreAffectedItems,
-  } from "$lib/utils/item-store";
+  } from "$lib/utils/store/item-store";
   import { DEFAULT_GENERAL_SETTINGS } from "$lib/services/settings";
   import type { ClipboardItem } from "$lib/types/clipboard";
   let { out, initial = [] }: { out: ProbeState; initial?: ClipboardItem[] } = $props();
