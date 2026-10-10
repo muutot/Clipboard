@@ -55,7 +55,7 @@ Read `components.md` and `services.md` for ownership and change gates inside tho
 | `commands/`              | Tauri command modules (clipboard, config, update, system, files, OCR, etc.)                                                                                                |
 | `cli/`                   | Process CLI execution and loopback API server                                                                                                                              |
 
-Platform source files may contain detailed scaffolding or documented intended flows. Verify runtime wiring and tests before claiming platform completion.
+Platform source files may contain detailed scaffolding or documented intended flows. Verify runtime wiring and tests before claiming platform completion. The Linux adapters are split per concern under `platform/linux/x11/` and `platform/linux/wayland/`; Wayland code that is not wired into the runtime is collected in `wayland/intended.rs` and must never be reported as shipped behavior.
 
 `platform/macos_image.rs` isolates bounded clipboard-image tool fallback, private
 scratch cleanup and atomic icon conversion from the Objective-C adapter. It is
