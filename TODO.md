@@ -13,12 +13,12 @@
 
 - [x] SEC-01 本地 API 认证 — `src-tauri/src/cli/api.rs:30-33,258-297` token + Host/Origin 校验 + 回归测试
 - [x] SEC-02 asset scope 去 `"**"` — `src-tauri/tauri.conf.json:34`
-- [x] SEC-03 rename 路径穿越 — `operations.rs:462,484-492` sanitize + file_name 断言
+- [x] SEC-03 rename 路径穿越 — `commands/clipboard/operations/rename.rs` sanitize + file_name 断言
 - [x] SEC-04 `copy_file_to` 已删除；`delete_icon_files` 已约束 — `files.rs:164-177,209-212`
 - [x] SEC-06 OCR 下载尊重 localOnly + 超时 — `commands/ocr.rs:180-202`
 - [x] SEC-07/08 open scheme 白名单 + tag 编码 — `files.rs:215-229`，`update.rs` urlencoding
 - [x] STA-02 迁移前停后台 writer — `commands/config/storage.rs:86`
-- [x] STA-03 rename 先写 DB 后改名 + 回滚 — `operations.rs:498-513`
+- [x] STA-03 rename 先写 DB 后改名 + 回滚 — `commands/clipboard/operations/rename.rs`
 - [x] STA-04 捕获 sequence 比对防混合 — `commands/capture.rs:430-441`
 - [x] STA-05 DST midnight 容错 — `search/date_parser.rs:56-69`
 - [x] STA-07 API 每连接独立线程 — `cli/api.rs` serve
