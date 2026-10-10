@@ -1095,7 +1095,10 @@ async function cleanTextIfEnabled(text: string): Promise<string> {
 async function pasteToPreviousApp(
   item: ClipboardItem,
   keys: PasteMessageKeys,
-  write: () => Promise<void>,
+  // The writer can return replacement keys when it produced a different
+  // representation than the requested mode (e.g. a cleaned plain-text
+  // downgrade of an explicit format paste), so the toast stays truthful.
+  write: () => Promise<PasteMessageKeys | void>,
   hooks: PasteItemHooks = {},
 ): Promise<void> {
   const locale = getLocale();
@@ -1103,14 +1106,15 @@ async function pasteToPreviousApp(
   const t = (path: string, params?: Record<string, string | number>) =>
     resolvePath(messages, path, params);
 
+  let resolvedKeys = keys;
   try {
-    await write();
+    resolvedKeys = (await write()) ?? keys;
   } catch (error) {
     // Same split as the copy path: a record whose file is gone must not read as
     // a transient paste failure.
     console.error("Unable to prepare clipboard content for paste", describeInvokeFailure(error));
     showToast(
-      t(isFilesCopySourceMissing(error) ? "toast.copySourceMissing" : keys.failed),
+      t(isFilesCopySourceMissing(error) ? "toast.copySourceMissing" : resolvedKeys.failed),
       "error",
     );
     return;
@@ -1118,16 +1122,16 @@ async function pasteToPreviousApp(
   await recordSuccessfulUsage(item, hooks);
 
   if (!isTauriRuntime()) {
-    showToast(t(keys.copy), "success");
+    showToast(t(resolvedKeys.copy), "success");
     return;
   }
 
   try {
     const pasted = await invokeTauri<boolean>("paste_to_previous_application");
-    showToast(t(pasted ? keys.paste : keys.copy), pasted ? "success" : "info");
+    showToast(t(pasted ? resolvedKeys.paste : resolvedKeys.copy), pasted ? "success" : "info");
   } catch (error) {
     console.error("Unable to restore the previous application and paste", error);
-    showToast(t(keys.failed), "error");
+    showToast(t(resolvedKeys.failed), "error");
   }
 }
 
@@ -1209,7 +1213,14 @@ export async function pasteClipboardItem(
           const cleaned = await cleanTextIfEnabled(plainText);
           if (cleaned !== plainText) {
             await writeClipboardText(cleaned);
-            return;
+            // Cleaning cannot be applied inside markup, so an explicit
+            // format paste degrades to cleaned plain text here. Report the
+            // real representation instead of claiming the format was kept.
+            return {
+              paste: "toast.formatPasteCleanedSuccess",
+              copy: "toast.formatCopyCleanedSuccess",
+              failed: "toast.formatPasteFailed",
+            };
           }
         }
         await writeClipboardHtml(htmlContent, plainText, item.rtfContent);

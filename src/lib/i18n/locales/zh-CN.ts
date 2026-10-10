@@ -675,6 +675,8 @@ const zhCN: LocaleDefinition = {
     formatCopySuccess: "已复制为带格式文本，未找到可恢复的原应用",
     formatPasteSuccess: "已按原格式粘贴",
     formatPasteFailed: "恢复原应用并粘贴失败",
+    formatCopyCleanedSuccess: "已复制清洗后的纯文本（原格式未保留）",
+    formatPasteCleanedSuccess: "已粘贴清洗后的纯文本（原格式未保留）",
     cleanCopySuccess: "已复制清洗后的文本，未找到可恢复的原应用",
     cleanPasteSuccess: "已粘贴清洗后的文本",
     cleanPasteFailed: "恢复原应用并粘贴失败",

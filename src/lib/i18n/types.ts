@@ -644,6 +644,8 @@ export interface LocaleDefinition {
     formatCopySuccess: string;
     formatPasteSuccess: string;
     formatPasteFailed: string;
+    formatCopyCleanedSuccess: string;
+    formatPasteCleanedSuccess: string;
     cleanCopySuccess: string;
     cleanPasteSuccess: string;
     cleanPasteFailed: string;

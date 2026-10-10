@@ -705,6 +705,8 @@ const en: LocaleDefinition = {
     formatCopySuccess: "Copied with formatting; no previous application was available",
     formatPasteSuccess: "Pasted with formatting",
     formatPasteFailed: "Failed to restore the previous application and paste",
+    formatCopyCleanedSuccess: "Copied as cleaned plain text; formatting was dropped",
+    formatPasteCleanedSuccess: "Pasted as cleaned plain text; formatting was dropped",
     cleanCopySuccess: "Copied cleaned text; no previous application was available",
     cleanPasteSuccess: "Pasted cleaned text",
     cleanPasteFailed: "Failed to restore the previous application and paste",
