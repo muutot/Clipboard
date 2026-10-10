@@ -15,7 +15,7 @@ use crate::content::{
 };
 use crate::domain::{ClipboardItem, ClipboardKind};
 use crate::platform;
-use crate::platform::windows_clipboard::ClipboardChange;
+use crate::platform::windows::ClipboardChange;
 use crate::platform::ClipboardMonitor;
 use crate::state::{CaptureState, CaptureWorker, SelfTriggerState};
 use crate::storage::{ClipboardRepository, Database, OcrRepository, StoragePaths};

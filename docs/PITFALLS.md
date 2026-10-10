@@ -324,7 +324,7 @@ END;
 
 ```
 error[E0658]: use of unstable library feature `int_roundings`
-  --> src/platform/linux_x11.rs:1047
+  --> src/platform/linux/x11/mod.rs:1047
    | offset_units += (nitems as i64).div_ceil(4);
 ```
 

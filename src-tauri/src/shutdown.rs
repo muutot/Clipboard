@@ -58,7 +58,8 @@ pub fn stop_runtime_services(app: &tauri::AppHandle) {
         lock_or_recover(&thumbnails, "thumbnail worker").stop();
     }
 
-    if let Some(hotkey) = app.try_state::<Mutex<crate::platform::windows_hotkey::HotkeyManager>>() {
+    if let Some(hotkey) = app.try_state::<Mutex<crate::platform::windows::hotkey::HotkeyManager>>()
+    {
         lock_or_recover(&hotkey, "hotkey manager").stop();
     }
 

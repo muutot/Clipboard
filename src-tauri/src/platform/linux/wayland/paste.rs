@@ -1,6 +1,6 @@
 //! Conditional quick paste for Sway/Hyprland with the compositor's own focus
 //! command and wtype. Other Wayland desktops return an explicit unsupported error.
-use super::quick_paste::Target;
+use crate::platform::quick_paste::Target;
 use std::{
     process::Command,
     thread,
@@ -8,7 +8,7 @@ use std::{
 };
 
 fn command(program: &str, args: &[&str]) -> Result<Vec<u8>, String> {
-    use super::bounded_command::BoundedCommandExt;
+    use crate::platform::bounded_command::BoundedCommandExt;
     let output = Command::new(program)
         .args(args)
         .bounded_output(1024 * 1024)

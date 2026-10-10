@@ -239,7 +239,7 @@ pub use mac::{current, paste};
 #[cfg(target_os = "linux")]
 pub fn current() -> Option<Target> {
     if super::Platform::detect().is_wayland() {
-        super::wayland_paste::current()
+        crate::platform::linux::wayland::paste::current()
     } else {
         x11::current()
     }
@@ -247,7 +247,7 @@ pub fn current() -> Option<Target> {
 #[cfg(target_os = "linux")]
 pub fn paste(target: Target) -> Result<(), String> {
     if super::Platform::detect().is_wayland() {
-        super::wayland_paste::paste(target)
+        crate::platform::linux::wayland::paste::paste(target)
     } else {
         x11::paste(target)
     }

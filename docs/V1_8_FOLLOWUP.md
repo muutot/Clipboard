@@ -51,7 +51,7 @@ The helper stopped its own server after completion.
 - Plain `npm test`: 356 passed, one opt-in frontend benchmark skipped.
 - Rust workspace: 849 passed, 10 ignored opt-in checks, one native CF_HDROP check
   explicitly excluded. Command:
-  `npm run test:rust -- -- --skip platform::windows_clipboard::tests::read_clipboard_file_paths_reads_a_cf_hdrop`.
+  `npm run test:rust -- -- --skip platform::windows::tests::read_clipboard_file_paths_reads_a_cf_hdrop`.
 - Svelte check: zero errors/warnings. Frontend build, workspace Clippy and format pass.
 - Real S3 smoke: 4 passed separately; backup preview benchmarks ran at 1k/10k/100k rows.
 

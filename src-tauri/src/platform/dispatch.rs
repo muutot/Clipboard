@@ -5,13 +5,13 @@ use crate::platform::platform_info::ForegroundApp;
 use crate::platform::platform_info::Platform;
 
 #[cfg(target_os = "linux")]
-use super::linux_wayland::LinuxWaylandPlatform;
+use super::linux::wayland::LinuxWaylandPlatform;
 #[cfg(target_os = "linux")]
-use super::linux_x11::LinuxX11Platform;
+use super::linux::x11::LinuxX11Platform;
 #[cfg(target_os = "macos")]
 use super::macos::MacPlatform;
 #[cfg(target_os = "windows")]
-use super::windows_clipboard::WindowsPlatform;
+use super::windows::WindowsPlatform;
 
 // ---------------------------------------------------------------------------
 //  PlatformClipboard trait — the per-platform clipboard contract

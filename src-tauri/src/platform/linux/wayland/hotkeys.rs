@@ -5,7 +5,7 @@ use crate::{
     platform::{
         hotkey_common::HotkeyRegistration,
         native_hotkeys::report_registration_failure,
-        windows_hotkey::{action_for_hotkey_id, HotkeyAction},
+        windows::hotkey::{action_for_hotkey_id, HotkeyAction},
     },
 };
 use dbus::{

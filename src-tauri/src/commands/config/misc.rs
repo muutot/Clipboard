@@ -6,7 +6,7 @@ use tauri::{Emitter, Manager};
 
 use crate::config::ConfigStore;
 use crate::keyboard::{is_global_action, KeyboardConfig, KeyboardManager};
-use crate::platform::windows_hotkey::HotkeyManager;
+use crate::platform::windows::hotkey::HotkeyManager;
 use crate::platform::{self, ClipboardMonitor, RuntimeInfo};
 use crate::privacy::PrivacyManager;
 use crate::storage::{ClipboardRepository, Database};
@@ -355,7 +355,7 @@ pub fn paste_to_previous_application(
     }
     thread::sleep(Duration::from_millis(40));
 
-    if let Err(error) = platform::windows_hotkey::restore_window_and_paste(target) {
+    if let Err(error) = platform::windows::hotkey::restore_window_and_paste(target) {
         crate::dbg_log(&format!("paste_to_previous_application: error={error}"));
         if let Some(window) = &main_window {
             let _ = window.show();

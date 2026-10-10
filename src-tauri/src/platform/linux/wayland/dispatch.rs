@@ -104,7 +104,7 @@ mod tests {
         let connection = Connection::from_socket(client).unwrap();
         let mut queue = connection.new_event_queue();
         let mut state = State::default();
-        let stop = crate::platform::stop_pipe::StopPipePair::new().unwrap();
+        let stop = crate::platform::linux::stop_pipe::StopPipePair::new().unwrap();
         let reader = stop.reader_fd();
         let callback = connection.display().sync(&queue.handle(), ());
         // Send a real wl_callback.done packet; the peer never answers another

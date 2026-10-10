@@ -288,7 +288,7 @@ pub(crate) fn current_time_ms() -> i64 {
 
 #[cfg(target_os = "windows")]
 fn read_system_clipboard_text() -> Result<String, String> {
-    crate::platform::windows_clipboard::read_clipboard_text()
+    crate::platform::windows::read_clipboard_text()
         .ok_or_else(|| "system clipboard does not contain readable text".to_owned())
 }
 

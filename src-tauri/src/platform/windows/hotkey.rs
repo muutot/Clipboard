@@ -1,3 +1,7 @@
+//! Native hotkey engine: RegisterHotKey message pump, bare-modifier
+//! double-tap hook, quick-paste target tracking and the manager that
+//! owns the single loop thread.
+
 use std::collections::BTreeSet;
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
@@ -7,14 +11,15 @@ use std::time::Duration;
 use tauri::Emitter as _;
 use tauri::Manager as _;
 
-use super::hotkey_common::{action_index_for_hotkey_id, plan_registrations};
-pub use super::hotkey_common::{
+use crate::keyboard::{global_action_ids, Modifier, DEFAULT_DOUBLE_TAP_INTERVAL_MS};
+
+use super::{register_global_hotkey, unregister_global_hotkey};
+use crate::platform::hotkey_common::{action_index_for_hotkey_id, plan_registrations};
+pub use crate::platform::hotkey_common::{
     assign_hotkey_ids, combined_hotkey_registrations, shortcut_bindings_to_double_modifiers,
     shortcut_bindings_to_windows_hotkeys, HotkeyRegistration, FIRST_HOTKEY_ID,
     FLOAT_HOTKEY_ID_BASE,
 };
-use super::windows_clipboard;
-use crate::keyboard::{global_action_ids, Modifier, DEFAULT_DOUBLE_TAP_INTERVAL_MS};
 
 const WM_HOTKEY: u32 = 0x0312;
 const WM_KEYDOWN: u32 = 0x0100;
@@ -337,9 +342,7 @@ fn hotkey_message_loop(
 
         let mut registered_ids = Vec::with_capacity(registrations.len());
         for (id, modifiers, vk) in registrations {
-            if let Err(error) =
-                windows_clipboard::register_global_hotkey(hwnd, *id, *modifiers, *vk)
-            {
+            if let Err(error) = register_global_hotkey(hwnd, *id, *modifiers, *vk) {
                 // A single occupied chord (another app already owns that
                 // shortcut) must not take down every other action sharing
                 // this loop: skip that chord and keep serving the rest.
@@ -433,7 +436,7 @@ fn hotkey_message_loop(
         }
         clear_double_modifier_tracker();
         for id in registered_ids {
-            let _ = windows_clipboard::unregister_global_hotkey(hwnd, id);
+            let _ = unregister_global_hotkey(hwnd, id);
         }
         DestroyWindow(hwnd);
     }

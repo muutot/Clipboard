@@ -11,7 +11,7 @@ use tauri::{
 use crate::commands::clipboard::{broadcast_item_usage, record_item_usage, SearchResultCache};
 use crate::config::ConfigStore;
 use crate::domain::ClipboardKind;
-use crate::platform::windows_hotkey::HotkeyManager;
+use crate::platform::windows::hotkey::HotkeyManager;
 use crate::privacy::PrivacyManager;
 use crate::storage::{ClipboardRepository, Database, HistoryFilter};
 use crate::CaptureState;
@@ -694,7 +694,7 @@ pub fn apply_window_effect<R: Runtime>(
         RawWindowHandle::Xcb(handle) => handle.window.get(),
         _ => return Err("X11 window handle unavailable".into()),
     };
-    super::x11_effect::set_blur(id, enabled)
+    crate::platform::linux::x11::effect::set_blur(id, enabled)
 }
 
 #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]

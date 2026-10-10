@@ -100,10 +100,12 @@ impl TapTracker {
 mod runtime {
     use super::*;
     use crate::platform::hotkey_common::HotkeyRegistration;
-    #[cfg(all(test, target_os = "windows"))]
-    use crate::platform::portable_hotkey_compile_test::{action_for_hotkey_id, HotkeyAction};
     #[cfg(not(target_os = "windows"))]
-    use crate::platform::windows_hotkey::{action_for_hotkey_id, HotkeyAction};
+    use crate::platform::windows::hotkey::{action_for_hotkey_id, HotkeyAction};
+    #[cfg(all(test, target_os = "windows"))]
+    use crate::platform::windows::portable_hotkey_compile_test::{
+        action_for_hotkey_id, HotkeyAction,
+    };
     use global_hotkey::{GlobalHotKeyEvent, GlobalHotKeyManager, HotKeyState};
     use std::{
         cell::RefCell,

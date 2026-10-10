@@ -16,6 +16,8 @@
 //! are compiled.
 
 #![allow(dead_code)]
+#[cfg(any(test, target_os = "linux"))]
+pub mod effect;
 
 use std::{
     collections::{HashMap, HashSet},
@@ -72,7 +74,7 @@ impl crate::platform::PlatformClipboard for LinuxX11Platform {
 }
 
 #[cfg(target_os = "linux")]
-use super::bounded_command::BoundedCommandExt;
+use crate::platform::bounded_command::BoundedCommandExt;
 
 // ---------------------------------------------------------------------------
 // Error types
@@ -430,13 +432,13 @@ extern "C" fn x11_io_error_handler(_display: *mut x11_ffi::Display) -> i32 {
 /// monitor thread owns and closes the pipe's read end.
 #[cfg(target_os = "linux")]
 pub(crate) fn try_spawn_xfixes_monitor(
-    sender: std::sync::mpsc::Sender<crate::platform::windows_clipboard::ClipboardChange>,
+    sender: std::sync::mpsc::Sender<crate::platform::windows::ClipboardChange>,
 ) -> Option<(
     thread::JoinHandle<()>,
-    crate::platform::stop_pipe::StopPipeWriter,
+    crate::platform::linux::stop_pipe::StopPipeWriter,
 )> {
-    use crate::platform::stop_pipe::StopPipePair;
-    use crate::platform::windows_clipboard::ClipboardChange;
+    use crate::platform::linux::stop_pipe::StopPipePair;
+    use crate::platform::windows::ClipboardChange;
 
     // Raw Xlib display pointer. The monitor thread takes exclusive
     // ownership of the connection, so wrapping it in a Send marker is
@@ -1167,7 +1169,7 @@ pub fn read_clipboard_file_paths() -> Vec<String> {
     {
         if output.status.success() {
             let text = String::from_utf8(output.stdout).unwrap_or_default();
-            return crate::platform::parse_uri_list(&text);
+            return crate::platform::linux::parse_uri_list(&text);
         }
     }
     vec![]
@@ -1291,7 +1293,7 @@ pub fn extract_app_icon(
     app_name: &str,
     exe_path: &str,
 ) -> Option<String> {
-    super::linux_icons::ensure_cached_app_icon(icon_dir, app_name, exe_path)
+    crate::platform::linux::icons::ensure_cached_app_icon(icon_dir, app_name, exe_path)
 }
 
 #[cfg(not(target_os = "linux"))]

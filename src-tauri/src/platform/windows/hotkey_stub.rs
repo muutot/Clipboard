@@ -6,17 +6,17 @@ use std::thread;
 
 use tauri::Emitter as _;
 
-use super::hotkey_common::{action_index_for_hotkey_id, plan_registrations};
+use crate::keyboard::{global_action_ids, Modifier};
+use crate::platform::hotkey_common::{action_index_for_hotkey_id, plan_registrations};
 #[cfg_attr(all(test, target_os = "windows"), allow(unused_imports))]
-pub use super::hotkey_common::{
+pub use crate::platform::hotkey_common::{
     assign_hotkey_ids, combined_hotkey_registrations, shortcut_bindings_to_double_modifiers,
     shortcut_bindings_to_windows_hotkeys, HotkeyRegistration, FIRST_HOTKEY_ID,
     FLOAT_HOTKEY_ID_BASE,
 };
-use crate::keyboard::{global_action_ids, Modifier};
 
 /// OS hotkey action selected by the fired registration id. Mirrors
-/// `windows_hotkey.rs`; the native loop supplies OS events, but the routing stays
+/// `windows/hotkey`; the native loop supplies OS events, but the routing stays
 /// identical so behavior differs only in OS registration, not in dispatch.
 /// `Forward` carries later registry actions as `global-hotkey` events.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -36,11 +36,11 @@ pub fn action_for_hotkey_id(id: i32) -> HotkeyAction {
 
 #[derive(Default)]
 struct QuickPasteTarget {
-    window_handle: Mutex<Option<super::quick_paste::Target>>,
+    window_handle: Mutex<Option<crate::platform::quick_paste::Target>>,
 }
 
 impl QuickPasteTarget {
-    fn remember(&self, window_handle: super::quick_paste::Target) {
+    fn remember(&self, window_handle: crate::platform::quick_paste::Target) {
         if window_handle.handle == 0 {
             return;
         }
@@ -49,7 +49,7 @@ impl QuickPasteTarget {
         }
     }
 
-    fn take(&self) -> Option<super::quick_paste::Target> {
+    fn take(&self) -> Option<crate::platform::quick_paste::Target> {
         self.window_handle
             .lock()
             .ok()
@@ -83,10 +83,16 @@ fn spawn_hotkey_thread_with_registrations(
         return thread::spawn(|| {});
     };
     #[cfg(target_os = "linux")]
-    if super::Platform::detect().is_wayland() {
-        return super::wayland_hotkeys::start(registrations, double_modifiers, tx, app, stop);
+    if crate::platform::Platform::detect().is_wayland() {
+        return crate::platform::linux::wayland::hotkeys::start(
+            registrations,
+            double_modifiers,
+            tx,
+            app,
+            stop,
+        );
     }
-    super::native_hotkeys::start(registrations, double_modifiers, tx, app, stop)
+    crate::platform::native_hotkeys::start(registrations, double_modifiers, tx, app, stop)
 }
 
 pub struct HotkeyManager {
@@ -96,7 +102,7 @@ pub struct HotkeyManager {
     tracking_handle: Option<thread::JoinHandle<()>>,
     window: Option<tauri::WebviewWindow>,
     /// Chord bindings per global action in `global_action_ids()` order.
-    /// Mirrors `windows_hotkey.rs`; a new registry row extends this vector
+    /// Mirrors `windows/hotkey`; a new registry row extends this vector
     /// without manager edits.
     global_chords: Vec<Vec<(u32, u32)>>,
     toggle_doubles: Vec<Modifier>,
@@ -175,7 +181,7 @@ impl HotkeyManager {
     }
 
     /// Starts the shared loop from a full registry-ordered chord plan in one
-    /// rebuild. Mirrors `windows_hotkey.rs`; the native loop supplies OS events, but
+    /// rebuild. Mirrors `windows/hotkey`; the native loop supplies OS events, but
     /// plan handling stays identical.
     pub fn start_with_plan(
         &mut self,
@@ -221,7 +227,7 @@ impl HotkeyManager {
                 tracking_rx.recv_timeout(std::time::Duration::from_millis(150)),
                 Err(mpsc::RecvTimeoutError::Timeout)
             ) {
-                if let Some(target) = super::quick_paste::current() {
+                if let Some(target) = crate::platform::quick_paste::current() {
                     tracked.remember(target);
                 }
             }
@@ -263,7 +269,7 @@ impl HotkeyManager {
                 };
                 let window = window.clone();
                 let app = app.clone();
-                if let Some(target) = super::quick_paste::current() {
+                if let Some(target) = crate::platform::quick_paste::current() {
                     quick_paste_target.remember(target);
                 }
                 let generation = dispatch_generation.clone();
@@ -347,7 +353,7 @@ impl HotkeyManager {
         }
     }
 
-    pub fn take_quick_paste_target(&self) -> Option<super::quick_paste::Target> {
+    pub fn take_quick_paste_target(&self) -> Option<crate::platform::quick_paste::Target> {
         self.quick_paste_target.take()
     }
 
@@ -378,10 +384,12 @@ impl HotkeyManager {
     }
 }
 
-fn foreground_window_handle() -> Option<super::quick_paste::Target> {
-    super::quick_paste::current()
+fn foreground_window_handle() -> Option<crate::platform::quick_paste::Target> {
+    crate::platform::quick_paste::current()
 }
 
-pub fn restore_window_and_paste(target: super::quick_paste::Target) -> Result<(), String> {
-    super::quick_paste::paste(target)
+pub fn restore_window_and_paste(
+    target: crate::platform::quick_paste::Target,
+) -> Result<(), String> {
+    crate::platform::quick_paste::paste(target)
 }

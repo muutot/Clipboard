@@ -123,7 +123,7 @@ pub fn capabilities_for(platform: Platform) -> PlatformCapabilities {
             Platform::LinuxWayland => {
                 #[cfg(target_os = "linux")]
                 {
-                    super::wayland_hotkeys::READY.load(std::sync::atomic::Ordering::SeqCst)
+                    super::linux::wayland::hotkeys::READY.load(std::sync::atomic::Ordering::SeqCst)
                 }
                 #[cfg(not(target_os = "linux"))]
                 {
@@ -149,7 +149,7 @@ pub fn capabilities_for(platform: Platform) -> PlatformCapabilities {
                 Platform::LinuxWayland => {
                     #[cfg(target_os = "linux")]
                     {
-                        super::wayland_paste::available()
+                        super::linux::wayland::paste::available()
                     }
                     #[cfg(not(target_os = "linux"))]
                     {
@@ -181,7 +181,7 @@ pub struct PlatformInfo {
     pub system_tray_supported: bool,
     #[cfg(target_os = "linux")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub wayland_capabilities: Option<super::linux_wayland::WaylandCapabilities>,
+    pub wayland_capabilities: Option<super::linux::wayland::WaylandCapabilities>,
     pub platform_notes: Vec<String>,
 }
 
@@ -208,7 +208,7 @@ pub fn get_platform_info() -> PlatformInfo {
     #[cfg(target_os = "linux")]
     {
         if platform.is_wayland() {
-            let wayland_caps = super::linux_wayland::WaylandCapabilities::detect();
+            let wayland_caps = super::linux::wayland::WaylandCapabilities::detect();
             if wayland_caps.requires_config {
                 notes.extend(wayland_caps.notes.clone());
             }
@@ -234,7 +234,7 @@ pub fn get_platform_info() -> PlatformInfo {
 
         #[cfg(target_os = "linux")]
         wayland_capabilities: if platform.is_wayland() {
-            Some(super::linux_wayland::WaylandCapabilities::detect())
+            Some(super::linux::wayland::WaylandCapabilities::detect())
         } else {
             None
         },
@@ -292,7 +292,7 @@ mod tests {
                         Platform::LinuxWayland => {
                             #[cfg(target_os = "linux")]
                             {
-                                crate::platform::wayland_paste::available()
+                                crate::platform::linux::wayland::paste::available()
                             }
                             #[cfg(not(target_os = "linux"))]
                             {

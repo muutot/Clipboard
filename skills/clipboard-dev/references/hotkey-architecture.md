@@ -45,7 +45,7 @@ event forward (anything else)     event with the action id payload
 | `keyboard/manager.rs`             | Config store + matcher composition; no OS code.                                                                                                                                                                                                                      |
 | `platform/hotkey_common.rs`       | Shared pure logic for both OS backends: per-action id ranges (`action_id_base` / `action_index_for_hotkey_id`, stride 1000, legacy `1..` / `1000..` layout preserved), `plan_registrations`, Win32 key mapping, binding conversion.                                  |
 | `platform/windows_hotkey.rs`      | Real `RegisterHotKey` message loop + low-level double-modifier hook. A chord the OS refuses (occupied by another app) is skipped, logged, and emitted as a `hotkey-registration-failed` event (`{action, error}`) so the settings UI can surface the conflict.       |
-| `platform/windows_hotkey_stub.rs` | Non-Windows manager: native_hotkeys / wayland_hotkeys registration, joined dispatch thread, UI work posted to main.                                                                                                                                                  |
+| `platform/windows/hotkey_stub.rs` | Non-Windows manager: native_hotkeys / wayland_hotkeys registration, joined dispatch thread, UI work posted to main.                                                                                                                                                  |
 | `lib.rs`                          | `resolve_global_hotkey_plan` (registry → chords/doubles) + `refresh_hotkey_registrations` (single rebuild) + startup wiring with bundled-default toggle fallback.                                                                                                    |
 | `commands/config/misc.rs`         | `get/configure/delete/reset_keyboard_config`; configure/delete refresh the OS loop only when `is_global_action(&action)`.                                                                                                                                            |
 
@@ -144,11 +144,11 @@ Window-only (main window focused):
   X11 sampling uses x11rb and disables monitoring with a logged/UI failure on
   disconnect. `report_registration_failure` logs both registration errors and
   failures to emit their UI notification.
-  `wayland_hotkeys.rs` owns a GlobalShortcuts portal session, closes outstanding
+  `linux/wayland/hotkeys.rs` owns a GlobalShortcuts portal session, closes outstanding
   requests on stop and the session on drop; no bare modifier tap support.
 - `platform_info.rs::capabilities_for` reports native chord backends only for
   the running platform; Wayland reports true only after portal binding succeeds.
-  Quick paste uses `quick_paste.rs` on macOS/X11 and `wayland_paste.rs` for
+  Quick paste uses `quick_paste.rs` on macOS/X11 and `linux/wayland/paste.rs` for
   Sway/Hyprland with wtype. The non-Windows manager retains a 150 ms foreground
   tracker even when global bindings are empty. Targets include both native id
   and pid; restored focus/ownership is checked before key injection. Mac/X11

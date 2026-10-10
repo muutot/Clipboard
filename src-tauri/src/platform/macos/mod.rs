@@ -438,7 +438,7 @@ impl MacOSClipboardMonitor {
     #[cfg(target_os = "macos")]
     pub fn start(
         &mut self,
-    ) -> Result<mpsc::Receiver<crate::platform::windows_clipboard::ClipboardChange>, String> {
+    ) -> Result<mpsc::Receiver<crate::platform::windows::ClipboardChange>, String> {
         if self.running.load(Ordering::SeqCst) {
             return Err("clipboard monitor is already running".to_string());
         }
@@ -459,7 +459,7 @@ impl MacOSClipboardMonitor {
 
                     if count != last_count {
                         last_count = count;
-                        let _ = sender.send(crate::platform::windows_clipboard::ClipboardChange {
+                        let _ = sender.send(crate::platform::windows::ClipboardChange {
                             sequence: count as u32,
                         });
                     }
@@ -479,7 +479,7 @@ impl MacOSClipboardMonitor {
     #[cfg(not(target_os = "macos"))]
     pub fn start(
         &mut self,
-    ) -> Result<mpsc::Receiver<crate::platform::windows_clipboard::ClipboardChange>, String> {
+    ) -> Result<mpsc::Receiver<crate::platform::windows::ClipboardChange>, String> {
         let (_sender, receiver) = mpsc::channel();
         self.running.store(true, Ordering::SeqCst);
         Ok(receiver)

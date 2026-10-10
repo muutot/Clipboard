@@ -1,7 +1,7 @@
 //! Shared pure helpers for the OS-global hotkey loop.
 //!
-//! `windows_hotkey.rs` (real `RegisterHotKey` loop) and
-//! `windows_hotkey_stub.rs` (non-Windows placeholder) previously duplicated
+//! `windows::hotkey` (real `RegisterHotKey` loop) and
+//! `hotkey_stub.rs` (non-Windows placeholder) previously duplicated
 //! all of this logic. Both now import from here, so a fix to id assignment,
 //! key mapping, or binding conversion applies to both backends at once.
 //!
@@ -180,18 +180,10 @@ pub fn shortcut_to_windows_hotkey(
             let mut mod_flags: u32 = 0;
             for m in modifiers {
                 match m {
-                    crate::keyboard::Modifier::Alt => {
-                        mod_flags |= super::windows_clipboard::MOD_ALT
-                    }
-                    crate::keyboard::Modifier::Control => {
-                        mod_flags |= super::windows_clipboard::MOD_CONTROL
-                    }
-                    crate::keyboard::Modifier::Shift => {
-                        mod_flags |= super::windows_clipboard::MOD_SHIFT
-                    }
-                    crate::keyboard::Modifier::Meta => {
-                        mod_flags |= super::windows_clipboard::MOD_WIN
-                    }
+                    crate::keyboard::Modifier::Alt => mod_flags |= super::windows::MOD_ALT,
+                    crate::keyboard::Modifier::Control => mod_flags |= super::windows::MOD_CONTROL,
+                    crate::keyboard::Modifier::Shift => mod_flags |= super::windows::MOD_SHIFT,
+                    crate::keyboard::Modifier::Meta => mod_flags |= super::windows::MOD_WIN,
                 }
             }
             let vk = windows_virtual_key(key)?;

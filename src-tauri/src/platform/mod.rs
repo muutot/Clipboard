@@ -5,29 +5,10 @@
 #[cfg(target_os = "macos")]
 pub mod macos;
 #[cfg(not(target_os = "macos"))]
-#[path = "macos.rs"]
+#[path = "macos/mod.rs"]
 pub mod macos;
 
-#[cfg(target_os = "linux")]
-pub mod linux_x11;
-#[cfg(not(target_os = "linux"))]
-#[path = "linux_x11.rs"]
-pub mod linux_x11;
-
-#[cfg(target_os = "linux")]
-pub mod linux_wayland;
-#[cfg(not(target_os = "linux"))]
-#[path = "linux_wayland.rs"]
-pub mod linux_wayland;
-
-#[cfg(target_os = "linux")]
-pub mod wayland_hotkeys;
-pub mod windows_clipboard;
-#[cfg(target_os = "windows")]
-pub mod windows_hotkey;
-#[cfg(not(target_os = "windows"))]
-#[path = "windows_hotkey_stub.rs"]
-pub mod windows_hotkey;
+pub mod windows;
 
 // ---------------------------------------------------------------------------
 //  Shared submodules
@@ -38,35 +19,23 @@ pub mod autostart;
 pub mod bounded_command;
 pub mod clipboard_snapshot;
 pub mod dispatch;
-pub mod dpapi;
 pub mod hotkey_common;
-pub mod linux_icons;
+pub mod linux;
 #[cfg(any(test, not(target_os = "windows")))]
 pub mod local_wake;
 #[cfg(any(test, target_os = "macos"))]
+#[path = "macos/image.rs"]
 mod macos_image;
 #[cfg(any(test, not(target_os = "windows")))]
 pub mod modifier_input;
-pub mod monitor;
 #[cfg(any(test, not(target_os = "windows")))]
 pub mod native_hotkeys;
 pub mod platform_info;
-#[cfg(all(test, target_os = "windows"))]
-#[path = "windows_hotkey_stub.rs"]
-mod portable_hotkey_compile_test;
 #[cfg(any(test, not(target_os = "windows")))]
 pub mod quick_paste;
 pub mod secret_store;
 pub mod single_instance;
-#[cfg(target_os = "linux")]
-pub mod stop_pipe;
 pub mod ui;
-#[cfg(target_os = "linux")]
-mod wayland_dispatch;
-#[cfg(any(test, target_os = "linux"))]
-pub mod wayland_paste;
-#[cfg(any(test, target_os = "linux"))]
-pub mod x11_effect;
 
 use std::path::Path;
 
@@ -76,7 +45,6 @@ use std::path::Path;
 
 pub use autostart::{decide_autostart_action, sync_autostart, AutostartAction};
 pub use dispatch::{platform, ClipboardImageData, PlatformClipboard};
-pub use monitor::ClipboardMonitor;
 pub use platform_info::{
     current_capabilities, get_platform_info, runtime_info, ClipboardPlatform, ForegroundApp,
     Platform, PlatformCapabilities, PlatformInfo, RuntimeInfo,
@@ -86,55 +54,11 @@ pub use ui::{
     apply_window_effect, apply_window_transparency, disk_space, refresh_tray_recent_menu,
     show_main_window, window_transparency_alpha, DiskSpace, SystemTray, WindowManager,
 };
+pub use windows::ClipboardMonitor;
 
 // ---------------------------------------------------------------------------
 //  Shared helpers
 // ---------------------------------------------------------------------------
-
-/// Parses `text/uri-list` clipboard output into local file paths.
-///
-/// Skips blank lines and `#` comments and keeps only `file://` entries.
-/// Shared by the X11 (`xclip`) and Wayland (`wl-paste`) readers so both
-/// backends agree on edge cases.
-///
-/// An empty or `localhost` authority maps to the local path; any other host
-/// is skipped because it names a remote machine, not a local file.
-/// Percent-encoding is decoded (`%20` to space); undecodable sequences fall
-/// back to the raw path rather than dropping the entry.
-pub fn parse_uri_list(text: &str) -> Vec<String> {
-    text.lines()
-        .filter_map(|line| {
-            let line = line.trim();
-            if line.is_empty() || line.starts_with('#') {
-                return None;
-            }
-            let rest = line.strip_prefix("file://")?;
-            let path = if rest.starts_with('/') {
-                rest
-            } else {
-                match rest.find('/') {
-                    Some(index) => {
-                        let (host, path) = rest.split_at(index);
-                        if host.is_empty() || host.eq_ignore_ascii_case("localhost") {
-                            path
-                        } else {
-                            return None;
-                        }
-                    }
-                    None => return None,
-                }
-            };
-            if path.is_empty() {
-                return None;
-            }
-            Some(
-                urlencoding::decode(path)
-                    .map(|decoded| decoded.into_owned())
-                    .unwrap_or_else(|_| path.to_owned()),
-            )
-        })
-        .collect()
-}
 
 /// Extracts the `.app` bundle directory from a macOS executable path:
 /// `/Applications/Foo.app/Contents/MacOS/Foo` -> `/Applications/Foo.app`.
@@ -333,34 +257,6 @@ mod tests {
     #[test]
     fn disk_space_returns_none_for_a_missing_path() {
         assert!(disk_space(Path::new("Z:\\definitely\\missing\\path")).is_none());
-    }
-
-    #[test]
-    fn parse_uri_list_keeps_only_file_entries() {
-        let parsed = super::parse_uri_list(
-            "# comment\n\nfile:///home/user/a.txt\n  file:///home/user/b.txt  \nhttp://example.com/x\ntext/plain\n",
-        );
-        assert_eq!(parsed, vec!["/home/user/a.txt", "/home/user/b.txt"]);
-    }
-
-    #[test]
-    fn parse_uri_list_empty_input_yields_no_paths() {
-        assert!(super::parse_uri_list("").is_empty());
-        assert!(super::parse_uri_list("# only a comment\n   \n").is_empty());
-    }
-
-    #[test]
-    fn parse_uri_list_decodes_percent_encoding() {
-        let parsed = super::parse_uri_list("file:///home/user/my%20doc.txt\n");
-        assert_eq!(parsed, vec!["/home/user/my doc.txt"]);
-    }
-
-    #[test]
-    fn parse_uri_list_accepts_localhost_and_skips_remote_hosts() {
-        let parsed = super::parse_uri_list(
-            "file://localhost/home/user/a.txt\nfile://otherhost/home/user/b.txt\nfile://host\n",
-        );
-        assert_eq!(parsed, vec!["/home/user/a.txt"]);
     }
 
     #[test]

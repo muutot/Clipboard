@@ -59,6 +59,12 @@
 //! ```
 
 #![allow(dead_code)]
+#[cfg(target_os = "linux")]
+pub mod dispatch;
+#[cfg(target_os = "linux")]
+pub mod hotkeys;
+#[cfg(any(test, target_os = "linux"))]
+pub mod paste;
 
 use std::{
     collections::HashSet,
@@ -115,7 +121,7 @@ impl crate::platform::PlatformClipboard for LinuxWaylandPlatform {
 }
 
 #[cfg(target_os = "linux")]
-use super::bounded_command::BoundedCommandExt;
+use crate::platform::bounded_command::BoundedCommandExt;
 
 // ---------------------------------------------------------------------------
 // WaylandCapabilities
@@ -950,7 +956,7 @@ pub fn read_clipboard_file_paths() -> Vec<String> {
     {
         if output.status.success() {
             let text = String::from_utf8(output.stdout).unwrap_or_default();
-            return crate::platform::parse_uri_list(&text);
+            return crate::platform::linux::parse_uri_list(&text);
         }
     }
     vec![]
@@ -966,7 +972,7 @@ pub fn read_clipboard_file_paths() -> Vec<String> {
 pub fn get_foreground_app() -> crate::platform::ForegroundApp {
     // Compositor window ids are not OS process ids. Reuse the JSON query
     // used by quick paste, but retain our own pid for source attribution.
-    let pid = super::wayland_paste::foreground_target()
+    let pid = crate::platform::linux::wayland::paste::foreground_target()
         .map(|target| u64::from(target.pid))
         .or_else(|| {
             // Fallback: use xdotool (works in XWayland sessions)
@@ -1018,7 +1024,7 @@ pub fn extract_app_icon(
     app_name: &str,
     exe_path: &str,
 ) -> Option<String> {
-    super::linux_icons::ensure_cached_app_icon(icon_dir, app_name, exe_path)
+    crate::platform::linux::icons::ensure_cached_app_icon(icon_dir, app_name, exe_path)
 }
 
 #[cfg(not(target_os = "linux"))]
@@ -1079,13 +1085,13 @@ pub fn write_clipboard_text_with_self_trigger(_text: &str) -> Result<(), String>
 /// on stop; the monitor thread owns and closes the pipe's read end.
 #[cfg(target_os = "linux")]
 pub(crate) fn try_spawn_data_control_monitor(
-    sender: std::sync::mpsc::Sender<crate::platform::windows_clipboard::ClipboardChange>,
+    sender: std::sync::mpsc::Sender<crate::platform::windows::ClipboardChange>,
 ) -> Option<(
     std::thread::JoinHandle<()>,
-    crate::platform::stop_pipe::StopPipeWriter,
+    crate::platform::linux::stop_pipe::StopPipeWriter,
 )> {
-    use super::wayland_dispatch::dispatch_once;
-    use crate::platform::stop_pipe::StopPipePair;
+    use crate::platform::linux::stop_pipe::StopPipePair;
+    use crate::platform::linux::wayland::dispatch::dispatch_once;
     use wayland_client::protocol::{wl_callback, wl_registry, wl_seat};
     use wayland_client::{Connection, Dispatch, QueueHandle};
     use wayland_protocols::ext::data_control::v1::client::{
@@ -1155,7 +1161,7 @@ pub(crate) fn try_spawn_data_control_monitor(
     }
 
     struct DataControlState {
-        sender: std::sync::mpsc::Sender<crate::platform::windows_clipboard::ClipboardChange>,
+        sender: std::sync::mpsc::Sender<crate::platform::windows::ClipboardChange>,
         manager: Option<Manager>,
         seat: Option<wl_seat::WlSeat>,
         device: Option<DataControlDevice>,
@@ -1356,7 +1362,7 @@ pub(crate) fn try_spawn_data_control_monitor(
                 state.sequence = state.sequence.wrapping_add(1);
                 let _ = state
                     .sender
-                    .send(crate::platform::windows_clipboard::ClipboardChange {
+                    .send(crate::platform::windows::ClipboardChange {
                         sequence: state.sequence,
                     });
             }

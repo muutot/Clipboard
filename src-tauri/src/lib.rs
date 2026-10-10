@@ -64,7 +64,7 @@ use performance::{PerformanceTracker, StartupMetrics, StartupTimer};
 use platform::hotkey_common::{
     shortcut_bindings_to_double_modifiers, shortcut_bindings_to_windows_hotkeys,
 };
-use platform::windows_hotkey::HotkeyManager;
+use platform::windows::hotkey::HotkeyManager;
 use platform::{
     show_main_window, sync_autostart, ClipboardMonitor, SingleInstanceError, SingleInstanceGuard,
     SystemTray,

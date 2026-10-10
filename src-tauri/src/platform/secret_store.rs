@@ -67,7 +67,8 @@ const SERVICE_NAME: &str = "clipboard-desktop";
 /// Whether a stored value already carries protection (DPAPI envelope on
 /// Windows, OS-store marker elsewhere).
 pub fn is_protected(value: &str) -> bool {
-    crate::platform::dpapi::is_envelope(value) || SecretAccount::from_marker(value).is_some()
+    crate::platform::windows::dpapi::is_envelope(value)
+        || SecretAccount::from_marker(value).is_some()
 }
 
 /// Seals `plain` for `account` under the current platform user. Returns `None`
@@ -77,7 +78,7 @@ pub fn protect_secret(account: SecretAccount, plain: &str) -> Option<String> {
     #[cfg(target_os = "windows")]
     {
         let _ = account;
-        crate::platform::dpapi::protect(plain)
+        crate::platform::windows::dpapi::protect(plain)
     }
     #[cfg(not(target_os = "windows"))]
     {
@@ -89,8 +90,8 @@ pub fn protect_secret(account: SecretAccount, plain: &str) -> Option<String> {
 /// plaintext (handled by the caller as a passthrough) and for markers or
 /// envelopes that cannot be resolved on this machine/user.
 pub fn unprotect_secret(stored: &str) -> Option<String> {
-    if crate::platform::dpapi::is_envelope(stored) {
-        return crate::platform::dpapi::unprotect(stored);
+    if crate::platform::windows::dpapi::is_envelope(stored) {
+        return crate::platform::windows::dpapi::unprotect(stored);
     }
     #[cfg(target_os = "windows")]
     {
