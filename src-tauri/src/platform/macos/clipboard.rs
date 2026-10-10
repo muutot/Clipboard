@@ -120,30 +120,6 @@ fn decode_rtf_bytes(bytes: &[u8]) -> Option<String> {
     Some(result)
 }
 
-#[cfg(test)]
-mod rtf_tests {
-    use super::decode_rtf_bytes;
-    #[test]
-    fn preserves_rtf_controls_and_code_page_bytes() {
-        let rtf = b"{\\rtf1\\ansi\\ansicpg1252 caf\xe9}";
-        assert_eq!(
-            decode_rtf_bytes(rtf).as_deref(),
-            Some("{\\rtf1\\ansi\\ansicpg1252 caf\\'e9}")
-        );
-        assert_eq!(
-            decode_rtf_bytes(b"{\\rtf1 \\u20320?}"),
-            Some("{\\rtf1 \\u20320?}".into())
-        );
-    }
-    #[test]
-    fn rejects_binary_runs_without_confusing_escaped_text() {
-        assert!(decode_rtf_bytes(b"{\\rtf1\\bin3 abc}").is_none());
-        assert!(decode_rtf_bytes(b"plain text").is_none());
-        assert!(decode_rtf_bytes(b"{\\rtf1 \\\\bin3}").is_some());
-        assert!(decode_rtf_bytes(b"{\\rtf1 \0}").is_none());
-    }
-}
-
 #[cfg(not(target_os = "macos"))]
 pub fn read_clipboard_rtf() -> Option<String> {
     None
@@ -309,4 +285,28 @@ pub fn write_clipboard_text_with_self_trigger(text: &str) -> Result<(), String> 
 #[cfg(not(target_os = "macos"))]
 pub fn write_clipboard_text_with_self_trigger(_text: &str) -> Result<(), String> {
     Err("macOS clipboard writing is not supported on this platform".to_owned())
+}
+
+#[cfg(test)]
+mod rtf_tests {
+    use super::decode_rtf_bytes;
+    #[test]
+    fn preserves_rtf_controls_and_code_page_bytes() {
+        let rtf = b"{\\rtf1\\ansi\\ansicpg1252 caf\xe9}";
+        assert_eq!(
+            decode_rtf_bytes(rtf).as_deref(),
+            Some("{\\rtf1\\ansi\\ansicpg1252 caf\\'e9}")
+        );
+        assert_eq!(
+            decode_rtf_bytes(b"{\\rtf1 \\u20320?}"),
+            Some("{\\rtf1 \\u20320?}".into())
+        );
+    }
+    #[test]
+    fn rejects_binary_runs_without_confusing_escaped_text() {
+        assert!(decode_rtf_bytes(b"{\\rtf1\\bin3 abc}").is_none());
+        assert!(decode_rtf_bytes(b"plain text").is_none());
+        assert!(decode_rtf_bytes(b"{\\rtf1 \\\\bin3}").is_some());
+        assert!(decode_rtf_bytes(b"{\\rtf1 \0}").is_none());
+    }
 }
