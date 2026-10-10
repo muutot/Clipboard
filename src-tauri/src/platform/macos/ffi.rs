@@ -1,11 +1,15 @@
 //! Declarations of the native macOS APIs used by this adapter
 //! (CoreGraphics, Carbon Event Manager, Accessibility, NSStatusBar).
 //!
-//! They are only linkable on macOS.  Every call site in this module is still a
-//! commented-out outline, so the block is kept as documentation of the FFI
-//! boundary rather than as a working binding.
+//! They are only linkable on macOS.  Only the accessibility probe is wired to
+//! a call site (see `accessibility.rs`); the remaining declarations document
+//! the FFI boundary for the outlined hotkey/tray work and stay unused, so this
+//! file is not evidence that those paths run.
 
+// `ApplicationServices` is the umbrella that exports the CoreGraphics and
+// HIServices symbols declared below; nothing else links it for us.
 #[cfg(target_os = "macos")]
+#[link(name = "ApplicationServices", kind = "framework")]
 extern "C" {
     // ---- CGEvent (CoreGraphics) ----------------------------------------
     fn CGEventSourceCreate(state_id: i32) -> *mut std::ffi::c_void;
@@ -44,7 +48,8 @@ extern "C" {
     fn UnregisterEventHotKey(hotkey_ref: *mut std::ffi::c_void) -> i32;
 
     // ---- Accessibility ------------------------------------------------
-    fn AXIsProcessTrusted() -> bool;
+    /// `AXIsProcessTrusted` returns a `Boolean` (`UInt8`), not a Rust `bool`.
+    pub fn AXIsProcessTrusted() -> u8;
     fn AXMakeProcessTrusted() -> i32;
 
     // ---- NSStatusBar --------------------------------------------------

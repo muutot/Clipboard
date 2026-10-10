@@ -16,7 +16,7 @@
 //! | `clipboard.rs`      | Live pasteboard reads/writes, foreground app and icon lookup             |
 //! | `accessibility.rs`  | Accessibility permission state reported to `platform_info`              |
 //! | `error.rs`          | `MacOSError` / `MacOSResult`                                           |
-//! | `ffi.rs`            | Native API declarations — every call site is still a commented outline   |
+//! | `ffi.rs`            | Native API declarations — only the accessibility probe has a call site   |
 //! | `intended.rs`       | Recorded design intent (hotkey hook, monitor, tray) — **not wired yet**  |
 //!
 //! The live surface is the `MacPlatform` impl below plus `clipboard.rs`;

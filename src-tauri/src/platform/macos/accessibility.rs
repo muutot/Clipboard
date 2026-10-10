@@ -1,9 +1,10 @@
 //! Accessibility permission state reported to `platform_info`.
 //!
-//! `is_trusted()` currently returns `false` unconditionally: the
-//! `AXIsProcessTrusted` / `AXMakeProcessTrusted` calls are still commented out
-//! in `ffi.rs`, so treat this as an honest "not yet wired" signal rather than a
-//! working permission probe.
+//! `is_trusted()` wraps the public `AXIsProcessTrusted` probe, so the
+//! "Accessibility permission is not granted" platform note is only emitted when
+//! the process really lacks the permission. Asking the system to grant it is
+//! still not wired: `request_permission()` reports the missing request path
+//! instead of pretending to prompt.
 
 #[cfg(target_os = "macos")]
 use super::error::MacOSError;
@@ -33,8 +34,9 @@ impl MacOSAccessibilityHelper {
     /// Wraps `AXIsProcessTrusted()`.
     #[cfg(target_os = "macos")]
     pub fn is_trusted() -> bool {
-        // unsafe { AXIsProcessTrusted() }
-        false
+        // SAFETY: `AXIsProcessTrusted` only reads the process's own code-signing
+        // and TCC state; it takes no arguments and touches no memory we own.
+        unsafe { super::ffi::AXIsProcessTrusted() != 0 }
     }
 
     #[cfg(not(target_os = "macos"))]
