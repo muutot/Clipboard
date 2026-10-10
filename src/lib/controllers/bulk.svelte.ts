@@ -17,7 +17,7 @@ import {
   persistHardDelete,
 } from "$lib/services/clipboard";
 import { showToast } from "$lib/services/toast";
-import { planBulkDelete } from "$lib/utils/bulk-actions";
+import { planBulkCopy, planBulkDelete } from "$lib/utils/bulk-actions";
 export interface BulkDependencies {
   itemStore: ItemStoreView;
   readonly settings: GeneralSettings;
@@ -48,18 +48,16 @@ export function createBulkController(deps: BulkDependencies) {
       return;
     }
     // Text/link rows carry the full content in `textContent` while `title`
-    // is only the first line; copying titles silently drops content.
-    // Media rows keep `title` (their `textContent` is null or an internal
-    // multi-file JSON list, never user-facing text).
-    const text = selectedItems
-      .map((i) => (i.kind === "text" || i.kind === "link" ? i.textContent || i.title : i.title))
-      .join("\n");
+    // is only the first line; image/file rows contribute their source path
+    // (see `planBulkCopy`), never the display title alone.
+    const { text, copiedCount } = planBulkCopy(selectedItems);
+    if (copiedCount === 0) {
+      showToast(deps.translate("toast.copyFailed"), "error");
+      return;
+    }
     void writeClipboardText(text)
       .then(() => {
-        showToast(
-          deps.translate("toast.bulkCopySuccess", { count: selectedItems.length }),
-          "success",
-        );
+        showToast(deps.translate("toast.bulkCopySuccess", { count: copiedCount }), "success");
       })
       .catch(() => {
         showToast(deps.translate("toast.copyFailed"), "error");

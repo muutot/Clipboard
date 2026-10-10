@@ -128,7 +128,11 @@ Renders viewport-bounded menu items with `id`, label, icon, destructive state, a
 
 ### `BulkBar.svelte`
 
-Multiselection action bar extracted from the main route. Renders nothing when `selectedCount` is 0. Props: `selectedCount`, `selectedActiveCount`, `selectedDeletedCount`, `activeFilter: string`, `allSelectedFavorites`, plus `ondeselect`/`oncopy`/`ondelete`/`onfavorite`/`onrestore`/`onpermanentdelete` callbacks. Owns its `.bulk-bar` scoped styles (moved verbatim from the route; no parent selectors or page-scope element rules touch it). The route keeps the derived counts and bulk-operation implementations; the bar only presents them. i18n labels resolve internally via `messages`/`resolvePath`, matching other panels.
+Multiselection action bar extracted from the main route. Renders nothing when `selectedCount` is 0. Props: `selectedCount`, `selectedActiveCount`, `selectedDeletedCount`, `activeFilter: string`, `allSelectedFavorites`, plus `ondeselect`/`oncopy`/`ondelete`/`onfavorite`/`onrestore`/`onpermanentdelete` callbacks. Owns its `.bulk-bar` scoped styles (moved verbatim from the route; no parent selectors or page-scope element rules touch it). The route keeps the derived counts and bulk-operation implementations; the bar only presents them. Its
+copy action runs the route's `bulkCopy`, which builds the payload through `planBulkCopy`
+(`utils/bulk-actions.ts`): text/link rows contribute their full content and image/file rows contribute their
+source path or multi-file path list, never the display title alone, and the success toast counts only rows
+that actually contributed. i18n labels resolve internally via `messages`/`resolvePath`, matching other panels.
 
 ### `StatusBar.svelte`
 

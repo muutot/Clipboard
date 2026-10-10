@@ -35,3 +35,54 @@ export function planBulkDelete(
   }
   return { softIds, permanentIds, hardIds };
 }
+
+export interface BulkCopyPayload {
+  /** Newline-joined plain text written to the clipboard. */
+  text: string;
+  /** Selected rows that actually contributed content. */
+  copiedCount: number;
+}
+
+/** Parses a file record's MULTI-file path list (stored as JSON text). */
+function filePathList(textContent: string | null | undefined): string[] | null {
+  if (!textContent || !textContent.startsWith("[")) return null;
+  try {
+    const parsed = JSON.parse(textContent) as unknown;
+    if (!Array.isArray(parsed)) return null;
+    const paths = parsed.filter(
+      (entry): entry is string => typeof entry === "string" && entry.trim().length > 0,
+    );
+    return paths.length > 0 ? paths : null;
+  } catch {
+    return null;
+  }
+}
+
+function bulkCopyEntry(item: ClipboardItem): string | null {
+  if (item.kind === "text" || item.kind === "link") {
+    const text = item.textContent || item.title;
+    return text.length > 0 ? text : null;
+  }
+  if (item.kind === "file") {
+    const paths = filePathList(item.textContent);
+    if (paths) return paths.join("\n");
+  }
+  return item.resourcePath ? item.resourcePath : null;
+}
+
+/**
+ * Plans the plain-text payload for a bulk copy. Text/link rows contribute
+ * their full content; image/file rows contribute their source path (or the
+ * multi-file path list), the same representation the single-item copy uses,
+ * instead of the display title -- a title is not clipboard content, so the
+ * old behavior silently reduced media rows to their names. Rows with nothing
+ * copyable are dropped so `copiedCount` stays honest.
+ */
+export function planBulkCopy(items: readonly ClipboardItem[]): BulkCopyPayload {
+  const parts: string[] = [];
+  for (const item of items) {
+    const entry = bulkCopyEntry(item);
+    if (entry !== null) parts.push(entry);
+  }
+  return { text: parts.join("\n"), copiedCount: parts.length };
+}
