@@ -15,10 +15,9 @@
     detectContentActions,
     type QuickAction,
     writeClipboardText,
-    getDisplayTitle,
-    getDisplayRemainingLines,
-    SOURCE_TONE_COLORS,
   } from "$lib/services/clipboard";
+  import { SOURCE_TONE_COLORS } from "$lib/services/clipboard/mapping";
+  import { getDisplayRemainingLines, getDisplayTitle } from "$lib/utils/content/display-text";
   import { trimTrailingBlankLines } from "$lib/utils/layout/virtual-scroll";
   import { assetUrl as baseAssetUrl } from "$lib/utils/content/format";
   import { detectQuickActions, parseIsoDate, quickActionKind } from "$lib/utils/content/patterns";

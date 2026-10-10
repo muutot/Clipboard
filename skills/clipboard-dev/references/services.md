@@ -24,6 +24,11 @@ When changing settings, update normalization, valid unions, numeric ranges, clon
 
 ## `clipboard.ts`
 
+`clipboard.ts` is the IPC-facing service module. Pure display-text helpers
+(`getDisplayTitle`, `getDisplayRemainingLines`, generated/custom title detection) live in
+`src/lib/utils/content/display-text.ts`, and the persisted→view mapping (`toClipboardItem`,
+`parseResourceMetadata`, size labels, source tone) lives in `services/clipboard/mapping.ts`.
+
 `hydrateClipboardItem` loads a summary through `get_clipboard_item`, coalesces only
 in-flight requests, and fails on missing records. Native default text/link copy passes only
 the id to the backend, which reads the full record; it never hydrates a body into the WebView.

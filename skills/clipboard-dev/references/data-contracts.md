@@ -9,13 +9,13 @@ Frontend `ClipboardItem.ocrBlocks?: OcrTextBlock[]` comes from the existing
 Coordinates refer to original image pixels. This is derived UI state, not a new
 clipboard-row column or sync DTO field.
 
-| Layer              | Source                                                                   | Role                                                            |
-| ------------------ | ------------------------------------------------------------------------ | --------------------------------------------------------------- |
-| Rust domain        | `src-tauri/src/domain/clipboard_item.rs`                                 | persisted/backend `ClipboardItem` and lowercase `ClipboardKind` |
-| SQLite mapping     | `src-tauri/src/storage/repository.rs`                                    | row conversion, CRUD, dedup, favorite/delete semantics          |
-| Frontend raw type  | `PersistedClipboardItem` in `src/lib/types/clipboard.ts`                 | camelCase Tauri payload                                         |
-| Frontend view type | `ClipboardItem` in the same file                                         | display-enriched item used by cards/routes                      |
-| Mapping            | `toClipboardItem` and `parseResourceMetadata` in `services/clipboard.ts` | raw payload → view state and metadata                           |
+| Layer              | Source                                                                           | Role                                                            |
+| ------------------ | -------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| Rust domain        | `src-tauri/src/domain/clipboard_item.rs`                                         | persisted/backend `ClipboardItem` and lowercase `ClipboardKind` |
+| SQLite mapping     | `src-tauri/src/storage/repository.rs`                                            | row conversion, CRUD, dedup, favorite/delete semantics          |
+| Frontend raw type  | `PersistedClipboardItem` in `src/lib/types/clipboard.ts`                         | camelCase Tauri payload                                         |
+| Frontend view type | `ClipboardItem` in the same file                                                 | display-enriched item used by cards/routes                      |
+| Mapping            | `toClipboardItem` and `parseResourceMetadata` in `services/clipboard/mapping.ts` | raw payload → view state and metadata                           |
 
 Rust payload structs sent to the frontend use `#[serde(rename_all = "camelCase")]`. `ClipboardKind` serializes as `text`, `link`, `image`, or `file`. Text records may also carry optional rich-text fragments for paste-by-format: `html_content`/`htmlContent` (the CF_HTML fragment on Windows or `public.html` on macOS) and `rtf_content`/`rtfContent` (the registered `Rich Text Format` payload on Windows, `public.rtf` NSData on macOS, and `text/rtf` on Linux; macOS raw binary runs are skipped). Both are capped at the configurable `maxTextCaptureBytes` (default 500_000; see `settings-reference.md`) and `#[serde(default)]` so older records and imports stay compatible. `writeClipboardHtml(html, plainText?, rtf?)` writes `text/html` plus optional `text/plain` and `text/rtf`, so office suites that prefer RTF keep formatted paste. When fields change, update all four layers plus imports/exports and tests.
 

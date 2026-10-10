@@ -12,13 +12,13 @@
   import { isTauriRuntime } from "$lib/services/runtime";
   import {
     copyClipboardItem,
-    getDisplayTitle,
     loadClipboardHistory,
     pasteClipboardItem,
     persistDelete,
     persistFavorite,
     persistHardDelete,
   } from "$lib/services/clipboard";
+  import { getDisplayTitle } from "$lib/utils/content/display-text";
   import { generalSettings } from "$lib/services/settings";
   import { applyGeneralSettingsToDocument } from "$lib/services/settings-bootstrap";
   import type {

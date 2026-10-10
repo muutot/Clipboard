@@ -10,7 +10,7 @@ import {
   measureVisualLines,
   trimTrailingBlankLines,
 } from "$lib/utils/layout/virtual-scroll";
-import { getDisplayRemainingLines } from "$lib/services/clipboard";
+import { getDisplayRemainingLines } from "$lib/utils/content/display-text";
 
 export interface CardEstimateInputs {
   imageHeight: number;

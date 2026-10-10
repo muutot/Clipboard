@@ -30,13 +30,13 @@
     listAllTags,
     listSourceApplications,
     materializeClipboardItem,
-    toClipboardItem,
     copyClipboardItem,
     copyClipboardPath,
     pasteClipboardItem,
     deriveTextEditPatch,
     writeClipboardText,
   } from "$lib/services/clipboard";
+  import { toClipboardItem } from "$lib/services/clipboard/mapping";
   import { getRuntimeInfo, isTauriRuntime } from "$lib/services/runtime";
   import { showToast } from "$lib/services/toast";
   import { onContextMenuOpenChanged } from "$lib/services/context-menu";

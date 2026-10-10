@@ -25,7 +25,7 @@
   import { invoke } from "@tauri-apps/api/core";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { isTauriRuntime } from "$lib/services/runtime";
-  import { getDisplayTitle } from "$lib/services/clipboard";
+  import { getDisplayTitle } from "$lib/utils/content/display-text";
 
   const MARKDOWN_RE = /^#{1,6}\s|^>\s|^-\s|^\*\*|^\`\`\`|^\[.+\]\(.+\)/m;
   const CODE_PATTERNS: [RegExp, string][] = [
