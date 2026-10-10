@@ -49,6 +49,8 @@
     onmaterialize: (id: string) => void;
     onedit: (id: string) => void;
     editingId?: string | null;
+    editDraft?: { content: string; title: string } | null;
+    oneditingdraftchange?: (id: string, content: string, title: string) => void;
     onsaveedit: (id: string, content: string) => void | Promise<boolean>;
     onsaveasnew: (id: string, title: string, content: string) => void;
     oncanceledit: (id: string) => void;
@@ -103,6 +105,8 @@
     onmaterialize,
     onedit,
     editingId = null,
+    editDraft = null,
+    oneditingdraftchange,
     onsaveedit,
     onsaveasnew,
     oncanceledit,
@@ -153,6 +157,8 @@
       {onmaterialize}
       {onedit}
       {editingId}
+      {editDraft}
+      {oneditingdraftchange}
       {onsaveedit}
       {onsaveasnew}
       {oncanceledit}

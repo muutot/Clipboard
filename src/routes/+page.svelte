@@ -1432,13 +1432,29 @@
   }
 
   let editingId = $state<string | null>(null);
+  let editDraft = $state<{ content: string; title: string } | null>(null);
+
+  function endEdit() {
+    editingId = null;
+    editDraft = null;
+  }
+
+  function updateEditDraft(id: string, content: string, title: string) {
+    if (editingId !== id) return;
+    editDraft = { content, title };
+  }
 
   async function startEdit(id: string) {
     const item = findLoadedItem(id);
     if (!item) return;
     try {
-      await ensureItemHydrated(item);
+      const hydrated = await ensureItemHydrated(item);
+      if (hydrated.contentLoaded === false) return;
       editingId = id;
+      editDraft = {
+        content: hydrated.textContent || hydrated.title,
+        title: hydrated.title,
+      };
     } catch (error) {
       console.error("Unable to load clipboard editor", error);
       showToast(_t("toast.saveFailed"), "error");
@@ -1475,7 +1491,7 @@
           imageMeta: mapped.imageMeta,
           searchableText: mapped.searchableText,
         }));
-        editingId = null;
+        endEdit();
         showToast(_t("toast.editSaved"), "success");
         return true;
       } catch (e) {
@@ -1510,13 +1526,13 @@
       sizeLabel: newSizeLabel,
       ...(item.customTitle ? {} : { title: newTitle }),
     }));
-    editingId = null;
+    endEdit();
     showToast(_t("toast.editSaved"), "success");
     return true;
   }
 
   function cancelEdit(_id: string) {
-    editingId = null;
+    endEdit();
   }
 
   function renameTitle(id: string, title: string) {
@@ -1625,7 +1641,7 @@
   }
 
   async function saveAsNew(id: string, title: string, content: string) {
-    editingId = null;
+    endEdit();
     try {
       await invoke("save_clipboard_item_as_new", {
         id,
@@ -2219,6 +2235,8 @@
       onmaterialize={prepareItemMaterialization}
       onedit={startEdit}
       {editingId}
+      {editDraft}
+      oneditingdraftchange={updateEditDraft}
       onsaveedit={saveEdit}
       onsaveasnew={saveAsNew}
       oncanceledit={cancelEdit}

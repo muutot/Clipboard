@@ -16,7 +16,12 @@ Owns one list item: text/link/image/file rendering, source metadata, quick/conte
 Key contracts:
 
 - The route owns collection state and persistence decisions; the card emits controlled callbacks keyed by item ID.
-- Inline editing is authoritative on the route's single `editingId`, which is passed down through `HistoryList` as the `editingId` prop. Each card closes its own editor when `editingId` is not its item id, so two cards can never both be in edit mode.
+- Inline editing is authoritative on the route's single `editingId` plus its draft, both passed down through
+  `HistoryList` as the `editingId` and `editDraft` props. The card derives its open state from
+  `editingId === item.id && editDraft != null` and reports keystrokes through `oneditingdraftchange`, so two
+  cards can never both edit and the uncommitted draft survives the card unmounting (filter change, virtual
+  scroll) instead of being discarded with the component. Saving, cancelling, save-as-new, and Escape all
+  clear the route draft together.
 - `onheightchange` plus `heightMeasurementKey` feed virtual scrolling. Re-measure whenever visible content, card layout metrics, action/meta visibility, title state, or line limits can alter height.
 - Resource previews use `convertFileSrc`; source app icons are resolved from the managed `iconsDir` store using the icon key, not an arbitrary full path.
 - Card action order and context-menu behavior must stay aligned. Reuse the same callback path rather than creating a second implementation. Exception: while the card is in inline-edit mode and the editor has a text selection, the context-menu `copy` writes that selection to the clipboard (`writeClipboardText` + toast) instead of emitting `oncopy(item.id)`; with no selection it still emits `oncopy`.

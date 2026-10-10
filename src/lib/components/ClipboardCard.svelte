@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { tick } from "svelte";
   import AppIcon from "$lib/components/AppIcon.svelte";
   import CardDateDialog from "$lib/components/CardDateDialog.svelte";
   import CardActions from "$lib/components/CardActions.svelte";
@@ -96,6 +95,8 @@
     ondetail: (id: string) => void;
     onedit: (id: string) => void;
     editingId?: string | null;
+    editDraft?: { content: string; title: string } | null;
+    oneditingdraftchange?: (id: string, content: string, title: string) => void;
     onsaveedit: (id: string, content: string) => void | Promise<boolean>;
     oncanceledit: (id: string) => void;
     onplainpaste: (id: string) => void;
@@ -146,6 +147,8 @@
     ondetail,
     onedit,
     editingId = null,
+    editDraft = null,
+    oneditingdraftchange,
     onsaveedit,
     oncanceledit,
     onplainpaste,
@@ -185,16 +188,13 @@
     return trackContextMenuOpen();
   });
 
-  let editing = $state(false);
-  let editContent = $state("");
-  let editTitle = $state("");
   let editTextarea = $state<HTMLTextAreaElement | null>(null);
 
-  // Editing is owned by the route's single `editingId`. When another card
-  // starts editing, this card must close its editor so two are never open.
-  $effect(() => {
-    if (editingId !== item.id && editing) editing = false;
-  });
+  // The route owns the single active draft keyed by `editingId`. Deriving the
+  // editor's open state from the route keeps the draft alive when the card
+  // unmounts -- for example when a filter change or virtual scroll removes the
+  // row -- and guarantees only one card is in edit mode at a time.
+  const editing = $derived(editingId === item.id && editDraft != null);
 
   let tagAdding = $state(false);
   let tagDraft = $state("");
@@ -268,7 +268,8 @@
   });
 
   const contentChanged = $derived(
-    editContent !== (item.textContent || item.title) || editTitle !== item.title,
+    editDraft != null &&
+      (editDraft.content !== (item.textContent || item.title) || editDraft.title !== item.title),
   );
   const primaryPreviewText = $derived(
     trimTrailingBlankLines(item.textContent) || trimTrailingBlankLines(item.title),
@@ -431,11 +432,6 @@
 
   async function beginEdit() {
     await onedit(item.id);
-    await tick();
-    if (item.contentLoaded === false) return;
-    editContent = item.textContent || item.title;
-    editTitle = item.title;
-    editing = true;
   }
 
   /** Selected text in the inline editor, if the user highlighted any. */
@@ -502,27 +498,25 @@
 
   async function saveEdit(event: Event) {
     event.stopPropagation();
-    const saved = await onsaveedit(item.id, editContent);
-    if (saved !== false) editing = false;
+    if (!editDraft) return;
+    await onsaveedit(item.id, editDraft.content);
   }
 
   function cancelEdit(event: Event) {
     event.stopPropagation();
-    editing = false;
     oncanceledit(item.id);
   }
 
   function saveAsNew(event: Event) {
     event.stopPropagation();
-    onsaveasnew(item.id, editTitle, editContent);
-    editing = false;
+    if (!editDraft) return;
+    onsaveasnew(item.id, editDraft.title, editDraft.content);
   }
 
   function handleKeydown(event: KeyboardEvent) {
     if (editing && event.key === "Escape") {
       event.preventDefault();
       event.stopPropagation();
-      editing = false;
       oncanceledit(item.id);
     }
   }
@@ -644,7 +638,6 @@
     if (e.key === "Escape") {
       e.preventDefault();
       e.stopPropagation();
-      editing = false;
       oncanceledit(item.id);
     }
   }
@@ -829,15 +822,27 @@
       {#if item.customTitle}
         <input
           class="edit-title-input"
-          bind:value={editTitle}
+          value={editDraft?.title ?? ""}
+          oninput={(event) =>
+            oneditingdraftchange?.(
+              item.id,
+              editDraft?.content ?? "",
+              (event.currentTarget as HTMLInputElement).value,
+            )}
           placeholder={_t("card.editTitlePlaceholder")}
         />
       {/if}
       <textarea
-        bind:value={editContent}
+        value={editDraft?.content ?? ""}
         bind:this={editTextarea}
-        rows={Math.min(12, Math.max(3, editContent.split("\n").length))}
+        rows={Math.min(12, Math.max(3, (editDraft?.content ?? "").split("\n").length))}
         placeholder={_t("edit.placeholder")}
+        oninput={(event) =>
+          oneditingdraftchange?.(
+            item.id,
+            (event.currentTarget as HTMLTextAreaElement).value,
+            editDraft?.title ?? "",
+          )}
         onclick={stopPropagation}
         onkeydown={handleEditKeydown}></textarea>
       <div class="edit-actions">
