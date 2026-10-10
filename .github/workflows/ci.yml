@@ -101,4 +101,11 @@ jobs:
           tool: cargo-nextest
 
       - name: Test
+        env:
+          # `read_clipboard_file_paths_reads_a_cf_hdrop` empties and rewrites the
+          # real system clipboard. That is harmless on a headless CI runner, but
+          # it would destroy a developer's clipboard under `npm run verify` or
+          # `ci:local`, so the test only runs when this opt-in is set. The test
+          # is `cfg(target_os = "windows")`, so only the Windows runner enables it.
+          CLIPBOARD_ALLOW_REAL_CLIPBOARD_TEST: ${{ runner.os == 'Windows' && '1' || '' }}
         run: cargo nextest run --cargo-profile ci --manifest-path src-tauri/Cargo.toml --workspace

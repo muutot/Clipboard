@@ -2436,6 +2436,19 @@ mod tests {
     #[cfg(target_os = "windows")]
     #[test]
     fn read_clipboard_file_paths_reads_a_cf_hdrop() {
+        // `set_cf_hdrop` calls `EmptyClipboard` and replaces the system
+        // clipboard, so this test destroys whatever a developer had copied.
+        // Only run it when explicitly permitted: CI's Windows runner sets the
+        // variable, while local `npm run verify` / `ci:local` runs skip it so
+        // no real user clipboard is overwritten. Synthetic DIB/CF_HTML tests
+        // cover the decoding rules without touching the clipboard.
+        if std::env::var_os("CLIPBOARD_ALLOW_REAL_CLIPBOARD_TEST").is_none() {
+            eprintln!(
+                "skipping read_clipboard_file_paths_reads_a_cf_hdrop: set \
+                 CLIPBOARD_ALLOW_REAL_CLIPBOARD_TEST=1 to allow overwriting the real system clipboard"
+            );
+            return;
+        }
         let path = r"C:\Windows\notepad.exe";
         set_cf_hdrop(path);
         assert_eq!(read_clipboard_file_paths(), vec![path.to_owned()]);
