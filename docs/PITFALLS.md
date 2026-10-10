@@ -339,6 +339,7 @@ error[E0658]: use of unstable library feature `int_roundings`
 - 用 C 字符串字面量 `c"NAME"` 时注意 `c_char` 在 aarch64 Linux 是无符号的，而手写 FFI 常声明 `*const i8`——保留 `.cast()`，别让"更干净"的写法破坏可移植性。
 - 搬移或重命名这类模块时，全仓搜旧路径：只在 Linux/macOS 编译的调用点对本机不可见。实例：`platform/linux_x11.rs` 收成 `platform/linux/x11/mod.rs` 后，`platform/windows/monitor.rs` 的 `#[cfg(target_os = "linux")]` 事件监视分支仍写 `crate::platform::linux_x11::try_spawn_xfixes_monitor`，Linux 上直接 E0433（Wayland 同处一行之隔），本地三关依旧全绿。
 - 拆分模块时，`pub(crate)` 的项**不能**用 `pub use` 重新导出：只在目标平台编译的那份代码会报 E0364（`is only public within the crate, and cannot be re-exported outside`），本机三关照旧全绿。改成 `pub(crate) use`，或把该项提到 `pub`。
+- 同一个父模块下的**兄弟子模块**默认互相不可见：把 `a.rs` 拆成 `a/{b,c}.rs` 后，`b` 里私有的项在 `c` 中直接 E0603/E0425。跨文件共享的常量、结构体、函数要标 `pub(super)`（或从 `crate::...` 全路径引用）。实例：`cli/api.rs` 拆成 `cli/api/{mod,http,routes}.rs` 时，`http` 与 `routes` 互引的项都改成了 `pub(super)`；`LocalApiServer` 仍留在 `mod.rs`，所以 `cli` 的 `pub use api::LocalApiServer` 不受影响。
 
 ## Rust 模块结构
 

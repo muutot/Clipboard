@@ -303,7 +303,7 @@ def detect_surfaces(root: Path, files: list[Path], manifests: list[str], dep_tex
         add_surface(surfaces, "backend_api", "server/API framework dependency")
     if has_any(path_blob, ("controllers/", "api/", "openapi", "swagger", "graphql", "schema.graphql", "+server.")):
         add_surface(surfaces, "backend_api", "API route/schema files")
-    if has_any(dep_text, ("tauri",)) and has_any(path_blob, ("commands/", "cli/api.rs")):
+    if has_any(dep_text, ("tauri",)) and has_any(path_blob, ("commands/", "cli/api/")):
         add_surface(surfaces, "backend_api", "Tauri command/loopback API boundary")
 
     if has_any(dep_text, ("prisma", "typeorm", "sequelize", "mongoose", "drizzle", "knex", "sqlalchemy", "alembic", "django", "diesel", "sqlx", "rusqlite", "gorm", "hibernate", "entityframework", "ecto")):
