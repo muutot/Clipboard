@@ -136,7 +136,9 @@ Window-only (main window focused):
   `shortcutMatchesEvent` implement it — keep them in lock-step.
 - Double-modifier taps stay toggle-only by design (`RegisterHotKey` cannot
   express them); `allow_double_tap` marks the single action that owns the
-  hook. Other keys pressed mid-tap cancel the pending sequence.
+  hook. Other keys pressed mid-tap cancel the pending sequence, and a
+  foreground change also cancels it (`paste_target.rs` foreground hook) so a
+  mouse-only window switch between two taps cannot misfire the toggle.
 - Non-Windows registration is real: `native_hotkeys.rs` owns macOS/X11
   `global-hotkey` managers on the main thread and a stoppable event worker;
   `modifier_input.rs` samples keys every 10 ms for bare modifier double taps.

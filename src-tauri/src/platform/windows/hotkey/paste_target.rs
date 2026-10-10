@@ -58,6 +58,10 @@ pub(super) unsafe extern "system" fn foreground_hook_proc(
     if id_object != OBJID_WINDOW || hwnd == 0 {
         return;
     }
+    // A mouse-only window switch never reaches the keyboard hook, so drop any
+    // pending double-modifier tap here; otherwise the two taps could still
+    // satisfy the double-tap interval across the switch and misfire.
+    super::double_tap::cancel_pending_double_tap();
     if let Ok(guard) = FOREGROUND_TARGET.lock() {
         if let Some(target) = guard.as_ref() {
             target.remember(hwnd);

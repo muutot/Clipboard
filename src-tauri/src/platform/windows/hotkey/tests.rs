@@ -164,6 +164,37 @@ fn tracker_resets_when_a_different_modifier_is_tapped_in_between() {
 }
 
 #[test]
+fn tracker_cancels_a_pending_tap_on_foreground_change() {
+    let mut tracker = DoubleModifierTracker::new([Modifier::Shift]);
+
+    // First bare tap is remembered...
+    tracker.on_key_event(VK_SHIFT, true, 1_000);
+    tracker.on_key_event(VK_SHIFT, false, 1_020);
+    // ...then a mouse-only window switch cancels it (no key event in between).
+    tracker.cancel_pending();
+    tracker.on_key_event(VK_SHIFT, true, 1_100);
+    assert!(!tracker.on_key_event(VK_SHIFT, false, 1_120));
+
+    // A clean double tap afterwards still works (space past the interval so
+    // the 1_120 tap is not reused as the first half).
+    tracker.on_key_event(VK_SHIFT, true, 1_500);
+    tracker.on_key_event(VK_SHIFT, false, 1_520);
+    tracker.on_key_event(VK_SHIFT, true, 1_600);
+    assert!(tracker.on_key_event(VK_SHIFT, false, 1_620));
+}
+
+#[test]
+fn tracker_cancel_pending_discards_a_held_modifier_press() {
+    let mut tracker = DoubleModifierTracker::new([Modifier::Shift]);
+
+    tracker.on_key_event(VK_SHIFT, true, 1_000);
+    // Foreground change while the modifier is still held.
+    tracker.cancel_pending();
+    // The later release must not count as a clean tap.
+    assert!(!tracker.on_key_event(VK_SHIFT, false, 1_020));
+}
+
+#[test]
 fn tracker_only_fires_for_registered_modifiers() {
     let mut tracker = DoubleModifierTracker::new([Modifier::Shift]);
 

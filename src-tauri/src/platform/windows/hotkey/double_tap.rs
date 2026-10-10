@@ -102,6 +102,16 @@ impl DoubleModifierTracker {
             false
         }
     }
+
+    /// Drops any pending tap or held press, e.g. when the foreground window
+    /// changes through a pure mouse action. Without this, a first tap could
+    /// survive a window switch (no key event in between) and an unrelated
+    /// second tap inside the interval would fire an unintended toggle.
+    pub(super) fn cancel_pending(&mut self) {
+        self.active_press = None;
+        self.press_interrupted = false;
+        self.last_tap = None;
+    }
 }
 
 pub(super) unsafe extern "system" fn keyboard_hook_proc(
@@ -161,5 +171,16 @@ pub(super) fn set_double_modifier_tracker(double_modifiers: &[Modifier]) {
 pub(super) fn clear_double_modifier_tracker() {
     if let Ok(mut guard) = DOUBLE_MODIFIER_TRACKER.lock() {
         *guard = None;
+    }
+}
+
+/// Cancels a pending double-tap sequence. Called on every foreground change so
+/// a mouse-only window switch between two bare modifier taps cannot satisfy the
+/// double-tap interval (the keyboard hook never sees a key event for it).
+pub(super) fn cancel_pending_double_tap() {
+    if let Ok(mut guard) = DOUBLE_MODIFIER_TRACKER.lock() {
+        if let Some(tracker) = guard.as_mut() {
+            tracker.cancel_pending();
+        }
     }
 }
