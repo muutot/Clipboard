@@ -75,6 +75,9 @@ impl LocalWake {
             .as_ref()
             .ok_or_else(|| io::Error::other("wake listener closed"))?
             .try_clone()?;
+        // A duplicated socket does not inherit the non-blocking flag on Windows,
+        // which would park the loop in `accept()` and hang `Drop`'s join forever.
+        listener.set_nonblocking(true)?;
         let stop = Arc::clone(&self.stop);
         let token = self.token.clone();
         self.thread = Some(
@@ -206,7 +209,19 @@ mod tests {
         }
         assert!(LocalWake::notify(&project, 42));
         rx.recv_timeout(Duration::from_secs(2)).unwrap();
-        drop(wake);
+        // Park the accept loop before releasing it, then drop on a helper thread:
+        // on Windows a cloned listener is blocking again, so the loop would sit in
+        // `accept()` and the join would never return. Bound the wait so that
+        // regression fails instead of hanging the whole test binary.
+        thread::sleep(Duration::from_millis(50));
+        let (dropped_tx, dropped_rx) = mpsc::channel();
+        thread::spawn(move || {
+            drop(wake);
+            let _ = dropped_tx.send(());
+        });
+        dropped_rx
+            .recv_timeout(Duration::from_secs(5))
+            .expect("LocalWake::drop must not block on the accept loop");
         assert!(!project.join("instance-wake.json").exists());
         assert!(!LocalWake::notify(&project, 42));
         fs::remove_dir(&project).unwrap();

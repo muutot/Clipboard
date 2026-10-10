@@ -343,6 +343,8 @@ error[E0658]: use of unstable library feature `int_roundings`
 - 把整块 Windows 代码拆成 `windows/{a,b,c}.rs` 时，子模块靠 `use super::*;` 取父模块的常量和助手；非 Windows 目标上这些项几乎全被 cfg 掉，父模块的 `use a::*;` 与子模块的 `use super::*;` 就都成了 unused import，再加上 `pub use` 里混进被 cfg 掉的函数（如 `foreground::get_foreground_app`），`-D warnings` 会在 Linux/macOS 上一并打红。这类模块要么给子模块加 `#![cfg_attr(not(target_os = "windows"), allow(unused_imports))]` 并注明原因，要么让子模块本身只在 Windows 编译。
 - 同一个父模块下的**兄弟子模块**默认互相不可见：把 `a.rs` 拆成 `a/{b,c}.rs` 后，`b` 里私有的项在 `c` 中直接 E0603/E0425。跨文件共享的常量、结构体、函数要标 `pub(super)`（或从 `crate::...` 全路径引用）。实例：`cli/api.rs` 拆成 `cli/api/{mod,http,routes}.rs` 时，`http` 与 `routes` 互引的项都改成了 `pub(super)`；`LocalApiServer` 仍留在 `mod.rs`，所以 `cli` 的 `pub use api::LocalApiServer` 不受影响。
 
+- `TcpListener` / `TcpStream::try_clone()` 在 Windows 上**不继承非阻塞标志**（Unix 的 `dup()` 会继承，所以本地、Linux、macOS 都看不出问题）。`platform/local_wake.rs` 的唤醒线程克隆监听器后靠 `Err(WouldBlock)` 轮询 `stop`，Windows 上克隆体是阻塞的，线程直接停在 `accept()` 里，`Drop` 的 `join()` 就此永久阻塞。CI 的表现不是失败而是**挂死**：`Rust (windows-latest)` 的 Test 步骤两小时不结束，日志末尾只有 `SLOW [>7200.000s] … platform::local_wake::tests::wake_is_authenticated_stoppable_and_removes_endpoint`，run 一直停在 `in_progress`。克隆后补一次 `set_nonblocking(true)`（或干脆不克隆、把监听器所有权移进线程）才能保证停止信号可达；测试里释放对象要放到限时 `recv_timeout` 后面，让回归**失败**而不是挂死整个测试进程。
+
 ## CI 缓存会把第三方构建脚本指向不存在的路径
 
 `ort-sys`（`oar-ocr` 的依赖）在构建脚本里下载 ONNX Runtime 预编译包，放进用户缓存目录（Linux `~/.cache/ort.pyke.io`、macOS `~/Library/Caches/ort.pyke.io`、Windows `%LOCALAPPDATA%\ort.pyke.io`），并把该目录的 **绝对路径** 写进 `cargo:rustc-link-search`。这段输出随 `target/` 进入 rust-cache，被引用的目录却不在缓存里。
