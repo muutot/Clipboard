@@ -457,7 +457,7 @@
         onclick={() => switchFilter("favorite")}>{_t("float.favorites")}</button
       >
     </div>
-    <button type="button" class="float-close" aria-label={_t("actions.close")} onclick={close}
+    <button type="button" class="float-close" aria-label={_t("float.close")} onclick={close}
       >×</button
     >
   </header>

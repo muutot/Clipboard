@@ -150,6 +150,7 @@ export interface LocaleDefinition {
     all: string;
     favorites: string;
     empty: string;
+    close: string;
     openFailed: string;
     detailFailed: string;
     toggleFailed: string;

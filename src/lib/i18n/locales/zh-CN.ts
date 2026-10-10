@@ -158,6 +158,7 @@ const zhCN: LocaleDefinition = {
     all: "全部",
     favorites: "收藏",
     empty: "暂无记录",
+    close: "关闭悬浮窗",
     openFailed: "悬浮窗口打开失败",
     detailFailed: "记录详情打开失败",
     toggleFailed: "悬浮窗口切换失败",
