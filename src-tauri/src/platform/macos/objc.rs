@@ -1,7 +1,7 @@
 //! Hand-rolled Objective-C message-send helpers.
 //!
 //! Live code: used by this adapter, `platform/quick_paste.rs` and
-//! `platform/ui.rs` for NSPasteboard, NSWorkspace and NSWindow calls.
+//! `platform/ui/window.rs` for NSPasteboard, NSWorkspace and NSWindow calls.
 
 #![allow(non_camel_case_types, dead_code, clashing_extern_declarations)]
 
