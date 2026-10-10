@@ -113,6 +113,12 @@ First-page searches flush pending settings before invoking the backend; stale re
 
 The main route debounces a first-page indexed search by 300 ms.
 
+- Outside Tauri (browser preview) there is no backend: the effect defers one
+  `filterDemoSearchResults` pass over the loaded demo history
+  (`src/lib/utils/search/demo-search.ts`) into the `indexed` view via a `setTimeout(0)`.
+  The write must stay asynchronous — the effect also reads `itemStore.current`,
+  so writing it inside the effect body self-invalidates the effect and freezes
+  the query after the first keystroke.
 - Empty queries and recycle-bin filtering do not use Tantivy. Single characters and recognized date queries search the full backend history.
 - `searchRequestId` discards stale first-page responses when the query/effect changes.
 - `searchEpoch` (bumped by history/item/capture/tag invalidations and background `search-index-changed` events) re-runs the search effect; cancelling the in-flight request alone would drop a search that landed during the event and never retry it.

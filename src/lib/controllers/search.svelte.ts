@@ -3,11 +3,13 @@ import { createSearchPaintTracker } from "$lib/utils/search/search-paint-latency
 import { recordSearchInteractionLatency } from "$lib/services/storage";
 import { searchClipboardHistory } from "$lib/services/clipboard";
 import { isTauriRuntime } from "$lib/services/runtime";
+import { filterDemoSearchResults } from "$lib/utils/search/demo-search";
 import type { ClipboardItem, HistoryFilterArgs, GeneralSettings } from "$lib/types/clipboard";
 import type { ItemStoreView } from "$lib/utils/store/item-store-view.svelte";
 import {
   appendItems,
   closeSearchResults,
+  getItems,
   replaceViewItems,
   mergeSearchCachePage,
 } from "$lib/utils/store/item-store";
@@ -86,6 +88,30 @@ export function createSearchController(deps: SearchDependencies) {
       indexedQuery = "";
       searchPending = false;
       return;
+    }
+
+    if (!isTauriRuntime()) {
+      // Browser preview: there is no backend to query, so filter the demo
+      // records client-side into the indexed view the list renders during a
+      // search. The write is deferred like the desktop path because the effect
+      // also reads the item store; writing it synchronously inside the
+      // effect body self-invalidates the effect and freezes the query.
+      searchPending = true;
+      const timer = window.setTimeout(() => {
+        if (requestId !== searchRequestId || requestedEpoch !== searchEpoch) return;
+        const results = filterDemoSearchResults(
+          getItems(deps.itemStore.current, "history"),
+          requestedQuery,
+          requestedFilter,
+        );
+        deps.itemStore.current = replaceViewItems(deps.itemStore.current, results, "indexed");
+        indexedQuery = requestedQuery;
+        searchOffset = results.length;
+        searchHasMore = false;
+        searchPending = false;
+        deps.status = deps.translate("app.searchHitSummary", { count: results.length });
+      }, 0);
+      return () => window.clearTimeout(timer);
     }
 
     searchPending = true;

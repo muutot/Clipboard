@@ -282,6 +282,7 @@ describe("search settings and live changes", () => {
     expect(bridge.history.mock.calls[1][0]).toBe(3);
   });
   it("refreshes when the candidate cap changes without resetting for unrelated settings", async () => {
+    bridge.desktop = true;
     await open();
     bridge.search.mockClear();
     generalSettings.updateSetting("showToastNotifications", false);
@@ -292,6 +293,7 @@ describe("search settings and live changes", () => {
     expect(bridge.search).toHaveBeenCalledTimes(1);
   });
   it("preserves title sorting during recapture and then refreshes matching results", async () => {
+    bridge.desktop = true;
     generalSettings.updateSetting("searchSortRules", [{ field: "title", direction: "asc" }]);
     await open();
     expect(ids()).toEqual(["a", "b"]);
@@ -304,6 +306,7 @@ describe("search settings and live changes", () => {
   });
 
   it("refreshes recent-use sorting and rejects an older in-flight response", async () => {
+    bridge.desktop = true;
     let finish!: (value: ReturnType<typeof page>) => void;
     bridge.search.mockImplementationOnce(
       () =>
@@ -325,6 +328,7 @@ describe("search settings and live changes", () => {
   });
 
   it("refreshes after background index commits but not for irrelevant usage", async () => {
+    bridge.desktop = true;
     generalSettings.updateSetting("searchSortRules", [{ field: "title", direction: "asc" }]);
     await open();
     bridge.search.mockClear();
