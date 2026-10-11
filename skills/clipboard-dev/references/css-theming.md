@@ -92,14 +92,13 @@ The optional color-icon mode (`general.colorIcons`) is an intentional fixed-pale
 
 ## Global font and display variables
 
-| Variable                  | Current default | Use                     |
-| ------------------------- | --------------- | ----------------------- |
-| `--font-size-base`        | `14px`          | general UI/body         |
-| `--font-size-secondary`   | `11px`          | metadata/descriptions   |
-| `--font-size-tiny`        | `10px`          | smallest notes          |
-| `--font-size-cardTitle`   | `13px`          | card title              |
-| `--font-size-cardPreview` | `11px`          | card preview            |
-| `--show-secondary`        | `block`/`none`  | display preference hook |
+| Variable                  | Current default | Use                   |
+| ------------------------- | --------------- | --------------------- |
+| `--font-size-base`        | `14px`          | general UI/body       |
+| `--font-size-secondary`   | `11px`          | metadata/descriptions |
+| `--font-size-tiny`        | `10px`          | smallest notes        |
+| `--font-size-cardTitle`   | `13px`          | card title            |
+| `--font-size-cardPreview` | `11px`          | card preview          |
 
 `settings-bootstrap.ts` applies these and the 20 theme variables at startup. Live settings panels must update the same contract; do not create alternate variable names for the same meaning.
 
