@@ -207,9 +207,9 @@ For each command change:
 6. add or adjust focused tests;
 7. update the focused reference rather than copying a full command list here.
 
-`materialize_clipboard_item(id)` returns the refreshed camelCase `PersistedClipboardItem`. It is a local-cache mutation: it must not advance `(modified_at_ms, sync_writer_device_id)` or create a sync outbox row, and any stale/missing reference causes the whole path write-back to remain unchanged.
+`materialize_clipboard_item(id)` returns the refreshed camelCase `PersistedClipboardItem`. It is a local-cache mutation: it must not advance `(modified_at_ms, sync_writer_device_id)` or create a sync outbox row, and any stale/missing reference causes the whole path write-back to remain unchanged. The command is async and runs its S3 download on `tauri::async_runtime::spawn_blocking` with an injected `AppHandle` (the same pattern as `import_from_file`), so the frontend call arguments are unchanged.
 
-`save_clipboard_item_file(id, dst)` is the constrained "Save As" primitive. The webview passes only the item id and a user-chosen absolute destination; the backend resolves the source from the stored record and requires it to live under an owned image/file root, so it cannot copy an arbitrary path. The former unrestricted `copy_file_to(src, dst)` was removed and must not be reintroduced.
+`save_clipboard_item_file(id, dst)` is the constrained "Save As" primitive. The webview passes only the item id and a user-chosen absolute destination; the backend resolves the source from the stored record and requires it to live under an owned image/file root, so it cannot copy an arbitrary path. The former unrestricted `copy_file_to(src, dst)` was removed and must not be reintroduced. The command is async and runs the file copy on `tauri::async_runtime::spawn_blocking`, so arbitrarily large transfers never occupy the window event loop.
 
 `duplicate_clipboard_item(id)` creates a metadata-only second row that still shares the source's `resource_path`/`preview_path`. Both `id` and `content_hash` are namespaced with a random UUID suffix so `UNIQUE (kind, content_hash)` admits the copy and two rapid duplicates never collapse into one upsert.
 
