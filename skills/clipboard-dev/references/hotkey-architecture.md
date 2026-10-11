@@ -52,9 +52,11 @@ event forward (anything else)     event with the action id payload
 `HotkeyManager` stores chords per registry action (`global_chords` parallel to
 `global_action_ids()` order) plus the toggle-only `toggle_doubles`. Its
 dispatch loop handles `ToggleMain` (window show/hide + quick-paste target
-remember) and `ToggleFloat` (panel toggle + quick-paste target remember when
-neither our main nor float window is focused, so mouse-toggle-away never
-records our own handle) natively, and its message-loop thread additionally
+remember when neither our main nor float window is focused, so its own
+handle can never become the paste target) and `ToggleFloat` (panel toggle +
+quick-paste target remember under the same own-window guard, so
+mouse-toggle-away never records our own handle) natively, and its
+message-loop thread additionally
 hosts a continuous `EVENT_SYSTEM_FOREGROUND` watcher
 (`WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS`) that keeps the
 take-once quick-paste target pointed at the last external foreground window.
