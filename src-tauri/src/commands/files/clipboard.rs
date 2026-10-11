@@ -44,22 +44,42 @@ pub(super) fn managed_source_path(
     Ok(canonical)
 }
 
+/// Async: the managed source can be arbitrarily large and the chosen
+/// destination can be a slow disk or network share. The copy runs on the
+/// dedicated blocking pool so the window event loop stays responsive for the
+/// whole transfer; the source stays resolved from the record, never from a
+/// webview-supplied path.
 #[tauri::command]
-pub fn save_clipboard_item_file(
-    database: tauri::State<'_, Database>,
-    paths: tauri::State<'_, StoragePaths>,
+pub async fn save_clipboard_item_file(
     id: String,
     dst: String,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
+    use tauri::Manager;
+    tauri::async_runtime::spawn_blocking(move || {
+        let database = app.state::<Database>();
+        let paths = app.state::<StoragePaths>();
+        save_clipboard_item_file_blocking(&database, &paths, &id, &dst)
+    })
+    .await
+    .map_err(|error| format!("save file task join failed: {error}"))?
+}
+
+fn save_clipboard_item_file_blocking(
+    database: &Database,
+    paths: &StoragePaths,
+    id: &str,
+    dst: &str,
 ) -> Result<(), String> {
     let item = database
-        .get_item(&id)
+        .get_item(id)
         .map_err(|error| error.to_string())?
         .ok_or_else(|| "clipboard item not found".to_string())?;
     let source = item
         .resource_path
         .ok_or_else(|| "clipboard item has no file resource".to_string())?;
-    let source_path = managed_source_path(paths.inner(), &source)?;
-    let destination = std::path::Path::new(&dst);
+    let source_path = managed_source_path(paths, &source)?;
+    let destination = std::path::Path::new(dst);
     if !destination.is_absolute() {
         return Err("destination must be an absolute path".to_string());
     }
