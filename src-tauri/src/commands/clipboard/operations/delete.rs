@@ -186,6 +186,16 @@ pub fn permanently_delete_storage_kind(
     kind: ClipboardKind,
     expected: StorageKindDeleteExpectation,
 ) -> Result<StorageKindDeleteResult, String> {
+    // Hold the storage maintenance lock BEFORE the ingestion guard (the same
+    // order as the storage-root migration) so the zero-grace orphan cleanup
+    // inside `permanently_delete_storage_kind_for` cannot run concurrently
+    // with a rename's persist-then-move window: that window leaves the old
+    // file briefly unreferenced, and a concurrent zero-grace scan would delete
+    // it and leave the rename's rollback pointing at a missing file.
+    let _maintenance = lock_state(
+        &capture.storage_maintenance_lock,
+        "storage maintenance lock is poisoned",
+    )?;
     let ingestion_guard = lock_state(
         &capture.ingestion_guard,
         "clipboard ingestion lock is poisoned",
