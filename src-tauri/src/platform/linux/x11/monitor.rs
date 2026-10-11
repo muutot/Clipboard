@@ -15,12 +15,19 @@ const XFIXES_SET_SELECTION_OWNER_NOTIFY_MASK: u64 = 1 << 0;
 /// restart, session logout). The default handler terminates the whole process,
 /// which must not take the desktop app down with the session. The handler runs
 /// with the dead display's lock held and Xlib does not survive a plain return,
-/// so end only the monitor thread via `pthread_exit`. The dead connection and
-/// the two pipe fds stay unreclaimed until process exit, which is the price of
-/// keeping the app alive; nothing else in-process touches this display.
+/// so end only the calling thread via `pthread_exit`.
+///
+/// `XSetIOErrorHandler` is process-global and the handler runs on whichever
+/// thread owns the dead connection: usually the monitor thread, but also any
+/// worker thread holding one of the short-lived connections opened per call
+/// by `clipboard.rs` (`read_clipboard_text`, `get_foreground_app`). If X dies
+/// while such a thread is mid-call, that thread — e.g. the capture worker —
+/// is silently killed and clipboard capture stops until the app restarts.
+/// The dead connection's fds stay unreclaimed until process exit, which is the
+/// price of keeping the app alive.
 #[cfg(target_os = "linux")]
 extern "C" fn x11_io_error_handler(_display: *mut x11_ffi::Display) -> i32 {
-    crate::log_error!("[clipboard-monitor] X11 connection lost; stopping the monitor thread only");
+    crate::log_error!("[clipboard-monitor] X11 connection lost; stopping the calling thread only");
     unsafe { libc::pthread_exit(std::ptr::null_mut()) }
 }
 

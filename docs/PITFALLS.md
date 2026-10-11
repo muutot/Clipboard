@@ -345,6 +345,17 @@ error[E0658]: use of unstable library feature `int_roundings`
 
 - `TcpListener` / `TcpStream::try_clone()` 在 Windows 上**不继承非阻塞标志**（Unix 的 `dup()` 会继承，所以本地、Linux、macOS 都看不出问题）。`platform/local_wake.rs` 的唤醒线程克隆监听器后靠 `Err(WouldBlock)` 轮询 `stop`，Windows 上克隆体是阻塞的，线程直接停在 `accept()` 里，`Drop` 的 `join()` 就此永久阻塞。CI 的表现不是失败而是**挂死**：`Rust (windows-latest)` 的 Test 步骤两小时不结束，日志末尾只有 `SLOW [>7200.000s] … platform::local_wake::tests::wake_is_authenticated_stoppable_and_removes_endpoint`，run 一直停在 `in_progress`。克隆后补一次 `set_nonblocking(true)`（或干脆不克隆、把监听器所有权移进线程）才能保证停止信号可达；测试里释放对象要放到限时 `recv_timeout` 后面，让回归**失败**而不是挂死整个测试进程。
 
+## X11 IO error handler 是进程全局的，会误杀其他线程
+
+Linux 上 Xlib 的 `XSetIOErrorHandler` 注册的是**进程全局** handler，X 连接断开（X server 重启、注销会话）时，handler 在**持有死连接的那个线程**上运行。Xlib 无法从 handler 的普通返回中恢复（返回后 libX11 直接 `exit(1)`），所以 `platform/linux/x11/monitor.rs` 用 `pthread_exit` 只结束调用线程，保住应用进程。
+
+但这也意味着：`clipboard.rs` 里 `read_clipboard_text`、`get_foreground_app` 等按调用打开的**短命 X 连接**同样受这个 handler 支配。如果 X server 恰好在这些调用进行中断开，被杀的是当场的调用线程——最坏情况是捕获 worker 线程（receiver 已一次性移入，无法重生），剪贴板捕获会**静默停止**，直到应用重启。没有可靠的纯 Xlib 修法（x11rb 重写超出风险预算），只能接受并在日志里保留 `X11 connection lost` 线索。
+
+规则：
+
+- 改动任何进程全局的 Xlib/平台回调时，先枚举**所有**会触发它的线程，不要假设只有自己拥有那条连接。
+- 平台局限无法本地编译验证时，把现象、触发条件、日志关键字记录在这里，而不是盲写高风险的"修复"。
+
 ## CI 缓存会把第三方构建脚本指向不存在的路径
 
 `ort-sys`（`oar-ocr` 的依赖）在构建脚本里下载 ONNX Runtime 预编译包，放进用户缓存目录（Linux `~/.cache/ort.pyke.io`、macOS `~/Library/Caches/ort.pyke.io`、Windows `%LOCALAPPDATA%\ort.pyke.io`），并把该目录的 **绝对路径** 写进 `cargo:rustc-link-search`。这段输出随 `target/` 进入 rust-cache，被引用的目录却不在缓存里。
