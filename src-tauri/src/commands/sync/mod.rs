@@ -406,21 +406,38 @@ fn usable_sync_settings(sync: &SyncConfig) -> Option<SyncSettings> {
 /// image/file read — copy, paste, preview, fullscreen, save — fail with whatever
 /// the caller happened to report, while the local record was perfectly fine. An
 /// unusable configuration therefore falls through to the local row and only logs.
+///
+/// Async: on-demand materialization performs blocking S3 GETs (up to the
+/// configured resource limits) plus whole-file hash verification. The work
+/// runs on the dedicated blocking pool — a slow or unreachable endpoint would
+/// otherwise freeze the window event loop while the user waits on a copy,
+/// preview, fullscreen or save action.
 #[tauri::command]
-pub fn materialize_clipboard_item(
+pub async fn materialize_clipboard_item(
     id: String,
-    config: tauri::State<'_, Mutex<ConfigStore>>,
-    cancellation: tauri::State<'_, SyncCancellation>,
-    database: tauri::State<'_, Database>,
-    paths: tauri::State<'_, StoragePaths>,
-    thumbnail_worker: tauri::State<'_, Mutex<ThumbnailWorker>>,
+    app: tauri::AppHandle,
 ) -> Result<ClipboardItem, String> {
+    tauri::async_runtime::spawn_blocking(move || materialize_clipboard_item_blocking(&app, &id))
+        .await
+        .map_err(|error| format!("materialize task join failed: {error}"))?
+}
+
+fn materialize_clipboard_item_blocking(
+    app: &tauri::AppHandle,
+    id: &str,
+) -> Result<ClipboardItem, String> {
+    let config = app.state::<Mutex<ConfigStore>>();
+    let cancellation = app.state::<SyncCancellation>();
+    let database = app.state::<Database>();
+    let paths = app.state::<StoragePaths>();
+    let thumbnail_worker = app.state::<Mutex<ThumbnailWorker>>();
+
     if id.trim().is_empty() {
         return Err("clipboard item id is empty".to_string());
     }
 
     let current = database
-        .get_item(&id)
+        .get_item(id)
         .map_err(|error| error.to_string())?
         .ok_or_else(|| "clipboard item was not found".to_string())?;
 
@@ -448,7 +465,7 @@ pub fn materialize_clipboard_item(
         .map(|v| v.scope.clone())
         .unwrap_or_else(|| settings.legacy_scope_id());
     let refs = database
-        .get_sync_resource_refs(&remote_scope, &id)
+        .get_sync_resource_refs(&remote_scope, id)
         .map_err(|error| error.to_string())?;
     if refs.is_empty() {
         return Ok(current);
@@ -475,7 +492,7 @@ pub fn materialize_clipboard_item(
             paths.inner(),
             &settings,
             &remote_scope,
-            &id,
+            id,
             refs,
             session_key.as_ref(),
         )
@@ -484,7 +501,7 @@ pub fn materialize_clipboard_item(
     if changed && updated.kind == ClipboardKind::Image {
         if let Some(resource_path) = updated.resource_path.as_deref() {
             if let Ok(worker) = thumbnail_worker.lock() {
-                worker.enqueue(id.clone(), PathBuf::from(resource_path));
+                worker.enqueue(id.to_string(), PathBuf::from(resource_path));
             }
         }
     }
