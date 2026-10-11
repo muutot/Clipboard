@@ -77,6 +77,15 @@
     syncMaxFileBytes = fromDisplaySize(syncMaxFileDisplay, syncMaxFileUnit);
   }
 
+  // HTML min/max attributes never block typed values, and the SizeEntry
+  // setters below only receive the display number: normalize the byte values
+  // here so the inputs show what is actually persisted. The backend clamps
+  // the same 1 KiB–2 GiB window as the authoritative guard.
+  function clampSyncBytes(value: number, fallback: number): number {
+    if (!Number.isFinite(value) || value <= 0) return fallback;
+    return Math.min(2_147_483_648, Math.max(1024, Math.round(value)));
+  }
+
   async function loadSyncConfig() {
     if (!isTauriRuntime()) {
       syncConfigLoaded = true;
@@ -123,6 +132,10 @@
     if (!isTauriRuntime()) return;
     syncAutoInterval = clampSyncNumber(syncAutoInterval, 10, 86_400, 300);
     syncSegmentMaxEntries = clampSyncNumber(syncSegmentMaxEntries, 16, 10_000, 512);
+    syncMaxImageBytes = clampSyncBytes(syncMaxImageBytes, 5_242_880);
+    syncMaxFileBytes = clampSyncBytes(syncMaxFileBytes, 10_485_760);
+    syncMaxImageDisplay = toDisplaySize(syncMaxImageBytes, syncMaxImageUnit);
+    syncMaxFileDisplay = toDisplaySize(syncMaxFileBytes, syncMaxFileUnit);
     await setSyncConfig({
       provider: syncProvider,
       endpoint: syncEndpoint || null,
@@ -344,7 +357,12 @@
         label: _t("storage.syncMaxImageBytes"),
         min: 0,
         get: () => syncMaxImageDisplay,
-        set: (v) => (syncMaxImageDisplay = v),
+        // Recompute the byte value on every keystroke: onchange persists the
+        // bytes directly, so a display-only update would save a stale value.
+        set: (v) => {
+          syncMaxImageDisplay = v;
+          updateSyncMaxImageFromDisplay();
+        },
         getUnit: () => syncMaxImageUnit,
         setUnit: (u) => {
           syncMaxImageUnit = u;
@@ -361,7 +379,12 @@
         label: _t("storage.syncMaxFileBytes"),
         min: 0,
         get: () => syncMaxFileDisplay,
-        set: (v) => (syncMaxFileDisplay = v),
+        // Recompute the byte value on every keystroke: onchange persists the
+        // bytes directly, so a display-only update would save a stale value.
+        set: (v) => {
+          syncMaxFileDisplay = v;
+          updateSyncMaxFileFromDisplay();
+        },
         getUnit: () => syncMaxFileUnit,
         setUnit: (u) => {
           syncMaxFileUnit = u;
