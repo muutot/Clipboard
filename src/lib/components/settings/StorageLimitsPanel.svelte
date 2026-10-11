@@ -123,6 +123,18 @@
     return Math.min(max, Math.max(min, Math.round(value)));
   }
 
+  // Mirrors NumberEntry's input handling: an emptied field must not push a
+  // non-finite value into the state — the previous save would then silently
+  // persist the clamp fallback (e.g. a 1-day retention) instead of keeping
+  // the user's stored setting.
+  function handleHistoryNumberInput(event: Event, set: (value: number) => void) {
+    const raw = (event.currentTarget as HTMLInputElement).value;
+    if (raw === "") return;
+    const value = Number(raw);
+    if (Number.isNaN(value)) return;
+    set(value);
+  }
+
   async function loadStorageKindStats(): Promise<boolean> {
     try {
       const entries = await Promise.all(
@@ -231,9 +243,10 @@
       <span class="setting-label">{_t("captureSettings.retentionPeriod")}</span>
       <input
         type="number"
-        bind:value={retentionPeriodDays}
+        value={retentionPeriodDays}
         min="1"
         max="365"
+        oninput={(e) => handleHistoryNumberInput(e, (v) => (retentionPeriodDays = v))}
         onchange={saveHistoryConfig}
       />
       <span class="number-suffix">{_t("captureSettings.days")}</span>
@@ -244,9 +257,10 @@
       <span class="setting-label">{_t("captureSettings.maxItemCount")}</span>
       <input
         type="number"
-        bind:value={maxItemCount}
+        value={maxItemCount}
         min="100"
         step="100"
+        oninput={(e) => handleHistoryNumberInput(e, (v) => (maxItemCount = v))}
         onchange={saveHistoryConfig}
       />
       <span class="number-suffix">{_t("storage.recordCountUnit")}</span>
@@ -260,9 +274,10 @@
       <span class="setting-label">{_t("captureSettings.recycleBinDays")}</span>
       <input
         type="number"
-        bind:value={recycleBinDays}
+        value={recycleBinDays}
         min="0"
         max="365"
+        oninput={(e) => handleHistoryNumberInput(e, (v) => (recycleBinDays = v))}
         onchange={saveHistoryConfig}
       />
       <span class="number-suffix">{_t("captureSettings.days")}</span>
