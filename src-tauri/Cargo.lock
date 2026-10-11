@@ -777,7 +777,7 @@ dependencies = [
 
 [[package]]
 name = "clipboard-desktop"
-version = "1.7.4"
+version = "1.8.0"
 dependencies = [
  "apple-native-keyring-store",
  "base64 0.23.1",
