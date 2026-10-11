@@ -173,7 +173,22 @@ impl HotkeyManager {
                     HotkeyAction::ToggleMain => {
                         let is_visible = window.is_visible().unwrap_or(false);
                         let is_focused = window.is_focused().unwrap_or(false);
-                        if !is_focused {
+                        // Mirror ToggleFloat: skip remembering when one of our
+                        // own windows is focused — its handle must not become
+                        // the quick-paste target or the panel would paste into
+                        // itself (e.g. the float panel focused while the main
+                        // window is hidden).
+                        let own_focused = is_focused
+                            || app
+                                .as_ref()
+                                .and_then(|app| {
+                                    app.get_webview_window(
+                                        crate::commands::float::FLOAT_WINDOW_LABEL,
+                                    )
+                                })
+                                .and_then(|panel| panel.is_focused().ok())
+                                .unwrap_or(false);
+                        if !own_focused {
                             if let Some(window_handle) = foreground_window_handle() {
                                 quick_paste_target.remember(window_handle);
                             }
