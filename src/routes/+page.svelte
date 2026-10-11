@@ -1565,10 +1565,14 @@
     if (historyListEl) historyListEl.scrollTop = 0;
   }
 
+  let tagColorsRequest = 0;
   async function refreshTagColors() {
+    // Concurrent refreshes (startup, saveTags, tags-changed bursts) race the
+    // same async query; only the latest one may write the result.
+    const request = ++tagColorsRequest;
     try {
       const tags = await listAllTags();
-      if (!tags) return;
+      if (!tags || request !== tagColorsRequest) return;
       const map: Record<string, string> = {};
       for (const tag of tags) {
         if (tag.color) map[tag.name] = tag.color;
