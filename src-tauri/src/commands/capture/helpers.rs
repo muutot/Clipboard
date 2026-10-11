@@ -81,16 +81,33 @@ pub fn should_skip_self_triggered_text(
     guard.is_text_write_self_triggered(kind_name, text)
 }
 
+/// Reads a webview-supplied resource path for self-trigger bookkeeping, but
+/// only when it resolves inside the managed image storage root: arbitrary
+/// paths must never cross the IPC boundary (the asset protocol scope already
+/// enforces the same restriction for the webview itself).
+pub fn read_managed_image(root: &Path, path: &str) -> std::io::Result<Vec<u8>> {
+    let resolved = std::fs::canonicalize(path)?;
+    let managed_root = std::fs::canonicalize(root)?;
+    if !resolved.starts_with(managed_root) {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            "resource path is outside managed image storage",
+        ));
+    }
+    std::fs::read(resolved)
+}
+
 /// Registers hashes for an image this app just wrote so the capture loop can skip it.
 pub fn register_image_self_trigger(
     guard: &mut content::self_trigger::SelfTriggerGuard,
+    image_root: &Path,
     resource_path: Option<&str>,
     fallback_hash: Option<&str>,
 ) -> Result<(), String> {
     let mut registered = false;
 
     if let Some(path) = resource_path.filter(|path| !path.trim().is_empty()) {
-        match std::fs::read(path) {
+        match read_managed_image(image_root, path) {
             Ok(data) => {
                 guard.mark_media_write("image", &data);
                 registered = true;

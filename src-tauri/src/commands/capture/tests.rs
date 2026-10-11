@@ -190,6 +190,7 @@ fn register_image_self_trigger_reads_resource_or_falls_back() {
     let mut guard = SelfTriggerGuard::new();
     register_image_self_trigger(
         &mut guard,
+        &directory,
         Some(image_path.to_str().expect("temp path is utf-8")),
         None,
     )
@@ -206,6 +207,7 @@ fn register_image_self_trigger_reads_resource_or_falls_back() {
     let mut fallback_guard = SelfTriggerGuard::new();
     register_image_self_trigger(
         &mut fallback_guard,
+        &directory,
         Some(
             directory
                 .join("missing.png")
@@ -220,12 +222,37 @@ fn register_image_self_trigger_reads_resource_or_falls_back() {
         "fallback-hash"
     ));
 
+    // A webview-supplied path outside the managed root must not be read.
+    let outside = temp_dir("register-outside");
+    let external = outside.join("secret.png");
+    fs::write(&external, b"external-bytes").unwrap();
+    let mut outside_guard = SelfTriggerGuard::new();
+    assert!(register_image_self_trigger(
+        &mut outside_guard,
+        &directory,
+        Some(external.to_str().expect("temp path is utf-8")),
+        None,
+    )
+    .is_err());
+    assert!(!outside_guard.is_media_write_self_triggered("image", b"external-bytes"));
+    // With a fallback hash the registration still succeeds without reading.
+    assert!(register_image_self_trigger(
+        &mut outside_guard,
+        &directory,
+        Some(external.to_str().expect("temp path is utf-8")),
+        Some("outside-fallback-hash"),
+    )
+    .is_ok());
+
     // Nothing readable and no hash is an error.
     let mut empty_guard = SelfTriggerGuard::new();
-    assert!(register_image_self_trigger(&mut empty_guard, None, None).is_err());
-    assert!(register_image_self_trigger(&mut empty_guard, Some("  "), Some("  ")).is_err());
+    assert!(register_image_self_trigger(&mut empty_guard, &directory, None, None).is_err());
+    assert!(
+        register_image_self_trigger(&mut empty_guard, &directory, Some("  "), Some("  ")).is_err()
+    );
 
     fs::remove_dir_all(&directory).unwrap();
+    fs::remove_dir_all(&outside).unwrap();
 }
 
 #[test]

@@ -139,6 +139,7 @@ pub fn mark_self_triggered(
 /// Marks image bytes written by this app as self-triggered.
 pub fn mark_self_triggered_image(
     self_trigger: tauri::State<'_, SelfTriggerState>,
+    paths: tauri::State<'_, StoragePaths>,
     resource_path: Option<String>,
     content_hash: Option<String>,
 ) -> Result<(), String> {
@@ -148,6 +149,7 @@ pub fn mark_self_triggered_image(
         .map_err(|_| "self-trigger lock poisoned".to_owned())?;
     register_image_self_trigger(
         &mut guard,
+        &paths.images,
         resource_path.as_deref(),
         content_hash.as_deref(),
     )
@@ -173,6 +175,7 @@ pub fn unmark_self_triggered(
 /// Clears image self-trigger markers after the clipboard write failed.
 pub fn unmark_self_triggered_image(
     self_trigger: tauri::State<'_, SelfTriggerState>,
+    paths: tauri::State<'_, StoragePaths>,
     resource_path: Option<String>,
     content_hash: Option<String>,
 ) -> Result<(), String> {
@@ -184,7 +187,9 @@ pub fn unmark_self_triggered_image(
         .as_deref()
         .filter(|path| !path.trim().is_empty())
     {
-        if let Ok(data) = std::fs::read(path) {
+        // Only managed storage paths may cross the IPC boundary; anything
+        // else (or unreadable) is skipped exactly like a read failure.
+        if let Ok(data) = read_managed_image(&paths.images, path) {
             guard.unmark_media_write("image", &data);
         }
     }
