@@ -315,15 +315,15 @@
         options={[
           {
             value: "tiny",
-            label: `tiny (~6MB)${installedVariants.includes("tiny") ? " ?" : ""}`,
+            label: `tiny (~6MB)${installedVariants.includes("tiny") ? " ✓" : ""}`,
           },
           {
             value: "small",
-            label: `small (~30MB)${installedVariants.includes("small") ? " ?" : ""}`,
+            label: `small (~30MB)${installedVariants.includes("small") ? " ✓" : ""}`,
           },
           {
             value: "medium",
-            label: `medium (~135MB)${installedVariants.includes("medium") ? " ?" : ""}`,
+            label: `medium (~135MB)${installedVariants.includes("medium") ? " ✓" : ""}`,
           },
         ]}
         onchange={(v) => (modelVariant = v as string)}
