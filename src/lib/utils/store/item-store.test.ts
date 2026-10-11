@@ -344,6 +344,26 @@ describe("captureAffectedItems / restoreAffectedItems", () => {
     expect(getItems(next, "cache").map((i) => i.id)).toEqual(["b"]);
   });
 
+  it("restores ids whose view orderings disagree without shifting later slots", () => {
+    // "a" leads the indexed view but trails in cache; the old global sort (by
+    // the lowest position across views) re-inserted "a" before "b" in cache,
+    // contradicting cache's recorded indices and shifting "b" one slot down.
+    const before = createItemStore([item("a"), item("b")]);
+    const seeded = appendItems(
+      appendItems(before, [item("a"), item("b")], "indexed"),
+      [item("b"), item("a")],
+      "cache",
+    );
+    const snapshot = captureAffectedItems(seeded, new Set(["a", "b"]));
+
+    const during = removeItems(seeded, new Set(["a", "b"]));
+    const next = restoreAffectedItems(during, snapshot);
+    assertConsistent(next);
+    expect(getItems(next, "history").map((i) => i.id)).toEqual(["a", "b"]);
+    expect(getIndexedItems(next)!.map((i) => i.id)).toEqual(["a", "b"]);
+    expect(getItems(next, "cache").map((i) => i.id)).toEqual(["b", "a"]);
+  });
+
   it("captures and reclaims a record only the detail pane displayed", () => {
     const before = setDetailItem(createItemStore([item("a")]), item("solo"));
     const snapshot = captureAffectedItems(before, new Set(["solo"]));

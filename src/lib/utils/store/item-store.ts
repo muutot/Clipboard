@@ -398,8 +398,7 @@ export function restoreAffectedItems(store: ItemStore, snapshot: AffectedItemSna
     indexed: store.indexedIds === null ? [] : [...store.indexedIds],
     cache: [...store.cacheIds],
   };
-  const drift: Record<ItemView, number> = { history: 0, indexed: 0, cache: 0 };
-  const missing: [string, ClipboardItem, ReadonlyMap<ItemView, number> | undefined][] = [];
+  const missing = new Map<string, ReadonlyMap<ItemView, number> | undefined>();
 
   for (const [id, before] of snapshot.previous) {
     const current = byId.get(id);
@@ -407,20 +406,27 @@ export function restoreAffectedItems(store: ItemStore, snapshot: AffectedItemSna
       byId.set(id, { ...current, ...before });
       continue;
     }
-    missing.push([id, before, snapshot.positions.get(id)]);
+    byId.set(id, before);
+    missing.set(id, snapshot.positions.get(id));
   }
 
-  // Restore in recorded order so each insertion shifts only later positions.
-  missing.sort((a, b) => firstPosition(a[2]) - firstPosition(b[2]));
-  for (const [id, before, slot] of missing) {
-    byId.set(id, before);
-    if (!slot) continue;
-    for (const view of VIEWS) {
-      const at = slot.get(view);
-      if (at === undefined) continue;
-      const list = views[view];
-      list.splice(Math.min(at + drift[view], list.length), 0, id);
-      drift[view] += 1;
+  // Re-insert per view in that view's own ascending recorded order. Views can
+  // order the same ids differently, so a single global pass (the old code
+  // sorted by the lowest position across all views) could re-insert two ids in
+  // an order that contradicts one view's recorded indices and shift every
+  // later insertion in that view by one slot.
+  for (const view of VIEWS) {
+    const list = views[view];
+    const slots: { id: string; at: number }[] = [];
+    for (const [id, slot] of missing) {
+      const at = slot?.get(view);
+      if (at !== undefined) slots.push({ id, at });
+    }
+    slots.sort((a, b) => a.at - b.at);
+    let drift = 0;
+    for (const { id, at } of slots) {
+      list.splice(Math.min(at + drift, list.length), 0, id);
+      drift += 1;
     }
   }
 
@@ -438,16 +444,6 @@ export function restoreAffectedItems(store: ItemStore, snapshot: AffectedItemSna
     cacheIds: views.cache,
     detailId,
   };
-}
-
-function firstPosition(slot: ReadonlyMap<ItemView, number> | undefined): number {
-  if (!slot) return Number.MAX_SAFE_INTEGER;
-  let lowest = Number.MAX_SAFE_INTEGER;
-  for (const view of VIEWS) {
-    const at = slot.get(view);
-    if (at !== undefined && at < lowest) lowest = at;
-  }
-  return lowest;
 }
 
 /** Renames one tag on a record, dropping duplicates the rename would create. */
