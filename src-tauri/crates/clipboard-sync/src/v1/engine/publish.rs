@@ -52,6 +52,42 @@ pub(super) fn reconcile_local_device_head(
         return Ok(state);
     }
 
+    // A crash between `publish_head` and the local publication commit leaves
+    // the remote head ahead of `state` while the gap segments were encoded
+    // from this device's own outbox, so their mutations are already applied
+    // locally. Adopt the remote head in the same epoch instead of re-pulling
+    // our own segment and resetting the publication state, which would rotate
+    // the epoch and force every peer into a full re-bootstrap while the old
+    // epoch's objects lose their GC coverage.
+    if state.initialized
+        && remote_head.epoch == state.epoch
+        && Some(&remote_head.snapshot) == state.snapshot.as_ref()
+        && remote_head.published_sequence > state.published_sequence
+    {
+        if let Some(segment_key) = remote_head.last_segment_key.clone() {
+            // A commit failure here means the local outbox no longer covers
+            // the remote head (e.g. it was pruned outside the engine); the
+            // pull-and-reset recovery below remains the fallback for that.
+            if let Ok(adopted) = database.commit_sync_segment_published(
+                remote_scope,
+                &state.epoch,
+                &segment_key,
+                remote_head.published_sequence,
+            ) {
+                record_head_cache(
+                    database,
+                    remote_scope,
+                    device_id,
+                    listed,
+                    downloaded.etag.as_deref(),
+                    downloaded.bytes.len() as u64,
+                    &remote_head,
+                );
+                return Ok(adopted);
+            }
+        }
+    }
+
     let already_applied = database
         .get_sync_cursor(remote_scope, device_id)?
         .is_some_and(|cursor| {
