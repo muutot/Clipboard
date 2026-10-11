@@ -762,18 +762,6 @@
         console.error("Unable to load storage status", error);
       });
 
-    // Load history independently of the storage-status probe: a transient
-    // status failure must not leave the whole list empty.
-    void loadActiveHistoryPage()
-      .then(() => {
-        if (items.length === 0) return;
-        selectedId = items[0]?.id ?? "";
-      })
-      .catch((error) => {
-        console.error("Unable to load clipboard history", error);
-        statusMessage = _t("app.databaseLoadFailed");
-      });
-
     void getRuntimeInfo().then((runtime) => {
       if (runtime) {
         runtimeLabel = `${runtime.operatingSystem} / ${runtime.architecture} \u00b7 ${_t("app.coreConnected")}`;
@@ -781,10 +769,6 @@
     });
 
     void loadKeyboardShortcuts();
-
-    // Load one recycle-bin page during startup so the filter reflects the
-    // persisted desktop state even before the user opens the deleted view.
-    void loadDeletedHistoryPage();
 
     void listSourceApplications()
       .then((apps) => {
@@ -926,6 +910,32 @@
       }
       void refreshTagColors();
       if (renamed || deleted) invalidateSearchResults();
+    });
+
+    // Registering the listeners above must precede the initial loads: a copy
+    // landing between the page-1 query and listener registration would
+    // otherwise be dropped until the next invalidation.
+    void Promise.all([
+      unlisten,
+      unlistenHistoryInvalidated,
+      unlistenSearchIndex,
+      unlistenItemsChanged,
+    ]).then(() => {
+      // Load history independently of the storage-status probe: a transient
+      // status failure must not leave the whole list empty.
+      void loadActiveHistoryPage()
+        .then(() => {
+          if (items.length === 0) return;
+          selectedId = items[0]?.id ?? "";
+        })
+        .catch((error) => {
+          console.error("Unable to load clipboard history", error);
+          statusMessage = _t("app.databaseLoadFailed");
+        });
+
+      // Load one recycle-bin page during startup so the filter reflects the
+      // persisted desktop state even before the user opens the deleted view.
+      void loadDeletedHistoryPage();
     });
 
     return () => {
