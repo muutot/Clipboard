@@ -202,11 +202,26 @@
     }
   }
 
-  async function addBinding(action: string, shortcut: string) {
+  // Binding mutations send the full replacement list computed from the local
+  // snapshot, so overlapping operations resolve from a stale snapshot: a chip
+  // removal landing during an in-flight recording add resurrects the removed
+  // binding, and the reverse order silently drops the newly added one.
+  // Serialize them; each queued operation reads the config updated by its
+  // predecessor.
+  let bindingQueue: Promise<void> = Promise.resolve();
+
+  function enqueueBindingOperation(operation: () => Promise<void>): Promise<void> {
+    bindingQueue = bindingQueue.then(operation, operation);
+    return bindingQueue;
+  }
+
+  async function applyBindingChange(action: string, update: (current: string[]) => string[]) {
     if (!config) return;
-    const current = config.shortcuts[action] ?? [];
     try {
-      const normalized = await configureKeyboardShortcuts(action, [...current, shortcut]);
+      const normalized = await configureKeyboardShortcuts(
+        action,
+        update(config.shortcuts[action] ?? []),
+      );
       if (componentDestroyed || !config) return;
       config = { ...config, shortcuts: { ...config.shortcuts, [action]: normalized } };
     } catch (error) {
@@ -216,21 +231,16 @@
     }
   }
 
-  async function removeBinding(action: string, shortcut: string) {
-    if (!config) return;
-    const current = config.shortcuts[action] ?? [];
-    try {
-      const normalized = await configureKeyboardShortcuts(
-        action,
-        current.filter((s) => s !== shortcut),
-      );
-      if (componentDestroyed || !config) return;
-      config = { ...config, shortcuts: { ...config.shortcuts, [action]: normalized } };
-    } catch (error) {
-      if (!componentDestroyed) {
-        feedback.show(error instanceof Error ? error.message : String(error), false);
-      }
-    }
+  function addBinding(action: string, shortcut: string): Promise<void> {
+    return enqueueBindingOperation(() =>
+      applyBindingChange(action, (current) => [...current, shortcut]),
+    );
+  }
+
+  function removeBinding(action: string, shortcut: string): Promise<void> {
+    return enqueueBindingOperation(() =>
+      applyBindingChange(action, (current) => current.filter((s) => s !== shortcut)),
+    );
   }
 
   function startRecording(action: string) {
