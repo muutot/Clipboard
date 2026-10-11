@@ -68,7 +68,7 @@
         <p>{_t("about.versionLabel", { version: appVersion })}</p>
       </div>
     </div>
-    <div class="about-update-controls">
+    <div class="about-update-controls" data-settings-search-id="about.update">
       <CustomSelect
         value={$generalSettings.updateSource}
         ariaLabel={_t("about.updateSource")}
