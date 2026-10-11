@@ -87,7 +87,7 @@ impl crate::platform::PlatformClipboard for MacPlatform {
 mod accessibility;
 mod clipboard;
 mod error;
-mod ffi;
+pub(crate) mod ffi;
 mod intended;
 #[cfg(target_os = "macos")]
 pub(crate) mod objc;

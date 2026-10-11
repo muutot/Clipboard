@@ -56,7 +56,6 @@ mod mac {
     pub fn paste(target: Target) -> Result<(), String> {
         #[link(name = "ApplicationServices", kind = "framework")]
         extern "C" {
-            fn AXIsProcessTrusted() -> bool;
             fn CGEventCreateKeyboardEvent(
                 source: *mut std::ffi::c_void,
                 key: u16,
@@ -67,7 +66,12 @@ mod mac {
             fn CGEventSourceFlagsState(state: i32) -> u64;
             fn CFRelease(value: *mut std::ffi::c_void);
         }
-        if target.external().is_none() || !unsafe { AXIsProcessTrusted() } {
+        // `AXIsProcessTrusted` is declared once in `platform::macos::ffi` with
+        // the correct `u8` (C `Boolean`) signature; a second `-> bool`
+        // declaration here would trip `clashing_extern_declarations`.
+        if target.external().is_none()
+            || unsafe { crate::platform::macos::ffi::AXIsProcessTrusted() == 0 }
+        {
             return Err("Accessibility permission is required for quick paste".into());
         }
         let pool = unsafe { objc::objc_autoreleasePoolPush() };
