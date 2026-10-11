@@ -15,6 +15,7 @@ use std::sync::{mpsc, Arc};
 use std::thread::{self, JoinHandle};
 
 use crate::item_operations::CopyContext;
+use crate::state::CaptureState;
 use crate::storage::Database;
 
 use http::{serve, ServeContext};
@@ -46,6 +47,7 @@ pub struct LocalApiServer {
     search_page_size_limit: u32,
     token: Option<Arc<String>>,
     copy_context: CopyContext,
+    capture: Option<CaptureState>,
     on_change: Arc<dyn Fn() + Send + Sync>,
 }
 
@@ -60,6 +62,7 @@ impl LocalApiServer {
             search_page_size_limit: 500,
             token: None,
             copy_context: CopyContext::default(),
+            capture: None,
             on_change: Arc::new(|| {}),
         }
     }
@@ -79,6 +82,13 @@ impl LocalApiServer {
     /// Sets the bearer token clients must present. Required before start.
     pub fn set_copy_context(&mut self, context: CopyContext) {
         self.copy_context = context;
+    }
+
+    /// Installs the capture-policy state the paste endpoint gates through.
+    /// Required before start in production: without it the paste endpoint
+    /// would bypass pause, sensitive-content, and size rules.
+    pub fn set_capture_state(&mut self, capture: CaptureState) {
+        self.capture = Some(capture);
     }
     pub fn set_change_callback(&mut self, callback: Arc<dyn Fn() + Send + Sync>) {
         self.on_change = callback;
@@ -125,6 +135,7 @@ impl LocalApiServer {
             port: self.port,
             active_connections,
             copy_context: self.copy_context.clone(),
+            capture: self.capture.clone(),
             on_change: self.on_change.clone(),
         };
         let handle = thread::Builder::new()

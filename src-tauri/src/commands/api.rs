@@ -6,7 +6,7 @@ use serde::Serialize;
 use crate::cli::{CliArgs, CliCommand, LocalApiServer};
 use crate::commands::lock::lock_state;
 use crate::config::ConfigStore;
-use crate::state::SelfTriggerState;
+use crate::state::{CaptureState, SelfTriggerState};
 use crate::storage::{Database, StoragePaths};
 
 const API_TOKEN_FILE_NAME: &str = "api.token";
@@ -174,6 +174,7 @@ pub fn run_cli_command(
     paths: tauri::State<'_, StoragePaths>,
     database: tauri::State<'_, Database>,
     config: tauri::State<'_, Mutex<ConfigStore>>,
+    capture: tauri::State<'_, CaptureState>,
     self_trigger: tauri::State<'_, SelfTriggerState>,
     command: String,
     query: Option<String>,
@@ -213,6 +214,10 @@ pub fn run_cli_command(
             paths: Some(paths.inner().clone()),
             self_trigger: Some(self_trigger.0.clone()),
         },
+        // The paste command writes to the database directly instead of going
+        // through the clipboard worker, so it must enforce the same privacy
+        // rules itself.
+        Some(capture.inner()),
     );
     if result.is_ok()
         && matches!(
@@ -232,6 +237,7 @@ pub fn start_local_api(
     api: tauri::State<'_, Mutex<LocalApiServer>>,
     paths: tauri::State<'_, StoragePaths>,
     config: tauri::State<'_, Mutex<ConfigStore>>,
+    capture: tauri::State<'_, CaptureState>,
     port: Option<u16>,
 ) -> Result<LocalApiStatus, String> {
     let database = Arc::new(Database::open(&paths.database).map_err(|error| error.to_string())?);
@@ -247,6 +253,10 @@ pub fn start_local_api(
         paths: Some(paths.inner().clone()),
         self_trigger: Some(self_trigger.0.clone()),
     });
+    // The paste endpoint writes to the database directly instead of going
+    // through the clipboard worker, so it needs the live capture policy
+    // (pause state, sensitive patterns, size ceiling) to gate itself.
+    api.set_capture_state(capture.inner().clone());
     api.set_change_callback(Arc::new(move || {
         crate::item_operations::invalidate_desktop(&app)
     }));

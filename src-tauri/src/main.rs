@@ -116,6 +116,18 @@ fn run_cli_process(args: &CliArgs) -> Result<(), String> {
     let database = Database::open(&paths.database).map_err(|error| error.to_string())?;
     let page_size_limit = config.page_size_limit();
     let search_page_size_limit = config.search_page_size_limit();
+    // The standalone CLI process runs no clipboard-worker pipeline, so the
+    // paste command builds the same capture policy from the persisted
+    // configuration — a paused capture, sensitive-content patterns, and the
+    // text capture ceiling must also hold here.
+    let mut privacy = clipboard_desktop_lib::privacy::PrivacyManager::new();
+    privacy.sync_with_config(&config);
+    let capture_state = clipboard_desktop_lib::state::CaptureState::new(
+        &privacy,
+        config.ignored_applications().to_vec(),
+        config.max_file_copy_size_bytes(),
+        config.max_text_capture_bytes(),
+    );
     let output = clipboard_desktop_lib::cli::run_cli_command_with_context(
         args,
         &database,
@@ -125,6 +137,7 @@ fn run_cli_process(args: &CliArgs) -> Result<(), String> {
             paths: Some(paths),
             self_trigger: None,
         },
+        Some(&capture_state),
     )?;
     if !output.is_empty() {
         print!("{output}");

@@ -8,6 +8,7 @@ use crate::content;
 use crate::domain::{ClipboardItem, ClipboardKind};
 use crate::export::{export_database, ExportFormat, ExportOptions};
 use crate::item_operations::{change_membership, copy_item_with, CopyContext, MembershipAction};
+use crate::state::CaptureState;
 use crate::storage::{ClipboardRepository, Database};
 
 use super::http::{error_response, json_response, response, HttpRequest, HttpResponse};
@@ -25,6 +26,7 @@ pub(super) fn dispatch(
         page_size_limit,
         search_page_size_limit,
         &CopyContext::default(),
+        None,
     )
 }
 
@@ -34,6 +36,7 @@ pub(super) fn dispatch_with_context(
     page_size_limit: u32,
     search_page_size_limit: u32,
     copy_context: &CopyContext,
+    capture: Option<&CaptureState>,
 ) -> HttpResponse {
     if request.method == "OPTIONS" {
         return response(204, "", Vec::new());
@@ -118,6 +121,12 @@ pub(super) fn dispatch_with_context(
             let text = parse_paste_body(&body);
             if text.is_empty() {
                 return error_response(400, "paste body is empty");
+            }
+            // The paste endpoint writes to the database directly instead of
+            // going through the clipboard worker, so it must enforce the same
+            // privacy rules itself.
+            if let Some(rejection) = capture.and_then(|capture| capture.reject_manual_text(&text)) {
+                return error_response(rejection.http_status(), rejection.message());
             }
             match save_text(database, &text) {
                 Ok(item) => json_response(201, &item),

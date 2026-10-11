@@ -5,6 +5,7 @@ use crate::export::{export_database, export_database_to_file, ExportFormat, Expo
 use crate::item_operations::{
     change_membership, copy_item_with, CopyContext, CopyError, MembershipAction,
 };
+use crate::state::CaptureState;
 use crate::storage::{ClipboardRepository, Database};
 
 mod api;
@@ -35,6 +36,9 @@ pub struct CliArgs {
     pub output_path: Option<String>,
 }
 
+/// Test convenience wrapper with no capture-policy gate. Every production
+/// entry point must call [`run_cli_command_with_context`] with the live
+/// [`CaptureState`] so CLI paste obeys the privacy rules.
 pub fn run_cli_command(
     args: &CliArgs,
     database: &Database,
@@ -47,15 +51,20 @@ pub fn run_cli_command(
         page_size_limit,
         search_page_size_limit,
         &CopyContext::default(),
+        None,
     )
 }
 
+/// `capture` carries the privacy gate (pause state, sensitive-content
+/// patterns, and the text capture ceiling) that the paste path must obey.
+/// `None` is only for in-memory test harnesses.
 pub fn run_cli_command_with_context(
     args: &CliArgs,
     database: &Database,
     page_size_limit: u32,
     search_page_size_limit: u32,
     context: &CopyContext,
+    capture: Option<&CaptureState>,
 ) -> Result<String, String> {
     run_cli_command_with_clipboard(
         args,
@@ -64,6 +73,7 @@ pub fn run_cli_command_with_context(
         search_page_size_limit,
         read_system_clipboard_text,
         |item| context.write(database, item),
+        capture,
     )
 }
 
@@ -74,6 +84,7 @@ fn run_cli_command_with_clipboard<Read, Write>(
     search_page_size_limit: u32,
     mut read_clipboard: Read,
     mut write_clipboard: Write,
+    capture: Option<&CaptureState>,
 ) -> Result<String, String>
 where
     Read: FnMut() -> Result<String, String>,
@@ -117,6 +128,12 @@ where
             let text = read_clipboard()?;
             if text.is_empty() {
                 return Err("system clipboard does not contain text".to_owned());
+            }
+            // The paste path writes to the database directly instead of going
+            // through the clipboard worker, so it must enforce the same
+            // privacy rules itself.
+            if let Some(rejection) = capture.and_then(|capture| capture.reject_manual_text(&text)) {
+                return Err(rejection.message().to_owned());
             }
             let markers = crate::content::detect_markers(&text);
             let kind = if markers.is_link {
@@ -465,6 +482,7 @@ mod tests {
             500,
             || Ok(String::new()),
             |_| Ok(()),
+            None,
         );
         assert_eq!(result.unwrap_err(), "copy requires an item id");
     }
@@ -487,6 +505,7 @@ mod tests {
                 copied = item.text_content.clone().unwrap();
                 Ok(())
             },
+            None,
         )
         .unwrap();
 
@@ -506,6 +525,7 @@ mod tests {
             500,
             || Ok("https://example.com".to_owned()),
             |_| Ok(()),
+            None,
         )
         .unwrap();
 
@@ -520,6 +540,84 @@ mod tests {
             Some("https://example.com")
         );
         assert_eq!(saved[0].source_app.as_deref(), Some("CLI"));
+    }
+
+    fn gated_capture_state(text_limit: u64) -> CaptureState {
+        crate::state::CaptureState::new(
+            &crate::privacy::PrivacyManager::new(),
+            Vec::new(),
+            1024 * 1024,
+            text_limit,
+        )
+    }
+
+    #[test]
+    fn cli_paste_refuses_text_matching_a_sensitive_pattern() {
+        let database = Database::open_in_memory().unwrap();
+        let mut privacy = crate::privacy::PrivacyManager::new();
+        privacy.sensitive_patterns = vec![regex_lite::Regex::new("secret").unwrap()];
+        let capture = CaptureState::new(&privacy, Vec::new(), 1024 * 1024, 500_000);
+        let args = args(CliCommand::Paste);
+
+        let result = run_cli_command_with_clipboard(
+            &args,
+            &database,
+            500,
+            500,
+            || Ok("the secret is out".to_owned()),
+            |_| Ok(()),
+            Some(&capture),
+        );
+
+        assert_eq!(
+            result.unwrap_err(),
+            "clipboard text matches a sensitive-content pattern"
+        );
+        assert_eq!(database.item_count().unwrap(), 0);
+    }
+
+    #[test]
+    fn cli_paste_refuses_text_above_the_capture_ceiling() {
+        let database = Database::open_in_memory().unwrap();
+        let capture = gated_capture_state(8);
+        let args = args(CliCommand::Paste);
+
+        let result = run_cli_command_with_clipboard(
+            &args,
+            &database,
+            500,
+            500,
+            || Ok("more than eight bytes".to_owned()),
+            |_| Ok(()),
+            Some(&capture),
+        );
+
+        assert_eq!(
+            result.unwrap_err(),
+            "text exceeds the configured maximum capture size"
+        );
+        assert_eq!(database.item_count().unwrap(), 0);
+    }
+
+    #[test]
+    fn cli_paste_refuses_everything_while_capture_is_paused() {
+        let database = Database::open_in_memory().unwrap();
+        let capture = gated_capture_state(500_000);
+        capture.set_paused(true);
+        let args = args(CliCommand::Paste);
+
+        let result = run_cli_command_with_clipboard(
+            &args,
+            &database,
+            500,
+            500,
+            || Ok("plain text".to_owned()),
+            |_| Ok(()),
+            Some(&capture),
+        );
+
+        assert_eq!(result.unwrap_err(), "clipboard capture is paused");
+        assert_eq!(database.item_count().unwrap(), 0);
     }
 
     #[test]

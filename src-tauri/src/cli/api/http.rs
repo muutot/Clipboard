@@ -15,6 +15,7 @@ use std::time::{Duration, Instant};
 use serde::Serialize;
 
 use crate::item_operations::CopyContext;
+use crate::state::CaptureState;
 use crate::storage::Database;
 
 use super::routes::dispatch_with_context;
@@ -43,6 +44,7 @@ pub(super) struct ServeContext {
     pub(super) port: u16,
     pub(super) active_connections: Arc<AtomicUsize>,
     pub(super) copy_context: CopyContext,
+    pub(super) capture: Option<CaptureState>,
     pub(super) on_change: Arc<dyn Fn() + Send + Sync>,
 }
 
@@ -100,6 +102,7 @@ pub(super) fn serve(
         port,
         active_connections,
         copy_context,
+        capture,
         on_change,
     } = context;
     let mut connections = Connections::default();
@@ -130,6 +133,7 @@ pub(super) fn serve(
                 let database = Arc::clone(&database);
                 let token = Arc::clone(&token);
                 let copy_context = copy_context.clone();
+                let capture = capture.clone();
                 let on_change = on_change.clone();
                 let connection_counter = Arc::clone(&active_connections);
                 let retained_stream = match stream.try_clone() {
@@ -152,6 +156,7 @@ pub(super) fn serve(
                             &token,
                             port,
                             &copy_context,
+                            capture.as_ref(),
                             on_change.as_ref(),
                         ) {
                             crate::log_error!("[local-api] request failed: {error}");
@@ -185,6 +190,7 @@ pub(super) fn handle_connection(
     token: &str,
     port: u16,
     copy_context: &CopyContext,
+    capture: Option<&CaptureState>,
     on_change: &(dyn Fn() + Send + Sync),
 ) -> Result<(), String> {
     // Accepted sockets may inherit the listener's nonblocking flag on Windows.
@@ -209,6 +215,7 @@ pub(super) fn handle_connection(
         page_size_limit,
         search_page_size_limit,
         copy_context,
+        capture,
     );
     if (200..300).contains(&response.status) && matches!(request.method.as_str(), "POST" | "DELETE")
     {

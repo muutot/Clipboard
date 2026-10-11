@@ -166,6 +166,27 @@ impl CaptureState {
         self.policy.should_skip(&ignored, source_app, text)
     }
 
+    /// Privacy gate for the manual text-ingestion paths (CLI paste and the
+    /// local API `POST /paste`), which write to the database directly instead
+    /// of going through the clipboard-worker pipeline. Without this check a
+    /// paused or sensitive-filtered capture could still be persisted by
+    /// invoking those entry points. Returns the rejection reason, or `None`
+    /// when the text may be stored.
+    pub(crate) fn reject_manual_text(&self, text: &str) -> Option<ManualTextRejection> {
+        if self.is_paused() {
+            return Some(ManualTextRejection::CapturePaused);
+        }
+        if text.len() as u64 > self.max_text_capture_bytes() {
+            return Some(ManualTextRejection::TextTooLarge);
+        }
+        // No source app exists for a manual paste, so only the text rules
+        // apply; an empty ignore list keeps the app branch inert.
+        if self.policy.should_skip(&[], None, Some(text)) {
+            return Some(ManualTextRejection::SensitiveContent);
+        }
+        None
+    }
+
     pub fn install_worker(&self, worker: CaptureWorker) {
         self.stop_worker();
         let mut slot = self
@@ -219,6 +240,33 @@ impl CapturePolicy {
             };
             patterns.iter().any(|pattern| pattern.is_match(text))
         })
+    }
+}
+
+/// Why a manual text-ingestion path (CLI paste, local API `POST /paste`)
+/// refused to store a text. These paths bypass the clipboard-worker pipeline,
+/// so they enforce the same privacy rules themselves.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ManualTextRejection {
+    CapturePaused,
+    TextTooLarge,
+    SensitiveContent,
+}
+
+impl ManualTextRejection {
+    pub(crate) fn message(&self) -> &'static str {
+        match self {
+            Self::CapturePaused => "clipboard capture is paused",
+            Self::TextTooLarge => "text exceeds the configured maximum capture size",
+            Self::SensitiveContent => "clipboard text matches a sensitive-content pattern",
+        }
+    }
+
+    pub(crate) fn http_status(&self) -> u16 {
+        match self {
+            Self::TextTooLarge => 413,
+            _ => 403,
+        }
     }
 }
 

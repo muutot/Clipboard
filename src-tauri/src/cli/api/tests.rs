@@ -9,13 +9,14 @@ use std::time::{Duration, Instant};
 
 use crate::domain::{ClipboardItem, ClipboardKind};
 use crate::item_operations::CopyContext;
+use crate::state::CaptureState;
 use crate::storage::{ClipboardRepository, Database};
 
 use super::http::{
     authorize, constant_time_eq, handle_connection, read_request_with_deadline, serve, HttpRequest,
     ServeContext,
 };
-use super::routes::{dispatch, parse_query};
+use super::routes::{dispatch, dispatch_with_context, parse_query};
 use super::LocalApiServer;
 
 fn request(method: &str, target: &str, body: &[u8]) -> HttpRequest {
@@ -91,6 +92,78 @@ fn paste_list_search_and_delete_endpoints_use_database() {
         .list_recent(10, 0, &crate::storage::HistoryFilter::default())
         .unwrap()
         .is_empty());
+}
+
+fn gated_capture_state(paused: bool, text_limit: u64) -> CaptureState {
+    let capture = CaptureState::new(
+        &crate::privacy::PrivacyManager::new(),
+        Vec::new(),
+        1024 * 1024,
+        text_limit,
+    );
+    if paused {
+        capture.set_paused(true);
+    }
+    capture
+}
+
+#[test]
+fn gated_paste_endpoint_refuses_text_matching_a_sensitive_pattern() {
+    let database = Database::open_in_memory().unwrap();
+    let mut privacy = crate::privacy::PrivacyManager::new();
+    privacy.sensitive_patterns = vec![regex_lite::Regex::new("secret").unwrap()];
+    let capture = CaptureState::new(&privacy, Vec::new(), 1024 * 1024, 500_000);
+    let paste = request("POST", "/paste", br#"{"text":"the secret is out"}"#);
+
+    let response = dispatch_with_context(
+        &paste,
+        &database,
+        500,
+        500,
+        &CopyContext::default(),
+        Some(&capture),
+    );
+
+    assert_eq!(response.status, 403);
+    assert_eq!(database.item_count().unwrap(), 0);
+}
+
+#[test]
+fn gated_paste_endpoint_refuses_text_above_the_capture_ceiling() {
+    let database = Database::open_in_memory().unwrap();
+    let capture = gated_capture_state(false, 8);
+    let paste = request("POST", "/paste", br#"{"text":"more than eight"}"#);
+
+    let response = dispatch_with_context(
+        &paste,
+        &database,
+        500,
+        500,
+        &CopyContext::default(),
+        Some(&capture),
+    );
+
+    assert_eq!(response.status, 413);
+    assert_eq!(database.item_count().unwrap(), 0);
+}
+
+#[test]
+fn gated_paste_endpoint_refuses_everything_while_capture_is_paused() {
+    let database = Database::open_in_memory().unwrap();
+    let capture = gated_capture_state(true, 500_000);
+    let paste = request("POST", "/paste", br#"{"text":"plain text"}"#);
+
+    let response = dispatch_with_context(
+        &paste,
+        &database,
+        500,
+        500,
+        &CopyContext::default(),
+        Some(&capture),
+    );
+
+    assert_eq!(response.status, 403);
+    assert_eq!(database.item_count().unwrap(), 0);
 }
 
 #[test]
@@ -242,6 +315,7 @@ fn accepted_nonblocking_connection_waits_for_delayed_request_bytes() {
                     "test",
                     port,
                     &CopyContext::default(),
+                    None,
                     &|| {},
                 ))
                 .unwrap();
@@ -286,6 +360,7 @@ fn stop_closes_accepted_clients_before_they_can_submit_a_write() {
         port,
         active_connections: Arc::clone(&active),
         copy_context: CopyContext::default(),
+        capture: None,
         on_change: Arc::new(|| {}),
     };
     let server = thread::spawn(move || serve(listener, stop_rx, context));
