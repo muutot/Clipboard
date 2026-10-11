@@ -115,6 +115,10 @@ A rejected or empty configuration response must keep the load gate closed. `OcrS
 
 Do not fetch per mount and correct later. When only part of a panel is async, gate just the affected control (or the smallest wrapping block) so the rest stays visible.
 
+### Size entries must keep the byte value and the display value in sync
+
+A size control (`SizeEntry`) holds two values: the display number plus unit, and the byte value that is actually persisted. `onchange`/`onblur` persists the byte value, so a `set` callback that only writes the display value silently saves a stale number (this shipped as a real bug in `SyncPanel`). Every `set` must recompute the byte value from the display input, every unit change must recompute it from the new unit, and `persist` must clamp the byte value to the backend's window and refresh the display so the input shows what was stored. The backend setter remains the authoritative clamp (e.g. `MIN/MAX_SYNC_RESOURCE_BYTES`, `MIN/MAX_FILE_COPY_SIZE_BYTES`).
+
 ## Canonical card patterns
 
 ### Toggle/control card
