@@ -64,6 +64,10 @@
   // Hold the sync controls until the stored config arrives so a saved
   // provider/auto-sync value does not render as the default and then flip.
   let syncConfigLoaded = $state(false);
+  // A failed load must block editing: rendering the editable panel over the
+  // in-code defaults would let one stray blur save those defaults on top of
+  // the user's real sync configuration.
+  let syncConfigError = $state(false);
 
   $effect(() => {
     void loadSyncConfig();
@@ -128,6 +132,7 @@
       syncEncryptPassword = "";
     } catch (e) {
       console.error("Failed to load sync config", e);
+      syncConfigError = true;
     } finally {
       syncConfigLoaded = true;
     }
@@ -250,6 +255,8 @@
 <div class="settings-scroll">
   {#if !syncConfigLoaded}
     <div class="settings-state">{_t("storage.readingConfig")}</div>
+  {:else if syncConfigError}
+    <div class="settings-state" role="alert">{_t("storage.storageUnavailable")}</div>
   {:else if tab === "cloud"}
     <SelectEntry
       config={{
