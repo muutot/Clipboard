@@ -73,8 +73,21 @@
     syncMaxImageBytes = fromDisplaySize(syncMaxImageDisplay, syncMaxImageUnit);
   }
 
+  // Switching the unit must keep the configured bytes fixed and re-derive the
+  // display number. Reusing the display number as if it were already in the
+  // new unit (the old code) silently rewrote the byte limit: 5 MB became 5 KB.
+  function setSyncMaxImageUnit(unit: "byte" | "KB" | "MB" | "GB") {
+    syncMaxImageUnit = unit;
+    syncMaxImageDisplay = toDisplaySize(syncMaxImageBytes, unit);
+  }
+
   function updateSyncMaxFileFromDisplay() {
     syncMaxFileBytes = fromDisplaySize(syncMaxFileDisplay, syncMaxFileUnit);
+  }
+
+  function setSyncMaxFileUnit(unit: "byte" | "KB" | "MB" | "GB") {
+    syncMaxFileUnit = unit;
+    syncMaxFileDisplay = toDisplaySize(syncMaxFileBytes, unit);
   }
 
   // HTML min/max attributes never block typed values, and the SizeEntry
@@ -364,10 +377,7 @@
           updateSyncMaxImageFromDisplay();
         },
         getUnit: () => syncMaxImageUnit,
-        setUnit: (u) => {
-          syncMaxImageUnit = u;
-          updateSyncMaxImageFromDisplay();
-        },
+        setUnit: setSyncMaxImageUnit,
         onchange: saveSyncConfig,
       }}
     />
@@ -386,10 +396,7 @@
           updateSyncMaxFileFromDisplay();
         },
         getUnit: () => syncMaxFileUnit,
-        setUnit: (u) => {
-          syncMaxFileUnit = u;
-          updateSyncMaxFileFromDisplay();
-        },
+        setUnit: setSyncMaxFileUnit,
         onchange: saveSyncConfig,
       }}
     />
