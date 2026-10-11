@@ -119,14 +119,20 @@
       <button
         type="button"
         class="settings-action-btn"
-        onclick={() => invoke("open_external_url", { url: "https://github.com/muutot/Clipboard" })}
+        onclick={() =>
+          invoke("open_external_url", { url: "https://github.com/muutot/Clipboard" }).catch((err) =>
+            console.warn("open_external_url failed:", err),
+          )}
       >
         GitHub
       </button>
       <button
         type="button"
         class="settings-action-btn"
-        onclick={() => invoke("open_external_url", { url: "https://gitcode.com/m2u/Clipboard" })}
+        onclick={() =>
+          invoke("open_external_url", { url: "https://gitcode.com/m2u/Clipboard" }).catch((err) =>
+            console.warn("open_external_url failed:", err),
+          )}
       >
         GitCode
       </button>
