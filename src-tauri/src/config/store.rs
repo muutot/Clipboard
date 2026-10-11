@@ -492,7 +492,12 @@ impl ConfigStore {
 
     pub fn set_max_file_copy_size_bytes(&mut self, value: u64) -> Result<(), StorageError> {
         self.mutate_and_save(|config| {
-            config.storage.max_file_copy_size_bytes = value;
+            // The capture worker treats 0 as unlimited, so an unclamped 0 would
+            // silently disable the limit and copy every captured file into the
+            // managed store. The settings UI declares 1 via input attributes
+            // only, which never blocks typed or cleared values.
+            config.storage.max_file_copy_size_bytes =
+                value.clamp(MIN_FILE_COPY_SIZE_BYTES, MAX_FILE_COPY_SIZE_BYTES);
         })
     }
 

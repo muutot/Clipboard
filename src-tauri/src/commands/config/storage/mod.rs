@@ -267,7 +267,9 @@ pub fn set_storage_config(
         config
             .set_max_file_copy_size_bytes(v)
             .map_err(|e| e.to_string())?;
-        capture.set_max_file_copy_size_bytes(v);
+        // Mirror the clamped value: the config store is the authoritative
+        // guard and the capture worker reads the atomic directly.
+        capture.set_max_file_copy_size_bytes(config.max_file_copy_size_bytes());
     }
     Ok(())
 }

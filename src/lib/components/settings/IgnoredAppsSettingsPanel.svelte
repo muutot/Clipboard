@@ -109,12 +109,23 @@
     maxFileCopySize = fromDisplaySize(maxFileCopyDisplay, maxFileCopySizeUnit);
   }
 
+  function normalizeFileCopySize(value: number): number {
+    // HTML min/max attributes never block typed values, and a cleared input
+    // arrives as null → 0, which the capture worker would interpret as
+    // unlimited. Reset an invalid entry to the default instead of persisting
+    // it; the backend setter clamps again as the authoritative guard.
+    if (!Number.isFinite(value) || value <= 0) return 100 * 1024 * 1024;
+    return Math.min(2 * 1024 * 1024 * 1024, Math.round(value));
+  }
+
   function changeFileSizeUnit(unit: "byte" | "KB" | "MB" | "GB") {
     maxFileCopySizeUnit = unit;
     maxFileCopyDisplay = toDisplaySize(maxFileCopySize, unit);
   }
 
   async function saveMaxFileCopySize() {
+    maxFileCopySize = normalizeFileCopySize(maxFileCopySize);
+    maxFileCopyDisplay = toDisplaySize(maxFileCopySize, maxFileCopySizeUnit);
     try {
       await invoke("set_storage_config", { maxFileCopySizeBytes: maxFileCopySize });
     } catch (error) {

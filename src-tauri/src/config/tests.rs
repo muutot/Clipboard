@@ -800,6 +800,23 @@ fn history_limits_clamp_out_of_range_values() {
 }
 
 #[test]
+fn max_file_copy_size_clamps_out_of_range_values() {
+    let project = temporary_test_directory("file-copy-clamp");
+    let mut store = ConfigStore::load(&project).unwrap();
+
+    // 0 must never persist: the capture worker reads 0 as unlimited.
+    store.set_max_file_copy_size_bytes(0).unwrap();
+    assert_eq!(store.max_file_copy_size_bytes(), 1);
+    store.set_max_file_copy_size_bytes(u64::MAX).unwrap();
+    assert_eq!(
+        store.max_file_copy_size_bytes(),
+        super::MAX_FILE_COPY_SIZE_BYTES
+    );
+
+    fs::remove_dir_all(project).unwrap();
+}
+
+#[test]
 fn failed_save_rolls_back_the_in_memory_value() {
     let project = temporary_test_directory("rollback");
     let mut store = ConfigStore::load(&project).unwrap();
