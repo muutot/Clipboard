@@ -789,7 +789,13 @@
       itemStore.current = promoteItem(itemStore.current, newItem, "history");
       itemStore.current = sortRecentHistory(itemStore.current);
       invalidateSearchResults();
-      selectedId = newItem.id;
+      // Pin the selection only when the promoted entry is actually displayed:
+      // in a search or the recycle bin it is not, and pinning anyway would
+      // deselection-steal into the "first row" reset of the selection effect
+      // below while the user keeps working with an unrelated capture in flight.
+      if (filteredItems.some((displayed) => displayed.id === newItem.id)) {
+        selectedId = newItem.id;
+      }
       // The timestamp bump shifts every row behind the OFFSET cursor just like
       // a fresh insertion does. Rebuild the cursor so a later scroll-load
       // cannot replay an already-loaded row as a duplicate.
