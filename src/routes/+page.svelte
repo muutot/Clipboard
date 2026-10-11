@@ -898,11 +898,10 @@
         cardTitle: number;
         cardPreview: number;
       };
-      display: { showSecondaryText: boolean; maxTextLines: number };
     }>("settings-font-changed", (event) => {
-      const { fontSizes, display } = event.payload;
+      const { fontSizes } = event.payload;
       if (fontSizes) {
-        applyFontSizesToDocument(fontSizes, display);
+        applyFontSizesToDocument(fontSizes);
       }
     });
 

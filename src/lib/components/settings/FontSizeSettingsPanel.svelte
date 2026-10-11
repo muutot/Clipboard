@@ -122,7 +122,7 @@
   });
 
   $effect(() => {
-    applyFontSizesToDocument(s.fontSizes, s.display);
+    applyFontSizesToDocument(s.fontSizes);
   });
 </script>
 

@@ -2,17 +2,9 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { applyThemeColors } from "$lib/utils/settings/theme";
 import { applyCustomCss } from "$lib/utils/settings/custom-css";
 import { isTauriRuntime } from "$lib/services/runtime";
-import type {
-  FontSizeSettings,
-  DisplaySettings,
-  GeneralSettings,
-  WindowEffect,
-} from "$lib/types/clipboard";
+import type { FontSizeSettings, GeneralSettings, WindowEffect } from "$lib/types/clipboard";
 
-export function applyFontSizesToDocument(
-  fontSizes: FontSizeSettings,
-  display?: Pick<DisplaySettings, "showSecondaryText">,
-): void {
+export function applyFontSizesToDocument(fontSizes: FontSizeSettings): void {
   if (typeof document === "undefined") return;
 
   const root = document.documentElement;
@@ -22,10 +14,6 @@ export function applyFontSizesToDocument(
   root.style.setProperty("--font-size-tiny", `${fontSizes.tiny}px`);
   root.style.setProperty("--font-size-cardTitle", `${fontSizes.cardTitle}px`);
   root.style.setProperty("--font-size-cardPreview", `${fontSizes.cardPreview}px`);
-
-  if (display) {
-    root.style.setProperty("--show-secondary", display.showSecondaryText ? "block" : "none");
-  }
 }
 
 export function applyWindowEffectToDocument(effect: WindowEffect): void {
@@ -66,7 +54,7 @@ export function applyWindowOpacityToDocument(transparency: number, affectsText: 
 export function applyGeneralSettingsToDocument(settings: GeneralSettings): void {
   if (typeof document === "undefined") return;
 
-  applyFontSizesToDocument(settings.fontSizes, settings.display);
+  applyFontSizesToDocument(settings.fontSizes);
   applyThemeColors(settings.themeColors);
   applyWindowEffectToDocument(settings.windowEffect);
   applyWindowOpacityToDocument(settings.windowTransparency, settings.windowOpacityAffectsText);
