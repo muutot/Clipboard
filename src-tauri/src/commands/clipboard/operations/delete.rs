@@ -3,6 +3,8 @@
 
 use super::*;
 
+use tauri::Manager;
+
 #[tauri::command]
 pub fn delete_clipboard_item(
     app: AppHandle,
@@ -177,52 +179,57 @@ pub fn batch_permanently_delete_clipboard_items(
 }
 
 #[tauri::command]
-pub fn permanently_delete_storage_kind(
-    database: tauri::State<'_, Database>,
-    paths: tauri::State<'_, StoragePaths>,
-    search_index: tauri::State<'_, Arc<SearchIndex>>,
-    capture: tauri::State<'_, CaptureState>,
-    app: tauri::AppHandle,
+pub async fn permanently_delete_storage_kind(
+    app: AppHandle,
     kind: ClipboardKind,
     expected: StorageKindDeleteExpectation,
 ) -> Result<StorageKindDeleteResult, String> {
-    // Hold the storage maintenance lock BEFORE the ingestion guard (the same
-    // order as the storage-root migration) so the zero-grace orphan cleanup
-    // inside `permanently_delete_storage_kind_for` cannot run concurrently
-    // with a rename's persist-then-move window: that window leaves the old
-    // file briefly unreferenced, and a concurrent zero-grace scan would delete
-    // it and leave the rename's rollback pointing at a missing file.
-    let _maintenance = lock_state(
-        &capture.storage_maintenance_lock,
-        "storage maintenance lock is poisoned",
-    )?;
-    let ingestion_guard = lock_state(
-        &capture.ingestion_guard,
-        "clipboard ingestion lock is poisoned",
-    )?;
-    let expected = KindStorageStats {
-        item_count: expected.item_count,
-        size_bytes: expected.size_bytes,
-    };
-    let mut result = permanently_delete_storage_kind_for(
-        database.inner(),
-        paths.inner(),
-        search_index.inner(),
-        kind,
-        Some(expected),
-    )?;
-    drop(ingestion_guard);
-    if result.deleted_count > 0 {
-        if let Err(error) = app.emit(
-            "clipboard-history-invalidated",
-            ClipboardHistoryInvalidated {
-                deleted_ids: result.deleted_ids.clone(),
-            },
-        ) {
-            result
-                .warnings
-                .push(format!("main window refresh is pending: {error}"));
+    // The full-kind scan and its zero-grace file cleanup can run for minutes
+    // on large libraries; keep them off the main thread so the event loop,
+    // tray tasks, and every window stay responsive.
+    tauri::async_runtime::spawn_blocking(move || {
+        let capture = app.state::<CaptureState>();
+        // Hold the storage maintenance lock BEFORE the ingestion guard (the
+        // same order as the storage-root migration) so the zero-grace orphan
+        // cleanup inside `permanently_delete_storage_kind_for` cannot run
+        // concurrently with a rename's persist-then-move window: that window
+        // leaves the old file briefly unreferenced, and a concurrent
+        // zero-grace scan would delete it and leave the rename's rollback
+        // pointing at a missing file.
+        let _maintenance = lock_state(
+            &capture.storage_maintenance_lock,
+            "storage maintenance lock is poisoned",
+        )?;
+        let ingestion_guard = lock_state(
+            &capture.ingestion_guard,
+            "clipboard ingestion lock is poisoned",
+        )?;
+        let expected = KindStorageStats {
+            item_count: expected.item_count,
+            size_bytes: expected.size_bytes,
+        };
+        let mut result = permanently_delete_storage_kind_for(
+            app.state::<Database>().inner(),
+            app.state::<StoragePaths>().inner(),
+            app.state::<Arc<SearchIndex>>().inner(),
+            kind,
+            Some(expected),
+        )?;
+        drop(ingestion_guard);
+        if result.deleted_count > 0 {
+            if let Err(error) = app.emit(
+                "clipboard-history-invalidated",
+                ClipboardHistoryInvalidated {
+                    deleted_ids: result.deleted_ids.clone(),
+                },
+            ) {
+                result
+                    .warnings
+                    .push(format!("main window refresh is pending: {error}"));
+            }
         }
-    }
-    Ok(result)
+        Ok(result)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
