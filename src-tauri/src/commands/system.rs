@@ -113,16 +113,24 @@ pub fn get_performance_metrics(
     Ok(performance_tracker.snapshot())
 }
 
+/// Async: the integrity check plus the full VACUUM INTO backup refresh can
+/// block for seconds to minutes on a large database. The work runs on the
+/// dedicated blocking pool so the window event loop stays responsive while
+/// the repair action runs.
 #[tauri::command]
-pub fn repair_database(
-    database: tauri::State<'_, Database>,
-    paths: tauri::State<'_, StoragePaths>,
-) -> Result<RepairResult, String> {
-    let result = database.repair().map_err(|e| e.to_string())?;
-    if result.integrity_ok {
-        refresh_database_backup(database.inner(), &paths.database).map_err(|e| e.to_string())?;
-    }
-    Ok(result)
+pub async fn repair_database(app: tauri::AppHandle) -> Result<RepairResult, String> {
+    use tauri::Manager;
+    tauri::async_runtime::spawn_blocking(move || {
+        let database = app.state::<Database>();
+        let paths = app.state::<StoragePaths>();
+        let result = database.repair().map_err(|e| e.to_string())?;
+        if result.integrity_ok {
+            refresh_database_backup(&database, &paths.database).map_err(|e| e.to_string())?;
+        }
+        Ok(result)
+    })
+    .await
+    .map_err(|error| format!("repair task join failed: {error}"))?
 }
 
 #[tauri::command]
