@@ -20,11 +20,13 @@ jobs:
     permissions:
       contents: read
     steps:
+      # Checkout the default branch, not the tag: older tags carry an outdated
+      # sync_release.py (e.g., without the draft-release fixes), and the script
+      # itself only talks to the GitHub/GitCode APIs — it needs no tag content.
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           fetch-depth: 0
           fetch-tags: true
-          ref: ${{ inputs.tag }}
 
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
