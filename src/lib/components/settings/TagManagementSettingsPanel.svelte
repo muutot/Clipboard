@@ -52,6 +52,12 @@
   let confirmDelete = $state<Record<string, boolean>>({});
   let feedbackTimer: ReturnType<typeof setTimeout> | undefined;
 
+  // Clear a pending feedback reset when the panel unmounts so the timer
+  // cannot fire against a destroyed component.
+  $effect(() => {
+    return () => clearTimeout(feedbackTimer);
+  });
+
   let colorPopover = $state<string | null>(null);
   let colorTriggerEl = $state<HTMLButtonElement | null>(null);
   let colorPopoverEl = $state<HTMLDivElement | null>(null);
