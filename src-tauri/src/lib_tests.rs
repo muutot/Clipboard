@@ -360,7 +360,8 @@ mod capture_tests {
         std::fs::write(&path, stored_png.get_ref()).expect("test image should be writable");
 
         let mut guard = content::self_trigger::SelfTriggerGuard::new();
-        register_image_self_trigger(&mut guard, path.to_str(), None).unwrap();
+        register_image_self_trigger(&mut guard, path.parent().unwrap(), path.to_str(), None)
+            .unwrap();
         assert!(guard.is_media_write_self_triggered("image", clipboard_bmp.get_ref()));
 
         let _ = std::fs::remove_file(path);
@@ -374,6 +375,7 @@ mod capture_tests {
 
         register_image_self_trigger(
             &mut guard,
+            std::path::Path::new("C:\\missing"),
             Some("C:\\missing\\clipboard-image.png"),
             Some(&fallback_hash),
         )
