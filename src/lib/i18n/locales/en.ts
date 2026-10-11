@@ -111,6 +111,7 @@ const en: LocaleDefinition = {
     shortcutHint: "Toggle",
     restartBlockedInDev:
       "In dev mode, restart the app from the terminal; in-app restart would orphan the frontend dev server",
+    settingsOpenFailed: "Could not open the settings window",
   },
   filter: {
     all: "All",

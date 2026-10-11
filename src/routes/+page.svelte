@@ -1141,6 +1141,10 @@
         focus: true,
         backgroundColor: settingsBg,
       });
+      settingsWindow.once("tauri://error", (event) => {
+        console.error("settings window creation failed:", event.payload);
+        showToast(_t("app.settingsOpenFailed"), "error");
+      });
     } finally {
       settingsWindowOpening = false;
     }

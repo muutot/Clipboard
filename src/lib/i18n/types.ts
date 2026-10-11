@@ -101,6 +101,7 @@ export interface LocaleDefinition {
     coreConnected: string;
     shortcutHint: string;
     restartBlockedInDev: string;
+    settingsOpenFailed: string;
   };
   filter: {
     all: string;
