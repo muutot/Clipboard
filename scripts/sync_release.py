@@ -327,8 +327,33 @@ def upload_asset_to_gitcode_by_tag(tag_name, file_path, file_name):
         return False
 
 
+def fetch_gitcode_release_by_tag(tag_name):
+    """按 tag 获取 GitCode Release；带 token 时 draft 也可见。"""
+    url = (
+        f"{GITCODE_API_BASE}/repos/{GITCODE_OWNER}/{GITCODE_REPO}"
+        f"/releases/tags/{tag_name}"
+    )
+    response = http.get(url, headers=get_gitcode_headers(), timeout=(10, 30))
+    if response.status_code == 200:
+        data = response.json()
+        return data if isinstance(data, dict) else None
+    return None
+
+
+def publish_gitcode_release(release_id):
+    """将 GitCode 草稿 Release 转为正式发布（GitHub 侧已发布时调用）。"""
+    url = (
+        f"{GITCODE_API_BASE}/repos/{GITCODE_OWNER}/{GITCODE_REPO}"
+        f"/releases/{release_id}"
+    )
+    resp = http.patch(
+        url, headers=get_gitcode_headers(), json={"draft": False}, timeout=(10, 30)
+    )
+    return resp.status_code in (200, 201)
+
+
 def ensure_gitcode_release(tag_name, release_name, release_body, prerelease, draft):
-    """在 GitCode 创建 Release；已存在则视为成功，继续传附件。"""
+    """在 GitCode 创建 Release；已存在则返回其信息，失败返回 None。"""
     create_url = f"{GITCODE_API_BASE}/repos/{GITCODE_OWNER}/{GITCODE_REPO}/releases"
     payload = {
         "tag_name": tag_name,
@@ -344,14 +369,28 @@ def ensure_gitcode_release(tag_name, release_name, release_body, prerelease, dra
 
     if resp.status_code in (200, 201):
         print(f"[+] Release [{tag_name}] 主体创建成功！")
-        return True
+        created = resp.json()
+        return created if isinstance(created, dict) else {}
     if resp.status_code == 422 or "already" in resp.text.lower():
-        print(f"[=] Release [{tag_name}] 在 GitCode 已存在，继续同步附件。")
-        return True
+        # 422 也可能来自 tag 不存在（代码镜像未同步），不能用 status 单独判定
+        # "已存在"——用 GET 按 tag 确认真实存在性。
+        existing = fetch_gitcode_release_by_tag(tag_name)
+        if existing is not None:
+            print(f"[=] Release [{tag_name}] 在 GitCode 已存在，继续同步附件。")
+            return existing
+        print(
+            f"[-] 创建 GitCode Release [{tag_name}] 返回 {resp.status_code}，"
+            f"且按 tag 未找到已有 Release。响应: {resp.text}"
+        )
+        print(
+            f"[!] 提示: GitCode 仓库可能缺少 tag {tag_name}（代码镜像未同步）。"
+            "请先在 GitCode 侧同步 tag 后重试。"
+        )
+        return None
     print(
         f"[-] 创建 GitCode Release [{tag_name}] 失败 [{resp.status_code}]: {resp.text}"
     )
-    return False
+    return None
 
 
 def sync_release(gh_release):
@@ -365,13 +404,26 @@ def sync_release(gh_release):
 
     print(f"\n[->] 开始同步 Release: {tag_name}")
 
-    # 1. 在 GitCode 创建 Release（已存在则复用）
-    if not ensure_gitcode_release(
+    # 1. 在 GitCode 创建 Release（已存在则复用），拿回其实际状态。
+    existing = ensure_gitcode_release(
         tag_name, release_name, release_body, prerelease, draft
-    ):
+    )
+    if existing is None:
         return False
 
-    # 2. 处理 Release 随附文件 (Assets)
+    # 2. GitHub 已发布而 GitCode 侧仍是历史草稿时先转正：GitCode 的
+    #    upload_url 端点对 draft 返回 404，直接上传会全部失败。
+    if existing.get("draft") and not draft:
+        release_id = existing.get("id") or existing.get("release_id")
+        if release_id and publish_gitcode_release(release_id):
+            print(f"[+] Release [{tag_name}] 已从草稿转为正式发布。")
+        else:
+            print(
+                f"[!] 转正 GitCode Release [{tag_name}] 失败"
+                "（缺少 release id 或 PATCH 失败），draft 状态可能阻断附件上传。"
+            )
+
+    # 3. 处理 Release 随附文件 (Assets)
     assets = gh_release.get("assets", [])
     if not assets:
         print("    [i] 无附件需要同步。")
