@@ -319,6 +319,18 @@ impl SyncRepository for MeasuredRepository<'_> {
         )
     }
 
+    fn sync_outbox_range_item_ids(
+        &self,
+        after_sequence: u64,
+        through_sequence: u64,
+    ) -> Result<Vec<String>, String> {
+        <Database as SyncRepository>::sync_outbox_range_item_ids(
+            self.database,
+            after_sequence,
+            through_sequence,
+        )
+    }
+
     fn get_sync_cursor(
         &self,
         remote_scope: &str,

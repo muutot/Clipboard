@@ -74,6 +74,43 @@ impl Database {
         })
     }
 
+    /// Distinct item ids referenced by outbox rows within
+    /// `(after_sequence, through_sequence]`, ordered ascending.
+    ///
+    /// A publish that crashed between `publish_head` and its local commit
+    /// leaves exactly the gap rows behind, so this set equals the published
+    /// segment's mutation ids. A database restored from an older backup can
+    /// still fill the sequence range with unrelated newer rows, so the caller
+    /// must compare identities, not just counts.
+    pub fn sync_outbox_range_item_ids(
+        &self,
+        after_sequence: u64,
+        through_sequence: u64,
+    ) -> Result<Vec<String>, StorageError> {
+        if through_sequence <= after_sequence {
+            return Ok(Vec::new());
+        }
+        if through_sequence > i64::MAX as u64 || after_sequence > i64::MAX as u64 {
+            return Err(StorageError::ValueOutOfRange {
+                field: "sync_outbox.sequence",
+            });
+        }
+        self.with_connection(|connection| {
+            let mut statement = connection.prepare(
+                "SELECT DISTINCT item_id
+                   FROM sync_outbox
+                  WHERE sequence > ?1 AND sequence <= ?2
+                  ORDER BY item_id ASC",
+            )?;
+            let rows = statement
+                .query_map([after_sequence as i64, through_sequence as i64], |row| {
+                    row.get::<_, String>(0)
+                })?
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(rows)
+        })
+    }
+
     pub fn acknowledge_sync_outbox(&self, through_sequence: u64) -> Result<u64, StorageError> {
         let through_sequence =
             i64::try_from(through_sequence).map_err(|_| StorageError::ValueOutOfRange {

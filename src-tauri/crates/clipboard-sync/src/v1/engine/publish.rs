@@ -59,31 +59,49 @@ pub(super) fn reconcile_local_device_head(
     // our own segment and resetting the publication state, which would rotate
     // the epoch and force every peer into a full re-bootstrap while the old
     // epoch's objects lose their GC coverage.
+    //
+    // A database restored from an older backup presents the same head shape
+    // (same epoch, same snapshot, remote ahead) but the gap mutations are not
+    // applied locally — and newer local mutations can fill the gap's sequence
+    // range, so sequence coverage alone proves nothing. Verify that the
+    // published segment was encoded from the still pending outbox rows before
+    // adopting; anything else falls through to the pull-and-reset recovery
+    // below.
     if state.initialized
         && remote_head.epoch == state.epoch
         && Some(&remote_head.snapshot) == state.snapshot.as_ref()
         && remote_head.published_sequence > state.published_sequence
     {
         if let Some(segment_key) = remote_head.last_segment_key.clone() {
-            // A commit failure here means the local outbox no longer covers
-            // the remote head (e.g. it was pruned outside the engine); the
-            // pull-and-reset recovery below remains the fallback for that.
-            if let Ok(adopted) = database.commit_sync_segment_published(
-                remote_scope,
-                &state.epoch,
-                &segment_key,
-                remote_head.published_sequence,
+            if published_segment_matches_outbox(
+                store,
+                database,
+                device_id,
+                &state,
+                &remote_head,
+                session_key,
+                result,
             ) {
-                record_head_cache(
-                    database,
+                // A commit failure here means the local outbox no longer covers
+                // the remote head (e.g. it was pruned outside the engine); the
+                // pull-and-reset recovery below remains the fallback for that.
+                if let Ok(adopted) = database.commit_sync_segment_published(
                     remote_scope,
-                    device_id,
-                    listed,
-                    downloaded.etag.as_deref(),
-                    downloaded.bytes.len() as u64,
-                    &remote_head,
-                );
-                return Ok(adopted);
+                    &state.epoch,
+                    &segment_key,
+                    remote_head.published_sequence,
+                ) {
+                    record_head_cache(
+                        database,
+                        remote_scope,
+                        device_id,
+                        listed,
+                        downloaded.etag.as_deref(),
+                        downloaded.bytes.len() as u64,
+                        &remote_head,
+                    );
+                    return Ok(adopted);
+                }
             }
         }
     }
@@ -115,6 +133,79 @@ fn local_publication_matches_remote(state: &SyncRemoteState, head: &DeviceHead) 
         && state.snapshot.as_ref() == Some(&head.snapshot)
         && state.published_sequence == head.published_sequence
         && state.last_segment_key == head.last_segment_key
+}
+
+/// Whether the segment referenced by `head` was encoded from the outbox rows
+/// that are still pending in `(state.published_sequence, head.published_sequence]`.
+///
+/// This is the crash-window signature: the gap segment was uploaded from this
+/// device's outbox and only the local publication commit is missing. A
+/// restored database instead fills the sequence range with unrelated newer
+/// rows, whose item ids cannot collide with the published mutations. Any
+/// verification failure must return `false` so the caller falls back to the
+/// pull-and-reset recovery.
+#[allow(clippy::too_many_arguments)]
+fn published_segment_matches_outbox(
+    store: &impl ObjectStore,
+    database: &impl SyncRepository,
+    device_id: &str,
+    state: &SyncRemoteState,
+    head: &DeviceHead,
+    session_key: Option<&SessionKey>,
+    result: &mut SyncEngineResult,
+) -> bool {
+    let Some(segment_key) = head.last_segment_key.as_deref() else {
+        return false;
+    };
+    let expected_first = match state.published_sequence.checked_add(1) {
+        Some(first) => first,
+        None => return false,
+    };
+    let parsed = match parse_segment_key(segment_key) {
+        Ok(parsed) => parsed,
+        Err(_) => return false,
+    };
+    if parsed.device_id != device_id
+        || parsed.epoch != state.epoch
+        || parsed.first_sequence != expected_first
+        || parsed.last_sequence != head.published_sequence
+    {
+        return false;
+    }
+    let bytes = match get_verified_object(store, segment_key, &parsed.sha256, None, result) {
+        Ok(bytes) => bytes,
+        Err(_) => return false,
+    };
+    let segment = match decode_segment(&bytes, session_key) {
+        Ok(segment) => segment,
+        Err(_) => return false,
+    };
+    if segment.device_id != device_id
+        || segment.epoch != state.epoch
+        || segment.first_sequence != expected_first
+        || segment.last_sequence != head.published_sequence
+        || segment.mutations.is_empty()
+    {
+        return false;
+    }
+    let mut segment_item_ids = segment
+        .mutations
+        .upserts
+        .iter()
+        .map(|upsert| upsert.item.id.clone())
+        .chain(
+            segment
+                .mutations
+                .tombstones
+                .iter()
+                .map(|tombstone| tombstone.item_id.clone()),
+        )
+        .collect::<Vec<_>>();
+    segment_item_ids.sort();
+    match database.sync_outbox_range_item_ids(state.published_sequence, head.published_sequence) {
+        Ok(outbox_item_ids) => outbox_item_ids == segment_item_ids,
+        Err(_) => false,
+    }
 }
 
 fn listed_head_identity(info: &ObjectInfo) -> Option<(&str, u64)> {

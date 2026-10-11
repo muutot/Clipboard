@@ -139,6 +139,17 @@ pub trait SyncRepository {
         last_segment_key: &str,
         through_sequence: u64,
     ) -> Result<SyncRemoteState, String>;
+    /// Distinct item ids referenced by outbox rows within
+    /// `(after_sequence, through_sequence]`, ordered ascending. Lets the
+    /// engine verify that a published segment was encoded from the still
+    /// pending outbox rows (a publish that crashed before its local commit)
+    /// instead of coincidentally matching newer local rows (a database
+    /// restored from an older backup).
+    fn sync_outbox_range_item_ids(
+        &self,
+        after_sequence: u64,
+        through_sequence: u64,
+    ) -> Result<Vec<String>, String>;
     fn get_sync_cursor(
         &self,
         remote_scope: &str,

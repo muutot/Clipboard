@@ -115,6 +115,15 @@ impl SyncRepository for Database {
         .map_err(|error| error.to_string())
     }
 
+    fn sync_outbox_range_item_ids(
+        &self,
+        after_sequence: u64,
+        through_sequence: u64,
+    ) -> Result<Vec<String>, String> {
+        Database::sync_outbox_range_item_ids(self, after_sequence, through_sequence)
+            .map_err(|error| error.to_string())
+    }
+
     fn get_sync_cursor(
         &self,
         remote_scope: &str,
