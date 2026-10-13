@@ -68,9 +68,16 @@ Acceptance candidates (intended gates; no test exists yet):
 ### V2-2. Real S3 CI matrix
 
 Status: wired, evidence pending. `.github/workflows/sync-s3.yml` runs the six S3-dependent
-smokes on pull requests touching the sync paths, on a weekly schedule, and on dispatch. Only
-ubuntu runs (windows/macos runners have no docker daemon; the pinned-rustfs path remains a
-local Windows convenience). The first green run on the final branch is still owed as evidence.
+smokes on pushes and pull requests touching the sync paths, weekly, and on dispatch. A first
+attempt used a pinned MinIO docker container and never passed the readiness probe; the job now
+provisions the pinned rustfs release the local `scripts/sync-s3-test.ps1` path already uses,
+verified against the upstream SHA256SUMS, and starts it in the same step as the tests (no
+cross-step background-process assumptions, no docker daemon). Pre-verified locally: the
+SHA256SUMS entry for the pinned asset and the checksum-extraction logic. Not pre-verifiable in
+the authoring environment (throttled network): the 188 MB archive contents and the rustfs
+1.0.1 CLI flags, which mirror the ps1 recipe and fail fast with the server log on startup
+errors. Only ubuntu runs (pinned linux-x86_64-musl asset). The first green run on the final
+branch is still owed as evidence.
 
 Goal: the S3-dependent ignored tests run in CI so their behavior cannot rot between manual runs
 (retires part of the roadmap's Rust ignored-test debt item).
@@ -80,15 +87,9 @@ S3-dependent ignored tests today (8):
 - `sync::v1::s3_smoke::*` × 5 and `clipboard_sync::s3::tests` × 1 (correctness smokes);
 - `sync::v1::scale_bench::s3_*` × 2 (also needs a release-mode runtime).
 
-Options to evaluate:
-
-- ubuntu runner with a MinIO service container (docker exists on GitHub-hosted runners);
-- keep the rustfs script for windows/macos, or restrict the matrix to ubuntu and record the
-  platform limit honestly;
-- trigger scope: pull requests touching `src-tauri/src/sync/**` or
-  `src-tauri/crates/clipboard-sync/**`, plus a scheduled run. Preserve the strong isolation
-  contract: random per-run prefix, drop cleanup, never user data
-  (`SYNC_V1.md`, "Isolation contract").
+Decision: rustfs, not MinIO. The same server family that produced the documented smoke
+evidence, no docker daemon on the runner, pin plus checksum verification, and one step for
+server and tests. The MinIO attempt above is recorded so it is not repeated blindly.
 
 Acceptance candidates: matrix green on the trigger scope; the suites still skip cleanly when
 `CLIPBOARD_S3_TEST_ENDPOINT` is unset; the scale benchmarks stay opt-in and out of the default

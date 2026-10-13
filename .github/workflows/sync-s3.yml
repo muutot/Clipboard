@@ -6,15 +6,19 @@
 # but not the wire. CI previously ran no real server, so the ignored test list
 # could rot between manual runs.
 #
-# This job provisions a disposable pinned MinIO and runs the six S3-dependent
-# smoke tests with the exact flag recipe `scripts/sync-s3-test.ps1` uses
-# locally (`--ignored --nocapture --test-threads=1`). The scale benchmarks stay
-# opt-in: they need a release-mode runtime and are not part of this gate.
-# Scope and acceptance criteria: `docs/SYNC_V2.md` (V2-2).
+# Server choice: pinned rustfs, the same server family the local
+# `scripts/sync-s3-test.ps1` path provisions, downloaded from the release and
+# verified against the upstream SHA256SUMS before it runs. A first attempt used
+# a pinned MinIO docker container and never passed the readiness probe; the
+# rustfs path is the one with documented smoke evidence (`docs/SYNC_V1.md`),
+# needs no docker daemon, and its asset is pinned plus checksum-verified. Only
+# ubuntu runs here (the pinned asset is linux-x86_64-musl); windows/macos have
+# no equivalent release asset pinned and the ps1 script remains the local
+# Windows path.
 #
-# Platform limit: only ubuntu runs here. windows/macos runners have no docker
-# daemon, and the pinned-rustfs path stays a local Windows convenience
-# (`scripts/sync-s3-test.ps1`).
+# The scale benchmarks stay opt-in: they need a release-mode runtime and are
+# not part of this gate. Scope and acceptance criteria: `docs/SYNC_V2.md`
+# (V2-2).
 
 name: Sync S3 smoke
 
@@ -39,13 +43,15 @@ on:
 
 permissions:
   contents: read
+  # Only used by the diagnostic status step below.
+  statuses: write
 
 jobs:
   smoke:
     name: Real S3 smoke
     runs-on: ubuntu-latest
-    # The build dominates; the smoke suite itself is ~10s. Same rationale as
-    # the CI timeout caps: a hung step must fail the job, not stall it.
+    # Provisioning plus a cold-profile build; the smoke suite itself is ~10s.
+    # Same rationale as the CI caps: a hung step must fail the job, not stall.
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
@@ -57,7 +63,7 @@ jobs:
           sudo apt update
           sudo apt install -y libwebkit2gtk-4.1-dev libappindicator3-dev \
             librsvg2-dev patchelf libssl-dev libgtk-3-dev libdbus-1-dev \
-            libjavascriptcoregtk-4.1-dev libsoup-3.0-dev mold
+            libjavascriptcoregtk-4.1-dev libsoup-3.0-dev mold unzip
 
       - name: Configure linker (Linux)
         run: echo "RUSTFLAGS=-C link-arg=-fuse-ld=mold" >> "$GITHUB_ENV"
@@ -74,33 +80,14 @@ jobs:
       - name: Refresh the ONNX Runtime link
         run: cargo clean -p ort-sys --profile ci --manifest-path src-tauri/Cargo.toml
 
-      - name: Start disposable MinIO
+      # One step on purpose: provisioning, the server, and the tests share a
+      # process lifetime. A server started in an earlier step depends on
+      # background-process survival across steps, which the runner does not
+      # guarantee; here the EXIT trap always stops rustfs.
+      - name: Provision rustfs and run real-S3 smokes
         env:
-          MINIO_ROOT_USER: clipboard-ci
-          MINIO_ROOT_PASSWORD: clipboard-ci-secret-0123456789
-        run: |
-          set -euo pipefail
-          # Pinned to the release that produced the documented baseline in
-          # docs/SYNC_V1.md. Command is explicit (service containers cannot
-          # override the image default command).
-          docker run -d --name minio -p 9000:9000 \
-            -e "MINIO_ROOT_USER=$MINIO_ROOT_USER" \
-            -e "MINIO_ROOT_PASSWORD=$MINIO_ROOT_PASSWORD" \
-            minio/minio:RELEASE.2025-09-07T16-13-09Z \
-            server /data --console-address ":9001"
-          for attempt in $(seq 1 60); do
-            if curl -fsS http://127.0.0.1:9000/minio/health/live >/dev/null; then
-              echo "minio healthy after ${attempt}s"
-              exit 0
-            fi
-            sleep 1
-          done
-          echo "::error::minio did not become healthy" >&2
-          docker logs minio >&2 || true
-          exit 1
-
-      - name: Run real-S3 smoke tests
-        env:
+          RUSTFS_VERSION: "1.0.1"
+          RUSTFS_ASSET: "rustfs-linux-x86_64-musl-v1.0.1.zip"
           CLIPBOARD_S3_TEST_ENDPOINT: http://127.0.0.1:9000
           CLIPBOARD_S3_TEST_REGION: us-east-1
           CLIPBOARD_S3_TEST_BUCKET: clipboard-sync-ci-smoke
@@ -110,12 +97,76 @@ jobs:
         run: |
           set -euo pipefail
           status=0
+          tools="$RUNNER_TEMP/rustfs"
+          data="$RUNNER_TEMP/rustfs-data"
+          server_log="$RUNNER_TEMP/rustfs-server.log"
+          mkdir -p "$tools" "$data"
+          cleanup() {
+            if [ -n "${server_pid:-}" ]; then
+              kill "$server_pid" 2>/dev/null || true
+            fi
+          }
+          trap cleanup EXIT
+
+          echo "== provisioning pinned rustfs $RUSTFS_VERSION =="
+          base="https://github.com/rustfs/rustfs/releases/download/$RUSTFS_VERSION"
+          curl -fsSL --retry 3 --retry-delay 2 -o "$tools/SHA256SUMS" "$base/SHA256SUMS"
+          curl -fsSL --retry 3 --retry-delay 2 -o "$tools/$RUSTFS_ASSET" "$base/$RUSTFS_ASSET"
+          expected="$(awk -v f="$RUSTFS_ASSET" '$2 == f { print $1 }' "$tools/SHA256SUMS")"
+          if [ -z "$expected" ]; then
+            echo "::error::SHA256SUMS has no entry for $RUSTFS_ASSET" >&2
+            exit 1
+          fi
+          actual="$(sha256sum "$tools/$RUSTFS_ASSET" | awk '{ print $1 }')"
+          if [ "$actual" != "$expected" ]; then
+            echo "::error::rustfs checksum mismatch: expected $expected, got $actual" >&2
+            exit 1
+          fi
+          echo "checksum verified ($actual)"
+          unzip -q "$tools/$RUSTFS_ASSET" -d "$tools/extract"
+          binary="$(find "$tools/extract" -type f -name rustfs -print -quit)"
+          if [ -z "$binary" ]; then
+            echo "::error::rustfs binary not found in $RUSTFS_ASSET" >&2
+            exit 1
+          fi
+          chmod +x "$binary"
+
+          echo "== starting rustfs =="
+          # Same flag shape as scripts/sync-s3-test.ps1.
+          "$binary" server \
+            --address 127.0.0.1:9000 \
+            --access-key "$CLIPBOARD_S3_TEST_ACCESS_KEY" \
+            --secret-key "$CLIPBOARD_S3_TEST_SECRET_KEY" \
+            --region "$CLIPBOARD_S3_TEST_REGION" \
+            "$data" >"$server_log" 2>&1 &
+          server_pid=$!
+          healthy=""
+          for attempt in $(seq 1 90); do
+            if curl -fsS http://127.0.0.1:9000/minio/health/live >/dev/null 2>&1; then
+              healthy="yes"
+              break
+            fi
+            if ! kill -0 "$server_pid" 2>/dev/null; then
+              echo "::error::rustfs exited during startup" >&2
+              break
+            fi
+            sleep 1
+          done
+          if [ -z "$healthy" ]; then
+            echo "::error::rustfs did not become healthy on 127.0.0.1:9000" >&2
+            tail -n 20 "$server_log" >&2 || true
+            exit 1
+          fi
+          echo "rustfs healthy after ${attempt}s"
+
           run_smoke() {
             local label="$1" filter="$2" log
             log="$(mktemp)"
             echo "== $label =="
             # Output goes to the log file first and is printed afterwards:
-            # piping through `tee` would race the guards below.
+            # piping through `tee` would race the guards below. Same flag
+            # recipe as the local script: --ignored --nocapture
+            # --test-threads=1.
             cargo test --profile ci --manifest-path src-tauri/Cargo.toml \
               --workspace -- --ignored --nocapture --test-threads=1 "$filter" \
               >"$log" 2>&1 || status=1
@@ -135,11 +186,32 @@ jobs:
           run_smoke "sync v1 engine smokes" "s3_smoke"
           run_smoke "clipboard-sync transport round trip" "disposable_s3_round_trip"
           if [ "$status" -ne 0 ]; then
-            echo "::error::real-S3 smoke matrix failed" >&2
+            echo "::error::real-S3 smoke suite failed" >&2
             exit 1
           fi
-          echo "real-S3 smoke matrix passed"
+          echo "real-S3 smoke suite passed"
 
-      - name: Stop MinIO
-        if: always()
-        run: docker rm -f minio >/dev/null 2>&1 || true
+      # The maintainer may not be able to open the Actions web log from every
+      # environment. This mirrors a short failure fingerprint into a commit
+      # status, which the public statuses API exposes without authentication.
+      # It is diagnostic only; the full output lives in the job log.
+      - name: Surface server failure fingerprint
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          log="$RUNNER_TEMP/rustfs-server.log"
+          fingerprint="no server log"
+          if [ -f "$log" ]; then
+            fingerprint="rustfs: $(tail -n 3 "$log" | tr '\n' ' ' | cut -c1-90)"
+          fi
+          gh api --method POST \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/${{ github.repository }}/statuses/${{ github.sha }}" \
+            -f state=failure \
+            -f context=sync-s3-smoke-diagnostics \
+            -f description="$fingerprint" \
+            -f target_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            >/dev/null
+          echo "fingerprint: $fingerprint"
