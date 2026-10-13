@@ -160,6 +160,12 @@ npm run format:check    # Prettier + cargo fmt
 npm run format          # 自动修复
 ```
 
+真实 S3 冒烟（opt-in，需一次性 S3 兼容服务器）：`sync::v1::s3_smoke` 与 `clipboard_sync::s3::tests` 在常规套件中默认忽略，覆盖 SigV4 签名、path-style、条件写/ETag、LIST 分页等 `MemoryStore` 无法证明的传输契约。改动 `src-tauri/src/sync/**` 或 `src-tauri/crates/clipboard-sync/**` 后：
+
+- 推送分支或提 PR 时 CI 自动运行（`.github/workflows/sync-s3.yml`，ubuntu + 固定版本 rustfs，护栏防止静默跳过/空跑）
+- 本地（Windows）预跑：`powershell -ExecutionPolicy Bypass -File scripts/sync-s3-test.ps1`，自动下载并校验固定版本 rustfs 后运行冒烟
+- 直接 `cargo test -- --ignored` 需先导出 `CLIPBOARD_S3_TEST_ENDPOINT` 等变量（契约见脚本头部）；未设置时冒烟模块**静默跳过并照常通过**，本地须自行辨别
+
 前端测试约定：纯函数放 `src/lib/utils/*.ts` 直接测；需要验证 rune 响应式时，把逻辑放进 `.svelte.ts` 模块或 `.svelte` 组件，用 `mount()`（jsdom）驱动——`vitest.config.ts` 已设 `resolve.conditions: ["browser"]`，否则 `mount()` 会解析到 Svelte 的服务端版本而报 `lifecycle_function_unavailable`。
 
 ## 问题反馈

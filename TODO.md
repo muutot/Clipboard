@@ -111,8 +111,7 @@
 - [ ] 同步 v2（大病一场）：立项范围见 `docs/SYNC_V2.md`——V2-1 密码/加密模式轮换流程、V2-2 真实 S3 CI 矩阵、V2-3 WAN 中断与原生退出集成证据；MinIO CI 矩阵的决议来源：1.5.3 节「等同步 v2 动大手术时再立项」。
 - [ ] 搜索尾部成本测量：真实管线中的 `get_items_by_ids`（≤500 条 SQLite 读取，`docs/SEARCH_OPTIMIZATION_REPORT.md`「后续可留档的候选」）。
 - [ ] 搜索增强：拼写纠错、编辑距离、拼音（`docs/SEARCH.md`：属后续增强能力，需先定方案再立项）。
-- [ ] Rust 忽略测试债：12 项 `#[ignore]` 不进常规套件——S3 冒烟 ×6（需一次性 S3 服务器）、规模/性能基准 ×5（需 release 模式与真实 S3）、子进程夹具 ×1（被其他测试拉起）；均无法单测化，运行时行为曾无门禁、仅靠偶尔手动跑（v1.8 文档记 8 项，现为 12 项，清单已 drift）。1 项 env 门控的真实剪贴板测试由 Windows CI 覆盖，不计入。
-  - [x] 为 S3 冒烟（×6）接 CI：`.github/workflows/sync-s3.yml`（push/PR 路径触发 + 每周定时，ubuntu + rustfs 1.0.1 musl 资产 + SHA-256 校验，护栏防静默跳过/空跑）。证据：2026-10-13 run [38382124322](https://github.com/muutot/Clipboard/actions/runs/38382124322) 全绿（v1.8.1，sha 0d3860b）——护栏通过即证明 6 项真实执行且未静默跳过。规模基准（×5）维持 opt-in 手动运行（需 release 模式）。
-  - [ ] CONTRIBUTING.md「测试」节补约定：改动 sync/S3/导出相关代码后手动 `cargo test -- --ignored` 跑冒烟。
-  - [ ] 本条目清单与源码（`rg "#\[ignore" src-tauri`）核对并保持同步，防止再 drift。
+- [x] Rust 忽略测试债（已闭环，清单以 `rg "#\[ignore" src-tauri` 为准，当前 12 项）：S3 冒烟 ×6 进 CI 门禁（首次全绿 2026-10-13，run 38382124322）；规模/性能基准 ×5 维持 opt-in 手动运行（`docs/SYNC_V1.md` 明确需要 release 模式与真实服务器，属既定设计非疏漏）；子进程夹具 ×1 由 bounded-command 测试自身调用；1 项 env 门控的真实剪贴板测试由 Windows CI 覆盖。本地脚本 pin 的 rustfs 版本已随发布下架修复（`scripts/sync-s3-test.ps1` repin 1.0.1）。
+  - [x] 为 S3 冒烟（×6）接 CI：`.github/workflows/sync-s3.yml`（push/PR 路径触发 + 每周定时，ubuntu + rustfs 1.0.1 musl 资产 + SHA-256 校验，护栏防静默跳过/空跑）。证据：2026-10-13 run [38382124322](https://github.com/muutot/Clipboard/actions/runs/38382124322) 全绿（v1.8.1，sha 0d3860b）——护栏通过即证明 6 项真实执行且未静默跳过。
+  - [x] CONTRIBUTING.md「测试」节补约定：真实 S3 冒烟的运行方式（CI 自动跑 + 本地 `scripts/sync-s3-test.ps1` + 直接跑所需的 env 契约与静默跳过陷阱）。证据：CONTRIBUTING.md 测试节新增段落。
 - [ ] 仓库卫生决策：`.worktree-experience/` 工作树与 `uv.lock` 的跟踪状态。
