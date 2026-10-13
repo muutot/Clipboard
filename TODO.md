@@ -1,9 +1,13 @@
-# TODO Roadmap — 1.5.2 / 1.5.3 / 1.6
+# TODO Roadmap
 
-> 版本映射：原 roadmap v1.6 → **1.5.2**（信任边界收尾），v1.7 → **1.5.3**
-> （性能/可观测余量），v1.8 → **1.6**（结构还债 + 平台渐进）。
 > 勾选规则（按 `skills/clipboard-dev`）：只有直接实现证据 + 相称验证覆盖
 > 完整措辞时才可勾选；stub、配置项、UI 壳不算完成。
+
+## 版本状态
+
+- 已发布：1.5.2 → 1.5.3 → 1.6 → 1.7.0–1.7.4 → **1.8.0（2026-10-11）**；当前分支 `v1.8.1` 承载发布后修复（打包元数据、同步脚本、release 存在性校验）。
+- 历史版本映射：原 roadmap v1.6 → **1.5.2**（信任边界收尾），v1.7 → **1.5.3**（性能/可观测余量），v1.8 → **1.6**（结构还债 + 平台渐进）。
+- 1.7 / 1.8 的实现条目与证据：`docs/V1_8_IMPLEMENTATION.md`、`docs/V1_8_FOLLOWUP.md`、`CHANGELOG.md`；后续版本候选见文末「开放项」。
 
 ## 已验证完成（审计债已闭环，不再立项）
 
@@ -49,7 +53,6 @@
 ## 1.5.3 — 性能 / 可观测余量
 
 - [x] 排序与动态设置一致性自动化回归：索引同步模式即时切换并在启动/保存失败时回滚；复制/粘贴写入成功后才记录使用；搜索按配置排序并响应内容/使用/索引事件；候选上限与缓存缩容即时生效；历史容量和单页数量变化不再误判分页耗尽或跳过丢弃行；通用设置按嵌套字段合并并保留失败期间的新编辑；关闭文字透明度时的原生 alpha 恢复决策有单测。证据：`main-settings.test.ts`、`clipboard-usage.test.ts`、`settings-persistence.test.ts`、`item-store.test.ts`、`item-changes.test.ts` 及 Rust 设置/搜索回归；Vitest 318 项、Rust 798 项通过，check/build/Clippy 与本次修改格式检查通过。原生剪贴板读取测试因 `OpenClipboard failed` 单独跳过，既有 ignored 测试保持不变；不据此宣称原生交互已验证。
-- [ ] 上述修复的原生窗口手工回归：实际双窗口并发修改设置，以及 Windows 文字透明度开关与背景/窗口特效的视觉组合。
 - [x] 默认历史排序直接使用最后使用时间：采集/CLI/副本创建时初始化为创建时间，导入补齐缺失值，schema v2 只回填旧 NULL；默认列表及收藏列表增加最后使用时间索引，分页使用 `(last_used_at_ms, id)` 游标，搜索 `lastUsedAt` 也直接比较存储值。迁移保留数据/同步版本/队列、查询计划无临时排序且直接定位游标、跨页同时间与使用提序回归已验证；`npm run verify` 通过，Rust 788、Vitest 284 通过。10 万条内存模拟记录、每页 100 条，索引查询约 0.23–0.28 ms（中位数；非界面端到端性能）。
 - [x] PERF-01 余量：macOS 改 `task_info`（`MACH_TASK_BASIC_INFO`）in-process 查询，`ps` 降级为兜底（`performance/memory_monitor.rs`）。绑定形状逐项对锁定的 libc 0.2.189 源码核实（含 `packed(4)` 非对齐读）；mac 一致性单测（原生 vs ps 4x 容差）由 mac CI 跑，Windows 侧回归全过。
 - [x] 日志红线复核：全量审计 `log_event!`/`eprintln!`/`dbg_log` 插值——仅 id/路径/计数/配置键/错误展示，无剪贴板正文、OCR 文本、秘密、请求体（唯一例外：非法敏感正则原文的可视化警告，属设计意图）；前端 `console` 仅 DevTools，顺手去掉一处 clipboard 衍生 payload 插值（`ClipboardCard.svelte`）。红线写入 CONTRIBUTING。
@@ -80,16 +83,33 @@
 - [x] 自动标签规则（标签页设置项）：标签设置区新增规则编辑器（增删行 + 显式保存 + 后端错误回显，中英双语 `tags.autoTag*`，`settings-search` 关键词扩展），非内置写死。验收：`check` 0 错误 + 双语键齐 + 设置契约（类型/默认/校验/持久化）走完。
 - [x] 悬浮剪贴板：独立置顶窄窗口（`routes/float`，仅全部/收藏分组，点击复制复用 `copyClipboardItem`），托盘 + 快捷键入口。验收：`check`/`build` 通过 + 双语键齐。主窗口复制流已真机回归（2026-10-11）：悬浮窗左键复制文件条目后剪贴板为携带原始路径的 CF_HDROP，主窗列表同步提序、无重复捕获；文本条目复制与全量/收藏分组切换正常。
 
-## 跨平台能力补齐（独立工作树）
+## 开放项
+
+> 本节条目在所列验收证据齐全前**不得勾选**（`skills/clipboard-dev`：直接实现证据 +
+> 相称验证）。代码已合入主干不等于完成。
+
+### A. 跨平台能力验收 — 实现已随 v1.8.0 合入，缺平台 CI 与实机证据
+
+证据：`CHANGELOG.md` 1.8.0 功能条目（全局热键、单实例唤醒、macOS RTF、跨平台快速粘贴、窗口透明/毛玻璃）与 `platform/` 适配器源码；README 中文平台矩阵对应单元格仍为 ⚠️「待验证」，README_EN.md 已同步为同措辞。macOS CI 变绿后的联动动作：中文矩阵单元格改 ✅、本区条目勾选、两份 README 去掉「待验证/待平台验证」标注。
 
 - [ ] 多格式竞态防护：macOS changeCount 已接线；Linux 双读一致性校验与三次有限重试已实现，不具备系统序列号的原子保证。待对应平台 CI/实机验收。
-
 - [ ] macOS RTF：public.rtf NSData 读取已接线，ANSI 字节转 RTF 十六进制转义；含原始 binary run 的负载保守跳过。待 macOS CI/实机验收。
-
 - [ ] macOS/Linux 单实例唤醒：实例锁所有者发布 owner-only 的本地端点与随机令牌，通知线程有停止与 join；UI 操作投递主线程。待对应平台 CI/桌面激活验收。
-
 - [ ] 跨平台全局热键：macOS/X11 原生注册与可停止的双击采样、Wayland portal 会话已接线；Wayland 不支持双击修饰键。待对应平台 CI/权限与桌面实测。
-
 - [ ] 快速粘贴：macOS 激活 + CGEvent、X11 EWMH + XTest、Sway/Hyprland + wtype 后端已接线；记录外部前台目标并复核身份与焦点。待对应平台权限/桌面实测。
-
 - [ ] 窗口透明/毛玻璃：macOS NSWindow alpha + Vibrancy、Linux GTK alpha、X11 KWin 兼容模糊请求已接线；Wayland 模糊仍依赖合成器。切回仅背景透明时恢复原生 alpha=100%。待对应平台视觉验收。
+
+### B. 原生窗口手工回归（v1.8 遗留，依据 `docs/V1_8_FOLLOWUP.md`「Native verification still required」）
+
+- [ ] 原生窗口手工回归（1.5.3 遗留）：实际双窗口并发修改设置，以及 Windows 文字透明度开关与背景/窗口特效的视觉组合。
+- [ ] 原生文本、HTML、文件与远程媒体复制粘贴保持完整内容（一次性桌面会话 + 临时应用数据；注意原生 CF_HDROP 测试会覆盖系统剪贴板）。
+- [ ] 标签、恢复与慢速 S3 传输过程中退出：线程 join、留下可重试数据。
+- [ ] 最终分支拿到 Windows/macOS/Linux CI 成功结果。
+
+### C. 下一版本候选（未立项；按「最小可验证单元」排期，取自各文档已记录的决议）
+
+- [ ] 同步 v2（大病一场）：MinIO CI 矩阵与 `docs/SYNC_V1.md` 演进；决议来源：1.5.3 节「等同步 v2 动大手术时再立项」。
+- [ ] 搜索尾部成本测量：真实管线中的 `get_items_by_ids`（≤500 条 SQLite 读取，`docs/SEARCH_OPTIMIZATION_REPORT.md`「后续可留档的候选」）。
+- [ ] 搜索增强：拼写纠错、编辑距离、拼音（`docs/SEARCH.md`：属后续增强能力，需先定方案再立项）。
+- [ ] Rust ignored 测试债：把可单测化的既有 `#[ignore]` 检查转为常规测试（原生 CF_HDROP 覆盖系统剪贴板，维持 opt-in）。
+- [ ] 仓库卫生决策：`.worktree-experience/` 工作树与 `uv.lock` 的跟踪状态。
