@@ -67,6 +67,11 @@ Acceptance candidates (intended gates; no test exists yet):
 
 ### V2-2. Real S3 CI matrix
 
+Status: wired, evidence pending. `.github/workflows/sync-s3.yml` runs the six S3-dependent
+smokes on pull requests touching the sync paths, on a weekly schedule, and on dispatch. Only
+ubuntu runs (windows/macos runners have no docker daemon; the pinned-rustfs path remains a
+local Windows convenience). The first green run on the final branch is still owed as evidence.
+
 Goal: the S3-dependent ignored tests run in CI so their behavior cannot rot between manual runs
 (retires part of the roadmap's Rust ignored-test debt item).
 

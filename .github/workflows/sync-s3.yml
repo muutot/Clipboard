@@ -1,0 +1,138 @@
+# Real-S3 sync smoke matrix
+#
+# The sync engine's transport contract (SigV4 signing, path-style addressing,
+# conditional writes, ETag quoting, LIST continuation) can only be proven
+# against a real S3-compatible server; `MemoryStore` covers engine semantics
+# but not the wire. CI previously ran no real server, so the ignored test list
+# could rot between manual runs.
+#
+# This job provisions a disposable pinned MinIO and runs the six S3-dependent
+# smoke tests with the exact flag recipe `scripts/sync-s3-test.ps1` uses
+# locally (`--ignored --nocapture --test-threads=1`). The scale benchmarks stay
+# opt-in: they need a release-mode runtime and are not part of this gate.
+# Scope and acceptance criteria: `docs/SYNC_V2.md` (V2-2).
+#
+# Platform limit: only ubuntu runs here. windows/macos runners have no docker
+# daemon, and the pinned-rustfs path stays a local Windows convenience
+# (`scripts/sync-s3-test.ps1`).
+
+name: Sync S3 smoke
+
+on:
+  pull_request:
+    paths:
+      - "src-tauri/src/sync/**"
+      - "src-tauri/crates/clipboard-sync/**"
+      - ".github/workflows/sync-s3.yml"
+  schedule:
+    # Weekly Monday 03:17 UTC: a quiet slot that still re-proves the wire
+    # contract when no sync change lands.
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: Real S3 smoke
+    runs-on: ubuntu-latest
+    # The build dominates; the smoke suite itself is ~10s. Same rationale as
+    # the CI timeout caps: a hung step must fail the job, not stall it.
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
+
+      - name: Install Linux system dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y libwebkit2gtk-4.1-dev libappindicator3-dev \
+            librsvg2-dev patchelf libssl-dev libgtk-3-dev libdbus-1-dev \
+            libjavascriptcoregtk-4.1-dev libsoup-3.0-dev mold
+
+      - name: Configure linker (Linux)
+        run: echo "RUSTFLAGS=-C link-arg=-fuse-ld=mold" >> "$GITHUB_ENV"
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          workspaces: src-tauri -> target
+          cache-on-failure: true
+          cache-targets: true
+
+      # Same reason as the main CI: a restored `target/` can reference an
+      # onnxruntime cache path the runner does not have, so the build script
+      # must re-run before anything links.
+      - name: Refresh the ONNX Runtime link
+        run: cargo clean -p ort-sys --profile ci --manifest-path src-tauri/Cargo.toml
+
+      - name: Start disposable MinIO
+        env:
+          MINIO_ROOT_USER: clipboard-ci
+          MINIO_ROOT_PASSWORD: clipboard-ci-secret-0123456789
+        run: |
+          set -euo pipefail
+          # Pinned to the release that produced the documented baseline in
+          # docs/SYNC_V1.md. Command is explicit (service containers cannot
+          # override the image default command).
+          docker run -d --name minio -p 9000:9000 \
+            -e "MINIO_ROOT_USER=$MINIO_ROOT_USER" \
+            -e "MINIO_ROOT_PASSWORD=$MINIO_ROOT_PASSWORD" \
+            minio/minio:RELEASE.2025-09-07T16-13-09Z \
+            server /data --console-address ":9001"
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:9000/minio/health/live >/dev/null; then
+              echo "minio healthy after ${attempt}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::minio did not become healthy" >&2
+          docker logs minio >&2 || true
+          exit 1
+
+      - name: Run real-S3 smoke tests
+        env:
+          CLIPBOARD_S3_TEST_ENDPOINT: http://127.0.0.1:9000
+          CLIPBOARD_S3_TEST_REGION: us-east-1
+          CLIPBOARD_S3_TEST_BUCKET: clipboard-sync-ci-smoke
+          CLIPBOARD_S3_TEST_ACCESS_KEY: clipboard-ci
+          CLIPBOARD_S3_TEST_SECRET_KEY: clipboard-ci-secret-0123456789
+          CLIPBOARD_S3_TEST_PASSWORD: clipboard-ci-sync-password
+        run: |
+          set -euo pipefail
+          status=0
+          run_smoke() {
+            local label="$1" filter="$2" log
+            log="$(mktemp)"
+            echo "== $label =="
+            # Output goes to the log file first and is printed afterwards:
+            # piping through `tee` would race the guards below.
+            cargo test --profile ci --manifest-path src-tauri/Cargo.toml \
+              --workspace -- --ignored --nocapture --test-threads=1 "$filter" \
+              >"$log" 2>&1 || status=1
+            cat "$log"
+            # Guard 1: the smoke module skips quietly when the endpoint
+            # contract breaks, which would otherwise look like a pass.
+            if grep -q "\[sync-smoke\] skipped" "$log"; then
+              echo "::error::$label silently skipped the real server" >&2
+              status=1
+            fi
+            # Guard 2: a filter that matches nothing also exits 0.
+            if ! grep -qE "test result: ok\. [1-9]" "$log"; then
+              echo "::error::$label executed no test" >&2
+              status=1
+            fi
+          }
+          run_smoke "sync v1 engine smokes" "s3_smoke"
+          run_smoke "clipboard-sync transport round trip" "disposable_s3_round_trip"
+          if [ "$status" -ne 0 ]; then
+            echo "::error::real-S3 smoke matrix failed" >&2
+            exit 1
+          fi
+          echo "real-S3 smoke matrix passed"
+
+      - name: Stop MinIO
+        if: always()
+        run: docker rm -f minio >/dev/null 2>&1 || true
