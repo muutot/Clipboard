@@ -111,5 +111,8 @@
 - [ ] 同步 v2（大病一场）：MinIO CI 矩阵与 `docs/SYNC_V1.md` 演进；决议来源：1.5.3 节「等同步 v2 动大手术时再立项」。
 - [ ] 搜索尾部成本测量：真实管线中的 `get_items_by_ids`（≤500 条 SQLite 读取，`docs/SEARCH_OPTIMIZATION_REPORT.md`「后续可留档的候选」）。
 - [ ] 搜索增强：拼写纠错、编辑距离、拼音（`docs/SEARCH.md`：属后续增强能力，需先定方案再立项）。
-- [ ] Rust ignored 测试债：把可单测化的既有 `#[ignore]` 检查转为常规测试（原生 CF_HDROP 覆盖系统剪贴板，维持 opt-in）。
+- [ ] Rust 忽略测试债：12 项 `#[ignore]` 不进常规套件——S3 冒烟 ×6（需一次性 S3 服务器）、规模/性能基准 ×5（需 release 模式与真实 S3）、子进程夹具 ×1（被其他测试拉起）；均无法单测化，运行时行为无门禁、仅靠偶尔手动跑（v1.8 文档记 8 项，现为 12 项，清单已 drift）。1 项 env 门控的真实剪贴板测试由 Windows CI 覆盖，不计入。
+  - [ ] 为 S3 冒烟（×6）与规模基准（×5）新增 nightly 或发布前 CI 作业（复用 `scripts/sync-s3-test.ps1`，仅 Windows 可起 rustfs）。
+  - [ ] CONTRIBUTING.md「测试」节补约定：改动 sync/S3/导出相关代码后手动 `cargo test -- --ignored` 跑冒烟。
+  - [ ] 本条目清单与源码（`rg "#\[ignore" src-tauri`）核对并保持同步，防止再 drift。
 - [ ] 仓库卫生决策：`.worktree-experience/` 工作树与 `uv.lock` 的跟踪状态。
