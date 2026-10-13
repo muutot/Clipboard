@@ -38,6 +38,9 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "publisher": "muutot",
+    "copyright": "Copyright (c) 2026 muutot. Licensed under AGPL-3.0-only.",
+    "homepage": "https://github.com/muutot/Clipboard",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

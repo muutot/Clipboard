@@ -2,7 +2,7 @@
 name = "clipboard-desktop"
 version = "1.8.0"
 description = "A high-performance cross-platform clipboard manager"
-authors = []
+authors = ["muutot"]
 edition = "2021"
 license = "AGPL-3.0-only"
 
