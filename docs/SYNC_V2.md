@@ -67,17 +67,15 @@ Acceptance candidates (intended gates; no test exists yet):
 
 ### V2-2. Real S3 CI matrix
 
-Status: wired, evidence pending. `.github/workflows/sync-s3.yml` runs the six S3-dependent
-smokes on pushes and pull requests touching the sync paths, weekly, and on dispatch. A first
-attempt used a pinned MinIO docker container and never passed the readiness probe; the job now
+Status: wired and green. `.github/workflows/sync-s3.yml` runs the six S3-dependent smokes on
+pushes and pull requests touching the sync paths, weekly, and on dispatch. A first attempt
+used a pinned MinIO docker container and never passed the readiness probe; the job now
 provisions the pinned rustfs release the local `scripts/sync-s3-test.ps1` path already uses,
 verified against the upstream SHA256SUMS, and starts it in the same step as the tests (no
-cross-step background-process assumptions, no docker daemon). Pre-verified locally: the
-SHA256SUMS entry for the pinned asset and the checksum-extraction logic. Not pre-verifiable in
-the authoring environment (throttled network): the 188 MB archive contents and the rustfs
-1.0.1 CLI flags, which mirror the ps1 recipe and fail fast with the server log on startup
-errors. Only ubuntu runs (pinned linux-x86_64-musl asset). The first green run on the final
-branch is still owed as evidence.
+cross-step background-process assumptions, no docker daemon). First green run 2026-10-13
+(run 38382124322, v1.8.1 at 0d3860b): checksum verified, server healthy, both smoke
+invocations executed; the green step also proves the in-step guards accepted the run, so no
+silent skip or empty filter occurred. Only ubuntu runs (pinned linux-x86_64-musl asset).
 
 Goal: the S3-dependent ignored tests run in CI so their behavior cannot rot between manual runs
 (retires part of the roadmap's Rust ignored-test debt item).
