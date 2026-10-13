@@ -19,6 +19,13 @@
 name: Sync S3 smoke
 
 on:
+  push:
+    # Same philosophy as CI: every branch (release branches included) is
+    # validated on push, filtered to the sync paths plus this file.
+    paths:
+      - "src-tauri/src/sync/**"
+      - "src-tauri/crates/clipboard-sync/**"
+      - ".github/workflows/sync-s3.yml"
   pull_request:
     paths:
       - "src-tauri/src/sync/**"
