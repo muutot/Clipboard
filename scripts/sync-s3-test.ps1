@@ -48,7 +48,8 @@ $ProgressPreference = 'SilentlyContinue'
 
 # Pinned release. The checksum is asserted against the upstream SHA256SUMS file
 # for this exact tag, so a compromised or substituted asset fails the run.
-$RustfsVersion = '1.0.1-preview.11'
+# Keep this in sync with .github/workflows/sync-s3.yml (rustfs 1.0.1 there).
+$RustfsVersion = '1.0.1'
 $RustfsAsset = "rustfs-windows-x86_64-v$RustfsVersion.zip"
 $DownloadBase = "https://github.com/rustfs/rustfs/releases/download/$RustfsVersion"
 
