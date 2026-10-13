@@ -199,21 +199,21 @@ npm run tauri build  # installers land in src-tauri/target/release/bundle/
 
 ## Platform support status
 
-| Feature                             | Windows         | macOS                                        | Linux X11                | Linux Wayland                    |
-| :---------------------------------- | :-------------- | :------------------------------------------- | :----------------------- | :------------------------------- |
-| Read clipboard text                 | ✅ Native Win32 | ✅ Native ObjC FFI                           | ✅ Native Xlib FFI       | ⚠️ `wl-paste`                    |
-| Write clipboard (self-trigger flag) | ✅ Native Win32 | ⚠️ `pbcopy` (no flag)                        | ⚠️ `xclip` (no flag)     | ⚠️ `wl-copy` (no flag)           |
-| Read clipboard image                | ✅ Native Win32 | ⚠️ `pngpaste` / `osascript`+`sips`           | ⚠️ `xclip`               | ⚠️ `wl-paste`                    |
-| Read file paths                     | ✅ Native Win32 | ⚠️ Native `NSFilenamesPboardType`¹           | ⚠️ `xclip` (uri-list)    | ⚠️ `wl-paste` (uri-list)         |
-| Foreground application              | ✅ Native Win32 | ✅ Native ObjC FFI                           | ✅ Native Xlib + `/proc` | ⚠️ `swaymsg`/`hyprctl`/`xdotool` |
-| Extract app icons                   | ✅ Native Win32 | ⚠️ `plutil` + `sips`                         | ⚠️ freedesktop icons     | ⚠️ freedesktop icons             |
-| Global hotkey / double modifier     | ✅ Native Win32 | ❌ Not implemented                           | ❌ Not implemented       | ❌ Not implemented               |
-| Quick paste to previous window      | ✅ Native Win32 | ❌ Not implemented                           | ❌ Not implemented       | ❌ Not implemented               |
-| Window transparency / blur          | ✅ Native Win32 | ❌ Not implemented                           | ❌ Not implemented       | ❌ Not implemented               |
-| RTF capture                         | ✅ Native Win32 | ❌ Not implemented (HTML is the rich source) | ⚠️ `xclip` / `wl-paste`  | ⚠️ `xclip` / `wl-paste`          |
-| Clipboard sequence number           | ✅ Native Win32 | ❌ Not implemented                           | ❌ Not implemented       | ❌ Not implemented               |
-| Single-instance wake-up             | ✅ Named event  | ❌ Not implemented                           | ❌ Not implemented       | ❌ Not implemented               |
-| Secret storage (OS keychain)        | ✅ DPAPI        | ⚠️ Keychain (falls back to plaintext)        | ⚠️ Secret Service (same) | ⚠️ Secret Service (same)         |
+| Feature                             | Windows         | macOS                                                        | Linux X11                                                  | Linux Wayland                                                   |
+| :---------------------------------- | :-------------- | :----------------------------------------------------------- | :--------------------------------------------------------- | :-------------------------------------------------------------- |
+| Read clipboard text                 | ✅ Native Win32 | ✅ Native ObjC FFI                                           | ✅ Native Xlib FFI                                         | ⚠️ `wl-paste`                                                   |
+| Write clipboard (self-trigger flag) | ✅ Native Win32 | ⚠️ `pbcopy` (no flag)                                        | ⚠️ `xclip` (no flag)                                       | ⚠️ `wl-copy` (no flag)                                          |
+| Read clipboard image                | ✅ Native Win32 | ⚠️ `pngpaste` / `osascript`+`sips`                           | ⚠️ `xclip`                                                 | ⚠️ `wl-paste`                                                   |
+| Read file paths                     | ✅ Native Win32 | ⚠️ Native `NSFilenamesPboardType`¹                           | ⚠️ `xclip` (uri-list)                                      | ⚠️ `wl-paste` (uri-list)                                        |
+| Foreground application              | ✅ Native Win32 | ✅ Native ObjC FFI                                           | ✅ Native Xlib + `/proc`                                   | ⚠️ `swaymsg`/`hyprctl`/`xdotool`                                |
+| Extract app icons                   | ✅ Native Win32 | ⚠️ `plutil` + `sips`                                         | ⚠️ freedesktop icons                                       | ⚠️ freedesktop icons                                            |
+| Global hotkey / double modifier     | ✅ Native Win32 | ⚠️ Native chords / 10ms double-tap sampling (unverified)     | ⚠️ Native chords / 10ms double-tap sampling (unverified)   | ⚠️ GlobalShortcuts portal; no double modifier tap               |
+| Quick paste to previous window      | ✅ Native Win32 | ⚠️ Native activation + CGEvent (accessibility permission)    | ⚠️ Native EWMH + XTest                                     | ⚠️ Sway/Hyprland + wtype                                        |
+| Window transparency / blur          | ✅ Native Win32 | ⚠️ Native opacity / Vibrancy (pending platform verification) | ⚠️ GTK opacity / KWin-compatible blur request              | ⚠️ GTK opacity; blur is compositor-controlled                   |
+| RTF capture                         | ✅ Native Win32 | ⚠️ Native public.rtf (pending platform verification)         | ⚠️ `xclip` / `wl-paste`                                    | ⚠️ `xclip` / `wl-paste`                                         |
+| Clipboard sequence number           | ✅ Native Win32 | ⚠️ Native changeCount (pending platform verification)        | ⚠️ Double-read validation and bounded retries              | ⚠️ Double-read validation and bounded retries                   |
+| Single-instance wake-up             | ✅ Named event  | ⚠️ Local authenticated IPC (pending platform verification)   | ⚠️ Local authenticated IPC (pending platform verification) | ⚠️ Local authenticated IPC (activation is compositor-dependent) |
+| Secret storage (OS keychain)        | ✅ DPAPI        | ⚠️ Keychain (falls back to plaintext)                        | ⚠️ Secret Service (same)                                   | ⚠️ Secret Service (same)                                        |
 
 - ✅ **Native API** — direct FFI calls, no external dependencies
 - ⚠️ **Partial** — relies on external command-line tools or source-format constraints
@@ -221,7 +221,7 @@ npm run tauri build  # installers land in src-tauri/target/release/bundle/
 
 > **Note**: Change detection differs per platform — Windows uses native clipboard sequence numbers; Linux uses XFixes events (X11) or the data-control protocol (Wayland), falling back to 500ms polling when the protocol is unavailable; macOS has no push API and polls every 500ms. Text is compared first, then file paths and image content, so image/file copies are captured too. Self-trigger protection keeps an in-memory hash guard of content the app itself wrote, rather than relying on private clipboard markers (which CLI writers cannot carry).
 
-> **Hotkey note**: System-wide registration and "paste to the previous window" only have a real implementation via Windows `RegisterHotKey` + low-level keyboard hooks. macOS `MacOSKeyboardHook::register` is still a comment-only outline; non-Windows platforms use `windows_hotkey_stub.rs`, whose thread never fires and whose `restore_window_and_paste` returns "quick paste is only implemented on Windows". `platform_info.rs::current_capabilities` therefore reports `global_shortcut: false` and `quick_paste: false` on macOS / Linux. Shortcut bindings themselves work cross-platform and take effect while the main window is focused.
+> **Hotkey note**: System-wide chords register natively through `global-hotkey` on macOS and X11, and a double modifier tap is recognized by sampling key state for 10ms (a tap shorter than the sampling interval may be missed; macOS requires input-monitoring permission). Wayland requests desktop authorization through the GlobalShortcuts portal and reports availability only after the binding succeeds; a double modifier tap has no general interface and fails with an explicit error. Non-Windows implementations still await matching platform CI and desktop testing. Quick paste adds native macOS/X11 backends; Wayland is supported only when Sway/Hyprland and `wtype` are available. External foreground windows are tracked continuously, and window/process identity is rechecked after focus is restored.
 
 > ¹ macOS file paths are read via a native `NSFilenamesPboardType` implementation (`platform/macos.rs::read_nsfilenames_paths`), not external commands, but the whole file is behind `#[cfg(target_os = "macos")]` and not compiled on the Windows gate, so it remains ⚠️ until macOS CI goes green.
 
