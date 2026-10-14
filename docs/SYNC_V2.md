@@ -56,6 +56,99 @@ Open design decisions that must be answered before any implementation unit:
   100,000 records per device). Define bounds, progress and cancellation on the same model as
   the v1.8 long-task surface (tags, backups, sync).
 
+These are worked out with options and trade-offs in [V2-1 design decisions](#v2-1-design-decisions-2026-10-14-drafted-pending-decision) below; pick one option per decision there.
+
+## V2-1 design decisions (2026-10-14, drafted, pending decision)
+
+### Constraints proven from the current tree
+
+1. `v1/namespace.json` is create-only: a second PUT returns `PreconditionFailed`
+   (smoke `namespace_binding_is_durable_and_cannot_be_overwritten`). The binding can never be
+   edited in place, which is why any rotation is destructive.
+2. The remote scope identity excludes the password (`SmokeScope::new` hashes
+   endpoint/region/bucket/prefix/access key). Changing the password changes only the derived
+   session key and the binding's HMAC key check — the same scope keeps its identity.
+3. On publish, a canonical resource reference is passed through **without uploading its body**
+   (`resources/mutations.rs::rewrite_outgoing_path`); a local path is fingerprinted and
+   uploaded; a missing local file is counted as skipped and the reference is dropped.
+   Therefore a rotation that republishes from local state **must first materialize every
+   referenced resource**, or the new namespace ships dangling references. This holds for every
+   D1 option below.
+4. A deleted `namespace.json` can be recreated by a peer from its cached identity
+   (`docs/SYNC_V1.md`: "a missing binding may be repaired from that cached identity after
+   authenticating existing pointers"). With same-prefix deletion, a stale-password peer can
+   write the old key check back into the namespace — the mixed-ciphertext state the design
+   forbids.
+
+### D1 — Crash window
+
+- **A. Stage a new remote prefix, then delete the old one (recommended).** Publish the
+  complete local state under a new prefix with the new key, verify locally, delete the old
+  prefix, and only then rewrite the configured prefix. Any crash leaves the old namespace
+  intact until the new head is durable; clipboard data is never at risk; recovery is
+  "resume or abandon". Costs: the prefix becomes a user-visible, mutated setting (needs the
+  same explicit-confirmation treatment as the rotation itself), double storage during the
+  window, and an orphan old prefix that needs a cleanup path. Side effect: every device
+  re-bootstraps from the new scope once (fresh devices bootstrap in ~51 s per 300k records in
+  the documented benchmark).
+- **B. Delete the same prefix, then republish (`docs/SYNC_V1.md`'s current recipe).** One
+  prefix, no config change. Crash inside the window leaves the remote empty; recovery is a
+  fresh bootstrap from local data, but until it completes the scope has **no remote backup at
+  all** — the window equals a full re-upload (38.6 s encode for 300k records in the benchmark,
+  plus every resource; a large resource set makes it minutes to hours). Constraint 4 above
+  also applies while the namespace is missing.
+- **C. Generation sub-namespace inside the same prefix.** Requires a layout/protocol change
+  (the engine owns `v1/` as a fixed root); fold into the separate `v2/` namespace question,
+  do not build it here.
+
+**Recommendation: A.** B's window is a real backup-safety regression; A's extra costs are
+one-time and collectible. A also composes with D2-B (the old namespace can carry the pointer).
+
+### D2 — Multi-device semantics
+
+- **A. Single-device only (possible first step).** Refuse rotation while the namespace has
+  more than one known device; say so in the UI. Simplest and safest, but the documented
+  workload is three devices, so most multi-device users hit a wall. Acceptable only as a
+  milestone with a documented limitation.
+- **B. Pointer in the old namespace, then a switching handshake (recommended full form).**
+  After staging the new prefix (D1-A), the rotating device writes one small owner-only pointer
+  object in the old namespace (`v1/rotated-to`: new prefix + new key check) and deletes the old
+  prefix only after every known device has switched or a grace period elapsed. Peers consult
+  the pointer on discovery (one small GET, cacheable) and prompt "namespace rotated — enter
+  the new prefix/password". Deletion stays a last, owner-verified step.
+- **C. Fully manual, never auto-delete.** Document the runbook: the user switches each device
+  out of band and cleans the old prefix by hand. Cheapest to build, leaks storage, and a
+  forgotten device silently keeps its own namespace alive.
+
+**Recommendation: B**, with C as the fallback if the pointer handshake is deferred; A only if
+B is too large for the first milestone.
+
+### D3 — Plaintext ↔ encrypted toggling
+
+One flow. The mode is only `session_key: None` vs `Some`, and both rejections
+(`wrong_password_is_rejected_before_a_new_device_publishes`,
+`encryption_mode_change_is_rejected_before_a_new_device_publishes`) are the same family.
+A separate path would double the UI and the failure injection for no behavioral gain.
+
+### D4 — Cost bounds
+
+Materialize-everything is mandatory (constraint 3): download unknown resources first, then
+republish. The cost is one-time but invisible to the user, so the flow must show it before
+starting and survive abandonment:
+
+- confirm dialog with the pending resource count and byte total (both are already countable
+  from the scope-local resource reference tables);
+- progress and cancellation on the v1.8 long-task model (tags/backups/sync), with the same
+  "cancelled commits stay committed" semantics;
+- no hard size cap; a rotation event is rare and a cap would block legitimate large scopes.
+
+### After the decisions
+
+1. engine-level rotation flow plus rustfs smoke (two devices, failure injection at every step
+   boundary), per the acceptance candidates above;
+2. frontend: dedicated destructive flow with the confirmation, progress and cancellation;
+3. pointer handshake (if D2-B) with its own smoke case.
+
 Acceptance candidates (intended gates; no test exists yet):
 
 - rustfs smoke: two devices, rotate the scope, both converge on the new namespace, no mixed
