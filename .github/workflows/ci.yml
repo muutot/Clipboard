@@ -59,6 +59,10 @@ jobs:
   rust:
     name: Rust (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+      # Only used by the clippy failure fingerprint step below.
+      statuses: write
     # 4-11 min with a warm cache. Same reason as the frontend cap: a test that
     # parks in `accept()` must fail the job, not stall it for hours.
     timeout-minutes: 45
@@ -110,7 +114,41 @@ jobs:
         run: cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
 
       - name: Clippy
-        run: cargo clippy --profile ci --manifest-path src-tauri/Cargo.toml --workspace --all-targets -- -D warnings
+        shell: bash
+        run: |
+          # Tee so a failure can be surfaced through the statuses API: the
+          # maintainer may not be able to open the Actions web log from every
+          # environment (same constraint as the sync-s3.yml fingerprint).
+          cargo clippy --profile ci --manifest-path src-tauri/Cargo.toml \
+            --workspace --all-targets -- -D warnings 2>&1 |
+            tee "$RUNNER_TEMP/clippy.log"
+
+      - name: Surface clippy failure fingerprint
+        if: failure()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -uo pipefail
+          log="$RUNNER_TEMP/clippy.log"
+          fingerprint="clippy failed without a captured log"
+          if [ -f "$log" ]; then
+            line="$(grep -m1 -E '^error' "$log" | cut -c1-100 || true)"
+            if [ -n "$line" ]; then
+              fingerprint="$line"
+            else
+              fingerprint="clippy failed without an error line"
+            fi
+          fi
+          gh api --method POST \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/${{ github.repository }}/statuses/${{ github.sha }}" \
+            -f state=failure \
+            -f context=ci-clippy-diagnostics \
+            -f description="$fingerprint" \
+            -f target_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            >/dev/null
+          echo "fingerprint: $fingerprint"
 
       - name: Install nextest
         uses: taiki-e/install-action@6cd13508893c0e7eab5f273c2575d3859bd7229a # v2
