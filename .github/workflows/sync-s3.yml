@@ -100,7 +100,11 @@ jobs:
           tools="$RUNNER_TEMP/rustfs"
           data="$RUNNER_TEMP/rustfs-data"
           server_log="$RUNNER_TEMP/rustfs-server.log"
+          smoke_log="$RUNNER_TEMP/rustfs-smoke.log"
           mkdir -p "$tools" "$data"
+          # Marker first: a step that dies before cargo leaves only this line,
+          # which tells the diagnostic status apart from a real test failure.
+          echo "provisioning" >"$smoke_log"
           cleanup() {
             if [ -n "${server_pid:-}" ]; then
               kill "$server_pid" 2>/dev/null || true
@@ -158,6 +162,7 @@ jobs:
             exit 1
           fi
           echo "rustfs healthy after ${attempt}s"
+          echo "running cargo" >>"$smoke_log"
 
           run_smoke() {
             local label="$1" filter="$2" log
@@ -206,15 +211,35 @@ jobs:
           server_log="$RUNNER_TEMP/rustfs-server.log"
           smoke_log="$RUNNER_TEMP/rustfs-smoke.log"
           fingerprint="no server log"
-          # A compile error outranks a server problem: without a build there is
-          # no test output at all.
-          if [ -f "$smoke_log" ]; then
-            build_error="$(grep -m1 -E '^error' "$smoke_log" | cut -c1-80 || true)"
-            if [ -n "$build_error" ]; then
-              fingerprint="$build_error"
+          # Failure detail, most informative first: a compile error outranks a
+          # broken environment contract, which outranks a failing test name.
+          detail=""
+          if grep -q "running cargo" "$smoke_log" 2>/dev/null; then
+            detail="$(grep -m1 -E 'error\[|^error:' "$smoke_log" | cut -c1-90 || true)"
+            if [ -z "$detail" ]; then
+              skip="$(grep -m1 '\[sync-smoke\] skipped' "$smoke_log" | cut -c1-90 || true)"
+              if [ -n "$skip" ]; then
+                detail="$skip"
+              fi
             fi
+            if [ -z "$detail" ]; then
+              failing_test="$(sed -n '/^failures:$/{n;p;}' "$smoke_log" | head -n1 | sed 's/^ *//' || true)"
+              if [ -n "$failing_test" ]; then
+                detail="test failed: $failing_test"
+              fi
+            fi
+            if [ -z "$detail" ]; then
+              summary_line="$(grep -m1 'test result: FAILED' "$smoke_log" | cut -c1-90 || true)"
+              if [ -n "$summary_line" ]; then
+                detail="$summary_line"
+              fi
+            fi
+          else
+            detail="failed before cargo (provisioning or server startup)"
           fi
-          if [ "$fingerprint" = "no server log" ] && [ -f "$server_log" ]; then
+          if [ -n "$detail" ]; then
+            fingerprint="$detail"
+          elif [ -f "$server_log" ]; then
             fingerprint="rustfs: $(tail -n 3 "$server_log" | tr '\n' ' ' | cut -c1-80)"
           fi
           gh api --method POST \
