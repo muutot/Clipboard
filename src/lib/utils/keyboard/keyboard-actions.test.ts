@@ -37,6 +37,7 @@ function ctx(overrides: Partial<KeyActionContext> = {}): KeyActionContext {
     hasFullscreen: false,
     hasTagDialog: false,
     hasContextMenu: false,
+    hasOnboarding: false,
     hasDetail: false,
     detailOverlayOpen: false,
     tagFilter: null,
@@ -99,6 +100,22 @@ describe("resolveKeyAction — Escape", () => {
     const prevented = keyEvent({ key: "Escape", cancelable: true });
     prevented.preventDefault();
     expect(resolveKeyAction(prevented, ctx())).toEqual({ type: "none", prevent: false });
+  });
+
+  it("yields every key to the onboarding overlay while it is open", () => {
+    const onboarding = ctx({
+      hasOnboarding: true,
+      isTauri: true,
+      selectedCount: 2,
+      tagFilter: "work",
+      hasDetail: true,
+    });
+    for (const key of ["Escape", "Enter", " ", "ArrowDown", "a", "v"]) {
+      expect(resolveKeyAction(keyEvent({ key }), onboarding)).toEqual({
+        type: "none",
+        prevent: false,
+      });
+    }
   });
 
   it("toggles the tag filter, hides the window on Tauri, else does nothing", () => {

@@ -377,6 +377,8 @@ export interface GeneralSettings {
   pasteCleaningEnabled: boolean;
   /** 双击条目时直接粘贴（有格式按原格式、纯文本/图片/文件直接粘贴）；关闭则双击打开详情面板 */
   doubleClickPaste: boolean;
+  /** 新手导引是否已看完；完成后不再自动弹出，可在常规设置中重新观看 */
+  onboardingCompleted: boolean;
   showToastNotifications: boolean;
   rememberWindowPosition: boolean;
   alwaysOnTop: boolean;

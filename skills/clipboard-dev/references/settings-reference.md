@@ -71,6 +71,7 @@ Every card kind shares one estimator contract: the `*Height` fields are content 
 | `useRecycleBin`               | boolean                                     | `true`       | —                                                                                |
 | `pasteCleaningEnabled`        | boolean                                     | `false`      | —                                                                                |
 | `doubleClickPaste`            | boolean                                     | `true`       | —                                                                                |
+| `onboardingCompleted`         | boolean                                     | `false`      | —                                                                                |
 | `maxTextCaptureBytes`         | number (bytes)                              | `500_000`    | 10000–10000000                                                                   |
 | `showToastNotifications`      | boolean                                     | `true`       | —                                                                                |
 | `rememberWindowPosition`      | boolean                                     | `false`      | —                                                                                |
@@ -137,6 +138,8 @@ History/storage/OCR/privacy/export settings are separate Rust config groups and 
 ## Backend representation caveat
 
 `GeneralConfig` explicitly types a core subset of the frontend settings and flattens unknown keys. Fields such as theme colors/presets, detail/card display options, search sort/cache policy, and load tolerance can survive through the flattened map without being explicit Rust members.
+
+`onboardingCompleted` is a frontend-only flattened flag, same as `doubleClickPaste`: the main route opens the onboarding overlay on first desktop run while it is false and writes it through the normal patch/flush flow when the guide is finished or skipped; the General panel's "Replay" entry emits `onboarding-replay-requested` instead of clearing the flag, so the overlay can be reopened without a state reset. Browser preview never writes it (the flag is only persisted in the Tauri runtime).
 
 `search_index_sync_mode` is an explicit `GeneralConfig` member (`"lazy"`/`"background"`, default `"lazy"`) because the backend startup wiring and the search command read it for typed behavior. `ConfigStore::search_index_sync_mode()` returns `SearchIndexSyncMode`. Changing the mode applies live. Settings serialize worker transitions, prepare a worker before saving, and retain the old mode on spawn/save failure. Searches inspect the actual running worker and fall back to lazy draining when none is alive.
 

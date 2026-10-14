@@ -911,6 +911,10 @@ const en: LocaleDefinition = {
     doubleClickPaste: "Double-Click to Paste",
     doubleClickPasteDescription:
       "Double-click an item to paste it directly: formatted items paste with formatting, while plain text, images, and files paste as-is. Disable to open the detail panel on double-click instead",
+    replayOnboarding: "User Guide",
+    replayOnboardingDescription:
+      "Replay the first-run onboarding to review core features and shortcuts",
+    replayOnboardingAction: "Replay",
     maxTextCaptureSize: "Text Capture Size Limit",
     maxTextCaptureSizeDescription:
       "Plain text, HTML, and RTF content larger than this size is not captured",
@@ -1219,6 +1223,72 @@ const en: LocaleDefinition = {
     favorite: "Favorite",
     detail: "View detail",
     delete: "Delete",
+  },
+  onboarding: {
+    eyebrow: "Getting Started",
+    skip: "Skip guide",
+    prev: "Back",
+    next: "Next",
+    finish: "Get started",
+    progress: "{current} / {total}",
+    steps: {
+      welcome: {
+        title: "Welcome to Clipboard",
+        desc: "A clipboard manager that runs quietly in the background. Take a minute to learn the essentials.",
+        points: [
+          "Any text, image, or file you copy is recorded automatically",
+          "Press Alt+C at any time to show or hide the window (rebindable in settings)",
+          "All data stays on this device; nothing is uploaded",
+        ],
+      },
+      search: {
+        title: "Find anything fast",
+        desc: "The search box sits at the top of the window; just start typing once it appears.",
+        points: [
+          "Chinese-friendly tokenization with unordered multi-keyword matching",
+          'Type "yesterday" or "last week" to filter by natural-language dates',
+          "Arrow keys move the selection, Enter pastes into the previous window",
+        ],
+      },
+      cards: {
+        title: "What you can do with an item",
+        desc: "Every record is a card; select one and use keyboard shortcuts.",
+        points: [
+          "Click to select, double-click to paste directly (can be turned off)",
+          "Ctrl+C copy, Ctrl+F favorite, Ctrl+T add a tag",
+          "Space opens the detail panel: editing, OCR, and tags live there",
+          "Ctrl+1~9 quick-copy the first nine items",
+        ],
+      },
+      organize: {
+        title: "Groups, filters, and tags",
+        desc: "As history grows, groups and tags keep it tidy.",
+        points: [
+          "Alt+1~7 switch groups: All / Text / Link / Image / File / Favorite / Recycle Bin",
+          "The toolbar filters by source app and date",
+          "Click a tag chip on a card to filter by it; settings manage tags in bulk and auto-tag rules",
+        ],
+      },
+      privacy: {
+        title: "Privacy stays yours",
+        desc: "Whenever a situation calls for it, tell Clipboard to step aside.",
+        points: [
+          "Pause capture or enable local-only mode from Settings → Privacy",
+          "Password managers (1Password, Bitwarden, …) can be ignored automatically",
+          "Regex rules skip sensitive content before it ever reaches the database",
+        ],
+      },
+      power: {
+        title: "Power features when you need them",
+        desc: "Everything below is available in settings.",
+        points: [
+          "Image OCR: recognize text locally and make it searchable",
+          "Alt+V opens the float panel for quick access to recent items",
+          "Import/export JSON or CSV, restore PPaste backups",
+          "Optional S3 end-to-end encrypted sync, plus a local CLI and HTTP API",
+        ],
+      },
+    },
   },
   settingsSearch: {
     databaseMaintenanceDesc: "Check database integrity and attempt repairs",

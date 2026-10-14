@@ -112,6 +112,7 @@ Events currently crossing windows/runtime include:
 - `general-settings-changed`
 - `settings-font-changed`
 - `tray-open-settings`
+- `onboarding-replay-requested`
 - `viewer:open`
 - OCR download progress events emitted by the backend.
 

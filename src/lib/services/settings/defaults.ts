@@ -24,6 +24,7 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   useRecycleBin: true,
   pasteCleaningEnabled: false,
   doubleClickPaste: true,
+  onboardingCompleted: false,
   showToastNotifications: true,
   rememberWindowPosition: false,
   alwaysOnTop: false,

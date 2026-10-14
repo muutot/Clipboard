@@ -325,6 +325,13 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
     ["删除", "trash"],
   ),
   entry(
+    "general.replay-onboarding",
+    { section: "general_general" },
+    i18n("general.replayOnboarding"),
+    i18n("general.replayOnboardingDescription"),
+    ["导引", "新手", "引导", "指南", "onboarding", "guide", "帮助", "help"],
+  ),
+  entry(
     "general.paste-cleaning",
     { section: "general_items" },
     i18n("general.pasteCleaning"),

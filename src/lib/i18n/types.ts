@@ -843,6 +843,9 @@ export interface LocaleDefinition {
     pasteCleaningDescription: string;
     doubleClickPaste: string;
     doubleClickPasteDescription: string;
+    replayOnboarding: string;
+    replayOnboardingDescription: string;
+    replayOnboardingAction: string;
     maxTextCaptureSize: string;
     maxTextCaptureSizeDescription: string;
     toastNotifications: string;
@@ -1146,6 +1149,28 @@ export interface LocaleDefinition {
     searchIndexDesc: string;
     ocrMemoryModelDesc: string;
   };
+  onboarding: {
+    eyebrow: string;
+    skip: string;
+    prev: string;
+    next: string;
+    finish: string;
+    progress: string;
+    steps: {
+      welcome: OnboardingStepCopy;
+      search: OnboardingStepCopy;
+      cards: OnboardingStepCopy;
+      organize: OnboardingStepCopy;
+      privacy: OnboardingStepCopy;
+      power: OnboardingStepCopy;
+    };
+  };
+}
+
+interface OnboardingStepCopy {
+  title: string;
+  desc: string;
+  points: string[];
 }
 
 export type LocaleMessages = Record<keyof LocaleDefinition, Record<string, string>>;

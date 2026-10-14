@@ -59,6 +59,8 @@ export interface KeyActionContext {
   hasTagDialog: boolean;
   /** A card context menu is open and owns Escape (closes the menu only). */
   hasContextMenu: boolean;
+  /** The first-run onboarding overlay is open and owns the whole keyboard. */
+  hasOnboarding: boolean;
   hasDetail: boolean;
   /** The overlay (non-split) detail panel is open and owns the keyboard. */
   detailOverlayOpen: boolean;
@@ -120,6 +122,12 @@ export function resolveKeyAction(event: KeyboardEvent, ctx: KeyActionContext): K
   // composition with Escape must not also hide the window or fire any other
   // global shortcut.
   if (event.isComposing || event.keyCode === 229) {
+    return { type: "none", prevent: false };
+  }
+
+  // The onboarding overlay owns every key while it is open; the route must not
+  // also hide the window, move the selection, or start a search underneath it.
+  if (ctx.hasOnboarding) {
     return { type: "none", prevent: false };
   }
 

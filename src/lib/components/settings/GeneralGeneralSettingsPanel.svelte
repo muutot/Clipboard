@@ -6,6 +6,7 @@
   import { onDestroy } from "svelte";
   import { createFeedback } from "$lib/utils/settings/feedback.svelte";
   import type { SettingEntryConfig } from "$lib/types/settings-entry";
+  import { emit } from "@tauri-apps/api/event";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);
@@ -62,6 +63,21 @@
   }
 
   const generalEntries: SettingEntryConfig[] = $derived([
+    {
+      type: "custom",
+      id: "general.replay-onboarding",
+      icon: "help",
+      label: _t("general.replayOnboarding"),
+      desc: _t("general.replayOnboardingDescription"),
+      variant: "column",
+      actionLabel: _t("general.replayOnboardingAction"),
+      onaction: () => {
+        // The main window listens for this and surfaces itself with the guide.
+        emit("onboarding-replay-requested", {}).catch((err) =>
+          console.warn("onboarding-replay-requested emit failed:", err),
+        );
+      },
+    },
     {
       type: "select",
       id: "general.language",

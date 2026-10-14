@@ -215,6 +215,10 @@ export function normalizeGeneralSettings(
     source.doubleClickPaste ?? fallback("doubleClickPaste"),
     defaultSettings.doubleClickPaste,
   );
+  result.onboardingCompleted = booleanValue(
+    source.onboardingCompleted ?? fallback("onboardingCompleted"),
+    defaultSettings.onboardingCompleted,
+  );
   result.showToastNotifications = booleanValue(
     source.showToastNotifications ?? fallback("showToastNotifications"),
     defaultSettings.showToastNotifications,

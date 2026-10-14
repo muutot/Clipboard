@@ -15,6 +15,7 @@
   import ImageFullscreenOverlay from "$lib/components/detail/ImageFullscreenOverlay.svelte";
   import TagEditDialog from "$lib/components/card/TagEditDialog.svelte";
   import SavedSearchDialog from "$lib/components/common/SavedSearchDialog.svelte";
+  import OnboardingOverlay from "$lib/components/onboarding/OnboardingOverlay.svelte";
   import { hydrateClipboardItem } from "$lib/services/clipboard";
   import type { SavedSearch } from "$lib/utils/settings/saved-searches";
   import type { HistoryDateFilter } from "$lib/utils/search/history-filter";
@@ -279,6 +280,14 @@
   let tagColors = $state<Record<string, string>>({});
   let tagEditDialog = $state<string | null>(null);
   let savedSearchDialog = $state(false);
+  let onboardingOpen = $state(false);
+
+  function completeOnboarding() {
+    onboardingOpen = false;
+    // The browser preview has no persisted profile, so only the desktop
+    // runtime records the flag; the replay entry keeps working there too.
+    if (isTauriRuntime()) generalSettings.updateSetting("onboardingCompleted", true);
+  }
 
   function applySavedSearch(search: SavedSearch) {
     resetHistoryScroll();
@@ -878,6 +887,23 @@
       showToast(_t("app.restartBlockedInDev"), "info");
     });
 
+    const unlistenOnboardingReplay = listen("onboarding-replay-requested", () => {
+      onboardingOpen = true;
+      // The replay entry lives in the settings window, and the main window may
+      // currently be hidden behind it, so surface the window the guide opens in.
+      if (isTauriRuntime()) {
+        const appWindow = getCurrentWindow();
+        void appWindow.show();
+        void appWindow.setFocus();
+      }
+    });
+
+    // First run only: the layout load gate has already hydrated the settings
+    // store, so this reads the persisted flag rather than the default.
+    if (isTauriRuntime() && !$generalSettings.onboardingCompleted) {
+      onboardingOpen = true;
+    }
+
     const windowLifecycle = createMainWindowController(loadKeyboardShortcuts);
 
     const unsubFontEvent = listen<{
@@ -955,6 +981,7 @@
       void unlistenTrayOpenSettings.then((fn) => fn()).catch(() => {});
       void unlistenOpenDetail.then((fn) => fn()).catch(() => {});
       void unlistenTrayRestartBlocked.then((fn) => fn()).catch(() => {});
+      void unlistenOnboardingReplay.then((fn) => fn()).catch(() => {});
       void unsubFontEvent.then((fn) => fn()).catch(() => {});
       void unsubTagsChanged.then((fn) => fn()).catch(() => {});
       if (heightRafId) cancelAnimationFrame(heightRafId);
@@ -1982,6 +2009,7 @@
         hasFullscreen: !!fullscreenFilePath,
         hasTagDialog: !!tagEditDialog || savedSearchDialog,
         hasContextMenu: contextMenuOpen,
+        hasOnboarding: onboardingOpen,
         hasDetail: !!detailItem,
         detailOverlayOpen: detailItem != null && detailDisplayMode !== "split",
         tagFilter,
@@ -2319,6 +2347,9 @@
 </main>
 
 <Toast />
+{#if onboardingOpen}
+  <OnboardingOverlay onclose={completeOnboarding} />
+{/if}
 {#if tagEditDialog}
   <TagEditDialog
     tag={tagEditDialog}

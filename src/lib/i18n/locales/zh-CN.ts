@@ -879,6 +879,9 @@ const zhCN: LocaleDefinition = {
     doubleClickPaste: "双击条目直接粘贴",
     doubleClickPasteDescription:
       "开启后双击条目按原格式粘贴：有格式文本用原格式，纯文本、图片、文件直接粘贴；关闭则双击打开详情面板",
+    replayOnboarding: "新手导引",
+    replayOnboardingDescription: "重新播放新手导引，快速了解核心功能与快捷键",
+    replayOnboardingAction: "重新观看",
     maxTextCaptureSize: "文本捕获大小上限",
     maxTextCaptureSizeDescription: "纯文本、HTML 和 RTF 内容超过该大小时将不会被捕获保存",
     toastNotifications: "操作通知",
@@ -1170,6 +1173,72 @@ const zhCN: LocaleDefinition = {
     favorite: "收藏",
     detail: "查看详情",
     delete: "删除",
+  },
+  onboarding: {
+    eyebrow: "新手导引",
+    skip: "跳过导引",
+    prev: "上一步",
+    next: "下一步",
+    finish: "开始使用",
+    progress: "{current} / {total}",
+    steps: {
+      welcome: {
+        title: "欢迎使用 Clipboard",
+        desc: "这是一个在后台静默运行的剪贴板管理器，花一分钟了解最常用的功能。",
+        points: [
+          "复制任何文本、图片或文件，都会自动记录到历史",
+          "默认热键 Alt+C 随时唤起或隐藏窗口，可在设置中修改",
+          "所有数据只保存在本地，不会上传",
+        ],
+      },
+      search: {
+        title: "搜索想找的内容",
+        desc: "窗口顶部就是搜索框，唤出窗口后直接输入即可，无需先点击。",
+        points: [
+          "支持中文分词，多个关键词无序匹配",
+          '输入"昨天""上周"等自然语言按时间筛选',
+          "↑↓ 选择记录，Enter 直接粘贴到上一个窗口",
+        ],
+      },
+      cards: {
+        title: "对一条记录能做什么",
+        desc: "每条记录是一张卡片，选中后即可使用快捷键操作。",
+        points: [
+          "单击选中，双击直接粘贴（可在设置中关闭）",
+          "Ctrl+C 复制、Ctrl+F 收藏、Ctrl+T 添加标签",
+          "空格键打开详情：编辑、OCR、标签都在这里",
+          "Ctrl+1~9 快速复制列表前 9 条",
+        ],
+      },
+      organize: {
+        title: "分组、筛选与标签",
+        desc: "记录变多之后，用分组和标签保持整齐。",
+        points: [
+          "Alt+1~7 切换分组：全部 / 文本 / 链接 / 图片 / 文件 / 收藏 / 回收站",
+          "工具栏可按来源应用、日期过滤",
+          "点击卡片上的标签即可筛选；设置里可批量管理标签、配置自动标签规则",
+        ],
+      },
+      privacy: {
+        title: "隐私由你掌控",
+        desc: "涉及隐私的场景，可以随时让 Clipboard 让路。",
+        points: [
+          "设置 → 隐私中可一键暂停记录、开启仅本地模式",
+          "密码管理器（1Password、Bitwarden 等）可自动忽略",
+          "可用正则规则跳过敏感内容，命中的内容不会入库",
+        ],
+      },
+      power: {
+        title: "还有这些进阶功能",
+        desc: "需要的时候，在设置里都能找到。",
+        points: [
+          "图片 OCR：本地识别图片文字，并加入搜索",
+          "Alt+V 打开悬浮窗，随手取用常用记录",
+          "导入导出 JSON / CSV、恢复 PPaste 备份",
+          "可选的 S3 端到端加密同步，以及本地 CLI 与 HTTP API",
+        ],
+      },
+    },
   },
   settingsSearch: {
     databaseMaintenanceDesc: "检查数据库完整性并尝试修复",
