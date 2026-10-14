@@ -208,18 +208,18 @@ jobs:
             -f description="$fingerprint" \
             -f target_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
             >/dev/null
-          # A link failure lists its missing symbols at the very end of its
-          # output; publish the stripped log tail as a second status so the
-          # symbol names are visible without the web log.
+          # A link failure lists its missing symbols in an `ld:` block; publish
+          # it flattened as a second status so the symbol names are visible
+          # without the web log.
           if [ -f "$RUNNER_TEMP/test.log.plain" ]; then
-            tail_text="$(tr -s ' \t' ' ' <"$RUNNER_TEMP/test.log.plain" | tail -c 130)"
-            if [ -n "$tail_text" ]; then
+            link_block="$(grep -m1 -A8 'symbol(s) not found' "$RUNNER_TEMP/test.log.plain" | tr '\n' ' ' | tr -s ' ' | cut -c1-130)"
+            if [ -n "$link_block" ]; then
               gh api --method POST \
                 -H "Accept: application/vnd.github+json" \
                 "/repos/${{ github.repository }}/statuses/${{ github.sha }}" \
                 -f state=failure \
-                -f context=ci-rust-tail \
-                -f description="$tail_text" \
+                -f context=ci-rust-link-detail \
+                -f description="$link_block" \
                 -f target_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
                 >/dev/null || true
             fi
