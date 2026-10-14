@@ -12,15 +12,15 @@ fn main() {
             .compile("glibc_compat");
     }
 
-    // macOS only: force the two frameworks onto the link line. The
-    // `#[link]` attributes on the extern blocks under `platform/macos/` did not
-    // put CoreFoundation there on the current toolchain/runner combination
-    // (`ld: symbol(s) not found: "_CFLocaleCopyCurrentLocale"` on arm64), and
-    // only build-script libs are guaranteed to land after the dependency
-    // rlibs. ApplicationServices is emitted alongside it because the
-    // CoreGraphics declarations share the same extern-block fate.
+    // macOS only: force the frameworks onto the link line. The `#[link]`
+    // attributes on the extern blocks under `platform/macos/`, and the
+    // `rustc-link-lib=framework=` form, did not put CoreFoundation on the final
+    // link line for the lib-test target on the current toolchain/runner
+    // combination (`ld: symbol(s) not found: "_CFLocaleCopyCurrentLocale"` on
+    // arm64). `rustc-link-arg` passes the raw arguments to cc after the object
+    // files, which even a single-pass linker resolves.
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {
-        println!("cargo:rustc-link-lib=framework=CoreFoundation");
-        println!("cargo:rustc-link-lib=framework=ApplicationServices");
+        println!("cargo:rustc-link-arg=-framework");
+        println!("cargo:rustc-link-arg=CoreFoundation");
     }
 }
