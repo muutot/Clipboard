@@ -300,6 +300,7 @@ clipboard/
 
 | Document                                                                 | Content                                                    |
 | :----------------------------------------------------------------------- | :--------------------------------------------------------- |
+| [docs/USER_GUIDE.md](docs/USER_GUIDE.md)                                 | User guide: onboarding, shortcuts, all features (Chinese)  |
 | [CONTRIBUTING.md](CONTRIBUTING.md)                                       | Dev setup, coding conventions, commit conventions          |
 | [docs/SEARCH.md](docs/SEARCH.md)                                         | Search architecture: Tantivy, N-gram tokenization, queries |
 | [docs/OCR.md](docs/OCR.md)                                               | OCR pipeline: engines, models, task queue                  |
