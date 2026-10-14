@@ -3,33 +3,18 @@
 //! The webview reports the Chromium accepted language, which can differ from
 //! the macOS display language; `CFLocaleCopyCurrentLocale` gives the user's
 //! actual locale. See `platform/os_locale.rs` for the shared contract.
-
-use std::ffi::c_void;
-
-// ApplicationServices, not CoreFoundation: it re-exports the CoreFoundation
-// symbols this module needs, and it is the framework this adapter already
-// links successfully for the CoreGraphics declarations in `ffi.rs` /
-// `quick_paste.rs`. A `#[link(name = "CoreFoundation")]` block here left
-// `_CFLocaleCopyCurrentLocale` unresolved at the final link (observed on the
-// macOS arm64 CI runner).
-#[link(name = "ApplicationServices", kind = "framework")]
-extern "C" {
-    fn CFLocaleCopyCurrentLocale() -> *const c_void;
-    fn CFLocaleGetIdentifier(locale: *const c_void) -> *const c_void;
-    fn CFStringGetCString(
-        the_string: *const c_void,
-        buffer: *mut u8,
-        buffer_size: isize,
-        encoding: u32,
-    ) -> bool;
-    fn CFRelease(cf: *const c_void);
-}
+//!
+//! The CoreFoundation declarations live in `ffi.rs`: an extern block in this
+//! module never reached the final link line on the macOS arm64 CI runner.
 
 const K_CF_STRING_ENCODING_UTF8: u32 = 0x0800_0100;
 
 /// Returns the macOS user locale identifier (`zh-CN`, `en-US`, …), or `None`
 /// when CoreFoundation cannot answer.
 pub fn locale_name() -> Option<String> {
+    use crate::platform::macos::ffi::{
+        CFLocaleCopyCurrentLocale, CFLocaleGetIdentifier, CFRelease, CFStringGetCString,
+    };
     unsafe {
         let locale = CFLocaleCopyCurrentLocale();
         if locale.is_null() {
@@ -56,6 +41,7 @@ pub fn locale_name() -> Option<String> {
             }
         };
         // The copied locale is retained; the identifier belongs to it.
+        // `CFRelease` is declared once in `platform::macos::ffi`.
         CFRelease(locale);
         name
     }

@@ -64,17 +64,10 @@ mod mac {
             fn CGEventSetFlags(event: *mut std::ffi::c_void, flags: u64);
             fn CGEventPost(tap: u32, event: *mut std::ffi::c_void);
             fn CGEventSourceFlagsState(state: i32) -> u64;
-            // `CFRelease` is also declared in `platform/macos/locale.rs`
-            // (CoreFoundation). Both must use the identical canonical
-            // `*const` signature: newer toolchains error on a redeclaration
-            // "with a different signature", and centralizing it into `ffi.rs`
-            // (linked via ApplicationServices) breaks CoreFoundation symbol
-            // resolution at link time. `*mut` call-site values coerce.
-            fn CFRelease(value: *const std::ffi::c_void);
         }
-        // `AXIsProcessTrusted` is declared once in `platform::macos::ffi` with
-        // the correct `u8` (C `Boolean`) signature; a second `-> bool`
-        // declaration here would trip `clashing_extern_declarations`.
+        // `AXIsProcessTrusted` and `CFRelease` are declared once in
+        // `platform::macos::ffi`; a second declaration here would trip
+        // `clashing_extern_declarations`.
         if target.external().is_none()
             || unsafe { crate::platform::macos::ffi::AXIsProcessTrusted() == 0 }
         {
@@ -118,10 +111,10 @@ mod mac {
             let up = CGEventCreateKeyboardEvent(std::ptr::null_mut(), 9, false);
             if down.is_null() || up.is_null() {
                 if !down.is_null() {
-                    CFRelease(down);
+                    crate::platform::macos::ffi::CFRelease(down);
                 }
                 if !up.is_null() {
-                    CFRelease(up);
+                    crate::platform::macos::ffi::CFRelease(up);
                 }
                 return Err("could not create paste key events".into());
             }
@@ -129,8 +122,8 @@ mod mac {
             CGEventSetFlags(up, 1 << 20);
             CGEventPost(0, down);
             CGEventPost(0, up);
-            CFRelease(down);
-            CFRelease(up);
+            crate::platform::macos::ffi::CFRelease(down);
+            crate::platform::macos::ffi::CFRelease(up);
         }
         Ok(())
     }

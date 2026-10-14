@@ -1,10 +1,12 @@
 //! Declarations of the native macOS APIs used by this adapter
-//! (CoreGraphics, Carbon Event Manager, Accessibility, NSStatusBar).
+//! (CoreGraphics, Carbon Event Manager, Accessibility, CoreFoundation,
+//! NSStatusBar).
 //!
-//! They are only linkable on macOS.  Only the accessibility probe is wired to
-//! a call site (see `accessibility.rs`); the remaining declarations document
-//! the FFI boundary for the outlined hotkey/tray work and stay unused, so this
-//! file is not evidence that those paths run.
+//! They are only linkable on macOS.  Only the accessibility probe, the
+//! CoreFoundation locale calls, `CFRelease` and the quick-paste event APIs are
+//! wired to call sites; the remaining declarations document the FFI boundary
+//! for the outlined hotkey/tray work and stay unused, so this file is not
+//! evidence that those paths run.
 
 // `ApplicationServices` is the umbrella that exports the CoreGraphics and
 // HIServices symbols declared below; nothing else links it for us.
@@ -70,4 +72,26 @@ extern "C" {
         key: *mut std::ffi::c_void,
     ) -> *mut std::ffi::c_void;
     fn NSMenuItem_separatorItem() -> *mut std::ffi::c_void;
+}
+
+// CoreFoundation is NOT re-exported by ApplicationServices, so it needs its
+// own block. The declarations live in this file rather than in `locale.rs`:
+// the extern block in that module never reached the final link line on the
+// macOS arm64 CI runner (`ld: symbol(s) not found: "_CFLocaleCopyCurrentLocale"`),
+// while every block in this file links. `CFRelease` is declared once here with
+// the canonical `*const` pointee; a second declaration with a different
+// signature (the CoreGraphics side takes `*mut`) trips the
+// `clashing_extern_declarations` error on newer toolchains.
+#[cfg(target_os = "macos")]
+#[link(name = "CoreFoundation", kind = "framework")]
+extern "C" {
+    pub fn CFRelease(cf: *const std::ffi::c_void);
+    pub fn CFLocaleCopyCurrentLocale() -> *const std::ffi::c_void;
+    pub fn CFLocaleGetIdentifier(locale: *const std::ffi::c_void) -> *const std::ffi::c_void;
+    pub fn CFStringGetCString(
+        the_string: *const std::ffi::c_void,
+        buffer: *mut u8,
+        buffer_size: isize,
+        encoding: u32,
+    ) -> bool;
 }
