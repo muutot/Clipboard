@@ -60,6 +60,13 @@ These are worked out with options and trade-offs in [V2-1 design decisions](#v2-
 
 ## V2-1 design decisions (2026-10-14, drafted, pending decision)
 
+| #   | Decision                                                                                     | Status                                       |
+| --- | -------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| D1  | Stage a new remote prefix, then delete the old namespace (option A)                          | Implied by D2; pending explicit confirmation |
+| D2  | Pointer warning, then delete the old namespace immediately; peers hard-fail until re-pointed | **Decided 2026-10-14**                       |
+| D3  | One flow covers plaintext ↔ encrypted toggling                                               | Recommended, pending objection               |
+| D4  | Preview + progress + cancellation, no hard size cap                                          | Recommended, pending objection               |
+
 ### Constraints proven from the current tree
 
 1. `v1/namespace.json` is create-only: a second PUT returns `PreconditionFailed`
@@ -101,27 +108,51 @@ These are worked out with options and trade-offs in [V2-1 design decisions](#v2-
   (the engine owns `v1/` as a fixed root); fold into the separate `v2/` namespace question,
   do not build it here.
 
-**Recommendation: A.** B's window is a real backup-safety regression; A's extra costs are
-one-time and collectible. A also composes with D2-B (the old namespace can carry the pointer).
+**Decision (implied by D2, pending explicit confirmation): A.** B's window is a real
+backup-safety regression; A's extra costs are one-time and collectible. The decided D2
+protocol needs the old namespace alive as the pointer's home, which only A provides.
 
-### D2 — Multi-device semantics
+### D2 — Multi-device semantics (decided: pointer warning, then delete immediately)
 
-- **A. Single-device only (possible first step).** Refuse rotation while the namespace has
-  more than one known device; say so in the UI. Simplest and safest, but the documented
-  workload is three devices, so most multi-device users hit a wall. Acceptable only as a
-  milestone with a documented limitation.
-- **B. Pointer in the old namespace, then a switching handshake (recommended full form).**
-  After staging the new prefix (D1-A), the rotating device writes one small owner-only pointer
-  object in the old namespace (`v1/rotated-to`: new prefix + new key check) and deletes the old
-  prefix only after every known device has switched or a grace period elapsed. Peers consult
-  the pointer on discovery (one small GET, cacheable) and prompt "namespace rotated — enter
-  the new prefix/password". Deletion stays a last, owner-verified step.
-- **C. Fully manual, never auto-delete.** Document the runbook: the user switches each device
-  out of band and cleans the old prefix by hand. Cheapest to build, leaks storage, and a
-  forgotten device silently keeps its own namespace alive.
+**Decision (2026-10-14):** keep the pointer notification, but do **not** wait for every known
+device to switch. Once the pointer is durable, the old namespace is deleted right away;
+stale peers hard-fail with an actionable error until a human re-points them. This trades
+"peers keep working on the old namespace during a handshake" (rejected: the split-brain
+window stays open as long as the old namespace accepts writes, and per-device switch
+bookkeeping is pure overhead) for a shorter window and a much smaller engine change. Manual
+runbook (rejected: a forgotten device silently keeps its own namespace) and single-device-only
+(rejected: the documented workload is three devices) remain rejected.
 
-**Recommendation: B**, with C as the fallback if the pointer handshake is deferred; A only if
-B is too large for the first milestone.
+Concrete protocol:
+
+1. The rotating device publishes the complete state at the new prefix `P2` with the new key
+   (D1-A) and verifies it locally.
+2. It writes one small owner-only pointer object at the **old configured prefix root**,
+   outside the engine's `v1/` namespace: `{P1}/rotated-to` = new prefix + new key check +
+   timestamp + rotating device id. The key check lets a peer verify a typed password locally
+   before any network work.
+3. It deletes every object under `{P1}/v1/` immediately. The pointer at the prefix root
+   survives (the deletion scope is the engine namespace, never the configured prefix
+   itself, per the existing obsolete-state deletion boundary). Crash between 2 and 3 is
+   idempotent (retry deletion); a crash after 3 leaves the pointer alone, which is exactly
+   the discovery artifact peers need. A later rotation leaves its own pointer; stale pointers
+   are tiny and documented as retained.
+4. It rewrites its own configured prefix to `P2` (destructive setting change, explicit
+   confirmation).
+5. A stale peer's next run checks `{P1}/rotated-to` **before** namespace resolution or binding
+   repair. Without this check, constraint 4 applies: the peer would recreate `namespace.json`
+   from its cached identity with the old key check and bootstrap a second namespace — the
+   split brain this design exists to prevent. With the check, the peer refuses to run and
+   reports "namespace rotated on <date>; obtain the new prefix and password".
+6. The user re-points each peer (new prefix + new password); the pointer's key check gives
+   immediate local feedback on a wrong password. Re-pointed peers bootstrap from `P2` as
+   fresh devices and purge the old scope's local state (heads, cursors, outbox, cached
+   binding) the way the rotation recipe already describes.
+
+Engine-level consequence: the pointer check belongs in the desktop sync entry
+(`commands/sync`) before the engine runs, because the pointer lives outside the engine's
+prefix scope; the engine itself stays unaware of rotation. Deletion reuses the existing
+bounded list-and-delete discipline (full pagination, validated keys, never the prefix).
 
 ### D3 — Plaintext ↔ encrypted toggling
 
@@ -144,17 +175,21 @@ starting and survive abandonment:
 
 ### After the decisions
 
-1. engine-level rotation flow plus rustfs smoke (two devices, failure injection at every step
-   boundary), per the acceptance candidates above;
-2. frontend: dedicated destructive flow with the confirmation, progress and cancellation;
-3. pointer handshake (if D2-B) with its own smoke case.
+1. engine-level rotation flow (materialize-all → publish at `P2` → write `{P1}/rotated-to` →
+   delete `{P1}/v1/`) plus rustfs smoke with failure injection at every step boundary;
+2. the peer-side pointer check in the desktop sync entry with its own smoke case (stale peer
+   refuses, re-pointed peer converges);
+3. frontend: dedicated destructive flow with the confirmation, progress and cancellation.
 
 Acceptance candidates (intended gates; no test exists yet):
 
 - rustfs smoke: two devices, rotate the scope, both converge on the new namespace, no mixed
-  ciphertext, old namespace fully deleted;
-- failure injection at every step boundary (cancel mid-materialize, mid-delete,
-  mid-republish) leaves a documented, recoverable state;
+  ciphertext, old namespace deleted while the pointer survives at the prefix root;
+- failure injection at every step boundary (cancel mid-materialize, mid-publish, after the
+  pointer, mid-delete, mid-repoint) leaves a documented, recoverable state;
+- a stale peer that has not seen the pointer check refuses with the actionable message and
+  writes nothing — in particular it must not recreate `namespace.json` from its cached
+  binding;
 - a wrong or old password during rotation is a hard error before any local state is cleared;
 - the destructive step requires explicit user confirmation (frontend unit, after the engine).
 
@@ -210,8 +245,9 @@ and run it once" if full automation is not justified.
 ## Suggested unit order
 
 1. V2-2 (CI matrix) first — independent of the protocol and unblocks real-server evidence for
-   everything after it.
-2. V2-1 engine level plus rustfs smoke, once the open design decisions are answered.
+   everything after it. **Done** (see V2-2).
+2. V2-1 engine level plus rustfs smoke. D1/D2 are decided and D3/D4 stand unless objected to,
+   so this unit is unblocked; build the rotation flow, then the peer pointer check.
 3. V2-1 frontend: dedicated destructive flow with progress, cancellation and confirmation.
 4. V2-3 as a scheduled evidence run.
 
