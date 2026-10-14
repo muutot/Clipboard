@@ -77,8 +77,8 @@ cross-step background-process assumptions, no docker daemon). First green run 20
 smoke invocations executed; the green step also proves the in-step guards accepted the run,
 so no silent skip or empty filter occurred. The seventh smoke — encrypted binary resources
 across two devices, added to close the last real-server gap (`docs/SYNC_V1.md` claimed
-coverage the suite did not have) — requires its own green run. Only ubuntu runs (pinned
-linux-x86_64-musl asset).
+coverage the suite did not have) — passed in run 38506261099 (sha a4c30ed), with the main CI
+green on the same tree. Only ubuntu runs (pinned linux-x86_64-musl asset).
 
 Goal: the S3-dependent ignored tests run in CI so their behavior cannot rot between manual runs
 (retires part of the roadmap's Rust ignored-test debt item).

@@ -353,8 +353,10 @@ records per device. Every run owns a random `clipboard-sync-benchmark/{uuid}/...
 deletes only that prefix. The transport counters measure actual HTTP PUT/GET/HEAD/LIST/DELETE
 requests, LIST continuation pages, payload bytes and method time; repository timers separate pack
 export/encoding from snapshot, checkpoint and segment apply time. Binary-resource encryption,
-streaming transfer and on-demand materialization remain covered by focused real-transport and
-resource tests rather than fabricating 300,000 large blobs in the metadata workload.
+streaming transfer and on-demand materialization are covered by the encrypted-resource
+real-S3 smoke (`sync::v1::s3_smoke::real_s3_encrypted_resource_materializes_across_devices`)
+plus the engine's `MemoryStore` resource tests, rather than fabricating 300,000 large blobs
+in the metadata workload.
 
 The implementation is accepted only when:
 
