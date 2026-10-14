@@ -6,7 +6,13 @@
 
 use std::ffi::c_void;
 
-#[link(name = "CoreFoundation", kind = "framework")]
+// ApplicationServices, not CoreFoundation: it re-exports the CoreFoundation
+// symbols this module needs, and it is the framework this adapter already
+// links successfully for the CoreGraphics declarations in `ffi.rs` /
+// `quick_paste.rs`. A `#[link(name = "CoreFoundation")]` block here left
+// `_CFLocaleCopyCurrentLocale` unresolved at the final link (observed on the
+// macOS arm64 CI runner).
+#[link(name = "ApplicationServices", kind = "framework")]
 extern "C" {
     fn CFLocaleCopyCurrentLocale() -> *const c_void;
     fn CFLocaleGetIdentifier(locale: *const c_void) -> *const c_void;
