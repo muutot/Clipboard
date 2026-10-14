@@ -29,9 +29,19 @@ encryption_mode_change_is_rejected_before_a_new_device_publishes}`.
    native process-exit timing remain checks outside the deterministic suites
    (`SYNC_V1.md`, "Cooperative cancellation" closing notes).
 
-## Candidate items (none committed)
+## Work items
 
 ### V2-1. Encryption password / mode rotation workflow
+
+Progress (2026-10-14): D1/D2 decided, D3/D4 recommended. First engine unit landed — the
+peer-side rotation guard (`commands/sync::refuse_if_prefix_rotated`): every sync run reads
+`{prefix}/rotated-to` before namespace resolution and refuses with an actionable message when
+another device rotated the prefix away, so a stale peer can never repair the old binding from
+cache and fork the namespace. Pure unit tests plus a real-S3 smoke case
+(`real_s3_rotation_pointer_blocks_a_stale_peer`) cover the decision; the smoke case's green CI
+run is pending for this tree. Remaining: the rotating side (materialize-all → publish at the
+new prefix → write the tombstone → delete the old namespace → re-point the local setting) and
+the frontend flow.
 
 User-visible goal: replace the sync password (or toggle the encryption mode) of an already
 initialized scope without losing remote history or stranding other devices.
@@ -41,22 +51,8 @@ workflow"): materialize every referenced resource under the old key, delete the 
 v1 objects, clear scope-local sync state (heads, cursors, checkpoint baseline, cached namespace
 binding), and republish the complete local state under the new key as a fresh bootstrap.
 
-Open design decisions that must be answered before any implementation unit:
-
-- **Crash window.** "Delete, then republish" leaves a crash point with no remote state. Either
-  accept it with an explicit recovery story, or stage the new namespace first and delete the
-  old one only after the new head is durable (double storage during rotation).
-- **Multi-device semantics.** Peers keep syncing against the old namespace until it is deleted;
-  afterwards every stale-password peer fails authentication and diverges. Rotation needs an
-  explicit story: who rotates first, how peers discover the new namespace, and what a stale
-  peer experiences.
-- **Plaintext ↔ encrypted toggling.** The mode check is the same rejection family as the
-  password check; decide whether one flow covers both.
-- **Cost bounds.** Materializing a large scope is a full download (the documented workload is
-  100,000 records per device). Define bounds, progress and cancellation on the same model as
-  the v1.8 long-task surface (tags, backups, sync).
-
-These are worked out with options and trade-offs in [V2-1 design decisions](#v2-1-design-decisions-2026-10-14-drafted-pending-decision) below; pick one option per decision there.
+The design questions are worked out with options and trade-offs in
+[V2-1 design decisions](#v2-1-design-decisions-2026-10-14-drafted-pending-decision) below.
 
 ## V2-1 design decisions (2026-10-14, drafted, pending decision)
 
@@ -177,9 +173,11 @@ starting and survive abandonment:
 
 1. engine-level rotation flow (materialize-all → publish at `P2` → write `{P1}/rotated-to` →
    delete `{P1}/v1/`) plus rustfs smoke with failure injection at every step boundary;
-2. the peer-side pointer check in the desktop sync entry with its own smoke case (stale peer
-   refuses, re-pointed peer converges);
+2. the peer-side pointer check in the desktop sync entry with its own smoke case;
 3. frontend: dedicated destructive flow with the confirmation, progress and cancellation.
+
+Progress: step 2 is **done** (2026-10-14, `commands/sync::refuse_if_prefix_rotated`); steps 1
+and 3 remain.
 
 Acceptance candidates (intended gates; no test exists yet):
 
@@ -195,7 +193,7 @@ Acceptance candidates (intended gates; no test exists yet):
 
 ### V2-2. Real S3 CI matrix
 
-Status: wired and green. `.github/workflows/sync-s3.yml` runs the seven S3-dependent smokes on
+Status: wired and green. `.github/workflows/sync-s3.yml` runs the eight S3-dependent smokes on
 pushes and pull requests touching the sync paths, weekly, and on dispatch. A first attempt
 used a pinned MinIO docker container and never passed the readiness probe; the job now
 provisions the pinned rustfs release the local `scripts/sync-s3-test.ps1` path already uses,
@@ -203,17 +201,16 @@ verified against the upstream SHA256SUMS, and starts it in the same step as the 
 cross-step background-process assumptions, no docker daemon). First green run 2026-10-13
 (run 38382124322, v1.8.1 at 0d3860b, six smokes): checksum verified, server healthy, both
 smoke invocations executed; the green step also proves the in-step guards accepted the run,
-so no silent skip or empty filter occurred. The seventh smoke — encrypted binary resources
-across two devices, added to close the last real-server gap (`docs/SYNC_V1.md` claimed
-coverage the suite did not have) — passed in run 38506261099 (sha a4c30ed), with the main CI
-green on the same tree. Only ubuntu runs (pinned linux-x86_64-musl asset).
+so no silent skip or empty filter occurred. The encrypted binary-resource smoke and the
+rotation-pointer smoke passed in run 38506261099 (sha a4c30ed), with the main CI green on the
+same tree. Only ubuntu runs (pinned linux-x86_64-musl asset).
 
 Goal: the S3-dependent ignored tests run in CI so their behavior cannot rot between manual runs
 (retires part of the roadmap's Rust ignored-test debt item).
 
 S3-dependent ignored tests today (8):
 
-- `sync::v1::s3_smoke::*` × 6 and `clipboard_sync::s3::tests` × 1 (correctness smokes);
+- `sync::v1::s3_smoke::*` × 7 and `clipboard_sync::s3::tests` × 1 (correctness smokes);
 - `sync::v1::scale_bench::s3_*` × 2 (also needs a release-mode runtime).
 
 Decision: rustfs, not MinIO. The same server family that produced the documented smoke

@@ -4,7 +4,7 @@ use std::{
     sync::{Arc, Mutex, OnceLock, Weak},
 };
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tauri::Manager;
 
@@ -14,6 +14,7 @@ use crate::content::ThumbnailWorker;
 use crate::domain::{ClipboardItem, ClipboardKind};
 use crate::storage::{ClipboardRepository, Database, StoragePaths};
 use crate::sync::{self, v1};
+use v1::ObjectStore as _;
 
 mod auto;
 mod policy;
@@ -614,6 +615,56 @@ pub(super) fn run_sync(app: &tauri::AppHandle) -> Result<SyncRunResult, String> 
     run_sync_cancellable(app, &cancellation)
 }
 
+/// Rotation tombstone key at the configured prefix root, deliberately outside
+/// the engine's `v1/` namespace (`docs/SYNC_V2.md` D2). A device that finds it
+/// was rotated away and must refuse to sync instead of repairing the old
+/// binding from its cache, which would fork the namespace.
+pub(crate) const ROTATED_TO_KEY: &str = "rotated-to";
+
+/// Public descriptor a rotating device leaves at the old prefix root.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct RotationPointer {
+    pub(crate) new_prefix: String,
+    pub(crate) rotated_at_ms: i64,
+    pub(crate) device_id: String,
+}
+
+/// Pure decision behind [`refuse_if_prefix_rotated`]. The object bytes are a
+/// tombstone whether or not they parse, because only this codebase writes the
+/// key — a malformed pointer still means "rotated".
+pub(crate) fn rotation_refusal(pointer: Option<&[u8]>) -> Result<(), String> {
+    let Some(bytes) = pointer else {
+        return Ok(());
+    };
+    match serde_json::from_slice::<RotationPointer>(bytes) {
+        Ok(pointer) => Err(format!(
+            "the sync prefix was rotated to {:?} by device {} at {}; sync stays disabled \
+             here until the new prefix and password are configured",
+            pointer.new_prefix, pointer.device_id, pointer.rotated_at_ms
+        )),
+        Err(_) => Err(
+            "the sync prefix was rotated by another device; sync stays disabled here until \
+             the new prefix and password are configured"
+                .to_string(),
+        ),
+    }
+}
+
+/// Refuses a sync run whose configured prefix carries a rotation tombstone.
+///
+/// Runs before namespace resolution on purpose: a missing `v1/namespace.json`
+/// would otherwise be repaired from the local binding cache and bootstrap a
+/// second namespace under the old password. An S3 error that is not "absent"
+/// propagates — sync fails at the next request anyway, and skipping the check
+/// silently would reopen the fork.
+pub(crate) fn refuse_if_prefix_rotated(store: &v1::S3ObjectStore) -> Result<(), String> {
+    let object = store.get(ROTATED_TO_KEY).map_err(|error| {
+        format!("unable to check the rotation pointer for this sync prefix: {error}")
+    })?;
+    rotation_refusal(object.as_ref().map(|object| object.bytes.as_slice()))
+}
+
 pub(super) fn run_sync_cancellable(
     app: &tauri::AppHandle,
     cancellation: &clipboard_sync::cancellation::CancellationToken,
@@ -643,6 +694,10 @@ pub(super) fn run_sync_cancellable(
     let _resource_publication = database.begin_resource_write();
     let outcome = operation.token().run(|| {
         operation.check()?;
+        // The rotation tombstone outranks everything below: without this check
+        // a stale peer repairs the old binding from cache and forks the
+        // namespace (docs/SYNC_V2.md D2).
+        refuse_if_prefix_rotated(&store)?;
         let stable_scope = settings.remote_scope_id();
         let previous = database
             .sync_namespace_binding(&stable_scope)
@@ -831,12 +886,30 @@ mod tests {
         assert!(validate_sync_endpoint("http://10.0.0.5:9000").is_err());
     }
 
+    #[test]
+    fn rotation_pointer_refuses_the_run_while_absence_passes() {
+        assert!(rotation_refusal(None).is_ok());
+
+        let pointer = serde_json::to_vec(&serde_json::json!({
+            "newPrefix": "clipboard/rotated-abc",
+            "rotatedAtMs": 1_700_000_000_000i64,
+            "deviceId": "device-a",
+        }))
+        .unwrap();
+        let error = rotation_refusal(Some(&pointer)).unwrap_err();
+        assert!(error.contains("device-a"), "{error}");
+        assert!(error.contains("clipboard/rotated-abc"), "{error}");
+
+        // A malformed tombstone still refuses: only this codebase writes the key.
+        let error = rotation_refusal(Some(b"not json")).unwrap_err();
+        assert!(error.contains("rotated"), "{error}");
+    }
+
     #[derive(Default)]
     struct MaterializationStore {
         objects: Mutex<BTreeMap<String, Vec<u8>>>,
         gets: AtomicU64,
     }
-
     impl v1::ObjectStore for MaterializationStore {
         fn list(
             &self,

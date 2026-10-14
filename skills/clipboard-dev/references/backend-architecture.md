@@ -115,12 +115,19 @@ cancellation scope. See `docs/SYNC_V1.md` for upgrading before credential rotati
 
 `sync/v1/s3_smoke.rs` holds opt-in real-server regressions that `MemoryStore` cannot prove:
 a thin ObjectStore decorator cancels after a successful immutable snapshot/segment PUT (the
-real head must stay unchanged; retry preserves pending rows and converges), and an encrypted
+real head must stay unchanged; retry preserves pending rows and converges), an encrypted
 image resource must upload as multi-chunk ciphertext, defer its body during an ordinary pull,
-and materialize byte-identical on the peer. CI runs the smokes through
+and materialize byte-identical on the peer, and a rotation tombstone at the prefix root must
+make a stale peer refuse. CI runs the smokes through
 `.github/workflows/sync-s3.yml` (ubuntu + checksum-verified pinned rustfs); locally use
 `scripts/sync-s3-test.ps1 -Test smoke`, which exports the password. None of it proves native
 exit timing.
+
+Every sync run first reads `{configured_prefix}/rotated-to`
+(`commands/sync::refuse_if_prefix_rotated`) and refuses before namespace resolution when the
+tombstone exists: repairing the old binding from cache would bootstrap a second namespace
+under the old password and fork the scope (design: `docs/SYNC_V2.md` D2). The check runs for
+manual and automatic runs alike and must stay ahead of binding resolution.
 
 ## Storage paths and ownership
 

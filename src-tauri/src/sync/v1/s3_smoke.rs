@@ -894,3 +894,42 @@ fn real_s3_encrypted_resource_materializes_across_devices() {
     assert_eq!(fs::read(&materialized.path).unwrap(), plaintext);
     assert_eq!(materialized.transferred_bytes, stored.bytes.len() as u64);
 }
+
+/// A peer whose configured prefix carries the rotation tombstone must refuse
+/// before namespace resolution; a clean prefix must pass. Proves the tombstone
+/// key resolves against a real server at the prefix root, outside `v1/`
+/// (`docs/SYNC_V2.md` D2).
+#[test]
+#[ignore = "requires a disposable S3-compatible server; run scripts/sync-s3-test.ps1"]
+fn real_s3_rotation_pointer_blocks_a_stale_peer() {
+    use crate::commands::sync::{refuse_if_prefix_rotated, ROTATED_TO_KEY};
+    let config = require_config!();
+    let scope = SmokeScope::new(&config, "rotation-pointer");
+    scope.ensure_bucket();
+    let store = scope.store(None);
+
+    // No tombstone yet: the guard passes and the run would enter the engine.
+    refuse_if_prefix_rotated(&store).expect("a clean prefix must not refuse");
+
+    let pointer = serde_json::json!({
+        "newPrefix": format!("{}/rotated", scope.remote_prefix),
+        "rotatedAtMs": 1_700_000_000_000i64,
+        "deviceId": "rotating-device",
+    })
+    .to_string();
+    s3::put_s3_object(
+        &config.endpoint,
+        &config.region,
+        &config.bucket,
+        &scope.object_key(ROTATED_TO_KEY),
+        pointer.into_bytes(),
+        &config.access_key,
+        &config.secret_key,
+        s3::S3PutCondition::IfAbsent,
+    )
+    .expect("the tombstone must be publishable at the prefix root");
+
+    let error = refuse_if_prefix_rotated(&store).unwrap_err();
+    assert!(error.contains("rotating-device"), "{error}");
+    assert!(error.contains("/rotated"), "{error}");
+}
