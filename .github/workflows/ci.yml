@@ -178,6 +178,13 @@ jobs:
             plain="$log.plain"
             sed 's/\x1b\[[0-9;]*m//g' "$log" >"$plain"
             line="$(grep -m1 -E 'error(\[|:)' "$plain" | cut -c1-100 || true)"
+            # A link failure hides its detail on the following lines.
+            if [ -n "$line" ] && printf '%s' "$line" | grep -q 'linking'; then
+              tail_detail="$(grep -A2 -m1 'error: linking' "$plain" | tail -n +2 | tr '\n' ' ' | cut -c1-80 || true)"
+              if [ -n "$tail_detail" ]; then
+                line="$line | $tail_detail"
+              fi
+            fi
             if [ -z "$line" ]; then
               # A failing test has no `error:` line: nextest prints
               # `FAIL [  1.234s] path::to::test`.
