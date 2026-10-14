@@ -113,10 +113,14 @@ that descriptor via `storage/sync_namespace.rs` for offline materialization and
 rejects replacement of a known binding. All resolution I/O stays inside the same
 cancellation scope. See `docs/SYNC_V1.md` for upgrading before credential rotation.
 
-`sync/v1/s3_smoke.rs` includes an opt-in real-server cancellation regression: a thin
-ObjectStore decorator cancels after a successful immutable snapshot/segment PUT.
-The real head must remain unchanged and retry must preserve pending rows and converge.
-Run through `scripts/sync-s3-test.ps1 -Test smoke`; it does not prove native exit timing.
+`sync/v1/s3_smoke.rs` holds opt-in real-server regressions that `MemoryStore` cannot prove:
+a thin ObjectStore decorator cancels after a successful immutable snapshot/segment PUT (the
+real head must stay unchanged; retry preserves pending rows and converges), and an encrypted
+image resource must upload as multi-chunk ciphertext, defer its body during an ordinary pull,
+and materialize byte-identical on the peer. CI runs the smokes through
+`.github/workflows/sync-s3.yml` (ubuntu + checksum-verified pinned rustfs); locally use
+`scripts/sync-s3-test.ps1 -Test smoke`, which exports the password. None of it proves native
+exit timing.
 
 ## Storage paths and ownership
 
