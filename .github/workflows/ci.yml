@@ -238,5 +238,18 @@ jobs:
                 -f target_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
                 >/dev/null || true
             fi
+            # Which target is linking, and does the framework appear on its
+            # command line at all?
+            target_line="$(grep -o '"cc" "[^"]*"' "$RUNNER_TEMP/test.log.plain" | head -n 1 | cut -c1-120)"
+            cf_line="$(grep -c 'CoreFoundation' "$RUNNER_TEMP/test.log.plain")"
+            detail="target: ${target_line:-unknown} | cf-mentions: $cf_line"
+            gh api --method POST \
+              -H "Accept: application/vnd.github+json" \
+              "/repos/${{ github.repository }}/statuses/${{ github.sha }}" \
+              -f state=failure \
+              -f context=ci-rust-link-target \
+              -f description="$detail" \
+              -f target_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+              >/dev/null || true
           fi
           echo "fingerprint: $fingerprint"
