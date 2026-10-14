@@ -241,8 +241,8 @@ jobs:
             # Which target is linking, and does the framework appear on its
             # command line at all?
             target_line="$(grep -o '"cc" "[^"]*"' "$RUNNER_TEMP/test.log.plain" | head -n 1 | cut -c1-120)"
-            cf_line="$(grep -c 'CoreFoundation' "$RUNNER_TEMP/test.log.plain")"
-            detail="target: ${target_line:-unknown} | cf-mentions: $cf_line"
+            cf_line="$(grep -m1 'CoreFoundation' "$RUNNER_TEMP/test.log.plain" | tr -s ' \t' ' ' | cut -c1-120)"
+            detail="target: ${target_line:-unknown} | cf: ${cf_line:-absent}"
             gh api --method POST \
               -H "Accept: application/vnd.github+json" \
               "/repos/${{ github.repository }}/statuses/${{ github.sha }}" \
