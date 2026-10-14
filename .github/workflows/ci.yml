@@ -96,6 +96,11 @@ jobs:
           # we used to pass here does not exist and was silently ignored.
           # This input is a boolean, not a list of profile directories.
           cache-targets: true
+          # Bumped: the restored macOS cache carried a stale/mismatched
+          # `libring` object file (`ld: warning: object file ...
+          # libring-*.rlib`), which broke every arm64 link. A fresh prefix
+          # purges it once; the next save repopulates the key.
+          prefix: v1-rust
 
       # `ort-sys` downloads its prebuilt ONNX Runtime into a per-user cache
       # directory and bakes that absolute path into the build script output.
@@ -212,7 +217,7 @@ jobs:
           # it flattened as a second status so the symbol names are visible
           # without the web log.
           if [ -f "$RUNNER_TEMP/test.log.plain" ]; then
-            link_block="$(grep -m1 -B10 -A2 'symbol(s) not found' "$RUNNER_TEMP/test.log.plain" | tr '\n' ' ' | tr -s ' ' | cut -c1-130)"
+            link_block="$(grep -m1 -B10 -A2 'symbol(s) not found' "$RUNNER_TEMP/test.log.plain" | tr '\n' ' ' | tr -s ' ' | sed 's|(/Users[^)]*)|(path)|g' | cut -c1-130)"
             if [ -n "$link_block" ]; then
               gh api --method POST \
                 -H "Accept: application/vnd.github+json" \
