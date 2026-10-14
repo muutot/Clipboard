@@ -208,4 +208,26 @@ jobs:
             -f description="$fingerprint" \
             -f target_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
             >/dev/null
+          # A link failure lists its missing symbols on the following lines;
+          # publish each as its own status (context-suffixed) to get past the
+          # 140-character description limit.
+          index=0
+          if [ -f "$RUNNER_TEMP/test.log.plain" ] || [ -f "$RUNNER_TEMP/clippy.log.plain" ]; then
+            for log in "$RUNNER_TEMP/test.log.plain" "$RUNNER_TEMP/clippy.log.plain"; do
+              [ -f "$log" ] || continue
+              while IFS= read -r detail_line; do
+                [ -n "$detail_line" ] || continue
+                gh api --method POST \
+                  -H "Accept: application/vnd.github+json" \
+                  "/repos/${{ github.repository }}/statuses/${{ github.sha }}" \
+                  -f state=failure \
+                  -f context="ci-rust-diagnostics-$index" \
+                  -f description="$detail_line" \
+                  -f target_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+                  >/dev/null || true
+                index=$((index + 1))
+                [ "$index" -ge 6 ] && break 2
+              done < <(grep -m6 -E 'symbol\(s\) not found|undefined symbol|referenced from|framework not found' "$log" | sed 's/^ *//' | cut -c1-120)
+            done
+          fi
           echo "fingerprint: $fingerprint"
