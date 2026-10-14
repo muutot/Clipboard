@@ -61,6 +61,21 @@ impl Database {
         })
     }
 
+    /// Every resource reference of the scope grouped by item id.
+    ///
+    /// Rotation materializes the whole scope before republishing it under a
+    /// new key; enumerating per item would turn a 100k-record scope into 100k
+    /// queries. Items with no references are absent from the map.
+    pub fn list_sync_resource_refs_for_scope(
+        &self,
+        remote_scope: &str,
+    ) -> Result<BTreeMap<String, Vec<SyncResourceRef>>, StorageError> {
+        validate_remote_scope(remote_scope)?;
+        self.with_connection(|connection| {
+            load_sync_resource_refs_for_scope(connection, remote_scope)
+        })
+    }
+
     /// Records a successfully materialized path while retaining the canonical
     /// reference. The reference is the stable content identity used to keep a
     /// later remote metadata update attached to the local cache; local path

@@ -3,6 +3,104 @@
 use super::*;
 
 #[test]
+fn scope_resource_refs_are_grouped_by_item_and_ordered_per_item() {
+    let database = Database::open_in_memory().unwrap();
+    database.initialize_sync().unwrap();
+    let image_key = format!("v1/resources/image/sha256-{}.png", "a".repeat(64));
+    let file_key = format!("v1/resources/file/sha256-{}.txt", "b".repeat(64));
+    let icon_key = format!("v1/resources/icon/sha256-{}.png", "c".repeat(64));
+    let refs = vec![
+        SyncResourceRef {
+            slot: "file".to_string(),
+            ordinal: 1,
+            object_key: file_key.clone(),
+        },
+        SyncResourceRef {
+            slot: "file".to_string(),
+            ordinal: 0,
+            object_key: file_key.clone(),
+        },
+        SyncResourceRef {
+            slot: "icon".to_string(),
+            ordinal: 0,
+            object_key: icon_key.clone(),
+        },
+    ];
+    let image_ref = SyncResourceRef {
+        slot: "image".to_string(),
+        ordinal: 0,
+        object_key: image_key.clone(),
+    };
+    let remote = replicated(
+        "scope-files",
+        "hash-scope-files",
+        "scope files",
+        RecordVersion {
+            modified_at_ms: 500,
+            writer_device_id: REMOTE_DEVICE.to_string(),
+        },
+    );
+    database
+        .apply_sync_snapshot_with_resources(
+            REMOTE_SCOPE,
+            &cursor(0, None),
+            &"a".repeat(64),
+            &MutationBatch {
+                upserts: vec![remote],
+                tombstones: Vec::new(),
+            },
+            &BTreeMap::from([("scope-files".to_string(), refs.clone())]),
+        )
+        .unwrap();
+    let image = replicated(
+        "scope-image",
+        "hash-scope-image",
+        "scope image",
+        RecordVersion {
+            modified_at_ms: 501,
+            writer_device_id: REMOTE_DEVICE.to_string(),
+        },
+    );
+    database
+        .apply_sync_snapshot_with_resources(
+            REMOTE_SCOPE,
+            &cursor(0, None),
+            &"a".repeat(64),
+            &MutationBatch {
+                upserts: vec![image],
+                tombstones: Vec::new(),
+            },
+            &BTreeMap::from([("scope-image".to_string(), vec![image_ref.clone()])]),
+        )
+        .unwrap();
+
+    let grouped = database
+        .list_sync_resource_refs_for_scope(REMOTE_SCOPE)
+        .unwrap();
+    // BTreeMap grouping: item ids in lexical order, refs per item in
+    // (slot, ordinal) order regardless of insertion order.
+    assert_eq!(
+        grouped.keys().cloned().collect::<Vec<_>>(),
+        vec!["scope-files".to_string(), "scope-image".to_string()]
+    );
+    let files = grouped.get("scope-files").unwrap();
+    assert_eq!(files.len(), 3);
+    assert_eq!(files[0].object_key, file_key);
+    assert_eq!(files[0].slot, "file");
+    assert_eq!(files[1].slot, "file");
+    assert_eq!(files[1].ordinal, 1);
+    assert_eq!(files[2].slot, "icon");
+    assert_eq!(grouped.get("scope-image").unwrap(), &[image_ref]);
+
+    // An unknown scope is empty rather than an error, and a scope without
+    // resource rows (e.g. a text-only history) reports nothing.
+    let other = database
+        .list_sync_resource_refs_for_scope(&"f".repeat(64))
+        .unwrap();
+    assert!(other.is_empty());
+}
+
+#[test]
 fn materialized_resources_update_paths_without_replicating_the_cache_write() {
     let database = Database::open_in_memory().unwrap();
     database.initialize_sync().unwrap();

@@ -30,6 +30,43 @@ pub(super) fn load_sync_resource_refs(
     Ok(references)
 }
 
+/// Every resource reference of one scope, grouped by item id in deterministic
+/// order. Rotation needs this to materialize the whole scope before it can
+/// republish: a republished reference without a local body would ship a
+/// dangling object key (`docs/SYNC_V2.md` constraint 3).
+pub(super) fn load_sync_resource_refs_for_scope(
+    connection: &rusqlite::Connection,
+    remote_scope: &str,
+) -> Result<BTreeMap<String, Vec<SyncResourceRef>>, StorageError> {
+    let Some(scope_id) = sync_resource_scope_id(connection, remote_scope)? else {
+        return Ok(BTreeMap::new());
+    };
+    let mut statement = connection.prepare(
+        "SELECT item_id, slot, ordinal, sha256, extension
+           FROM sync_item_resources
+          WHERE scope_id = ?1
+          ORDER BY item_id, slot, ordinal",
+    )?;
+    let rows = statement
+        .query_map(params![scope_id], |row| {
+            let item_id = row.get::<_, String>(0)?;
+            let ordinal = row.get::<_, i64>(2)?;
+            let ordinal = u32::try_from(ordinal)
+                .map_err(|_| rusqlite::Error::IntegralValueOutOfRange(2, ordinal))?;
+            let slot = resource_slot_from_i64(row.get(1)?)?;
+            let sha256 = row.get::<_, Vec<u8>>(3)?;
+            let extension = row.get::<_, String>(4)?;
+            let reference = sync_resource_ref_from_parts(slot, ordinal, &sha256, &extension)?;
+            Ok((item_id, reference))
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut grouped: BTreeMap<String, Vec<SyncResourceRef>> = BTreeMap::new();
+    for (item_id, reference) in rows {
+        grouped.entry(item_id).or_default().push(reference);
+    }
+    Ok(grouped)
+}
+
 pub(super) fn resource_slot_matches(
     old_refs: &[SyncResourceRef],
     new_refs: &[SyncResourceRef],
