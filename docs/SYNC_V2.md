@@ -38,10 +38,10 @@ peer-side rotation guard (`commands/sync::refuse_if_prefix_rotated`): every sync
 `{prefix}/rotated-to` before namespace resolution and refuses with an actionable message when
 another device rotated the prefix away, so a stale peer can never repair the old binding from
 cache and fork the namespace. Pure unit tests plus a real-S3 smoke case
-(`real_s3_rotation_pointer_blocks_a_stale_peer`) cover the decision; the smoke case's green CI
-run is pending for this tree. Remaining: the rotating side (materialize-all → publish at the
-new prefix → write the tombstone → delete the old namespace → re-point the local setting) and
-the frontend flow.
+(`real_s3_rotation_pointer_blocks_a_stale_peer`) cover the decision; both CI workflows are
+green on the same tree (smoke run 38553188977, main CI run 38553189131, sha 23d1cc3a).
+Remaining: the rotating side (materialize-all → publish at the new prefix → write the
+tombstone → delete the old namespace → re-point the local setting) and the frontend flow.
 
 User-visible goal: replace the sync password (or toggle the encryption mode) of an already
 initialized scope without losing remote history or stranding other devices.
