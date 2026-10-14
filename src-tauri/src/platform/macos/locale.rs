@@ -1,11 +1,11 @@
 //! OS locale detection (CoreFoundation) for the `language: "system"` setting.
 //!
 //! The webview reports the Chromium accepted language, which can differ from
-//! the macOS display language; `CFLocaleCopyCurrentLocale` gives the user's
-//! actual locale. See `platform/os_locale.rs` for the shared contract.
+//! the macOS display language; `CFLocaleCopyCurrent` gives the user's actual
+//! locale. See `platform/os_locale.rs` for the shared contract.
 //!
-//! The CoreFoundation declarations live in `ffi.rs`: an extern block in this
-//! module never reached the final link line on the macOS arm64 CI runner.
+//! The CoreFoundation declarations live in `ffi.rs`, next to the other native
+//! declarations of this adapter.
 
 const K_CF_STRING_ENCODING_UTF8: u32 = 0x0800_0100;
 
@@ -13,10 +13,10 @@ const K_CF_STRING_ENCODING_UTF8: u32 = 0x0800_0100;
 /// when CoreFoundation cannot answer.
 pub fn locale_name() -> Option<String> {
     use crate::platform::macos::ffi::{
-        CFLocaleCopyCurrentLocale, CFLocaleGetIdentifier, CFRelease, CFStringGetCString,
+        CFLocaleCopyCurrent, CFLocaleGetIdentifier, CFRelease, CFStringGetCString,
     };
     unsafe {
-        let locale = CFLocaleCopyCurrentLocale();
+        let locale = CFLocaleCopyCurrent();
         if locale.is_null() {
             return None;
         }

@@ -75,16 +75,6 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
 
-      # The runner exports MACOSX_DEPLOYMENT_TARGET=26.x, while rustc links with
-      # its own default minimum (11.0). C-compiled objects (build scripts)
-      # therefore target a newer OS than the link: ld reports
-      # "object file was built for newer 'macOS' version (26.5) than being
-      # linked (11.0)" and OS-version-gated symbols stop resolving. Pin both
-      # sides to rustc's default.
-      - name: Pin the macOS deployment target
-        if: runner.os == 'macOS'
-        run: echo "MACOSX_DEPLOYMENT_TARGET=11.0" >> "$GITHUB_ENV"
-
       - name: Install Linux system dependencies
         if: runner.os == 'Linux'
         run: |
@@ -106,11 +96,6 @@ jobs:
           # we used to pass here does not exist and was silently ignored.
           # This input is a boolean, not a list of profile directories.
           cache-targets: true
-          # Bumped: the restored macOS cache carried a stale/mismatched
-          # `libring` object file (`ld: warning: object file ...
-          # libring-*.rlib`), which broke every arm64 link. A fresh prefix
-          # purges it once; the next save repopulates the key.
-          prefix: v1-rust
 
       # `ort-sys` downloads its prebuilt ONNX Runtime into a per-user cache
       # directory and bakes that absolute path into the build script output.

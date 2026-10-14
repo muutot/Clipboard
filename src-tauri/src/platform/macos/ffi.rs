@@ -75,18 +75,20 @@ extern "C" {
 }
 
 // CoreFoundation is NOT re-exported by ApplicationServices, so it needs its
-// own block. The declarations live in this file rather than in `locale.rs`:
-// the extern block in that module never reached the final link line on the
-// macOS arm64 CI runner (`ld: symbol(s) not found: "_CFLocaleCopyCurrentLocale"`),
-// while every block in this file links. `CFRelease` is declared once here with
-// the canonical `*const` pointee; a second declaration with a different
-// signature (the CoreGraphics side takes `*mut`) trips the
+// own block. The declarations live in this file next to the adapter's other
+// native declarations, and `CFRelease` is declared once here with the
+// canonical `*const` pointee: a second declaration with a different signature
+// (the CoreGraphics side takes `*mut`) trips the
 // `clashing_extern_declarations` error on newer toolchains.
+//
+// Symbol names must match Apple's exactly: `CFLocaleCopyCurrentLocale` does
+// not exist (the real entry point is `CFLocaleCopyCurrent`), and a wrong name
+// surfaces only as `ld: symbol(s) not found` on the macOS job.
 #[cfg(target_os = "macos")]
 #[link(name = "CoreFoundation", kind = "framework")]
 extern "C" {
     pub fn CFRelease(cf: *const std::ffi::c_void);
-    pub fn CFLocaleCopyCurrentLocale() -> *const std::ffi::c_void;
+    pub fn CFLocaleCopyCurrent() -> *const std::ffi::c_void;
     pub fn CFLocaleGetIdentifier(locale: *const std::ffi::c_void) -> *const std::ffi::c_void;
     pub fn CFStringGetCString(
         the_string: *const std::ffi::c_void,

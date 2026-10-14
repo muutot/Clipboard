@@ -11,16 +11,4 @@ fn main() {
             .file("glibc_compat.c")
             .compile("glibc_compat");
     }
-
-    // macOS only: force the frameworks onto the link line. The `#[link]`
-    // attributes on the extern blocks under `platform/macos/`, and the
-    // `rustc-link-lib=framework=` form, did not put CoreFoundation on the final
-    // link line for the lib-test target on the current toolchain/runner
-    // combination (`ld: symbol(s) not found: "_CFLocaleCopyCurrentLocale"` on
-    // arm64). `rustc-link-arg` passes the raw arguments to cc after the object
-    // files, which even a single-pass linker resolves.
-    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {
-        println!("cargo:rustc-link-arg=-framework");
-        println!("cargo:rustc-link-arg=CoreFoundation");
-    }
 }
