@@ -1868,22 +1868,6 @@
     });
   }
 
-  function handleEscapePriority(event: KeyboardEvent) {
-    if (
-      event.key !== "Escape" ||
-      bulk.selectedIds.size === 0 ||
-      editingId ||
-      contextMenuOpen ||
-      isEditableKeyboardTarget(event.target)
-    ) {
-      return;
-    }
-
-    bulk.selectedIds = new Set();
-    // Don't preventDefault — let the event continue so a single Esc press
-    // can clear bulk selection, close detail panel, or hide the window.
-  }
-
   // Carries the pressed card id so the signal is consumed as an edge by the
   // targeted card only; a bare counter would re-fire on every other card the
   // moment it becomes selected.
@@ -2187,7 +2171,7 @@
   });
 </script>
 
-<svelte:window onkeydowncapture={handleEscapePriority} onkeydown={handleGlobalKeydown} />
+<svelte:window onkeydown={handleGlobalKeydown} />
 
 <main
   class="app-shell"

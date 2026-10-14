@@ -146,6 +146,15 @@ export function resolveKeyAction(event: KeyboardEvent, ctx: KeyActionContext): K
       return { type: "none", prevent: false };
     }
     if (ctx.detailEditor) return { type: "none", prevent: false };
+    // A bulk selection owns the first Escape (same handler as the Backspace
+    // clearSelection binding): it exits multi-select instead of letting the
+    // press fall through to the tag filter or the hideWindow branch. Editable
+    // surfaces keep Escape for themselves (the search box clears its query
+    // first), so the branch reuses `editableTarget` rather than the narrower
+    // `detailEditor` guard.
+    if (ctx.selectedCount > 0 && !editableTarget) {
+      return { type: "clear-selection", prevent: false };
+    }
     if (ctx.hasDetail) {
       // DetailPanel handles its own Escape.
       return { type: "none", prevent: false };

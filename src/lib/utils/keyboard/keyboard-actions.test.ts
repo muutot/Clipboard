@@ -134,6 +134,43 @@ describe("resolveKeyAction — Escape", () => {
     });
   });
 
+  it("clears a bulk selection instead of hiding the window or unwinding the tag filter", () => {
+    // The reported bug: one Escape press both exited multi-select and hid the
+    // main window, because the route's capture-phase clear and the
+    // bubble-phase hide branch ran off the same keystroke.
+    expect(
+      resolveKeyAction(keyEvent({ key: "Escape" }), ctx({ isTauri: true, selectedCount: 2 })),
+    ).toEqual({ type: "clear-selection", prevent: false });
+    // An active tag filter also survives the first press: Escape unwinds one
+    // layer at a time (selection first, tag filter on the next press).
+    expect(
+      resolveKeyAction(
+        keyEvent({ key: "Escape" }),
+        ctx({ isTauri: true, selectedCount: 2, tagFilter: "work" }),
+      ),
+    ).toEqual({ type: "clear-selection", prevent: false });
+    expect(
+      resolveKeyAction(
+        keyEvent({ key: "Escape" }),
+        ctx({ isTauri: true, selectedCount: 2, hasDetail: true }),
+      ),
+    ).toEqual({ type: "clear-selection", prevent: false });
+    // With the selection already gone the press is free to hide the window.
+    expect(resolveKeyAction(keyEvent({ key: "Escape" }), ctx({ isTauri: true }))).toEqual({
+      type: "escape-hide-window",
+      prevent: false,
+    });
+  });
+
+  it("leaves Escape inside an editable surface to that surface", () => {
+    const input = targetOn("input");
+    const event = Object.defineProperty(keyEvent({ key: "Escape" }), "target", { value: input });
+    expect(resolveKeyAction(event, ctx({ isTauri: true, selectedCount: 2 })).type).toBe(
+      "escape-hide-window",
+    );
+    input.remove();
+  });
+
   it("never fires while an IME composition is active", () => {
     const tauriCtx = ctx({ isTauri: true });
     // Cancelling a composition with Escape must not hide the window…

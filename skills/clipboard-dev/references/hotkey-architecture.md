@@ -172,6 +172,17 @@ Window-only (main window focused):
   or `keyCode === 229`: while an IME composition is active the keys belong to
   the IME, and cancelling a composition with Escape must not also hide the
   window. Keep this guard on top of `resolveKeyAction` when extending it.
+- Plain Escape resolves entirely inside `resolveKeyAction` (the route has no
+  capture-phase keydown listener): an already-prevented press, inline editing,
+  image fullscreen, the tag edit/saved-search dialog, or an open card context
+  menu owns the key; then a detail-panel editor keeps it; then a bulk
+  selection is cleared (`clear-selection`, the same handler as the Backspace
+  binding, exempt while focus sits in an editable surface such as the search
+  box); then `DetailPanel` closes itself; then an active tag filter is toggled
+  off; then the window hides. The bulk-selection branch must outrank
+  `escape-hide-window` and `escape-toggle-tag` — a capture-phase clear that let
+  the same keystroke reach the hide branch made one press both exit
+  multi-select and hide the window.
 - Type-to-search is the final `resolveKeyAction` fallback (`focus-search-type`):
   a printable single character typed outside every editable surface focuses the
   search box and appends the character. Because it sits after all bound chords
