@@ -132,33 +132,41 @@ jobs:
           } >>"$RUNNER_TEMP/clippy.log"
           exit "$code"
 
-      - name: Surface clippy failure fingerprint
+      - name: Surface rust failure fingerprint
         if: failure()
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -uo pipefail
-          log="$RUNNER_TEMP/clippy.log"
-          fingerprint="clippy failed without a captured log"
-          if [ -f "$log" ]; then
+          fingerprint="rust job failed without a captured log"
+          for log in "$RUNNER_TEMP/test.log" "$RUNNER_TEMP/clippy.log"; do
+            [ -f "$log" ] || continue
             # Cargo colorizes even when piped on CI, so strip the escapes
             # before matching (an anchored ^error would miss them).
-            plain="$RUNNER_TEMP/clippy-plain.log"
+            plain="$log.plain"
             sed 's/\x1b\[[0-9;]*m//g' "$log" >"$plain"
             line="$(grep -m1 -E 'error(\[|:)' "$plain" | cut -c1-100 || true)"
+            if [ -z "$line" ]; then
+              # A failing test has no `error:` line: nextest prints
+              # `FAIL [  1.234s] path::to::test`.
+              line="$(grep -m1 -E '^ *FAIL \[' "$plain" | sed 's/^ *//' | cut -c1-100 || true)"
+            fi
+            if [ -z "$line" ]; then
+              line="$(grep -m1 -E 'Summary .* (FAIL|failed)' "$plain" | cut -c1-100 || true)"
+            fi
             if [ -n "$line" ]; then
               fingerprint="$line"
-            else
-              detail="$(grep -E 'clippy_exit|disk_free|log_bytes' "$plain" | tr '\n' ' ' | cut -c1-100 || true)"
-              fingerprint="no error line; ${detail:-empty log}"
+              break
             fi
-          fi
+            detail="$(grep -E 'test_exit|clippy_exit|disk_free|log_bytes' "$plain" | tr '\n' ' ' | cut -c1-100 || true)"
+            fingerprint="no error line; ${detail:-empty log}"
+          done
           gh api --method POST \
             -H "Accept: application/vnd.github+json" \
             "/repos/${{ github.repository }}/statuses/${{ github.sha }}" \
             -f state=failure \
-            -f context=ci-clippy-diagnostics \
+            -f context=ci-rust-diagnostics \
             -f description="$fingerprint" \
             -f target_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
             >/dev/null
@@ -170,6 +178,7 @@ jobs:
           tool: cargo-nextest
 
       - name: Test
+        shell: bash
         env:
           # `read_clipboard_file_paths_reads_a_cf_hdrop` empties and rewrites the
           # real system clipboard. That is harmless on a headless CI runner, but
@@ -177,4 +186,16 @@ jobs:
           # `ci:local`, so the test only runs when this opt-in is set. The test
           # is `cfg(target_os = "windows")`, so only the Windows runner enables it.
           CLIPBOARD_ALLOW_REAL_CLIPBOARD_TEST: ${{ runner.os == 'Windows' && '1' || '' }}
-        run: cargo nextest run --cargo-profile ci --manifest-path src-tauri/Cargo.toml --workspace
+        run: |
+          # Tee for the same reason as Clippy: a platform-only failure (the
+          # macOS job runs tests that never compile elsewhere) must be
+          # visible through the statuses API.
+          code=0
+          cargo nextest run --cargo-profile ci --manifest-path src-tauri/Cargo.toml \
+            --workspace 2>&1 |
+            tee "$RUNNER_TEMP/test.log" || code=$?
+          {
+            echo "test_exit=$code"
+            echo "log_bytes=$(wc -c <"$RUNNER_TEMP/test.log")"
+          } >>"$RUNNER_TEMP/test.log"
+          exit "$code"
