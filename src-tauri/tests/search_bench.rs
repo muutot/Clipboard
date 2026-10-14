@@ -527,3 +527,76 @@ fn timed_drain(pending: usize, n: u32) -> Vec<Duration> {
 
 #[allow(dead_code)]
 fn _unused(_: &HashMap<String, (f64, f64)>) {}
+
+// Pipeline tail: a query returns candidate ids and the command layer hydrates
+// full rows for detail/copy/edit (`get_items_by_ids`, chunked at the 500-id
+// lookup chunk). `docs/SEARCH_OPTIMIZATION_REPORT.md` flagged this read as an
+// unmeasured tail cost of the search pipeline; measure it at the report's
+// corpus sizes with the id-set shapes the real pipeline produces (one id for
+// detail, a page-sized batch for hydration).
+#[test]
+#[ignore = "performance benchmark; run explicitly in release mode"]
+fn id_hydration_benchmark() {
+    use clipboard_desktop_lib::domain::{ClipboardItem, ClipboardKind};
+    use clipboard_desktop_lib::storage::{ClipboardRepository, Database};
+
+    fn item(id: &str, created_at_ms: i64) -> ClipboardItem {
+        ClipboardItem {
+            id: id.to_owned(),
+            kind: ClipboardKind::Text,
+            title: "人脸 脏乱".to_owned(),
+            text_content: Some("人脸 脏乱 在项目中有标签内容".to_owned()),
+            html_content: None,
+            rtf_content: None,
+            resource_path: None,
+            preview_path: None,
+            content_hash: format!("hash-{id}"),
+            source_app: Some("bench".to_owned()),
+            size_bytes: 32,
+            created_at_ms,
+            last_used_at_ms: None,
+            is_favorite: false,
+            icon_path: None,
+            metadata_json: None,
+        }
+    }
+
+    for count in [20_000usize, 80_000usize] {
+        let root = std::env::temp_dir().join(format!(
+            "clipboard-hydrate-bench-{count}-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        // On-disk database: the hydration read is the query tail of a real
+        // pipeline, so its page-cache behavior must match production.
+        let db = Database::open(root.join("clipboard.db")).unwrap();
+        let (seed, _) = timed(
+            || {
+                for i in 0..count {
+                    db.save_item(&item(&format!("item-{i}"), 1_700_000_000_000 + i as i64))
+                        .unwrap();
+                }
+            },
+            1,
+        );
+
+        println!("\n== hydrate corpus={count} ==");
+        println!("key=seed_ms:{} corpus={count}", summary(&seed).0);
+
+        for batch in [1usize, 20, 100, 500] {
+            // Deterministic spread across the corpus: every batch reads rows
+            // from the same distance distribution a paged cursor produces,
+            // instead of a clustered run of rowids.
+            let ids: Vec<String> = (0..batch)
+                .map(|k| format!("item-{}", k * count / batch))
+                .collect();
+            let (samples, hydrated) = timed(|| db.get_items_by_ids(&ids).unwrap(), REPEATS);
+            assert_eq!(hydrated.len(), batch, "every requested id must hydrate");
+            let (p50, p95) = summary(&samples);
+            println!("key=hydrate_ms_p50:{p50} p95:{p95} batch:{batch} corpus={count}");
+        }
+
+        drop(db);
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+}
