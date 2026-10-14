@@ -209,7 +209,7 @@ jobs:
           # A compile error outranks a server problem: without a build there is
           # no test output at all.
           if [ -f "$smoke_log" ]; then
-            build_error="$(grep -m1 -E '^error' "$smoke_log" | cut -c1-80)"
+            build_error="$(grep -m1 -E '^error' "$smoke_log" | cut -c1-80 || true)"
             if [ -n "$build_error" ]; then
               fingerprint="$build_error"
             fi
