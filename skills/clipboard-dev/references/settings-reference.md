@@ -61,43 +61,43 @@ Every card kind shares one estimator contract: the `*Height` fields are content 
 
 ## General scalar/enum settings
 
-| Field                         | Type/allowed values                         | Default      | Range when numeric                                                               |
-| ----------------------------- | ------------------------------------------- | ------------ | -------------------------------------------------------------------------------- |
-| `language`                    | `"system"`, `"zh-CN"` or `"en"`             | `"system"`   | —                                                                                |
-| `windowTransparency`          | number                                      | `95`         | 60–100                                                                           |
-| `windowEffect`                | `"off"`, `"acrylic"`, or `"mica"`           | `"off"`      | —                                                                                |
-| `windowOpacityAffectsText`    | boolean                                     | `false`      | —                                                                                |
-| `pinCopiedToTop`              | boolean                                     | `true`       | —                                                                                |
-| `useRecycleBin`               | boolean                                     | `true`       | —                                                                                |
-| `pasteCleaningEnabled`        | boolean                                     | `false`      | —                                                                                |
-| `doubleClickPaste`            | boolean                                     | `true`       | —                                                                                |
-| `onboardingCompleted`         | boolean                                     | `false`      | —                                                                                |
-| `maxTextCaptureBytes`         | number (bytes)                              | `500_000`    | 10000–10000000                                                                   |
-| `showToastNotifications`      | boolean                                     | `true`       | —                                                                                |
-| `rememberWindowPosition`      | boolean                                     | `false`      | —                                                                                |
-| `alwaysOnTop`                 | boolean                                     | `false`      | —                                                                                |
-| `useSystemTitleBar`           | boolean                                     | `false`      | —                                                                                |
-| `theme`                       | `"dark"`, `"light"`, or `"custom"`          | `"dark"`     | —                                                                                |
-| `imageFullscreenMode`         | `"overlay"` or `"desktop"`                  | `"overlay"`  | —                                                                                |
-| `viewerBackdropOpacity`       | number                                      | `92`         | 0–100                                                                            |
-| `searchSuggestionMode`        | `"off"`, `"panel"`, or `"inline"`           | `"off"`      | —                                                                                |
-| `searchHistoryEnabled`        | boolean                                     | `false`      | —                                                                                |
-| `searchPlaceholder`           | string                                      | `""`         | trimmed, ≤80 chars; empty = use localized default text (`app.searchPlaceholder`) |
-| `cardActionsDisplay`          | `"hover"` or `"always"`                     | `"hover"`    | —                                                                                |
-| `quickCopyBadgeAlwaysVisible` | boolean                                     | `true`       | —                                                                                |
-| `showSettingsCloseButton`     | boolean                                     | `true`       | —                                                                                |
-| `detailDisplayMode`           | `"overlay"` or `"split"`                    | `"overlay"`  | —                                                                                |
-| `groupDisplayMode`            | `"iconText"`, `"iconOnly"`, or `"textOnly"` | `"iconText"` | —                                                                                |
-| `pageSizeLimit`               | number                                      | `500`        | 500–6000                                                                         |
-| `searchPageSizeLimit`         | number                                      | `500`        | 50–1000                                                                          |
-| `searchCacheSize`             | number                                      | `500`        | 200–2000                                                                         |
-| `searchCacheEviction`         | `"fifo"` or `"lru"`                         | `"fifo"`     | —                                                                                |
-| `searchIndexSyncMode`         | `"lazy"` or `"background"`                  | `"lazy"`     | —                                                                                |
-| `updateSource`                | `"github"` or `"gitcode"`                   | `"gitcode"`  | —                                                                                |
-| `colorIcons`                  | boolean                                     | `false`      | —                                                                                |
-| `iconColors`                  | `IconColors` map (hex strings)              | `{}`         | keys limited to `ICON_NAMES`; values must be `#rrggbb`/`#rrggbbaa`               |
-| `loadTolerance`               | number                                      | `100`        | 50–500                                                                           |
-| `logLevel`                    | `"error"`, `"warn"`, `"info"`, or `"debug"` | `"info"`     | —                                                                                |
+| Field                         | Type/allowed values                         | Default      | Range when numeric                                                                                                                            |
+| ----------------------------- | ------------------------------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `language`                    | `"system"`, `"zh-CN"` or `"en"`             | `"system"`   | `system` resolves from the OS UI locale (`get_os_locale`), falling back to the webview `navigator.language`; any `zh` variant maps to `zh-CN` |
+| `windowTransparency`          | number                                      | `95`         | 60–100                                                                                                                                        |
+| `windowEffect`                | `"off"`, `"acrylic"`, or `"mica"`           | `"off"`      | —                                                                                                                                             |
+| `windowOpacityAffectsText`    | boolean                                     | `false`      | —                                                                                                                                             |
+| `pinCopiedToTop`              | boolean                                     | `true`       | —                                                                                                                                             |
+| `useRecycleBin`               | boolean                                     | `true`       | —                                                                                                                                             |
+| `pasteCleaningEnabled`        | boolean                                     | `false`      | —                                                                                                                                             |
+| `doubleClickPaste`            | boolean                                     | `true`       | —                                                                                                                                             |
+| `onboardingCompleted`         | boolean                                     | `false`      | —                                                                                                                                             |
+| `maxTextCaptureBytes`         | number (bytes)                              | `500_000`    | 10000–10000000                                                                                                                                |
+| `showToastNotifications`      | boolean                                     | `true`       | —                                                                                                                                             |
+| `rememberWindowPosition`      | boolean                                     | `false`      | —                                                                                                                                             |
+| `alwaysOnTop`                 | boolean                                     | `false`      | —                                                                                                                                             |
+| `useSystemTitleBar`           | boolean                                     | `false`      | —                                                                                                                                             |
+| `theme`                       | `"dark"`, `"light"`, or `"custom"`          | `"dark"`     | —                                                                                                                                             |
+| `imageFullscreenMode`         | `"overlay"` or `"desktop"`                  | `"overlay"`  | —                                                                                                                                             |
+| `viewerBackdropOpacity`       | number                                      | `92`         | 0–100                                                                                                                                         |
+| `searchSuggestionMode`        | `"off"`, `"panel"`, or `"inline"`           | `"off"`      | —                                                                                                                                             |
+| `searchHistoryEnabled`        | boolean                                     | `false`      | —                                                                                                                                             |
+| `searchPlaceholder`           | string                                      | `""`         | trimmed, ≤80 chars; empty = use localized default text (`app.searchPlaceholder`)                                                              |
+| `cardActionsDisplay`          | `"hover"` or `"always"`                     | `"hover"`    | —                                                                                                                                             |
+| `quickCopyBadgeAlwaysVisible` | boolean                                     | `true`       | —                                                                                                                                             |
+| `showSettingsCloseButton`     | boolean                                     | `true`       | —                                                                                                                                             |
+| `detailDisplayMode`           | `"overlay"` or `"split"`                    | `"overlay"`  | —                                                                                                                                             |
+| `groupDisplayMode`            | `"iconText"`, `"iconOnly"`, or `"textOnly"` | `"iconText"` | —                                                                                                                                             |
+| `pageSizeLimit`               | number                                      | `500`        | 500–6000                                                                                                                                      |
+| `searchPageSizeLimit`         | number                                      | `500`        | 50–1000                                                                                                                                       |
+| `searchCacheSize`             | number                                      | `500`        | 200–2000                                                                                                                                      |
+| `searchCacheEviction`         | `"fifo"` or `"lru"`                         | `"fifo"`     | —                                                                                                                                             |
+| `searchIndexSyncMode`         | `"lazy"` or `"background"`                  | `"lazy"`     | —                                                                                                                                             |
+| `updateSource`                | `"github"` or `"gitcode"`                   | `"gitcode"`  | —                                                                                                                                             |
+| `colorIcons`                  | boolean                                     | `false`      | —                                                                                                                                             |
+| `iconColors`                  | `IconColors` map (hex strings)              | `{}`         | keys limited to `ICON_NAMES`; values must be `#rrggbb`/`#rrggbbaa`                                                                            |
+| `loadTolerance`               | number                                      | `100`        | 50–500                                                                                                                                        |
+| `logLevel`                    | `"error"`, `"warn"`, `"info"`, or `"debug"` | `"info"`     | —                                                                                                                                             |
 
 Native opacity now applies on Windows/macOS/Linux. When `windowOpacityAffectsText` is false, native alpha resets to 100% and CSS controls only backgrounds. `windowEffect` retains its stored off/acrylic/mica values: macOS maps the latter two to Sidebar/UnderWindowBackground materials; Linux X11 requests compositor blur, while Wayland needs compositor configuration. Native window updates run on the main thread.
 

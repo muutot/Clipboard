@@ -25,6 +25,8 @@ describe("settings search section targets", () => {
   it("routes font search hits to the matching sub-tab", () => {
     expect(fontSectionFor("font.base")).toBe("interface");
     expect(fontSectionFor("font.secondary")).toBe("interface");
+    expect(fontSectionFor("font.tiny")).toBe("interface");
+    expect(fontSectionFor("font.search")).toBe("interface");
     expect(fontSectionFor("font.card-title")).toBe("card");
     expect(fontSectionFor("font.card-preview")).toBe("card");
   });

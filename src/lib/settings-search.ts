@@ -501,12 +501,6 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
     i18n("layout.searchHeightDescription"),
   ),
   entry(
-    "layout.search-font-size",
-    { section: "layout" },
-    i18n("layout.searchFontSize"),
-    i18n("layout.searchFontSizeDescription"),
-  ),
-  entry(
     "layout.card-border-radius",
     { section: "layout" },
     i18n("layout.cardBorderRadius"),
@@ -534,6 +528,13 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
     i18n("general.fontSizeTinyLabel"),
     i18n("general.fontSizeTinyDescription"),
     ["备注文字", "tiny font", "备注字号"],
+  ),
+  entry(
+    "font.search",
+    { section: "font", fontSection: "interface" },
+    i18n("general.fontSizeSearchLabel"),
+    i18n("general.fontSizeSearchDescription"),
+    ["搜索框字体", "search font", "搜索字号"],
   ),
   entry(
     "font.card-title",

@@ -815,6 +815,8 @@ export interface LocaleDefinition {
     fontSizeSecondaryDescription: string;
     fontSizeTinyLabel: string;
     fontSizeTinyDescription: string;
+    fontSizeSearchLabel: string;
+    fontSizeSearchDescription: string;
     fontSizeCardTitleLabel: string;
     fontSizeCardTitleDescription: string;
     fontSizeCardPreviewLabel: string;
@@ -975,8 +977,6 @@ export interface LocaleDefinition {
     imageHeightDescription: string;
     searchHeight: string;
     searchHeightDescription: string;
-    searchFontSize: string;
-    searchFontSizeDescription: string;
     cardBorderRadius: string;
     cardBorderRadiusDescription: string;
   };

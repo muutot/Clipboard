@@ -92,6 +92,18 @@
       8,
       13,
     ),
+    {
+      type: "slider",
+      id: "font.search",
+      icon: "search",
+      label: _t("general.fontSizeSearchLabel"),
+      desc: _t("general.fontSizeSearchDescription"),
+      get: () => s.searchFontSize,
+      set: (v) => generalSettings.updateSetting("searchFontSize", v),
+      min: 10,
+      max: 24,
+      suffix: "px",
+    },
   ]);
 
   const cardSliders: SettingEntryConfig[] = $derived([

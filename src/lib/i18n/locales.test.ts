@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { resolvePath } from "./index";
+import { localeFromName, resolvePath } from "./index";
 import en from "./locales/en";
 import zhCN from "./locales/zh-CN";
 
@@ -72,6 +72,20 @@ describe("i18n locales", () => {
     expect(zhCN.detail.file.length).toBeGreaterThan(0);
   });
 
+  it("maps every Chinese locale name to zh-CN", () => {
+    // Webview (`navigator.language`), Windows (`GetUserDefaultLocaleName`) and
+    // Linux POSIX values all funnel through this one rule.
+    for (const name of ["zh-CN", "zh", "zh-Hans-CN", "zh_CN", "ZH-TW", "  zh-SG  "]) {
+      expect(localeFromName(name)).toBe("zh-CN");
+    }
+  });
+
+  it("maps non-Chinese and missing locale names to en", () => {
+    for (const name of ["en-US", "en", "ja-JP", "fr-FR", "", "   ", null, undefined]) {
+      expect(localeFromName(name)).toBe("en");
+    }
+  });
+
   it("resolves every dotted-path literal referenced from source", () => {
     // Dotted literals that are NOT locale keys: code property accesses, and
     // settings search entry IDs, which anchor panels via
@@ -82,11 +96,13 @@ describe("i18n locales", () => {
       "event.key",
       "item.id",
       "window.localStorage",
+      "navigator.language",
       "about.info",
       "about.update",
       "font.base",
       "font.secondary",
       "font.tiny",
+      "font.search",
       "ocr.engine",
       "ocr.model",
       "recording.pause",

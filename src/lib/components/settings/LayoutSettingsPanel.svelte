@@ -102,17 +102,6 @@
     },
     {
       type: "slider",
-      icon: "type",
-      label: _t("layout.searchFontSize"),
-      desc: _t("layout.searchFontSizeDescription"),
-      get: () => s.searchFontSize,
-      set: (v) => generalSettings.updateSetting("searchFontSize", v),
-      min: 10,
-      max: 24,
-      suffix: "px",
-    },
-    {
-      type: "slider",
       icon: "grid",
       label: _t("layout.cardBorderRadius"),
       desc: _t("layout.cardBorderRadiusDescription"),
