@@ -208,40 +208,20 @@ jobs:
             -f description="$fingerprint" \
             -f target_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
             >/dev/null
-          # A link failure lists its missing symbols on the following lines;
-          # publish each as its own status (context-suffixed) to get past the
-          # 140-character description limit.
-          index=0
-          if [ -f "$RUNNER_TEMP/test.log.plain" ] || [ -f "$RUNNER_TEMP/clippy.log.plain" ]; then
-            for log in "$RUNNER_TEMP/test.log.plain" "$RUNNER_TEMP/clippy.log.plain"; do
-              [ -f "$log" ] || continue
-              # The frameworks on the cc link line live inside one huge note
-              # line; extract just the framework references (flag form or
-              # full path form) instead of matching the whole line.
-              frameworks="$(grep -o -E '(-framework +[A-Za-z0-9_]+|/System/Library/Frameworks/[A-Za-z0-9_]+\.framework)' "$log" | sed 's/ *$//' | sort -u | paste -sd, - | cut -c1-120)"
-              if [ -n "$frameworks" ]; then
-                gh api --method POST \
-                  -H "Accept: application/vnd.github+json" \
-                  "/repos/${{ github.repository }}/statuses/${{ github.sha }}" \
-                  -f state=failure \
-                  -f context="ci-rust-frameworks" \
-                  -f description="link frameworks: $frameworks" \
-                  -f target_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
-                  >/dev/null || true
-              fi
-              while IFS= read -r detail_line; do
-                [ -n "$detail_line" ] || continue
-                gh api --method POST \
-                  -H "Accept: application/vnd.github+json" \
-                  "/repos/${{ github.repository }}/statuses/${{ github.sha }}" \
-                  -f state=failure \
-                  -f context="ci-rust-diagnostics-$index" \
-                  -f description="$detail_line" \
-                  -f target_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
-                  >/dev/null || true
-                index=$((index + 1))
-                [ "$index" -ge 6 ] && break 2
-              done < <(grep -m6 -E 'symbol\(s\) not found|undefined symbol|referenced from|framework not found' "$log" | sed 's/^ *//' | cut -c1-120)
-            done
+          # A link failure lists its missing symbols at the very end of its
+          # output; publish the stripped log tail as a second status so the
+          # symbol names are visible without the web log.
+          if [ -f "$RUNNER_TEMP/test.log.plain" ]; then
+            tail_text="$(tr -s ' \t' ' ' <"$RUNNER_TEMP/test.log.plain" | tail -c 130)"
+            if [ -n "$tail_text" ]; then
+              gh api --method POST \
+                -H "Accept: application/vnd.github+json" \
+                "/repos/${{ github.repository }}/statuses/${{ github.sha }}" \
+                -f state=failure \
+                -f context=ci-rust-tail \
+                -f description="$tail_text" \
+                -f target_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+                >/dev/null || true
+            fi
           fi
           echo "fingerprint: $fingerprint"
