@@ -1,6 +1,7 @@
 import { writable, derived, get } from "svelte/store";
 import type { Locale, LocaleDefinition } from "./types";
 import { isTauriRuntime } from "$lib/services/runtime";
+import { getOsLocaleName } from "$lib/services/locale";
 import type { Language } from "$lib/types/clipboard";
 import zhCN from "./locales/zh-CN";
 import en from "./locales/en";
@@ -12,12 +13,39 @@ const locales: Record<Locale, LocaleDefinition> = {
 
 const STORAGE_KEY = "clipboard-locale";
 
-/** Follow the OS locale: Chinese environments get `zh-CN`, everything else `en`. */
+/**
+ * Maps a BCP-47-ish locale name to a supported UI locale. Any `zh` variant
+ * (zh-CN, zh-Hans-CN, zh_TW) resolves to `zh-CN`; everything else resolves to
+ * `en`. Pure so both the webview and the OS answer share one rule.
+ */
+export function localeFromName(name: string | null | undefined): Locale {
+  return name?.trim().toLowerCase().startsWith("zh") ? "zh-CN" : "en";
+}
+
+/** OS UI locale read once per window; `null` until loaded or when unavailable. */
+let osLocaleName: string | null = null;
+let osLocaleLoaded = false;
+
+/**
+ * Reads the OS UI locale from the desktop backend. Must settle before the
+ * first render of a window that resolves `language: "system"`, otherwise the
+ * webview answer would paint first and the correction would flash. Resolves
+ * immediately outside the Tauri runtime.
+ */
+export async function loadOsLocale(): Promise<void> {
+  if (osLocaleLoaded || !isTauriRuntime()) return;
+  osLocaleLoaded = true;
+  osLocaleName = await getOsLocaleName();
+}
+
+/**
+ * Follows the system language. The OS answer wins over the webview:
+ * `navigator.language` follows the Chromium accepted-language list, which on
+ * Windows can report `en-US` while the display language is Chinese.
+ */
 export function resolveSystemLocale(): Locale {
-  if (typeof navigator !== "undefined" && navigator.language?.startsWith("zh")) {
-    return "zh-CN";
-  }
-  return "en";
+  const name = osLocaleName ?? (typeof navigator !== "undefined" ? navigator.language : null);
+  return localeFromName(name);
 }
 
 /** Resolve a settings `Language` (which may be `"system"`) to a concrete locale. */

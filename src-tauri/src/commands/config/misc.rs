@@ -20,6 +20,15 @@ pub fn get_runtime_info() -> RuntimeInfo {
     platform::runtime_info()
 }
 
+/// OS UI locale name for the `language: "system"` setting. The webview's
+/// `navigator.language` follows the Chromium accepted-language list, which on
+/// Windows can disagree with the OS display language, so the frontend prefers
+/// this answer and only falls back to `navigator.language` when it is `null`.
+#[tauri::command]
+pub fn get_os_locale() -> Option<String> {
+    platform::os_locale_name()
+}
+
 #[tauri::command]
 pub fn toggle_privacy_pause(
     app: tauri::AppHandle,

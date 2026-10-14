@@ -90,6 +90,8 @@ mod error;
 pub(crate) mod ffi;
 mod intended;
 #[cfg(target_os = "macos")]
+pub(crate) mod locale;
+#[cfg(target_os = "macos")]
 pub(crate) mod objc;
 #[cfg(test)]
 mod tests;

@@ -30,6 +30,7 @@ mod macos_image;
 pub mod modifier_input;
 #[cfg(any(test, not(target_os = "windows")))]
 pub mod native_hotkeys;
+pub mod os_locale;
 pub mod platform_info;
 #[cfg(any(test, not(target_os = "windows")))]
 pub mod quick_paste;
@@ -45,6 +46,7 @@ use std::path::Path;
 
 pub use autostart::{decide_autostart_action, sync_autostart, AutostartAction};
 pub use dispatch::{platform, ClipboardImageData, PlatformClipboard};
+pub use os_locale::os_locale_name;
 pub use platform_info::{
     current_capabilities, get_platform_info, runtime_info, ClipboardPlatform, ForegroundApp,
     Platform, PlatformCapabilities, PlatformInfo, RuntimeInfo,
