@@ -118,10 +118,19 @@ jobs:
         run: |
           # Tee so a failure can be surfaced through the statuses API: the
           # maintainer may not be able to open the Actions web log from every
-          # environment (same constraint as the sync-s3.yml fingerprint).
+          # environment (same constraint as the sync-s3.yml fingerprint). A
+          # killed run (OOM, full disk) leaves no error line, so the exit code
+          # and disk headroom are recorded next to the log.
+          code=0
           cargo clippy --profile ci --manifest-path src-tauri/Cargo.toml \
             --workspace --all-targets -- -D warnings 2>&1 |
-            tee "$RUNNER_TEMP/clippy.log"
+            tee "$RUNNER_TEMP/clippy.log" || code=$?
+          {
+            echo "clippy_exit=$code"
+            echo "disk_free=$(df -h . | tail -n1 | tr -s ' ' | cut -d' ' -f4)"
+            echo "log_bytes=$(wc -c <"$RUNNER_TEMP/clippy.log")"
+          } >>"$RUNNER_TEMP/clippy.log"
+          exit "$code"
 
       - name: Surface clippy failure fingerprint
         if: failure()
@@ -137,7 +146,9 @@ jobs:
             if [ -n "$line" ]; then
               fingerprint="$line"
             else
-              fingerprint="clippy failed without an error line"
+              # No diagnostic line: report how the run died instead.
+              detail="$(grep -E 'clippy_exit|disk_free|log_bytes' "$log" | tr '\n' ' ' | cut -c1-100 || true)"
+              fingerprint="no error line; ${detail:-empty log}"
             fi
           fi
           gh api --method POST \
