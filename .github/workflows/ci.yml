@@ -180,7 +180,7 @@ jobs:
             line="$(grep -m1 -E 'error(\[|:)' "$plain" | cut -c1-100 || true)"
             # A link failure hides its detail on the following lines.
             if [ -n "$line" ] && printf '%s' "$line" | grep -q 'linking'; then
-              tail_detail="$(grep -m1 -E 'symbol\(s\) not found|undefined symbol|framework not found|ld: |clang: error' "$plain" | cut -c1-90 || true)"
+              tail_detail="$(grep -m1 -E 'symbol\(s\) not found|undefined symbol|clang: error|ld: error|library not found|no space left|cannot find' "$plain" | cut -c1-90 || true)"
               if [ -n "$tail_detail" ]; then
                 line="$line | $tail_detail"
               fi
