@@ -212,7 +212,7 @@ jobs:
           # it flattened as a second status so the symbol names are visible
           # without the web log.
           if [ -f "$RUNNER_TEMP/test.log.plain" ]; then
-            link_block="$(grep -m1 -A8 'symbol(s) not found' "$RUNNER_TEMP/test.log.plain" | tr '\n' ' ' | tr -s ' ' | cut -c1-130)"
+            link_block="$(grep -m1 -B10 -A2 'symbol(s) not found' "$RUNNER_TEMP/test.log.plain" | tr '\n' ' ' | tr -s ' ' | cut -c1-130)"
             if [ -n "$link_block" ]; then
               gh api --method POST \
                 -H "Accept: application/vnd.github+json" \
