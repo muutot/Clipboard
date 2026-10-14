@@ -1,11 +1,10 @@
 //! Declarations of the native macOS APIs used by this adapter
-//! (CoreGraphics, Carbon Event Manager, Accessibility, CoreFoundation,
-//! NSStatusBar).
+//! (CoreGraphics, Carbon Event Manager, Accessibility, NSStatusBar).
 //!
-//! They are only linkable on macOS.  Only the accessibility probe, `CFRelease`
-//! and the quick-paste event APIs are wired to call sites; the remaining
-//! declarations document the FFI boundary for the outlined hotkey/tray work and
-//! stay unused, so this file is not evidence that those paths run.
+//! They are only linkable on macOS.  Only the accessibility probe is wired to
+//! a call site (see `accessibility.rs`); the remaining declarations document
+//! the FFI boundary for the outlined hotkey/tray work and stay unused, so this
+//! file is not evidence that those paths run.
 
 // `ApplicationServices` is the umbrella that exports the CoreGraphics and
 // HIServices symbols declared below; nothing else links it for us.
@@ -52,13 +51,6 @@ extern "C" {
     /// `AXIsProcessTrusted` returns a `Boolean` (`UInt8`), not a Rust `bool`.
     pub fn AXIsProcessTrusted() -> u8;
     fn AXMakeProcessTrusted() -> i32;
-
-    // ---- CoreFoundation ------------------------------------------------
-    /// Declared once with the canonical `*const` pointee; a second extern
-    /// declaration with a different signature (the CoreGraphics side takes
-    /// `*mut`) trips the clashing-extern-declarations error on newer
-    /// toolchains. Callers pass `*mut` values, which coerce implicitly.
-    pub fn CFRelease(value: *const std::ffi::c_void);
 
     // ---- NSStatusBar --------------------------------------------------
     fn NSStatusBar_systemStatusBar() -> *mut std::ffi::c_void;

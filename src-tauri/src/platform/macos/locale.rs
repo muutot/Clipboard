@@ -16,6 +16,7 @@ extern "C" {
         buffer_size: isize,
         encoding: u32,
     ) -> bool;
+    fn CFRelease(cf: *const c_void);
 }
 
 const K_CF_STRING_ENCODING_UTF8: u32 = 0x0800_0100;
@@ -49,8 +50,7 @@ pub fn locale_name() -> Option<String> {
             }
         };
         // The copied locale is retained; the identifier belongs to it.
-        // `CFRelease` is declared once in `platform::macos::ffi`.
-        crate::platform::macos::ffi::CFRelease(locale);
+        CFRelease(locale);
         name
     }
 }
