@@ -142,12 +142,15 @@ jobs:
           log="$RUNNER_TEMP/clippy.log"
           fingerprint="clippy failed without a captured log"
           if [ -f "$log" ]; then
-            line="$(grep -m1 -E '^error' "$log" | cut -c1-100 || true)"
+            # Cargo colorizes even when piped on CI, so strip the escapes
+            # before matching (an anchored ^error would miss them).
+            plain="$RUNNER_TEMP/clippy-plain.log"
+            sed 's/\x1b\[[0-9;]*m//g' "$log" >"$plain"
+            line="$(grep -m1 -E 'error(\[|:)' "$plain" | cut -c1-100 || true)"
             if [ -n "$line" ]; then
               fingerprint="$line"
             else
-              # No diagnostic line: report how the run died instead.
-              detail="$(grep -E 'clippy_exit|disk_free|log_bytes' "$log" | tr '\n' ' ' | cut -c1-100 || true)"
+              detail="$(grep -E 'clippy_exit|disk_free|log_bytes' "$plain" | tr '\n' ' ' | cut -c1-100 || true)"
               fingerprint="no error line; ${detail:-empty log}"
             fi
           fi
