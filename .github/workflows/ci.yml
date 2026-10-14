@@ -216,9 +216,9 @@ jobs:
             for log in "$RUNNER_TEMP/test.log.plain" "$RUNNER_TEMP/clippy.log.plain"; do
               [ -f "$log" ] || continue
               # The frameworks on the cc link line live inside one huge note
-              # line; split on whitespace and keep the names after each
-              # -framework token.
-              frameworks="$(tr ' ' '\n' <"$log" | grep -A1 '^-framework$' | grep -v -e '^-framework$' -e '^--$' | sort -u | paste -sd, - | cut -c1-120)"
+              # line; extract just the framework references (flag form or
+              # full path form) instead of matching the whole line.
+              frameworks="$(grep -o -E '(-framework +[A-Za-z0-9_]+|/System/Library/Frameworks/[A-Za-z0-9_]+\.framework)' "$log" | sed 's/ *$//' | sort -u | paste -sd, - | cut -c1-120)"
               if [ -n "$frameworks" ]; then
                 gh api --method POST \
                   -H "Accept: application/vnd.github+json" \
