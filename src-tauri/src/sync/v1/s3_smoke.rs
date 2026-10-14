@@ -249,6 +249,14 @@ impl SmokeDevice {
             .save_item(&text_item(id, text))
             .expect("save smoke item");
     }
+
+    fn save_image(&self, id: &str, bytes: &[u8]) {
+        let image = self.paths.images.join(format!("{id}.png"));
+        fs::write(&image, bytes).expect("write smoke image");
+        self.database()
+            .save_item(&image_item(id, &image))
+            .expect("save smoke image item");
+    }
 }
 
 impl Drop for SmokeDevice {
@@ -289,6 +297,48 @@ fn options() -> SyncEngineOptions {
             file_bytes: 1024 * 1024,
             icon_bytes: 1024 * 1024,
         },
+    }
+}
+
+/// Larger resource limits so the encrypted-resource smoke can publish a body
+/// spanning several of the fixed 1 MiB AES-GCM chunks instead of one chunk.
+fn resource_options() -> SyncEngineOptions {
+    SyncEngineOptions {
+        segment_max_entries: 100,
+        resource_limits: ResourceLimits {
+            image_bytes: 8 * 1024 * 1024,
+            file_bytes: 8 * 1024 * 1024,
+            icon_bytes: 1024 * 1024,
+        },
+    }
+}
+
+fn image_item(id: &str, path: &std::path::Path) -> ClipboardItem {
+    let path = path.to_string_lossy().to_string();
+    ClipboardItem {
+        id: id.to_string(),
+        kind: crate::domain::ClipboardKind::Image,
+        title: id.to_string(),
+        text_content: None,
+        html_content: None,
+        rtf_content: None,
+        resource_path: Some(path.clone()),
+        preview_path: Some(path.clone()),
+        content_hash: format!("hash-{id}"),
+        source_app: Some("sync-smoke".to_string()),
+        icon_path: None,
+        size_bytes: fs::metadata(path.as_str()).unwrap().len(),
+        created_at_ms: 1_700_000_000_000,
+        last_used_at_ms: None,
+        is_favorite: false,
+        metadata_json: Some(
+            serde_json::json!({
+                "resourcePath": path,
+                "storagePath": path,
+                "previewPath": path,
+            })
+            .to_string(),
+        ),
     }
 }
 
@@ -726,4 +776,121 @@ fn real_s3_in_memory_object_read_is_bounded_for_segments() {
         .expect("in-budget segment read must succeed")
         .expect("in-budget segment must exist");
     assert_eq!(downloaded.bytes.len(), small.len());
+}
+
+/// The encrypted binary-resource wire path: chunked AES-GCM upload, an
+/// ordinary pull that defers resource bodies, and materialization with
+/// plaintext verification.
+///
+/// The engine tests cover these semantics against `MemoryStore`; only a real
+/// server proves it accepts the chunked streaming framing, the per-chunk
+/// nonce/AAD derivation, and the keyed digest naming for encrypted resources.
+#[test]
+#[ignore = "requires a disposable S3-compatible server; run scripts/sync-s3-test.ps1"]
+fn real_s3_encrypted_resource_materializes_across_devices() {
+    let config = require_config!();
+    // Encryption is the point of this test; without a password it would only
+    // re-test plaintext transfer the engine tests already cover.
+    if config.password.is_none() {
+        eprintln!(
+            "[sync-smoke] skipped: set CLIPBOARD_S3_TEST_PASSWORD for the encrypted \
+             resource wire path"
+        );
+        return;
+    }
+    let scope = SmokeScope::new(&config, "encrypted-resource");
+    scope.ensure_bucket();
+    let store = scope.store(None);
+    let source = SmokeDevice::new("resource-source");
+    let target = SmokeDevice::new("resource-target");
+    let key = scope.session_key().expect("password-derived session key");
+
+    // The repeated marker makes a plaintext leak detectable even when the
+    // body compresses well; 3 MiB + 1234 spans four of the fixed 1 MiB
+    // AES-GCM chunks, exercising multi-chunk framing over the wire.
+    let marker = b"smoke-encrypted-resource-plaintext-marker";
+    let plaintext: Vec<u8> = marker
+        .iter()
+        .copied()
+        .cycle()
+        .take(3 * 1024 * 1024 + 1234)
+        .collect();
+    source.save_image("encrypted-image", &plaintext);
+
+    let published = sync_database(
+        &store,
+        source.database(),
+        &source.engine_paths(),
+        &scope.remote_scope,
+        Some(&key),
+        resource_options(),
+    )
+    .expect("real-S3 resource sync run must succeed");
+    assert_eq!(published.applied_entries, 0);
+    assert!(published.uploaded_entries >= 1);
+    assert!(
+        published.uploaded_resources >= 1,
+        "the bootstrap must upload the image resource"
+    );
+
+    let resource_keys: Vec<String> = store
+        .list("v1/resources/image/", None)
+        .unwrap()
+        .into_iter()
+        .map(|object| object.key)
+        .collect();
+    assert_eq!(
+        resource_keys.len(),
+        1,
+        "one content-addressed image object, got {resource_keys:?}"
+    );
+    let resource_key = resource_keys[0].clone();
+    let stored = store
+        .get(&resource_key)
+        .unwrap()
+        .expect("the resource object must exist");
+    assert_ne!(
+        stored.bytes, plaintext,
+        "the stored object must be ciphertext"
+    );
+    assert!(
+        !stored
+            .bytes
+            .windows(marker.len())
+            .any(|window| window == marker.as_slice()),
+        "no plaintext window may appear in the stored object"
+    );
+
+    let pulled = sync_database(
+        &store,
+        target.database(),
+        &target.engine_paths(),
+        &scope.remote_scope,
+        Some(&key),
+        resource_options(),
+    )
+    .expect("real-S3 resource pull must succeed");
+    assert_eq!(pulled.applied_entries, 1);
+    assert_eq!(
+        pulled.downloaded_resources, 0,
+        "an ordinary pull must defer resource bodies"
+    );
+    assert!(target
+        .database()
+        .get_item("encrypted-image")
+        .unwrap()
+        .unwrap()
+        .resource_path
+        .is_none());
+
+    let materialized = materialize_resource(
+        &store,
+        &resource_key,
+        &target.paths.images,
+        resource_options().resource_limits.image_bytes,
+        Some(&key),
+    )
+    .expect("materializing the encrypted resource must succeed");
+    assert_eq!(fs::read(&materialized.path).unwrap(), plaintext);
+    assert_eq!(materialized.transferred_bytes, stored.bytes.len() as u64);
 }

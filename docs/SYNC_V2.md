@@ -67,22 +67,25 @@ Acceptance candidates (intended gates; no test exists yet):
 
 ### V2-2. Real S3 CI matrix
 
-Status: wired and green. `.github/workflows/sync-s3.yml` runs the six S3-dependent smokes on
+Status: wired and green. `.github/workflows/sync-s3.yml` runs the seven S3-dependent smokes on
 pushes and pull requests touching the sync paths, weekly, and on dispatch. A first attempt
 used a pinned MinIO docker container and never passed the readiness probe; the job now
 provisions the pinned rustfs release the local `scripts/sync-s3-test.ps1` path already uses,
 verified against the upstream SHA256SUMS, and starts it in the same step as the tests (no
 cross-step background-process assumptions, no docker daemon). First green run 2026-10-13
-(run 38382124322, v1.8.1 at 0d3860b): checksum verified, server healthy, both smoke
-invocations executed; the green step also proves the in-step guards accepted the run, so no
-silent skip or empty filter occurred. Only ubuntu runs (pinned linux-x86_64-musl asset).
+(run 38382124322, v1.8.1 at 0d3860b, six smokes): checksum verified, server healthy, both
+smoke invocations executed; the green step also proves the in-step guards accepted the run,
+so no silent skip or empty filter occurred. The seventh smoke — encrypted binary resources
+across two devices, added to close the last real-server gap (`docs/SYNC_V1.md` claimed
+coverage the suite did not have) — requires its own green run. Only ubuntu runs (pinned
+linux-x86_64-musl asset).
 
 Goal: the S3-dependent ignored tests run in CI so their behavior cannot rot between manual runs
 (retires part of the roadmap's Rust ignored-test debt item).
 
 S3-dependent ignored tests today (8):
 
-- `sync::v1::s3_smoke::*` × 5 and `clipboard_sync::s3::tests` × 1 (correctness smokes);
+- `sync::v1::s3_smoke::*` × 6 and `clipboard_sync::s3::tests` × 1 (correctness smokes);
 - `sync::v1::scale_bench::s3_*` × 2 (also needs a release-mode runtime).
 
 Decision: rustfs, not MinIO. The same server family that produced the documented smoke
