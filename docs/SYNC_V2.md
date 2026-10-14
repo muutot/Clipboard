@@ -33,15 +33,23 @@ encryption_mode_change_is_rejected_before_a_new_device_publishes}`.
 
 ### V2-1. Encryption password / mode rotation workflow
 
-Progress (2026-10-14): D1/D2 decided, D3/D4 recommended. First engine unit landed — the
-peer-side rotation guard (`commands/sync::refuse_if_prefix_rotated`): every sync run reads
-`{prefix}/rotated-to` before namespace resolution and refuses with an actionable message when
-another device rotated the prefix away, so a stale peer can never repair the old binding from
-cache and fork the namespace. Pure unit tests plus a real-S3 smoke case
-(`real_s3_rotation_pointer_blocks_a_stale_peer`) cover the decision; both CI workflows are
-green on the same tree (smoke run 38553188977, main CI run 38553189131, sha 23d1cc3a).
-Remaining: the rotating side (materialize-all → publish at the new prefix → write the
-tombstone → delete the old namespace → re-point the local setting) and the frontend flow.
+Progress (2026-10-14): D1/D2 decided, D3/D4 recommended. Engine level is complete except the
+dedicated failure-injection smoke. Landed:
+
+- `commands/sync::refuse_if_prefix_rotated` — every sync run reads `{prefix}/rotated-to`
+  before namespace resolution and refuses with an actionable message, so a stale peer can
+  never repair the old binding from cache and fork the namespace (pure unit tests plus the
+  real-S3 smoke `real_s3_rotation_pointer_blocks_a_stale_peer`; both CI workflows green, smoke
+  run 38553188977 / main CI 38553189131 at sha 23d1cc3a).
+- `rotate_sync_namespace` (Tauri command) over `perform_namespace_rotation` — materializes
+  every referenced resource of the old scope, claims a fresh derived prefix
+  (`{old}-rotated-{unix_ms}`) with the new key, republishes the complete local state, writes
+  the tombstone with the new key check, deletes the old engine namespace, and only then
+  rewrites the local configuration. A `MemoryStore`-style integration test covers the whole
+  sequence including the double-rotation refusal; a rustfs failure-injection smoke at every
+  step boundary is still owed.
+
+Remaining: the rustfs failure-injection smoke and the frontend flow.
 
 User-visible goal: replace the sync password (or toggle the encryption mode) of an already
 initialized scope without losing remote history or stranding other devices.
@@ -176,8 +184,9 @@ starting and survive abandonment:
 2. the peer-side pointer check in the desktop sync entry with its own smoke case;
 3. frontend: dedicated destructive flow with the confirmation, progress and cancellation.
 
-Progress: step 2 is **done** (2026-10-14, `commands/sync::refuse_if_prefix_rotated`); steps 1
-and 3 remain.
+Progress: step 2 is done (2026-10-14, `commands/sync::refuse_if_prefix_rotated`); step 1's
+engine flow is done (`perform_namespace_rotation` behind the `rotate_sync_namespace` command)
+with only its rustfs failure-injection smoke outstanding; step 3 remains.
 
 Acceptance candidates (intended gates; no test exists yet):
 

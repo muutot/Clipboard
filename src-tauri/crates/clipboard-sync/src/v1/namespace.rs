@@ -35,6 +35,12 @@ impl Namespace {
     pub fn to_bytes(&self) -> Vec<u8> {
         serde_json::to_vec(self).expect("namespace contains only strings and a version")
     }
+
+    /// Public HMAC check value. A peer can verify a typed password against it
+    /// locally before any further network work (`docs/SYNC_V2.md` D2).
+    pub fn key_check(&self) -> Option<&str> {
+        self.key_check.as_deref()
+    }
     pub fn session_key(&self, password: Option<&str>) -> Result<Option<SessionKey>, String> {
         let key = password
             .filter(|v| !v.is_empty())

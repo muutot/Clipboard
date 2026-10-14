@@ -14,7 +14,6 @@ use crate::content::ThumbnailWorker;
 use crate::domain::{ClipboardItem, ClipboardKind};
 use crate::storage::{ClipboardRepository, Database, StoragePaths};
 use crate::sync::{self, v1};
-use v1::ObjectStore as _;
 
 mod auto;
 mod policy;
@@ -598,6 +597,317 @@ fn materialize_item_resources(
     Ok((updated, changed))
 }
 
+/// What one scope-wide materialization pass did, for the rotation flow's
+/// confirm/progress surface.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+struct ScopeMaterializationStats {
+    /// Items that carry at least one resource reference in the scope.
+    items: u64,
+    /// Items whose local cache this pass wrote (a download happened).
+    downloaded_items: u64,
+}
+
+/// Materializes every resource reference of one scope into local storage.
+///
+/// Rotation republishes the complete local state under a new key, and a
+/// reference whose body was never materialized would ship a dangling object
+/// key into the new namespace (`docs/SYNC_V2.md` constraint 3), so this pass
+/// is a hard prerequisite. Items whose references are already local and
+/// verifying cost no network I/O; the first failure propagates so a rotation
+/// never starts from an incomplete scope.
+fn materialize_scope_resources(
+    store: &impl v1::ObjectStore,
+    database: &Database,
+    paths: &StoragePaths,
+    settings: &SyncSettings,
+    remote_scope: &str,
+    session_key: Option<&v1::SessionKey>,
+) -> Result<ScopeMaterializationStats, String> {
+    let references = database
+        .list_sync_resource_refs_for_scope(remote_scope)
+        .map_err(|error| error.to_string())?;
+    let mut stats = ScopeMaterializationStats::default();
+    for (item_id, refs) in references {
+        if refs.is_empty() {
+            continue;
+        }
+        stats.items += 1;
+        let (_, changed) = materialize_item_resources(
+            store,
+            database,
+            paths,
+            settings,
+            remote_scope,
+            &item_id,
+            refs,
+            session_key,
+        )?;
+        if changed {
+            stats.downloaded_items += 1;
+        }
+    }
+    Ok(stats)
+}
+
+/// What one namespace rotation did, for the caller and the UI.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RotationOutcome {
+    new_prefix: String,
+    materialized_items: u64,
+    uploaded_entries: u64,
+    uploaded_resources: u64,
+    deleted_objects: u64,
+}
+
+/// Rotates the sync namespace to a new prefix and key (`docs/SYNC_V2.md` D1-A
+/// with the decided D2 protocol).
+///
+/// The new prefix is what makes this crash-safe: the old namespace stays
+/// intact until the new one is durable. Order is therefore materialize every
+/// referenced resource locally (a republished reference without a body would
+/// ship a dangling object key), bootstrap-publish the complete local state
+/// under the new prefix and key, write the tombstone at the old prefix root,
+/// and only then delete the old engine namespace. The caller rewrites the
+/// local configuration after this returns successfully.
+#[allow(clippy::too_many_arguments)]
+fn perform_namespace_rotation(
+    old_store: &impl v1::ObjectStore,
+    new_store: &impl v1::ObjectStore,
+    database: &Database,
+    paths: &StoragePaths,
+    old_settings: &SyncSettings,
+    new_settings: &SyncSettings,
+    new_password: Option<&str>,
+    cancellation: &clipboard_sync::cancellation::CancellationToken,
+    progress: &mut dyn FnMut(clipboard_sync::v1::engine::SyncPhase),
+) -> Result<RotationOutcome, String> {
+    cancellation.check()?;
+    // Refuse a second rotation; the same check also covers the case where this
+    // prefix was rotated away by another device while we were offline.
+    refuse_if_prefix_rotated(old_store)?;
+
+    // --- old namespace: authenticate it and materialize every resource ---
+    let old_stable_scope = old_settings.remote_scope_id();
+    let previous = database
+        .sync_namespace_binding(&old_stable_scope)
+        .map_err(|error| error.to_string())?
+        .map(|bytes| clipboard_sync::v1::namespace::Namespace::from_bytes(&bytes))
+        .transpose()?;
+    let (old_binding, old_session_key) = clipboard_sync::v1::namespace::resolve_namespace(
+        old_store,
+        &old_stable_scope,
+        &old_settings.legacy_scope_id(),
+        old_settings.sync_password.as_deref(),
+        previous.as_ref(),
+    )?;
+    progress(clipboard_sync::v1::engine::SyncPhase::Preparing);
+    let materialized = materialize_scope_resources(
+        old_store,
+        database,
+        paths,
+        old_settings,
+        &old_binding.scope,
+        old_session_key.as_ref(),
+    )?;
+    cancellation.check()?;
+
+    // --- new namespace: claim it, then bootstrap the complete local state ---
+    let new_stable_scope = new_settings.remote_scope_id();
+    let (new_binding, new_session_key) = clipboard_sync::v1::namespace::resolve_namespace(
+        new_store,
+        &new_stable_scope,
+        &new_settings.legacy_scope_id(),
+        new_password,
+        None,
+    )?;
+    database
+        .remember_sync_namespace(&new_stable_scope, &new_binding.to_bytes())
+        .map_err(|error| error.to_string())?;
+    progress(clipboard_sync::v1::engine::SyncPhase::Uploading);
+    let engine_result = clipboard_sync::v1::engine::sync_database_cancellable(
+        new_store,
+        database,
+        &v1::SyncEnginePaths::from(paths),
+        &new_binding.scope,
+        new_session_key.as_ref(),
+        new_settings.engine_options(),
+        cancellation,
+    )?;
+    cancellation.check()?;
+    // Initialization without a published head is an engine bug, not a
+    // rotation: never tombstone the old namespace on that basis.
+    let initialized = database
+        .get_or_create_sync_remote_state(&new_binding.scope)
+        .map_err(|error| error.to_string())?
+        .initialized;
+    if !initialized {
+        return Err("rotation refused: the new namespace did not initialize".to_string());
+    }
+    progress(clipboard_sync::v1::engine::SyncPhase::Downloading);
+
+    // --- tombstone at the old prefix root, then delete the old namespace ---
+    let device_id = database
+        .get_sync_device_id()
+        .map_err(|error| error.to_string())?;
+    let pointer = serde_json::json!({
+        "newPrefix": new_settings.remote_path,
+        "rotatedAtMs": current_time_ms(),
+        "deviceId": device_id,
+        "keyCheck": new_binding.key_check(),
+    })
+    .to_string();
+    // Create-only: a concurrent rotation must not be silently overwritten.
+    match old_store.put(
+        ROTATED_TO_KEY,
+        pointer.into_bytes(),
+        v1::PutCondition::IfAbsent,
+    )? {
+        v1::PutOutcome::Stored { .. } => {}
+        v1::PutOutcome::PreconditionFailed => {
+            return Err("another device already rotated this prefix".to_string());
+        }
+    }
+    let mut deleted_objects = 0u64;
+    for object in old_store.list("", None)? {
+        // The tombstone is the discovery artifact peers read; only engine
+        // objects are replaced by the new prefix's copy.
+        if object.key == ROTATED_TO_KEY || !object.key.starts_with("v1/") {
+            continue;
+        }
+        old_store.delete(&object.key)?;
+        deleted_objects += 1;
+    }
+    progress(clipboard_sync::v1::engine::SyncPhase::Compacting);
+    Ok(RotationOutcome {
+        new_prefix: new_settings.remote_path.clone(),
+        materialized_items: materialized.items,
+        uploaded_entries: engine_result.uploaded_entries,
+        uploaded_resources: engine_result.uploaded_resources,
+        deleted_objects,
+    })
+}
+
+/// Replaces the sync password (or toggles the encryption mode) of an
+/// initialized scope by rotating it to a fresh prefix and key.
+///
+/// The frontend flow is a separate unit; this command is the engine-level
+/// surface. `new_password` is explicit: an empty string means plaintext, and
+/// no value is ever retained from the previous configuration, unlike the
+/// settings save path.
+///
+/// Async: the rotation downloads every referenced resource and republishes the
+/// complete local state, so it runs on the blocking pool with the same
+/// operation registry (progress + cancellation) as a manual sync.
+#[tauri::command]
+pub async fn rotate_sync_namespace(
+    new_password: String,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || run_namespace_rotation(&app, new_password))
+        .await
+        .map_err(|error| format!("rotation task join failed: {error}"))?
+}
+
+fn run_namespace_rotation(app: &tauri::AppHandle, new_password: String) -> Result<(), String> {
+    use crate::background_operations::{BackgroundOperations, OperationKind, OperationPhase};
+    let cancellation = app.state::<SyncCancellation>().0.child_token();
+    let config = app.state::<Mutex<ConfigStore>>();
+    let database = app.state::<Database>();
+    let paths = app.state::<StoragePaths>();
+
+    let old_settings = {
+        let guard = lock_state(&config, "configuration lock is poisoned")?;
+        SyncSettings::from_config(&guard)?
+    };
+    // Derived, never typed: the timestamp makes the prefix unique per rotation
+    // and the tombstone carries it to the peers.
+    let new_prefix = format!(
+        "{}-rotated-{}",
+        old_settings.remote_path.trim_matches('/'),
+        current_time_ms()
+    );
+    let new_settings = SyncSettings {
+        remote_path: new_prefix.clone(),
+        sync_password: Some(new_password).filter(|password| !password.is_empty()),
+        ..old_settings.clone()
+    };
+    if new_settings.sync_password.is_none() && old_settings.sync_password.is_some() {
+        // Toggling encryption off is legal but must be deliberate: the caller
+        // passes an explicitly empty password, which the UI confirms.
+        crate::log_warn!("[sync] rotation clears the namespace encryption password");
+    }
+
+    let (operation, token) = {
+        let guard = lock_state(&config, "configuration lock is poisoned")?;
+        let token = app
+            .state::<SyncCancellation>()
+            .register(guard.privacy_local_only(), &cancellation)?;
+        let operation = app
+            .state::<BackgroundOperations>()
+            .start(OperationKind::Sync, &token)?;
+        (operation, token)
+    };
+    let outcome = token.run(|| {
+        let old_store = old_settings.object_store()?;
+        let new_store = new_settings.object_store()?;
+        perform_namespace_rotation(
+            &old_store,
+            &new_store,
+            database.inner(),
+            paths.inner(),
+            &old_settings,
+            &new_settings,
+            new_settings.sync_password.as_deref(),
+            &token,
+            &mut |phase| {
+                let phase = match phase {
+                    clipboard_sync::v1::engine::SyncPhase::Preparing => OperationPhase::Preparing,
+                    clipboard_sync::v1::engine::SyncPhase::Discovering => {
+                        OperationPhase::Discovering
+                    }
+                    clipboard_sync::v1::engine::SyncPhase::Uploading => OperationPhase::Uploading,
+                    clipboard_sync::v1::engine::SyncPhase::Downloading => {
+                        OperationPhase::Downloading
+                    }
+                    clipboard_sync::v1::engine::SyncPhase::Compacting => OperationPhase::Compacting,
+                };
+                let _ = operation.progress(phase, 0, None);
+            },
+        )
+    });
+    crate::item_operations::invalidate_desktop(app);
+    match outcome {
+        Ok(outcome) => {
+            // Only now, with the remote state durable, does the local
+            // configuration move. A failure above leaves the old prefix and
+            // password configured.
+            let mut guard = lock_state(&config, "configuration lock is poisoned")?;
+            let previous = guard.sync_config();
+            let sync = SyncConfig {
+                remote_path: Some(outcome.new_prefix),
+                sync_password: new_settings.sync_password.clone(),
+                ..previous
+            };
+            if let Some(endpoint) = sync.endpoint.as_deref() {
+                validate_sync_endpoint(endpoint)?;
+            }
+            guard
+                .set_sync_config(sync)
+                .map_err(|error| error.to_string())?;
+            crate::log_info!(
+                "[sync] namespace rotated: materialized {} items, published {} entries / {} resources, deleted {} old objects",
+                outcome.materialized_items,
+                outcome.uploaded_entries,
+                outcome.uploaded_resources,
+                outcome.deleted_objects
+            );
+            Ok(())
+        }
+        Err(error) => Err(error),
+    }
+}
+
 /// Serialize manual/automatic sync with the storage migration boundary.
 pub(crate) fn try_lock_sync_run() -> Result<std::sync::MutexGuard<'static, ()>, String> {
     // Distinguish a real concurrent run from a poisoned lock: a panic inside a
@@ -658,7 +968,7 @@ pub(crate) fn rotation_refusal(pointer: Option<&[u8]>) -> Result<(), String> {
 /// second namespace under the old password. An S3 error that is not "absent"
 /// propagates — sync fails at the next request anyway, and skipping the check
 /// silently would reopen the fork.
-pub(crate) fn refuse_if_prefix_rotated(store: &v1::S3ObjectStore) -> Result<(), String> {
+pub(crate) fn refuse_if_prefix_rotated(store: &impl v1::ObjectStore) -> Result<(), String> {
     let object = store.get(ROTATED_TO_KEY).map_err(|error| {
         format!("unable to check the rotation pointer for this sync prefix: {error}")
     })?;
@@ -838,6 +1148,7 @@ mod tests {
             RecordVersion, ReplicatedItem,
         },
     };
+    use v1::ObjectStore as _;
 
     #[test]
     fn usable_sync_settings_tolerates_a_selected_but_unconfigured_provider() {
@@ -1238,6 +1549,468 @@ mod tests {
 
         drop(database);
         fs::remove_dir_all(paths.project).unwrap();
+    }
+
+    #[test]
+    fn scope_materialization_downloads_missing_bodies_and_reuses_local_ones() {
+        let paths = temporary_paths("scope-materialize");
+        let database = Database::open(&paths.database).unwrap();
+        database.initialize_sync().unwrap();
+        let bytes = b"scope image bytes".repeat(64);
+        let digest = hex::encode(Sha256::digest(&bytes));
+        let object_key =
+            v1::resource_object_key(v1::ResourceCategory::Image, &digest, "png").unwrap();
+        let reference = v1::SyncResourceRef {
+            slot: "image".to_string(),
+            ordinal: 0,
+            object_key: object_key.clone(),
+        };
+        let image_item = crate::domain::ClipboardItem {
+            id: "scope-image".to_string(),
+            kind: ClipboardKind::Image,
+            title: "scope image".to_string(),
+            text_content: None,
+            html_content: None,
+            rtf_content: None,
+            resource_path: None,
+            preview_path: None,
+            content_hash: "hash-scope-image".to_string(),
+            source_app: None,
+            icon_path: None,
+            size_bytes: bytes.len() as u64,
+            created_at_ms: 1,
+            last_used_at_ms: None,
+            is_favorite: false,
+            metadata_json: Some("{}".to_string()),
+        };
+        // A text record without references must be absent from the pass: the
+        // bulk loader only reports items the scope actually carries refs for.
+        let text_item = crate::domain::ClipboardItem {
+            id: "scope-text".to_string(),
+            kind: ClipboardKind::Text,
+            title: "scope text".to_string(),
+            text_content: Some("no resources here".to_string()),
+            html_content: None,
+            rtf_content: None,
+            resource_path: None,
+            preview_path: None,
+            content_hash: "hash-scope-text".to_string(),
+            source_app: None,
+            icon_path: None,
+            size_bytes: 17,
+            created_at_ms: 2,
+            last_used_at_ms: None,
+            is_favorite: false,
+            metadata_json: Some("{}".to_string()),
+        };
+        let remote_scope = "d".repeat(64);
+        database
+            .apply_sync_snapshot_with_resources(
+                &remote_scope,
+                &v1::DeviceCursor {
+                    device_id: "11111111-1111-4111-8111-111111111111".to_string(),
+                    epoch: "22222222-2222-4222-8222-222222222222".to_string(),
+                    sequence: 0,
+                    last_segment_key: None,
+                },
+                &"b".repeat(64),
+                &v1::MutationBatch {
+                    upserts: vec![
+                        ReplicatedItem {
+                            item: image_item.into(),
+                            version: RecordVersion {
+                                modified_at_ms: 2,
+                                writer_device_id: "11111111-1111-4111-8111-111111111111"
+                                    .to_string(),
+                            },
+                        },
+                        ReplicatedItem {
+                            item: text_item.into(),
+                            version: RecordVersion {
+                                modified_at_ms: 2,
+                                writer_device_id: "11111111-1111-4111-8111-111111111111"
+                                    .to_string(),
+                            },
+                        },
+                    ],
+                    tombstones: Vec::new(),
+                },
+                &BTreeMap::from([("scope-image".to_string(), vec![reference.clone()])]),
+            )
+            .unwrap();
+        let settings = SyncSettings::from_sync_config(&configured_sync()).unwrap();
+        let store = MaterializationStore::default();
+        store
+            .objects
+            .lock()
+            .unwrap()
+            .insert(object_key, bytes.clone());
+
+        let first =
+            materialize_scope_resources(&store, &database, &paths, &settings, &remote_scope, None)
+                .unwrap();
+        assert_eq!(first.items, 1);
+        assert_eq!(first.downloaded_items, 1);
+        assert_eq!(store.gets.load(Ordering::Relaxed), 1);
+        let local_path = PathBuf::from(
+            database
+                .get_item("scope-image")
+                .unwrap()
+                .unwrap()
+                .resource_path
+                .unwrap(),
+        );
+        assert_eq!(fs::read(&local_path).unwrap(), bytes);
+
+        // A second pass must be pure local verification: the rotation flow
+        // runs this before every attempt and cannot re-download.
+        let second =
+            materialize_scope_resources(&store, &database, &paths, &settings, &remote_scope, None)
+                .unwrap();
+        assert_eq!(second.items, 1);
+        assert_eq!(second.downloaded_items, 0);
+        // The GET counter is cumulative across both passes: still the single
+        // download from the first pass, i.e. the second pass did no I/O.
+        assert_eq!(store.gets.load(Ordering::Relaxed), 1);
+
+        drop(database);
+        fs::remove_dir_all(paths.project).unwrap();
+    }
+
+    #[derive(Default)]
+    struct RotationStore {
+        /// Key → (bytes, raw quoted ETag), so `IfMatch` and head-cache
+        /// comparison have something stable to compare against.
+        objects: Mutex<BTreeMap<String, (Vec<u8>, String)>>,
+        puts: AtomicU64,
+        deletes: AtomicU64,
+        gets: AtomicU64,
+    }
+
+    fn fake_etag(bytes: &[u8]) -> String {
+        format!("\"{}\"", hex::encode(&Sha256::digest(bytes)[..16]))
+    }
+
+    impl v1::ObjectStore for RotationStore {
+        fn list(
+            &self,
+            prefix: &str,
+            _start_after: Option<&str>,
+        ) -> Result<Vec<ObjectInfo>, String> {
+            let objects = self.objects.lock().map_err(|_| "lock poisoned")?;
+            Ok(objects
+                .iter()
+                .filter(|(key, _)| key.starts_with(prefix))
+                .map(|(key, (bytes, etag))| ObjectInfo {
+                    key: key.clone(),
+                    size_bytes: Some(bytes.len() as u64),
+                    modified_ms: Some(1),
+                    etag: Some(etag.clone()),
+                })
+                .collect())
+        }
+
+        fn get(&self, key: &str) -> Result<Option<DownloadedObject>, String> {
+            self.gets.fetch_add(1, Ordering::Relaxed);
+            Ok(self
+                .objects
+                .lock()
+                .map_err(|_| "lock poisoned")?
+                .get(key)
+                .map(|(bytes, etag)| DownloadedObject {
+                    bytes: bytes.clone(),
+                    etag: Some(etag.clone()),
+                }))
+        }
+
+        fn head(&self, key: &str) -> Result<Option<ObjectMetadata>, String> {
+            Ok(self
+                .objects
+                .lock()
+                .map_err(|_| "lock poisoned")?
+                .get(key)
+                .map(|(bytes, etag)| ObjectMetadata {
+                    size_bytes: Some(bytes.len() as u64),
+                    etag: Some(etag.clone()),
+                }))
+        }
+
+        fn get_to_file(
+            &self,
+            key: &str,
+            destination: &Path,
+            max_bytes: u64,
+        ) -> Result<Option<DownloadedFile>, String> {
+            let Some((bytes, etag)) = self
+                .objects
+                .lock()
+                .map_err(|_| "lock poisoned")?
+                .get(key)
+                .cloned()
+            else {
+                return Ok(None);
+            };
+            if bytes.len() as u64 > max_bytes {
+                return Err("object exceeds limit".to_string());
+            }
+            let mut file = fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(destination)
+                .map_err(|error| error.to_string())?;
+            file.write_all(&bytes).map_err(|error| error.to_string())?;
+            self.gets.fetch_add(1, Ordering::Relaxed);
+            Ok(Some(DownloadedFile {
+                size_bytes: bytes.len() as u64,
+                sha256: hex::encode(Sha256::digest(&bytes)),
+                etag: Some(etag),
+            }))
+        }
+
+        fn put(
+            &self,
+            key: &str,
+            bytes: Vec<u8>,
+            condition: PutCondition,
+        ) -> Result<PutOutcome, String> {
+            let mut objects = self.objects.lock().map_err(|_| "lock poisoned")?;
+            match &condition {
+                PutCondition::IfAbsent => {
+                    if objects.contains_key(key) {
+                        return Ok(PutOutcome::PreconditionFailed);
+                    }
+                }
+                PutCondition::IfMatch(etag) => match objects.get(key) {
+                    Some((_, current)) if current == etag => {}
+                    _ => return Ok(PutOutcome::PreconditionFailed),
+                },
+                PutCondition::Unconditional => {}
+            }
+            let etag = fake_etag(&bytes);
+            objects.insert(key.to_string(), (bytes, etag.clone()));
+            self.puts.fetch_add(1, Ordering::Relaxed);
+            Ok(PutOutcome::Stored { etag: Some(etag) })
+        }
+
+        fn put_file(
+            &self,
+            key: &str,
+            path: &Path,
+            sha256: &str,
+            size_bytes: u64,
+            condition: PutCondition,
+        ) -> Result<PutOutcome, String> {
+            let bytes = fs::read(path).map_err(|error| error.to_string())?;
+            if bytes.len() as u64 != size_bytes || hex::encode(Sha256::digest(&bytes)) != sha256 {
+                return Err("staged file does not match its digest".to_string());
+            }
+            self.put(key, bytes, condition)
+        }
+
+        fn delete(&self, key: &str) -> Result<(), String> {
+            if self
+                .objects
+                .lock()
+                .map_err(|_| "lock poisoned")?
+                .remove(key)
+                .is_some()
+            {
+                self.deletes.fetch_add(1, Ordering::Relaxed);
+            }
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn namespace_rotation_moves_state_tombstones_the_old_prefix_and_refuses_twice() {
+        fn image_record(id: &str, path: &Path) -> crate::domain::ClipboardItem {
+            let path = path.to_string_lossy().to_string();
+            crate::domain::ClipboardItem {
+                id: id.to_string(),
+                kind: ClipboardKind::Image,
+                title: id.to_string(),
+                text_content: None,
+                html_content: None,
+                rtf_content: None,
+                resource_path: Some(path.clone()),
+                preview_path: None,
+                content_hash: format!("hash-{id}"),
+                source_app: None,
+                icon_path: None,
+                size_bytes: fs::metadata(&path).unwrap().len(),
+                created_at_ms: 1,
+                last_used_at_ms: None,
+                is_favorite: false,
+                metadata_json: Some("{}".to_string()),
+            }
+        }
+
+        // Source device captures the history, so the old namespace holds the
+        // only copy of the image body.
+        let source_paths = temporary_paths("rotate-source");
+        fs::create_dir_all(&source_paths.images).unwrap();
+        let image_bytes = b"rotating image payload".repeat(256);
+        let source_image = source_paths.images.join("source.png");
+        fs::write(&source_image, &image_bytes).unwrap();
+        let source = Database::open(&source_paths.database).unwrap();
+        source.initialize_sync().unwrap();
+        source
+            .save_item(&image_record("rotate-image", &source_image))
+            .unwrap();
+        source
+            .save_item(&crate::domain::ClipboardItem {
+                id: "rotate-text".to_string(),
+                kind: ClipboardKind::Text,
+                title: "rotate text".to_string(),
+                text_content: Some("rotated record".to_string()),
+                html_content: None,
+                rtf_content: None,
+                resource_path: None,
+                preview_path: None,
+                content_hash: "hash-rotate-text".to_string(),
+                source_app: None,
+                icon_path: None,
+                size_bytes: 14,
+                created_at_ms: 2,
+                last_used_at_ms: None,
+                is_favorite: false,
+                metadata_json: Some("{}".to_string()),
+            })
+            .unwrap();
+
+        let old_settings = SyncSettings::from_sync_config(&configured_sync()).unwrap();
+        let old_scope = old_settings.remote_scope_id();
+        let old_store = RotationStore::default();
+        let (binding, key) = clipboard_sync::v1::namespace::resolve_namespace(
+            &old_store,
+            &old_scope,
+            &old_settings.legacy_scope_id(),
+            old_settings.sync_password.as_deref(),
+            None,
+        )
+        .unwrap();
+        clipboard_sync::v1::engine::sync_database(
+            &old_store,
+            &source,
+            &v1::SyncEnginePaths::from(&source_paths),
+            &binding.scope,
+            key.as_ref(),
+            old_settings.engine_options(),
+        )
+        .unwrap();
+
+        // Target device synced the metadata but never materialized the body —
+        // the exact precondition rotation must repair.
+        let target_paths = temporary_paths("rotate-target");
+        let target = Database::open(&target_paths.database).unwrap();
+        target.initialize_sync().unwrap();
+        clipboard_sync::v1::engine::sync_database(
+            &old_store,
+            &target,
+            &v1::SyncEnginePaths::from(&target_paths),
+            &binding.scope,
+            key.as_ref(),
+            old_settings.engine_options(),
+        )
+        .unwrap();
+        assert!(target
+            .get_item("rotate-image")
+            .unwrap()
+            .unwrap()
+            .resource_path
+            .is_none());
+
+        let new_password = "brand-new-rotation-password";
+        let new_prefix = "clipboard-rotated-42";
+        let new_settings = SyncSettings {
+            remote_path: new_prefix.to_string(),
+            sync_password: Some(new_password.to_string()),
+            ..old_settings.clone()
+        };
+        let new_store = RotationStore::default();
+        let token = clipboard_sync::cancellation::CancellationToken::default();
+        let outcome = perform_namespace_rotation(
+            &old_store,
+            &new_store,
+            &target,
+            &target_paths,
+            &old_settings,
+            &new_settings,
+            Some(new_password),
+            &token,
+            &mut |_| {},
+        )
+        .unwrap();
+
+        assert_eq!(outcome.new_prefix, new_prefix);
+        assert_eq!(outcome.materialized_items, 1);
+        assert!(outcome.uploaded_entries >= 2);
+        assert!(outcome.uploaded_resources >= 1);
+        assert!(outcome.deleted_objects >= 3);
+
+        // Old prefix: tombstone survives, the whole engine namespace is gone.
+        let old_keys: Vec<String> = old_store
+            .list("", None)
+            .unwrap()
+            .into_iter()
+            .map(|object| object.key)
+            .collect();
+        assert_eq!(old_keys, vec!["rotated-to".to_string()]);
+        let tombstone: serde_json::Value =
+            serde_json::from_slice(&old_store.get("rotated-to").unwrap().unwrap().bytes).unwrap();
+        assert_eq!(tombstone["newPrefix"], serde_json::json!(new_prefix));
+        assert!(tombstone["keyCheck"].is_string());
+        assert!(tombstone["deviceId"].is_string());
+
+        // New prefix: a complete namespace, including the image body under the
+        // new keyed digest.
+        let new_keys: Vec<String> = new_store
+            .list("", None)
+            .unwrap()
+            .into_iter()
+            .map(|object| object.key)
+            .collect();
+        assert!(new_keys.iter().any(|key| key == "v1/namespace.json"));
+        assert!(new_keys
+            .iter()
+            .any(|key| key.starts_with("v1/resources/image/")));
+        assert!(new_keys.iter().any(|key| key.starts_with("v1/heads/")));
+
+        // The materialized body is local, byte-identical, and the record kept
+        // its canonical reference.
+        let rotated = target.get_item("rotate-image").unwrap().unwrap();
+        assert_eq!(
+            fs::read(rotated.resource_path.as_deref().unwrap()).unwrap(),
+            image_bytes
+        );
+        assert_eq!(
+            target
+                .list_sync_resource_refs_for_scope(&new_settings.remote_scope_id())
+                .unwrap()
+                .len(),
+            1,
+            "the new scope carries the image reference"
+        );
+
+        // A second rotation on the same old prefix refuses at the tombstone.
+        let error = perform_namespace_rotation(
+            &old_store,
+            &new_store,
+            &target,
+            &target_paths,
+            &old_settings,
+            &new_settings,
+            Some(new_password),
+            &token,
+            &mut |_| {},
+        )
+        .unwrap_err();
+        assert!(error.contains("rotated"), "{error}");
+
+        drop(source);
+        drop(target);
+        fs::remove_dir_all(source_paths.project).unwrap();
+        fs::remove_dir_all(target_paths.project).unwrap();
     }
 
     #[test]

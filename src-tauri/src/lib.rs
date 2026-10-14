@@ -918,6 +918,7 @@ pub fn run() {
             commands::background_operations::cancel_background_operation,
             sync_now,
             materialize_clipboard_item,
+            rotate_sync_namespace,
             copy_clipboard_item_files,
             copy_clipboard_item
         ])

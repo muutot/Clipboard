@@ -171,6 +171,8 @@ jobs:
               --workspace -- --ignored --nocapture --test-threads=1 "$filter" \
               >"$log" 2>&1 || status=1
             cat "$log"
+            # Keep a stable copy for the diagnostic status step below.
+            tee -a "$RUNNER_TEMP/rustfs-smoke.log" <"$log" >/dev/null
             # Guard 1: the smoke module skips quietly when the endpoint
             # contract breaks, which would otherwise look like a pass.
             if grep -q "\[sync-smoke\] skipped" "$log"; then
@@ -201,10 +203,19 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          log="$RUNNER_TEMP/rustfs-server.log"
+          server_log="$RUNNER_TEMP/rustfs-server.log"
+          smoke_log="$RUNNER_TEMP/rustfs-smoke.log"
           fingerprint="no server log"
-          if [ -f "$log" ]; then
-            fingerprint="rustfs: $(tail -n 3 "$log" | tr '\n' ' ' | cut -c1-90)"
+          # A compile error outranks a server problem: without a build there is
+          # no test output at all.
+          if [ -f "$smoke_log" ]; then
+            build_error="$(grep -m1 -E '^error' "$smoke_log" | cut -c1-80)"
+            if [ -n "$build_error" ]; then
+              fingerprint="$build_error"
+            fi
+          fi
+          if [ "$fingerprint" = "no server log" ] && [ -f "$server_log" ]; then
+            fingerprint="rustfs: $(tail -n 3 "$server_log" | tr '\n' ' ' | cut -c1-80)"
           fi
           gh api --method POST \
             -H "Accept: application/vnd.github+json" \
