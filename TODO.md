@@ -105,6 +105,7 @@
 - [ ] 原生文本、HTML、文件与远程媒体复制粘贴保持完整内容（一次性桌面会话 + 临时应用数据；注意原生 CF_HDROP 测试会覆盖系统剪贴板）。**文本部分已验证（Windows，2026-10-15）**：隔离数据目录运行 CLI（数据目录随可执行文件位置解析，GUI 子系统用 `Start-Process -RedirectStandardOutput` 捕获输出），真实系统剪贴板往返 `paste` 捕获 → `list` → `copy --query <id>` → 逐字节一致（先以占位符覆写排除假阳性）。HTML/文件/远程媒体、双窗口联动仍未验证。
 - [ ] 标签、恢复与慢速 S3 传输过程中退出：线程 join、留下可重试数据。
 - [ ] 最终分支拿到 Windows/macOS/Linux CI 成功结果。
+- [ ] 深色/浅色/自定义主题 × 常规/窄宽度（含 Windows 文字透明度与背景/窗口特效组合）保持可读。**部分证据（Windows，2026-10-15）**：隔离数据目录 + 预置 conf.json（注意 PowerShell `Set-Content -Encoding utf8` 会写 BOM 导致配置被隔离成 corrupt，须用 `[System.IO.File]::WriteAllText` 无 BOM 写入）启动原生 GUI，验证配置被真实读取（应用回写的 `general.theme` / `privacy.paused` 与种子一致）与主窗口正常创建（746x709，标题 Clipboard）。**未取到有效视觉证据**：空状态为全幅背景图、与主题无关；且 `MainWindowHandle` 就绪时序不可靠，一次截图捕到了屏幕上的其他窗口。主题可读性对比与 520px 窄宽度仍未验证。
 
 ### C. 下一版本候选（未立项；按「最小可验证单元」排期，取自各文档已记录的决议）
 
