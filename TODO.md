@@ -102,7 +102,7 @@
 ### B. 原生窗口手工回归（v1.8 遗留，依据 `docs/V1_8_FOLLOWUP.md`「Native verification still required」）
 
 - [ ] 原生窗口手工回归（1.5.3 遗留）：实际双窗口并发修改设置，以及 Windows 文字透明度开关与背景/窗口特效的视觉组合。
-- [ ] 原生文本、HTML、文件与远程媒体复制粘贴保持完整内容（一次性桌面会话 + 临时应用数据；注意原生 CF_HDROP 测试会覆盖系统剪贴板）。
+- [ ] 原生文本、HTML、文件与远程媒体复制粘贴保持完整内容（一次性桌面会话 + 临时应用数据；注意原生 CF_HDROP 测试会覆盖系统剪贴板）。**文本部分已验证（Windows，2026-10-15）**：隔离数据目录运行 CLI（数据目录随可执行文件位置解析，GUI 子系统用 `Start-Process -RedirectStandardOutput` 捕获输出），真实系统剪贴板往返 `paste` 捕获 → `list` → `copy --query <id>` → 逐字节一致（先以占位符覆写排除假阳性）。HTML/文件/远程媒体、双窗口联动仍未验证。
 - [ ] 标签、恢复与慢速 S3 传输过程中退出：线程 join、留下可重试数据。
 - [ ] 最终分支拿到 Windows/macOS/Linux CI 成功结果。
 

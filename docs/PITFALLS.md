@@ -380,6 +380,10 @@ GitHub 默认每个 job 上限 6 小时。`ci.yml` 的 `frontend` / `rust` 因�
 
 `settle(n)` 每轮只推进一个宏任务，40 轮在本地约 0.2 s：CI 负载一高，懒加载 chunk 还没到就已经耗尽，于是变成「本地从不红、CI 偶发红」的假失败（`StorageSettingsDialog.test.ts` 的 `waitFor`，同一提交在 ubuntu 上四跑两红）。等条件的上限要按 `Date.now()` 算（该文件取 2 s），命中就立刻返回；断言也从「`settle()` 若干轮 + `!` 直接取」换成同一个等候函数，别让等待轮数成为隐式的断言。
 
+## 真机验证会动用户的系统剪贴板，先落盘再还原
+
+本项目自己的测试就懂这个道理（`platform/windows/tests.rs` 的 CF_HDROP 用例把整块写入逻辑关在 `CLIPBOARD_ALLOW_REAL_CLIPBOARD_TEST` 后面，注释原话："it would destroy a developer's clipboard"）。CLI/冒烟级别的真机验证同样在动真剪贴板：`paste` 读它、`copy` 覆写它。2026-10-15 做 Windows 文本往返验证时的教训：保存只存进了 shell 变量，而工具调用是**跨进程**的——下一次调用里变量已经消失，还原时写回去的是测试标记而不是用户原文。规则：验证前 `Get-Clipboard` 的内容先**写进临时文件**，还原从文件读；占位符先行覆写以排除假阳性；验证结束清理隔离数据目录（CLI 的数据目录随可执行文件位置解析，把 exe 拷进临时目录即完全隔离）。GUI 子系统程序（`#![windows_subsystem = "windows"]`）没有控制台，输出要用 `Start-Process -RedirectStandardOutput` 捕获。
+
 ## Rust 模块结构
 
 添加新功能时按模块归属放置：
