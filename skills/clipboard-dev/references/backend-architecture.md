@@ -134,11 +134,13 @@ manual and automatic runs alike and must stay ahead of binding resolution.
 `rotate_sync_namespace` replaces the scope's key (password change or plaintext toggle) by
 rotating to a fresh derived prefix: materialize every referenced resource of the old scope,
 claim `{old}-rotated-{unix_ms}` with the new key, republish the complete local state, write
-the create-only tombstone (new prefix + key check + device id) at the old prefix root, delete
-only `v1/` objects under the old prefix, and only then rewrite the local configuration
-(`commands/sync::perform_namespace_rotation`). Any failure leaves the old prefix and password
-configured; a tombstone that already exists refuses the run. The engine stays unaware of
-rotation — the command owns the two stores and the deletion boundary.
+the create-only tombstone (new prefix + key check + device id) at the old prefix root,
+rewrite the local configuration **before** deleting the old `v1/` objects (the tombstone
+makes every run at the old prefix refuse, so an interrupted deletion must not strand the
+device), and leave any leftover old objects as bounded garbage. Any failure earlier leaves
+the old prefix and password configured; a tombstone that already exists refuses the run.
+The engine stays unaware of rotation — the command owns the two stores and the deletion
+boundary.
 
 ## Storage paths and ownership
 
