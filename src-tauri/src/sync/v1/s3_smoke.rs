@@ -933,3 +933,169 @@ fn real_s3_rotation_pointer_blocks_a_stale_peer() {
     assert!(error.contains("rotating-device"), "{error}");
     assert!(error.contains("/rotated"), "{error}");
 }
+
+/// The full rotation flow over the wire: a peer device that only holds
+/// metadata (its resource body was never materialized) rotates the scope to a
+/// fresh prefix with a new password. Proves the materialize-all step, the
+/// encrypted republish, the tombstone contents, the old-namespace deletion and
+/// the byte-identical local body — all against a real server.
+#[test]
+#[ignore = "requires a disposable S3-compatible server; run scripts/sync-s3-test.ps1"]
+fn real_s3_namespace_rotation_moves_state_and_tombstones() {
+    use crate::commands::sync::{perform_namespace_rotation, SyncSettings};
+    use crate::config::{SyncConfig, SyncProvider};
+    use clipboard_sync::cancellation::CancellationToken;
+
+    let config = require_config!();
+    let scope = SmokeScope::new(&config, "namespace-rotation");
+    scope.ensure_bucket();
+    let store = scope.store(None);
+
+    fn sync_config_for(remote_path: &str, password: Option<&str>) -> SyncConfig {
+        SyncConfig {
+            provider: SyncProvider::S3,
+            endpoint: Some(std::env::var("CLIPBOARD_S3_TEST_ENDPOINT").unwrap()),
+            remote_path: Some(remote_path.to_string()),
+            s3_region: Some("us-east-1".to_string()),
+            s3_bucket: Some("clipboard".to_string()),
+            s3_access_key: Some("access".to_string()),
+            s3_secret_key: Some("secret".to_string()),
+            sync_password: password.map(str::to_string),
+            ..SyncConfig::default()
+        }
+    }
+
+    // A device that captured the history seeds the old namespace.
+    let source = SmokeDevice::new("rotate-wire-source");
+    let image_bytes = b"rotating wire image".repeat(512);
+    source.save_image("rotate-image", &image_bytes);
+
+    let old_settings = SyncSettings::validated_from_sync_config(&sync_config_for(
+        &scope.remote_prefix,
+        config.password.as_deref(),
+    ))
+    .unwrap();
+    let (binding, key) = clipboard_sync::v1::namespace::resolve_namespace(
+        &store,
+        &old_settings.remote_scope_id(),
+        &old_settings.legacy_scope_id(),
+        config.password.as_deref(),
+        None,
+    )
+    .unwrap();
+    clipboard_sync::v1::engine::sync_database(
+        &store,
+        source.database(),
+        &source.engine_paths(),
+        &binding.scope,
+        key.as_ref(),
+        old_settings.engine_options(),
+    )
+    .unwrap();
+
+    // The rotating device pulled the metadata but never the body.
+    let target = SmokeDevice::new("rotate-wire-target");
+    clipboard_sync::v1::engine::sync_database(
+        &store,
+        target.database(),
+        &target.engine_paths(),
+        &binding.scope,
+        key.as_ref(),
+        old_settings.engine_options(),
+    )
+    .unwrap();
+    assert!(target
+        .database()
+        .get_item("rotate-image")
+        .unwrap()
+        .unwrap()
+        .resource_path
+        .is_none());
+
+    let new_password = "brand-new-rotation-password";
+    let new_prefix = format!("{}-rotated-1700000000000", scope.remote_prefix);
+    let new_store = S3ObjectStore::new(
+        &config.endpoint,
+        &config.region,
+        &config.bucket,
+        &config.access_key,
+        &config.secret_key,
+        &new_prefix,
+    )
+    .unwrap();
+    let new_settings =
+        SyncSettings::validated_from_sync_config(&sync_config_for(&new_prefix, Some(new_password)))
+            .unwrap();
+    let token = CancellationToken::default();
+    let outcome = perform_namespace_rotation(
+        &store,
+        &new_store,
+        target.database(),
+        &target.paths,
+        &old_settings,
+        &new_settings,
+        Some(new_password),
+        &token,
+        &mut |_| {},
+    )
+    .unwrap();
+
+    assert_eq!(outcome.new_prefix, new_prefix);
+    assert!(outcome.materialized_items >= 1);
+    assert!(outcome.uploaded_resources >= 1);
+    assert!(outcome.deleted_objects >= 3);
+
+    // Old prefix: only the tombstone survives, and it carries the new prefix,
+    // the key check peers verify a typed password against, and the device id.
+    let old_keys: Vec<String> = store
+        .list("", None)
+        .unwrap()
+        .into_iter()
+        .map(|object| object.key)
+        .collect();
+    assert_eq!(old_keys, vec!["rotated-to".to_string()]);
+    let tombstone: serde_json::Value =
+        serde_json::from_slice(&store.get("rotated-to").unwrap().unwrap().bytes).unwrap();
+    assert_eq!(tombstone["newPrefix"], serde_json::json!(new_prefix));
+    assert!(tombstone["keyCheck"].is_string());
+    assert!(tombstone["deviceId"].is_string());
+
+    // New prefix: a complete namespace, including the resource body encrypted
+    // under the new keyed digest.
+    let new_keys: Vec<String> = new_store
+        .list("", None)
+        .unwrap()
+        .into_iter()
+        .map(|object| object.key)
+        .collect();
+    assert!(new_keys.iter().any(|key| key == "v1/namespace.json"));
+    assert!(new_keys.iter().any(|key| key.starts_with("v1/heads/")));
+    assert!(new_keys
+        .iter()
+        .any(|key| key.starts_with("v1/resources/image/")));
+
+    // The rotating device now holds the body locally, byte-identical.
+    let rotated = target.database().get_item("rotate-image").unwrap().unwrap();
+    assert_eq!(
+        fs::read(rotated.resource_path.as_deref().unwrap()).unwrap(),
+        image_bytes
+    );
+
+    // A second rotation on the same old prefix refuses at the tombstone.
+    let error = perform_namespace_rotation(
+        &store,
+        &new_store,
+        target.database(),
+        &target.paths,
+        &old_settings,
+        &new_settings,
+        Some(new_password),
+        &token,
+        &mut |_| {},
+    )
+    .unwrap_err();
+    assert!(error.contains("rotated"), "{error}");
+
+    drop(source);
+    drop(target);
+}

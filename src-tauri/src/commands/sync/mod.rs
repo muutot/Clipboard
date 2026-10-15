@@ -111,7 +111,7 @@ impl From<v1::SyncEngineResult> for SyncRunResult {
 /// Immutable snapshot of every value needed by one network run. The config
 /// mutex is released before key derivation, hashing, SQLite export, or S3 I/O.
 #[derive(Clone, PartialEq, Eq)]
-struct SyncSettings {
+pub(crate) struct SyncSettings {
     endpoint: String,
     remote_path: String,
     region: String,
@@ -161,8 +161,8 @@ impl SyncSettings {
 
     /// The connection test must work before the user turns the sync switch
     /// on, so it deliberately skips the provider gate while still validating
-    /// every required field.
-    fn validated_from_sync_config(sync: &SyncConfig) -> Result<Self, String> {
+    /// every required field. Also used by the real-S3 rotation smoke.
+    pub(crate) fn validated_from_sync_config(sync: &SyncConfig) -> Result<Self, String> {
         Ok(Self {
             endpoint: validate_sync_endpoint(&required_value(
                 sync.endpoint.as_deref(),
@@ -198,7 +198,7 @@ impl SyncSettings {
         })
     }
 
-    fn remote_scope_id(&self) -> String {
+    pub(crate) fn remote_scope_id(&self) -> String {
         let endpoint = self.endpoint.trim().trim_end_matches('/');
         let identity = format!(
             "clipboard-sync-v1-namespace\n{endpoint}\n{}\n{}\n{}",
@@ -207,7 +207,7 @@ impl SyncSettings {
         hex::encode(Sha256::digest(identity.as_bytes()))
     }
 
-    fn legacy_scope_id(&self) -> String {
+    pub(crate) fn legacy_scope_id(&self) -> String {
         let endpoint = self.endpoint.trim().trim_end_matches('/');
         let identity = format!(
             "clipboard-sync-v1\n{endpoint}\n{}\n{}\n{}\n{}",
@@ -234,7 +234,7 @@ impl SyncSettings {
             .transpose()
     }
 
-    fn engine_options(&self) -> v1::SyncEngineOptions {
+    pub(crate) fn engine_options(&self) -> v1::SyncEngineOptions {
         v1::SyncEngineOptions {
             segment_max_entries: self.segment_max_entries,
             resource_limits: v1::ResourceLimits {
@@ -652,12 +652,12 @@ fn materialize_scope_resources(
 /// What one namespace rotation did, for the caller and the UI.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct RotationOutcome {
-    new_prefix: String,
-    materialized_items: u64,
-    uploaded_entries: u64,
-    uploaded_resources: u64,
-    deleted_objects: u64,
+pub(crate) struct RotationOutcome {
+    pub(crate) new_prefix: String,
+    pub(crate) materialized_items: u64,
+    pub(crate) uploaded_entries: u64,
+    pub(crate) uploaded_resources: u64,
+    pub(crate) deleted_objects: u64,
 }
 
 /// Rotates the sync namespace to a new prefix and key (`docs/SYNC_V2.md` D1-A
@@ -671,7 +671,7 @@ struct RotationOutcome {
 /// and only then delete the old engine namespace. The caller rewrites the
 /// local configuration after this returns successfully.
 #[allow(clippy::too_many_arguments)]
-fn perform_namespace_rotation(
+pub(crate) fn perform_namespace_rotation(
     old_store: &impl v1::ObjectStore,
     new_store: &impl v1::ObjectStore,
     database: &Database,
