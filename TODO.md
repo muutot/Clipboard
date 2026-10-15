@@ -116,4 +116,4 @@
   - [x] CONTRIBUTING.md「测试」节补约定：真实 S3 冒烟的运行方式（CI 自动跑 + 本地 `scripts/sync-s3-test.ps1` + 直接跑所需的 env 契约与静默跳过陷阱）。证据：CONTRIBUTING.md 测试节新增段落。
   - [x] 加密二进制资源真实线覆盖：`real_s3_encrypted_resource_materializes_across_devices`（3MiB+1234 跨 4 个 1MiB 加密块、拉取不下载正文、物化字节一致）。证据：run 38506261099 全绿。
   - [x] 轮换全流程真实线覆盖：`real_s3_namespace_rotation_moves_state_and_tombstones`（物化全部资源→新 prefix 加密重发布→墓碑内容→旧命名空间删除→字节一致的本地正文→二次轮换拒绝）。证据：smoke run 38662706953 全绿（sha e9d1163b）。
-- [ ] 仓库卫生决策：`.worktree-experience/` 工作树与 `uv.lock` 的跟踪状态。
+- [x] 仓库卫生决策：`.worktree-experience/` 为注册中的活动工作树（分支 `experience`），保留并加入 `.gitignore` 消除状态噪音（与 `.prettierignore` 排除先例一致）；`uv.lock` 维持未跟踪——`.gitignore` 已将 `pyproject.toml` 归类为「Stray local tooling stubs (untracked)」，Python 工具链条目按既定约定保持本地。证据：`.gitignore` 提交 `757f0862`。
