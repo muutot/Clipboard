@@ -1027,6 +1027,7 @@ fn real_s3_namespace_rotation_moves_state_and_tombstones() {
         SyncSettings::validated_from_sync_config(&sync_config_for(&new_prefix, Some(new_password)))
             .unwrap();
     let token = CancellationToken::default();
+    let mut config_committed = false;
     let outcome = perform_namespace_rotation(
         &store,
         &new_store,
@@ -1036,9 +1037,17 @@ fn real_s3_namespace_rotation_moves_state_and_tombstones() {
         &new_settings,
         Some(new_password),
         &token,
+        &mut || {
+            config_committed = true;
+            Ok(())
+        },
         &mut |_| {},
     )
     .unwrap();
+    assert!(
+        config_committed,
+        "the local configuration must move before the old namespace is deleted"
+    );
 
     assert_eq!(outcome.new_prefix, new_prefix);
     assert!(outcome.materialized_items >= 1);
@@ -1091,6 +1100,7 @@ fn real_s3_namespace_rotation_moves_state_and_tombstones() {
         &new_settings,
         Some(new_password),
         &token,
+        &mut || Ok(()),
         &mut |_| {},
     )
     .unwrap_err();

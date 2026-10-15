@@ -146,13 +146,19 @@ Concrete protocol:
    the discovery artifact peers need. A later rotation leaves its own pointer; stale pointers
    are tiny and documented as retained.
 4. It rewrites its own configured prefix to `P2` (destructive setting change, explicit
+   confirmation) — **before** the deletion starts, because the tombstone makes every run at
+   `{P1}` refuse: an interrupted deletion must not leave the device pointed at a prefix that
+   answers "rotated". Leftover old objects after an interruption are bounded garbage; an
+   unsyncable device is not (regression:
+   `rotation_commits_the_configuration_before_deleting_the_old_namespace`).
+5. It rewrites its own configured prefix to `P2` (destructive setting change, explicit
    confirmation).
-5. A stale peer's next run checks `{P1}/rotated-to` **before** namespace resolution or binding
+6. A stale peer's next run checks `{P1}/rotated-to` **before** namespace resolution or binding
    repair. Without this check, constraint 4 applies: the peer would recreate `namespace.json`
    from its cached identity with the old key check and bootstrap a second namespace — the
    split brain this design exists to prevent. With the check, the peer refuses to run and
    reports "namespace rotated on <date>; obtain the new prefix and password".
-6. The user re-points each peer (new prefix + new password); the pointer's key check gives
+7. The user re-points each peer (new prefix + new password); the pointer's key check gives
    immediate local feedback on a wrong password. Re-pointed peers bootstrap from `P2` as
    fresh devices and purge the old scope's local state (heads, cursors, outbox, cached
    binding) the way the rotation recipe already describes.

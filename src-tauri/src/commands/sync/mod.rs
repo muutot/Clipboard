@@ -668,8 +668,11 @@ pub(crate) struct RotationOutcome {
 /// referenced resource locally (a republished reference without a body would
 /// ship a dangling object key), bootstrap-publish the complete local state
 /// under the new prefix and key, write the tombstone at the old prefix root,
-/// and only then delete the old engine namespace. The caller rewrites the
-/// local configuration after this returns successfully.
+/// hand the new configuration to `commit_local_config` (the tombstone makes
+/// every run at the old prefix refuse, so the local move must happen before
+/// the old namespace starts disappearing), and finally delete the old engine
+/// namespace. Any earlier failure leaves the old prefix and password
+/// configured and the run retryable.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn perform_namespace_rotation(
     old_store: &impl v1::ObjectStore,
@@ -680,6 +683,7 @@ pub(crate) fn perform_namespace_rotation(
     new_settings: &SyncSettings,
     new_password: Option<&str>,
     cancellation: &clipboard_sync::cancellation::CancellationToken,
+    commit_local_config: &mut dyn FnMut() -> Result<(), String>,
     progress: &mut dyn FnMut(clipboard_sync::v1::engine::SyncPhase),
 ) -> Result<RotationOutcome, String> {
     cancellation.check()?;
@@ -768,6 +772,14 @@ pub(crate) fn perform_namespace_rotation(
             return Err("another device already rotated this prefix".to_string());
         }
     }
+    // Move the local configuration onto the new prefix BEFORE deleting the old
+    // namespace. The tombstone makes every run at the old prefix refuse, so a
+    // crash or cancellation between the two would otherwise strand this
+    // device: its config still points at a prefix that now answers "rotated".
+    // Leftover old objects after an interrupted deletion are bounded garbage;
+    // an unsyncable device is not.
+    commit_local_config()?;
+    cancellation.check()?;
     let mut deleted_objects = 0u64;
     for object in old_store.list("", None)? {
         // The tombstone is the discovery artifact peers read; only engine
@@ -848,6 +860,7 @@ fn run_namespace_rotation(app: &tauri::AppHandle, new_password: String) -> Resul
             .start(OperationKind::Sync, &token)?;
         (operation, token)
     };
+    let mut config_committed = false;
     let outcome = token.run(|| {
         let old_store = old_settings.object_store()?;
         let new_store = new_settings.object_store()?;
@@ -860,6 +873,29 @@ fn run_namespace_rotation(app: &tauri::AppHandle, new_password: String) -> Resul
             &new_settings,
             new_settings.sync_password.as_deref(),
             &token,
+            &mut || {
+                // Invoked right after the tombstone is durable: the old prefix
+                // now answers "rotated" to every run, so the local
+                // configuration must move before the old namespace disappears.
+                // A failure here leaves the old prefix configured and the
+                // rotation retryable (the tombstone is create-only, so a
+                // later attempt reports "another device already rotated").
+                let mut guard = lock_state(&config, "configuration lock is poisoned")?;
+                let previous = guard.sync_config();
+                let sync = SyncConfig {
+                    remote_path: Some(new_settings.remote_path.clone()),
+                    sync_password: new_settings.sync_password.clone(),
+                    ..previous
+                };
+                if let Some(endpoint) = sync.endpoint.as_deref() {
+                    validate_sync_endpoint(endpoint)?;
+                }
+                guard
+                    .set_sync_config(sync)
+                    .map_err(|error| error.to_string())?;
+                config_committed = true;
+                Ok(())
+            },
             &mut |phase| {
                 let phase = match phase {
                     clipboard_sync::v1::engine::SyncPhase::Preparing => OperationPhase::Preparing,
@@ -879,22 +915,6 @@ fn run_namespace_rotation(app: &tauri::AppHandle, new_password: String) -> Resul
     crate::item_operations::invalidate_desktop(app);
     match outcome {
         Ok(outcome) => {
-            // Only now, with the remote state durable, does the local
-            // configuration move. A failure above leaves the old prefix and
-            // password configured.
-            let mut guard = lock_state(&config, "configuration lock is poisoned")?;
-            let previous = guard.sync_config();
-            let sync = SyncConfig {
-                remote_path: Some(outcome.new_prefix),
-                sync_password: new_settings.sync_password.clone(),
-                ..previous
-            };
-            if let Some(endpoint) = sync.endpoint.as_deref() {
-                validate_sync_endpoint(endpoint)?;
-            }
-            guard
-                .set_sync_config(sync)
-                .map_err(|error| error.to_string())?;
             crate::log_info!(
                 "[sync] namespace rotated: materialized {} items, published {} entries / {} resources, deleted {} old objects",
                 outcome.materialized_items,
@@ -904,7 +924,18 @@ fn run_namespace_rotation(app: &tauri::AppHandle, new_password: String) -> Resul
             );
             Ok(())
         }
-        Err(error) => Err(error),
+        Err(error) => {
+            // The configuration moved once the tombstone was durable, so a
+            // failure after that point (an interrupted deletion, say) leaves a
+            // usable device pointed at the new prefix plus bounded leftover
+            // objects under the old one — not an unsyncable one.
+            if config_committed {
+                crate::log_warn!(
+                    "[sync] rotation committed the new prefix but did not finish: {error}"
+                );
+            }
+            Err(error)
+        }
     }
 }
 
@@ -1137,7 +1168,7 @@ mod tests {
         fs,
         io::Write,
         path::Path,
-        sync::atomic::{AtomicU64, Ordering},
+        sync::atomic::{AtomicBool, AtomicU64, Ordering},
     };
 
     use super::*;
@@ -1685,6 +1716,8 @@ mod tests {
         puts: AtomicU64,
         deletes: AtomicU64,
         gets: AtomicU64,
+        /// Injects a deletion failure to model an interrupted cleanup.
+        fail_deletes: AtomicBool,
     }
 
     fn fake_etag(bytes: &[u8]) -> String {
@@ -1808,6 +1841,9 @@ mod tests {
         }
 
         fn delete(&self, key: &str) -> Result<(), String> {
+            if self.fail_deletes.load(Ordering::Relaxed) {
+                return Err("injected deletion failure".to_string());
+            }
             if self
                 .objects
                 .lock()
@@ -1929,6 +1965,7 @@ mod tests {
         };
         let new_store = RotationStore::default();
         let token = clipboard_sync::cancellation::CancellationToken::default();
+        let mut config_committed = false;
         let outcome = perform_namespace_rotation(
             &old_store,
             &new_store,
@@ -1938,9 +1975,17 @@ mod tests {
             &new_settings,
             Some(new_password),
             &token,
+            &mut || {
+                config_committed = true;
+                Ok(())
+            },
             &mut |_| {},
         )
         .unwrap();
+        assert!(
+            config_committed,
+            "the local configuration must move before the old namespace is deleted"
+        );
 
         assert_eq!(outcome.new_prefix, new_prefix);
         assert_eq!(outcome.materialized_items, 1);
@@ -2002,6 +2047,7 @@ mod tests {
             &new_settings,
             Some(new_password),
             &token,
+            &mut || Ok(()),
             &mut |_| {},
         )
         .unwrap_err();
@@ -2011,6 +2057,140 @@ mod tests {
         drop(target);
         fs::remove_dir_all(source_paths.project).unwrap();
         fs::remove_dir_all(target_paths.project).unwrap();
+    }
+
+    /// The crash window that motivated the commit ordering: when the old
+    /// namespace cannot be deleted (crash, provider error), the rotation must
+    /// have already moved the local configuration. Otherwise the tombstone —
+    /// which makes every run at the old prefix refuse — would strand this
+    /// device forever.
+    #[test]
+    fn rotation_commits_the_configuration_before_deleting_the_old_namespace() {
+        let paths = temporary_paths("rotate-interrupted");
+        let database = Database::open(&paths.database).unwrap();
+        database.initialize_sync().unwrap();
+        let image_bytes = b"interrupted rotation image".repeat(64);
+        let digest = hex::encode(Sha256::digest(&image_bytes));
+        let object_key =
+            v1::resource_object_key(v1::ResourceCategory::Image, &digest, "png").unwrap();
+        let reference = v1::SyncResourceRef {
+            slot: "image".to_string(),
+            ordinal: 0,
+            object_key: object_key.clone(),
+        };
+        let item = crate::domain::ClipboardItem {
+            id: "interrupted-image".to_string(),
+            kind: ClipboardKind::Image,
+            title: "interrupted image".to_string(),
+            text_content: None,
+            html_content: None,
+            rtf_content: None,
+            resource_path: None,
+            preview_path: None,
+            content_hash: "hash-interrupted-image".to_string(),
+            source_app: None,
+            icon_path: None,
+            size_bytes: image_bytes.len() as u64,
+            created_at_ms: 1,
+            last_used_at_ms: None,
+            is_favorite: false,
+            metadata_json: Some("{}".to_string()),
+        };
+        let settings = SyncSettings::from_sync_config(&configured_sync()).unwrap();
+        // The rotation materializes the references recorded under the scope
+        // its namespace resolution derives from the settings.
+        let old_scope = settings.remote_scope_id();
+        database
+            .apply_sync_snapshot_with_resources(
+                &old_scope,
+                &v1::DeviceCursor {
+                    device_id: "11111111-1111-4111-8111-111111111111".to_string(),
+                    epoch: "22222222-2222-4222-8222-222222222222".to_string(),
+                    sequence: 0,
+                    last_segment_key: None,
+                },
+                &"b".repeat(64),
+                &v1::MutationBatch {
+                    upserts: vec![ReplicatedItem {
+                        item: item.into(),
+                        version: RecordVersion {
+                            modified_at_ms: 2,
+                            writer_device_id: "11111111-1111-4111-8111-111111111111".to_string(),
+                        },
+                    }],
+                    tombstones: Vec::new(),
+                },
+                &BTreeMap::from([("interrupted-image".to_string(), vec![reference.clone()])]),
+            )
+            .unwrap();
+        let old_store = RotationStore::default();
+        let etag = fake_etag(&image_bytes);
+        old_store
+            .objects
+            .lock()
+            .unwrap()
+            .insert(object_key, (image_bytes.clone(), etag));
+
+        let new_password = "brand-new-rotation-password";
+        let new_prefix = "clipboard-rotated-interrupted";
+        let new_settings = SyncSettings {
+            remote_path: new_prefix.to_string(),
+            sync_password: Some(new_password.to_string()),
+            ..settings.clone()
+        };
+        // The old namespace cannot be cleaned up.
+        old_store.fail_deletes.store(true, Ordering::Relaxed);
+        let new_store = RotationStore::default();
+        let token = clipboard_sync::cancellation::CancellationToken::default();
+        let mut config_committed = false;
+        let error = perform_namespace_rotation(
+            &old_store,
+            &new_store,
+            &database,
+            &paths,
+            &settings,
+            &new_settings,
+            Some(new_password),
+            &token,
+            &mut || {
+                config_committed = true;
+                Ok(())
+            },
+            &mut |_| {},
+        )
+        .unwrap_err();
+        assert!(error.contains("injected deletion failure"), "{error}");
+        assert!(
+            config_committed,
+            "the configuration must already point at the new prefix when deletion fails"
+        );
+
+        // The tombstone is durable and the new namespace is complete, so a
+        // re-pointed device can sync; the old objects are bounded leftovers.
+        let old_keys: Vec<String> = old_store
+            .list("", None)
+            .unwrap()
+            .into_iter()
+            .map(|object| object.key)
+            .collect();
+        assert!(old_keys.contains(&"rotated-to".to_string()));
+        assert!(
+            old_keys.iter().any(|key| key.starts_with("v1/")),
+            "the interrupted deletion leaves the old objects behind, which is recoverable"
+        );
+        let new_keys: Vec<String> = new_store
+            .list("", None)
+            .unwrap()
+            .into_iter()
+            .map(|object| object.key)
+            .collect();
+        assert!(new_keys.iter().any(|key| key == "v1/namespace.json"));
+        assert!(new_keys
+            .iter()
+            .any(|key| key.starts_with("v1/resources/image/")));
+
+        drop(database);
+        fs::remove_dir_all(paths.project).unwrap();
     }
 
     #[test]
