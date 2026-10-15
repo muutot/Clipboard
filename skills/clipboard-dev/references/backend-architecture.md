@@ -117,8 +117,10 @@ cancellation scope. See `docs/SYNC_V1.md` for upgrading before credential rotati
 a thin ObjectStore decorator cancels after a successful immutable snapshot/segment PUT (the
 real head must stay unchanged; retry preserves pending rows and converges), an encrypted
 image resource must upload as multi-chunk ciphertext, defer its body during an ordinary pull,
-and materialize byte-identical on the peer, and a rotation tombstone at the prefix root must
-make a stale peer refuse. CI runs the smokes through
+and materialize byte-identical on the peer, a rotation tombstone at the prefix root must
+make a stale peer refuse, and the full rotation flow (materialize-all → publish at the new
+prefix → tombstone → delete the old namespace → byte-identical body) must hold over the wire
+(`real_s3_namespace_rotation_moves_state_and_tombstones`). CI runs the smokes through
 `.github/workflows/sync-s3.yml` (ubuntu + checksum-verified pinned rustfs); locally use
 `scripts/sync-s3-test.ps1 -Test smoke`, which exports the password. None of it proves native
 exit timing.
