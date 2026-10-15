@@ -44,6 +44,9 @@ pyproject.toml
 .workbuddy/
 __pycache__/
 
+# Linked experience worktree (kept locally; excluded from tooling via .prettierignore)
+.worktree-experience/
+
 # Locally provisioned test servers (untracked; see scripts/sync-s3-test.ps1)
 .tools/
 
