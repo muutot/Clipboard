@@ -246,6 +246,13 @@ export interface LocaleDefinition {
     syncEncryption: string;
     syncEncryptionPlaceholder: string;
     syncEncryptionStored: string;
+    syncRotate: string;
+    syncRotateDesc: string;
+    syncRotateNewPassword: string;
+    syncRotateConfirm: string;
+    syncRotateCancel: string;
+    syncRotating: string;
+    syncRotateSuccess: string;
     appearanceSettings: string;
     ocrSettings: string;
     statisticsSettings: string;

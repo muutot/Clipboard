@@ -16,6 +16,7 @@
   import BackgroundOperationStatus from "../layout/BackgroundOperationStatus.svelte";
   import {
     getSyncConfig,
+    rotateSyncNamespace,
     runSync,
     setSyncConfig,
     testSyncConnection,
@@ -68,6 +69,42 @@
   // in-code defaults would let one stray blur save those defaults on top of
   // the user's real sync configuration.
   let syncConfigError = $state(false);
+  // Namespace rotation state. The run itself is a Sync-kind background
+  // operation, so `operation` drives its progress and cancel button.
+  let rotateDialogEl = $state<HTMLDialogElement | null>(null);
+  let rotatePassword = $state("");
+  let rotating = $state(false);
+
+  function openRotateDialog() {
+    rotatePassword = "";
+    rotateDialogEl?.showModal();
+  }
+
+  function closeRotateDialog() {
+    rotateDialogEl?.close();
+  }
+
+  async function handleRotateNamespace() {
+    if (!isTauriRuntime() || rotating) return;
+    rotating = true;
+    try {
+      await rotateSyncNamespace(rotatePassword);
+      closeRotateDialog();
+      rotatePassword = "";
+      onfeedback(_t("storage.syncRotateSuccess"), true);
+      // The backend rewrote the prefix and password; re-read so the panel
+      // shows the new values instead of the stale pre-rotation ones.
+      await loadSyncConfig();
+    } catch (e) {
+      // A failed rotation leaves the old prefix and password configured, so
+      // the panel stays valid; surface the reason and keep the dialog open
+      // for a retry.
+      console.error("Namespace rotation failed", e);
+      onfeedback(String(e), false);
+    } finally {
+      rotating = false;
+    }
+  }
 
   $effect(() => {
     void loadSyncConfig();
@@ -493,5 +530,66 @@
         onblur: saveSyncConfig,
       }}
     />
+    {#if syncProvider === "s3"}
+      <section class="setting-card">
+        <div class="setting-heading">
+          <span class="setting-icon"><AppIcon name="lock" size={17} /></span>
+          <div class="sync-now-info">
+            <strong>{_t("storage.syncRotate")}</strong>
+            <p class="sync-now-desc">{_t("storage.syncRotateDesc")}</p>
+          </div>
+          <button
+            type="button"
+            class="settings-action-btn"
+            disabled={syncBusy || syncTesting}
+            onclick={openRotateDialog}
+          >
+            {_t("storage.syncRotate")}
+          </button>
+        </div>
+      </section>
+    {/if}
   {/if}
+  <dialog
+    bind:this={rotateDialogEl}
+    aria-label={_t("storage.syncRotate")}
+    oncancel={(event) => {
+      event.preventDefault();
+      closeRotateDialog();
+    }}
+    onkeydown={(event) => event.stopPropagation()}
+    onclick={(event) => {
+      if (event.target === rotateDialogEl) closeRotateDialog();
+    }}
+  >
+    <header>
+      <strong>{_t("storage.syncRotate")}</strong><button
+        type="button"
+        onclick={closeRotateDialog}
+        aria-label={_t("storage.syncRotateCancel")}>×</button
+      >
+    </header>
+    <p class="hint">{_t("storage.syncRotateDesc")}</p>
+    <form
+      onsubmit={(event) => {
+        event.preventDefault();
+        void handleRotateNamespace();
+      }}
+    >
+      <input
+        bind:value={rotatePassword}
+        type="password"
+        autocomplete="new-password"
+        placeholder={_t("storage.syncRotateNewPassword")}
+        aria-label={_t("storage.syncRotateNewPassword")}
+      />
+      <div class="rotate-actions">
+        <button type="submit" disabled={rotating || syncBusy}
+          >{rotating ? _t("storage.syncRotating") : _t("storage.syncRotateConfirm")}</button
+        >
+        <button type="button" onclick={closeRotateDialog}>{_t("storage.syncRotateCancel")}</button>
+      </div>
+    </form>
+    <BackgroundOperationStatus {operation} />
+  </dialog>
 </div>

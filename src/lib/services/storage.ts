@@ -413,3 +413,16 @@ export async function runSync(): Promise<SyncRunResult> {
     "Sync is only available in the desktop app",
   );
 }
+
+/// Rotates the sync namespace to a fresh prefix and key. Destructive and
+/// long-running: the backend materializes every referenced resource, then
+/// republishes the complete local state under the new prefix/key before the
+/// local configuration moves. An empty password disables namespace encryption.
+/// A failure leaves the previous prefix and password configured.
+export async function rotateSyncNamespace(newPassword: string): Promise<void> {
+  await invokeTauriRequired<void>(
+    "rotate_sync_namespace",
+    { newPassword },
+    "Namespace rotation is only available in the desktop app",
+  );
+}
