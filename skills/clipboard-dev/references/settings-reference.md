@@ -54,10 +54,11 @@ Every card kind shares one estimator contract: the `*Height` fields are content 
 | `cardTallTextHeight` | `42`    | 42–100           |
 | `cardImageHeight`    | `80`    | 64–200           |
 | `searchHeight`       | `30`    | 28–56            |
-| `searchFontSize`     | `20`    | 10–24            |
 | `cardBorderRadius`   | `5`     | 0–20             |
 
-`LayoutSettingsPanel` (labeled "Layout" in the UI) exposes nine sliders. Custom-title text/link cards share the same text estimate as normal text cards (single-line title + clamped preview + meta row); the former dedicated `cardCustomTitleHeight` base was removed because a user-fixed height cannot track the rendered content and left an empty band inside pinned cards. Stale `cardCustomTitleHeight` keys in old `settings.json` are absorbed by the Rust config `extra` map and ignored.
+`LayoutSettingsPanel` (labeled "Layout" in the UI) exposes eight sliders. Custom-title text/link cards share the same text estimate as normal text cards (single-line title + clamped preview + meta row); the former dedicated `cardCustomTitleHeight` base was removed because a user-fixed height cannot track the rendered content and left an empty band inside pinned cards. Stale `cardCustomTitleHeight` keys in old `settings.json` are absorbed by the Rust config `extra` map and ignored.
+
+`searchFontSize` is a top-level scalar grouped with the card/search knobs but rendered on the font panel's interface tab (search item id `font.search`), not in the layout panel; see the general scalar table below.
 
 ## General scalar/enum settings
 
@@ -83,6 +84,7 @@ Every card kind shares one estimator contract: the `*Height` fields are content 
 | `searchSuggestionMode`        | `"off"`, `"panel"`, or `"inline"`           | `"off"`      | —                                                                                                                                             |
 | `searchHistoryEnabled`        | boolean                                     | `false`      | —                                                                                                                                             |
 | `searchPlaceholder`           | string                                      | `""`         | trimmed, ≤80 chars; empty = use localized default text (`app.searchPlaceholder`)                                                              |
+| `searchFontSize`              | number                                      | `20`         | 10–24                                                                                                                                         |
 | `cardActionsDisplay`          | `"hover"` or `"always"`                     | `"hover"`    | —                                                                                                                                             |
 | `quickCopyBadgeAlwaysVisible` | boolean                                     | `true`       | —                                                                                                                                             |
 | `showSettingsCloseButton`     | boolean                                     | `true`       | —                                                                                                                                             |
