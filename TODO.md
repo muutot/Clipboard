@@ -88,16 +88,16 @@
 > 本节条目在所列验收证据齐全前**不得勾选**（`skills/clipboard-dev`：直接实现证据 +
 > 相称验证）。代码已合入主干不等于完成。
 
-### A. 跨平台能力验收 — 实现已随 v1.8.0 合入，缺平台 CI 与实机证据
+### A. 跨平台能力验收 — 实现已随 v1.8.0 合入；平台 CI 已绿，缺桌面实机证据
 
-证据：`CHANGELOG.md` 1.8.0 功能条目（全局热键、单实例唤醒、macOS RTF、跨平台快速粘贴、窗口透明/毛玻璃）与 `platform/` 适配器源码；README 中文平台矩阵对应单元格仍为 ⚠️「待验证」，README_EN.md 已同步为同措辞。macOS CI 变绿后的联动动作：中文矩阵单元格改 ✅、本区条目勾选、两份 README 去掉「待验证/待平台验证」标注。
+证据：`CHANGELOG.md` 1.8.0 功能条目（全局热键、单实例唤醒、macOS RTF、跨平台快速粘贴、窗口透明/毛玻璃）与 `platform/` 适配器源码。**平台 CI 门禁已达成**：`Rust (macos-latest)` 与 `Rust (ubuntu-latest)` job 自 2026-10-15 起常绿（run e9d1163b）——全部 `#[cfg(target_os)]` 平台代码被编译且其单测运行；README 中文矩阵「读取文件路径」macOS 单元格据此按脚注规则由 ⚠️ 改判 ✅，两份 README 已同步。**剩余缺口**：下列各项的真实桌面功能实测（快捷键触发、粘贴注入、窗口特效观感、Finder 复制取路径等），本环境（Windows）无法执行，保持未勾选。
 
-- [ ] 多格式竞态防护：macOS changeCount 已接线；Linux 双读一致性校验与三次有限重试已实现，不具备系统序列号的原子保证。待对应平台 CI/实机验收。
-- [ ] macOS RTF：public.rtf NSData 读取已接线，ANSI 字节转 RTF 十六进制转义；含原始 binary run 的负载保守跳过。待 macOS CI/实机验收。
-- [ ] macOS/Linux 单实例唤醒：实例锁所有者发布 owner-only 的本地端点与随机令牌，通知线程有停止与 join；UI 操作投递主线程。待对应平台 CI/桌面激活验收。
-- [ ] 跨平台全局热键：macOS/X11 原生注册与可停止的双击采样、Wayland portal 会话已接线；Wayland 不支持双击修饰键。待对应平台 CI/权限与桌面实测。
-- [ ] 快速粘贴：macOS 激活 + CGEvent、X11 EWMH + XTest、Sway/Hyprland + wtype 后端已接线；记录外部前台目标并复核身份与焦点。待对应平台权限/桌面实测。
-- [ ] 窗口透明/毛玻璃：macOS NSWindow alpha + Vibrancy、Linux GTK alpha、X11 KWin 兼容模糊请求已接线；Wayland 模糊仍依赖合成器。切回仅背景透明时恢复原生 alpha=100%。待对应平台视觉验收。
+- [ ] 多格式竞态防护：macOS changeCount 已接线；Linux 双读一致性校验与三次有限重试已实现，不具备系统序列号的原子保证。平台 CI 已绿（2026-10-15）；待桌面实机验收。
+- [ ] macOS RTF：public.rtf NSData 读取已接线，ANSI 字节转 RTF 十六进制转义；含原始 binary run 的负载保守跳过。平台 CI 已绿（2026-10-15）；待 macOS 桌面实机验收。
+- [ ] macOS/Linux 单实例唤醒：实例锁所有者发布 owner-only 的本地端点与随机令牌，通知线程有停止与 join；UI 操作投递主线程。平台 CI 已绿（2026-10-15）；待桌面激活验收。
+- [ ] 跨平台全局热键：macOS/X11 原生注册与可停止的双击采样，Wayland portal 会话已接线；Wayland 不支持双击修饰键。平台 CI 已绿（2026-10-15）；待权限与桌面实测。
+- [ ] 快速粘贴：macOS 激活 + CGEvent、X11 EWMH + XTest、Sway/Hyprland + wtype 后端已接线；记录外部前台目标并复核身份与焦点。平台 CI 已绿（2026-10-15）；待权限/桌面实测。
+- [ ] 窗口透明/毛玻璃：macOS NSWindow alpha + Vibrancy、Linux GTK alpha、X11 KWin 兼容模糊请求已接线；Wayland 模糊仍依赖合成器。切回仅背景透明时恢复原生 alpha=100%。平台 CI 已绿（2026-10-15）；待视觉验收。
 
 ### B. 原生窗口手工回归（v1.8 遗留，依据 `docs/V1_8_FOLLOWUP.md`「Native verification still required」）
 

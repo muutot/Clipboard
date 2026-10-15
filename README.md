@@ -209,7 +209,7 @@ npm run tauri build  # 在 src-tauri/target/release/bundle/ 生成安装包
 | 读取剪贴板文本             | ✅ 原生 Win32 | ✅ 原生 ObjC FFI                        | ✅ 原生 Xlib FFI                        | ⚠️ `wl-paste`                               |
 | 写入剪贴板（含自触发标记） | ✅ 原生 Win32 | ⚠️ `pbcopy`（无标记）                   | ⚠️ `xclip`（无标记）                    | ⚠️ `wl-copy`（无标记）                      |
 | 读取剪贴板图片             | ✅ 原生 Win32 | ⚠️ `pngpaste` / `osascript`+`sips`      | ⚠️ `xclip`                              | ⚠️ `wl-paste`                               |
-| 读取文件路径               | ✅ 原生 Win32 | ⚠️ 原生 `NSFilenamesPboardType`¹        | ⚠️ `xclip`（uri-list）                  | ⚠️ `wl-paste`（uri-list）                   |
+| 读取文件路径               | ✅ 原生 Win32 | ✅ 原生 `NSFilenamesPboardType`¹        | ⚠️ `xclip`（uri-list）                  | ⚠️ `wl-paste`（uri-list）                   |
 | 获取前台应用               | ✅ 原生 Win32 | ✅ 原生 ObjC FFI                        | ✅ 原生 Xlib + `/proc`                  | ⚠️ `swaymsg`/`hyprctl`/`xdotool`            |
 | 提取应用图标               | ✅ 原生 Win32 | ⚠️ `plutil` + `sips`                    | ⚠️ freedesktop 图标                     | ⚠️ freedesktop 图标                         |
 | 全局热键 / 双击修饰键      | ✅ 原生 Win32 | ⚠️ 原生组合键 / 10ms 双击采样（待验证） | ⚠️ 原生组合键 / 10ms 双击采样（待验证） | ⚠️ GlobalShortcuts portal；不支持修饰键双击 |
@@ -226,10 +226,12 @@ npm run tauri build  # 在 src-tauri/target/release/bundle/ 生成安装包
 
 > **注意**：剪贴板变更检测按平台采用不同机制——Windows 使用原生剪贴板序列号事件驱动；Linux 在 X11 下通过 XFixes 事件、在 Wayland 下通过 data-control 协议事件驱动（协议不可用时回退 500ms 轮询）；macOS 无推送 API，使用 500ms 轮询。先比对文本，无文本时再比对文件路径与图片内容，因此图片/文件复制也能被采集。自触发防护不依赖剪贴板私有标记（写入命令行工具无法携带标记），而是将应用自身写入的内容哈希登记在内存守卫中，采集时比对跳过。
 
-> **热键说明**：macOS/X11 组合键经 `global-hotkey` 原生注册，双击修饰键经 10ms 按键状态采样识别（短于采样间隔的按键可能漏检，macOS 需要输入监控权限）。Wayland 通过 GlobalShortcuts portal 请求桌面授权，只在绑定成功后报告可用；修饰键双击无通用接口，明确报错。非 Windows 实现仍待对应平台 CI 和桌面实测。快速粘贴新增 macOS/X11 原生后端；Wayland 仅在 Sway/Hyprland 与 wtype 可用时支持。会持续记录外部前台窗口，并在恢复焦点后核对窗口/进程身份。
+> **热键说明**：macOS/X11 组合键经 `global-hotkey` 原生注册，双击修饰键经 10ms 按键状态采样识别（短于采样间隔的按键可能漏检，macOS 需要输入监控权限）。Wayland 通过 GlobalShortcuts portal 请求桌面授权，只在绑定成功后报告可用；修饰键双击无通用接口，明确报错。快速粘贴新增 macOS/X11 原生后端；Wayland 仅在 Sway/Hyprland 与 wtype 可用时支持。会持续记录外部前台窗口，并在恢复焦点后核对窗口/进程身份。**平台 CI 状态**：macOS job（编译全部 `#[cfg(target_os = "macos")]` 代码并运行其单测）与 Linux job 自 2026-10-15 起常绿，表格中「待验证/待平台验证」残留的缺口是**真实桌面功能实测**，不再是编译门禁。
 
-> ¹ macOS 文件路径读取已是原生 `NSFilenamesPboardType` 实现（`platform/macos.rs::read_nsfilenames_paths`），不依赖外部命令，
-> 但整个文件在 `#[cfg(target_os = "macos")]` 之下、Windows 门禁不编译，因此仍标为 ⚠️ 而非 ✅——只有 macOS CI 变绿才可改判。
+> ¹ macOS 文件路径读取是原生 `NSFilenamesPboardType` 实现（`platform/macos/clipboard.rs::read_nsfilenames_paths`），不依赖外部命令；
+> 该文件只在 macOS 编译，其改判依据为对应平台 CI：`Rust (macos-latest)` job 自 2026-10-15 起编译并
+> 运行该模块（含不 panic 冒烟测试），故由 ⚠️ 改判 ✅。真实 Finder 复制文件的取路径实测仍未做，
+> 属 `TODO.md` 开放项 A 的桌面验收部分。
 
 ---
 
