@@ -48,9 +48,10 @@ Progress (2026-10-15): D1/D2 decided, D3/D4 recommended. Engine level landed:
   sequence including the double-rotation refusal, and the real-S3 smoke
   `real_s3_namespace_rotation_moves_state_and_tombstones` proves the same flow over the wire
   (materialize-all, encrypted republish, tombstone contents, old-namespace deletion,
-  byte-identical body, second-rotation refusal). Failure injection at every step boundary
-  (cancel mid-materialize, mid-publish, after the pointer, mid-delete, mid-repoint) is still
-  owed; the destructive cancellation semantics follow the v1.8 long-task model.
+  byte-identical body, second-rotation refusal) — smoke run 38662706953 / main CI green on
+  sha e9d1163b. Failure injection at every step boundary (cancel mid-materialize,
+  mid-publish, after the pointer, mid-delete, mid-repoint) is still owed; the destructive
+  cancellation semantics follow the v1.8 long-task model.
 
 Remaining: the rustfs failure-injection smoke and the frontend flow.
 
