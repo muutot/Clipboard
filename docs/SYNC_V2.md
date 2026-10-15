@@ -189,8 +189,12 @@ starting and survive abandonment:
 3. frontend: dedicated destructive flow with the confirmation, progress and cancellation.
 
 Progress: step 2 is done (2026-10-14, `commands/sync::refuse_if_prefix_rotated`); step 1's
-engine flow is done (`perform_namespace_rotation` behind the `rotate_sync_namespace` command)
-with only its rustfs failure-injection smoke outstanding; step 3 remains.
+engine flow is done (`perform_namespace_rotation` behind the `rotate_sync_namespace` command,
+with `MemoryStore` and real-server smokes); step 3 is done (2026-10-15,
+`SyncPanel` rotation section — destructive `<dialog>` confirm with a new-password field,
+progress/cancel through the shared Sync-kind operation monitor, config re-read on success,
+`rotateSyncNamespace` service wrapper, bilingual keys; type check and the frontend suite pass).
+What remains for V2-1 is only the rustfs failure-injection smoke at every step boundary.
 
 Acceptance candidates (intended gates; no test exists yet):
 
