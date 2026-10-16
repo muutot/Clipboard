@@ -35,6 +35,15 @@ observed.
 Text round-trip is already recorded (Windows, 2026-10-15). The remaining three
 representations:
 
+`scripts/native-clipboard-verify.ps1` automates the capture and copy-back halves
+of the HTML and file cases against a real clipboard with an isolated profile. It
+writes `HTML Format`, checks the stored `html_content`, writes CF_HDROP, checks
+the `file` record plus managed copy, then runs the CLI `copy` and checks the
+clipboard formats. The isolated database lives at
+`storage\database\clipboard.sqlite3`, not `history.sqlite` in the executable
+directory. The parts it cannot script — WebView "format paste", Explorer paste,
+and remote media — stay manual below.
+
 ### HTML
 
 Capture side: a producer writes CF_HTML (`"HTML Format"`) to the clipboard. The

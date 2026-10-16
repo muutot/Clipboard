@@ -78,6 +78,14 @@ Do not promote a niche exception into a general rule. Record newly discovered lo
 - Inspect rendered/runtime behavior for layout, theme, focus, multi-window, platform, or OS integration claims; static checks alone are insufficient.
 - Treat platform-gated code as unverified locally. Anything behind `#[cfg(target_os = ...)]` (the Linux/macOS halves of `src-tauri/src/platform/`) is not compiled by a Windows `npm run verify`, and cross-`cargo check` is not a substitute because native dependencies still need a cross C toolchain. After touching such code, the matching CI job is the only real gate — read its result, and do not treat a green local run as coverage. `docs/PITFALLS.md` ("平台专属代码是本地门禁的盲区") records a branch that stayed red through many green local runs.
 
+Windows native clipboard claims have a runnable harness:
+`scripts/native-clipboard-verify.ps1` copies the built executable into a temp
+profile, writes real CF_HTML/CF_HDROP, asserts the stored record and managed
+copy, and checks the CLI copy-back formats. It backs up and restores the
+clipboard text to a temp file. It does not cover the WebView format-paste write,
+Explorer paste or remote media — those stay manual, per
+`docs/NATIVE_VERIFICATION.md`.
+
 Report skipped checks and why. Do not convert missing evidence into a passing claim.
 
 ## 8. Run the documentation currency gate before every commit

@@ -115,8 +115,8 @@
   - [ ] 双窗口条目联动：一侧收藏/复制/删除，另一侧对应行实时更新（`clipboard-items-changed`）。
   - [ ] Windows 文字透明度开关 × 背景/窗口特效（none/acrylic/mica）视觉组合保持可读。
 - [ ] 原生文本、HTML、文件与远程媒体复制粘贴保持完整内容（一次性桌面会话 + 临时应用数据；注意原生 CF_HDROP 测试会覆盖系统剪贴板）。**文本部分已验证（Windows，2026-10-15）**：隔离数据目录运行 CLI（数据目录随可执行文件位置解析，GUI 子系统用 `Start-Process -RedirectStandardOutput` 捕获输出），真实系统剪贴板往返 `paste` 捕获 → `list` → `copy --query <id>` → 逐字节一致（先以占位符覆写排除假阳性）。HTML/文件/远程媒体、双窗口联动仍未验证。
-  - [ ] HTML 富文本：真实 CF_HTML 写入 → 捕获入库 `html_content` 保真 → GUI「格式化粘贴」回写 CF_HTML 后目标应用保留格式。（后端 `copy_clipboard_item` 只写纯文本，富文本回写仅走 format 粘贴，属既定设计。）
-  - [ ] 文件：真实 CF_HDROP 写入 → 捕获为 `file` 记录并物化受管副本 → 复制回 CF_HDROP，资源管理器粘贴出源文件且内容一致。
+  - [ ] HTML 富文本：真实 CF_HTML 写入 → 捕获入库 `html_content` 保真 → GUI「格式化粘贴」回写 CF_HTML 后目标应用保留格式。（后端 `copy_clipboard_item` 只写纯文本，富文本回写仅走 format 粘贴，属既定设计。）**捕获段已验证（Windows，2026-10-16）**：`scripts/native-clipboard-verify.ps1` 向真实剪贴板写 `HTML Format`，隔离实例捕获后 `html_content` 精确含标记；GUI「格式化粘贴」回写仍待人工。
+  - [ ] 文件：真实 CF_HDROP 写入 → 捕获为 `file` 记录并物化受管副本 → 复制回 CF_HDROP，资源管理器粘贴出源文件且内容一致。**捕获+物化+回写段已验证（Windows，2026-10-16）**：同一脚本写 CF_HDROP，隔离实例生成 `file` 记录、受管副本落盘存在；CLI `copy` 回写后系统剪贴板 `CF_HDROP` 可用。资源管理器实际粘贴仍待人工。
   - [ ] 远程媒体：本地无资源的同步记录在复制/预览时经 `materialize_clipboard_item` 下载，落地字节与源 SHA-256 一致。
 - [ ] 标签、恢复与慢速 S3 传输过程中退出：线程 join、留下可重试数据。
   - [ ] 退出路径：`RunEvent::ExitRequested → stop_runtime_services` 先取消并等待 `BackgroundOperations`（≤30s），再停各 worker（`shutdown.rs`）。

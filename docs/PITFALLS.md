@@ -384,6 +384,8 @@ GitHub 默认每个 job 上限 6 小时。`ci.yml` 的 `frontend` / `rust` 因�
 
 本项目自己的测试就懂这个道理（`platform/windows/tests.rs` 的 CF_HDROP 用例把整块写入逻辑关在 `CLIPBOARD_ALLOW_REAL_CLIPBOARD_TEST` 后面，注释原话："it would destroy a developer's clipboard"）。CLI/冒烟级别的真机验证同样在动真剪贴板：`paste` 读它、`copy` 覆写它。2026-10-15 做 Windows 文本往返验证时的教训：保存只存进了 shell 变量，而工具调用是**跨进程**的——下一次调用里变量已经消失，还原时写回去的是测试标记而不是用户原文。规则：验证前 `Get-Clipboard` 的内容先**写进临时文件**，还原从文件读；占位符先行覆写以排除假阳性；验证结束清理隔离数据目录（CLI 的数据目录随可执行文件位置解析，把 exe 拷进临时目录即完全隔离）。GUI 子系统程序（`#![windows_subsystem = "windows"]`）没有控制台，输出要用 `Start-Process -RedirectStandardOutput` 捕获。
 
+2026-10-16 用 `scripts/native-clipboard-verify.ps1` 覆盖 HTML/文件时又踩到三个点，已写成脚本行为：隔离实例的数据库不在 exe 同级，而是 `storage\database\clipboard.sqlite3`（先前的错误假设是 `history.sqlite`，白等 60s 超时）；`SetClipboardData` 会被另一个开着剪贴板监视的实例偶发顶掉（首轮 `win32 $code` 直接失败，重试即过），脚本必须像生产写入路径一样重试而不是一次定成败；PowerShell 5.1 不支持 `?.`，`$PSScriptRoot` 在 `param()` 默认值求值阶段可能为空（把默认路径求值挪到参数块之后）。
+
 ## Rust 模块结构
 
 添加新功能时按模块归属放置：
