@@ -799,7 +799,12 @@ export async function pasteClipboardItem(
   }
 
   if (mode === "format") {
-    if (!item.htmlContent) return;
+    if (!item.htmlContent) {
+      // No rich content to paste as formatted; degrade to plain text so the
+      // user's action still has a result instead of silently doing nothing.
+      await pasteClipboardItem(item, "plain", hooks);
+      return;
+    }
     const htmlContent = item.htmlContent;
     const plainText = item.textContent || undefined;
     await pasteToPreviousApp(
