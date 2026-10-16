@@ -65,21 +65,26 @@ export function createBulkController(deps: BulkDependencies) {
       });
   }
 
-  // Sequential paste: the multi-selection doubles as the paste queue, so the
-  // feature adds no second piece of state. The selection set is
-  // insertion-ordered and `selectedLoadedItems` derives from it in that order,
-  // which makes the head the first item the user picked.
-  async function bulkPasteNext() {
-    const [next] = deps.selectedLoadedItems;
-    if (!next) return;
-    // The shared paste path (clipboard write + restore/paste into the
-    // previous application, or a plain copy outside Tauri) already reports
-    // its own failures through toasts; advancing matches the single-item
-    // paste behavior, where a failed write leaves the same stale clipboard.
-    await pasteClipboardItem(next);
-    // Only the delivered head leaves the selection, so the next invocation
-    // continues with the following item.
-    selectedIds = new Set([...selectedIds].filter((id) => id !== next.id));
+  // Bulk paste: deliver every selected item to the previous application in one
+  // go, selection order preserved. No per-item queue state is exposed.
+  async function bulkPasteAll() {
+    const items = deps.selectedLoadedItems;
+    if (items.length === 0) return;
+    let succeeded = 0;
+    for (const item of items) {
+      try {
+        await pasteClipboardItem(item);
+        succeeded++;
+      } catch (error) {
+        console.error("Bulk paste failed", error);
+      }
+    }
+    selectedIds = new Set();
+    if (succeeded > 0) {
+      showToast(deps.translate("toast.bulkPasteSuccess", { count: succeeded }), "success");
+    } else {
+      showToast(deps.translate("toast.pasteFailed"), "error");
+    }
   }
 
   function bulkFavorite() {
@@ -285,7 +290,7 @@ export function createBulkController(deps: BulkDependencies) {
   }
   return {
     bulkCopy,
-    bulkPasteNext,
+    bulkPasteAll,
     bulkFavorite,
     bulkRestore,
     bulkPermanentDelete,

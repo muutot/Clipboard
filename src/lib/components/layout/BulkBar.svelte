@@ -7,72 +7,45 @@
 
   interface Props {
     selectedCount: number;
-    selectedActiveCount: number;
-    selectedDeletedCount: number;
-    activeFilter: string;
     allSelectedFavorites: boolean;
     ondeselect: () => void;
     oncopy: () => void;
-    onpastenext: () => void;
+    onpasteall: () => void;
     ondelete: () => void;
     onfavorite: () => void;
-    onrestore: () => void;
-    onpermanentdelete: () => void;
   }
 
   let {
     selectedCount,
-    selectedActiveCount,
-    selectedDeletedCount,
-    activeFilter,
     allSelectedFavorites,
     ondeselect,
     oncopy,
-    onpastenext,
+    onpasteall,
     ondelete,
     onfavorite,
-    onrestore,
-    onpermanentdelete,
   }: Props = $props();
 </script>
 
 {#if selectedCount > 0}
   <div class="bulk-bar">
+    <span class="bulk-count">{_t("bulk.totalN", { count: selectedCount })}</span>
     <div class="bulk-actions">
       <button type="button" onclick={oncopy}>
         <AppIcon name="copy" size={14} />
-        <span>{_t("bulk.copyN", { count: selectedCount })}</span>
+        <span>{_t("bulk.copy")}</span>
       </button>
-      {#if selectedActiveCount > 0}
-        <button type="button" onclick={onpastenext} title={_t("bulk.pasteNextHint")}>
-          <AppIcon name="clipboard" size={14} />
-          <span>{_t("bulk.pasteNextN", { count: selectedActiveCount })}</span>
-        </button>
-      {/if}
-      {#if selectedActiveCount > 0 && activeFilter !== "favorite"}
-        <button type="button" class="danger" onclick={ondelete}>
-          <AppIcon name="trash" size={14} />
-          <span>{_t("bulk.deleteN", { count: selectedActiveCount })}</span>
-        </button>
-      {/if}
+      <button type="button" onclick={onpasteall}>
+        <AppIcon name="clipboard" size={14} />
+        <span>{_t("bulk.pasteAll")}</span>
+      </button>
+      <button type="button" class="danger" onclick={ondelete}>
+        <AppIcon name="trash" size={14} />
+        <span>{_t("bulk.delete")}</span>
+      </button>
       <button type="button" onclick={onfavorite}>
         <AppIcon name="star" size={14} />
-        <span
-          >{allSelectedFavorites
-            ? _t("bulk.unfavoriteN", { count: selectedCount })
-            : _t("bulk.favoriteN", { count: selectedCount })}</span
-        >
+        <span>{allSelectedFavorites ? _t("bulk.unfavorite") : _t("bulk.favorite")}</span>
       </button>
-      {#if selectedDeletedCount > 0}
-        <button type="button" onclick={onrestore}>
-          <AppIcon name="restore" size={14} />
-          <span>{_t("bulk.restoreN", { count: selectedDeletedCount })}</span>
-        </button>
-        <button type="button" class="danger" onclick={onpermanentdelete}>
-          <AppIcon name="trash" size={14} />
-          <span>{_t("bulk.permanentDeleteN", { count: selectedDeletedCount })}</span>
-        </button>
-      {/if}
     </div>
     <button type="button" class="bulk-deselect" onclick={ondeselect} title={_t("bulk.deselectAll")}>
       <AppIcon name="x" size={14} strokeWidth={2.5} />
@@ -88,6 +61,12 @@
     padding: 8px 14px;
     border-top: 1px solid var(--border-subtle);
     background: var(--input-bg);
+  }
+
+  .bulk-count {
+    font-size: 11.5px;
+    color: var(--text-secondary);
+    font-weight: 500;
   }
 
   .bulk-deselect {

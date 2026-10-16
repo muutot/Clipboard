@@ -121,6 +121,7 @@ export interface LocaleDefinition {
     unfavorite: string;
     delete: string;
     selectItem: string;
+    pasteOrder: string;
     itemActions: string;
     viewDetail: string;
     edit: string;
@@ -663,15 +664,13 @@ export interface LocaleDefinition {
     suggestions: string;
   };
   bulk: {
-    copyN: string;
-    pasteNextN: string;
-    pasteNextHint: string;
-    favoriteN: string;
-    unfavoriteN: string;
-    deleteN: string;
-    restoreN: string;
-    permanentDeleteN: string;
+    copy: string;
+    pasteAll: string;
+    favorite: string;
+    unfavorite: string;
+    delete: string;
     deselectAll: string;
+    totalN: string;
   };
   toast: {
     copySuccess: string;
@@ -686,6 +685,7 @@ export interface LocaleDefinition {
     bulkFavoriteSuccess: string;
     bulkUnfavoriteSuccess: string;
     bulkDeleteSuccess: string;
+    bulkPasteSuccess: string;
     editSaved: string;
     plainCopySuccess: string;
     plainPasteSuccess: string;

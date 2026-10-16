@@ -343,8 +343,7 @@
     },
     translate: _t,
   });
-  const { bulkCopy, bulkPasteNext, bulkFavorite, bulkRestore, bulkPermanentDelete, bulkDelete } =
-    bulk;
+  const { bulkCopy, bulkPasteAll, bulkFavorite, bulkDelete } = bulk;
 
   let lastClickedIndex = $state(-1);
 
@@ -564,10 +563,6 @@
       .map((id) => findLoadedItem(id))
       .filter((item): item is ClipboardItem => item !== undefined),
   );
-  const selectedDeletedCount = $derived(
-    selectedLoadedItems.filter((item) => !!item.deleted).length,
-  );
-  const selectedActiveCount = $derived(selectedLoadedItems.filter((item) => !item.deleted).length);
   const allSelectedFavorites = $derived(
     selectedLoadedItems.length > 0 && selectedLoadedItems.every((item) => item.favorite),
   );
@@ -2291,17 +2286,12 @@
 
     <BulkBar
       selectedCount={bulk.selectedIds.size}
-      {selectedActiveCount}
-      {selectedDeletedCount}
-      {activeFilter}
       {allSelectedFavorites}
       ondeselect={() => (bulk.selectedIds = new Set())}
       oncopy={bulkCopy}
-      onpastenext={bulkPasteNext}
+      onpasteall={bulkPasteAll}
       ondelete={bulkDelete}
       onfavorite={bulkFavorite}
-      onrestore={bulkRestore}
-      onpermanentdelete={bulkPermanentDelete}
     />
 
     {#if detailDisplayMode === "split" && detailItem}
