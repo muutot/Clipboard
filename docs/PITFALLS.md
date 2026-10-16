@@ -386,6 +386,11 @@ GitHub 默认每个 job 上限 6 小时。`ci.yml` 的 `frontend` / `rust` 因�
 
 2026-10-16 用 `scripts/native-clipboard-verify.ps1` 覆盖 HTML/文件时又踩到三个点，已写成脚本行为：隔离实例的数据库不在 exe 同级，而是 `storage\database\clipboard.sqlite3`（先前的错误假设是 `history.sqlite`，白等 60s 超时）；`SetClipboardData` 会被另一个开着剪贴板监视的实例偶发顶掉（首轮 `win32 $code` 直接失败，重试即过），脚本必须像生产写入路径一样重试而不是一次定成败；PowerShell 5.1 不支持 `?.`，`$PSScriptRoot` 在 `param()` 默认值求值阶段可能为空（把默认路径求值挪到参数块之后）。
 
+同一轮做主题/宽度截图（`scripts/theme-screenshot-matrix.ps1`）时又确认两条，都属"验收口径写错了"而不是代码缺陷：
+
+- **520px 不是主窗口可达状态。** 主窗口三处强制最小宽度 730：`tauri.conf.json` 的 `minWidth`、后端 `MAIN_WINDOW_MIN_WIDTH`、`geometry.rs` 的 `MIN_WIDTH`。520px 是 `DetailPanel.svelte` 的 CSS 断点（`width: min(520px, 100vw)`、`@media (max-width: 520px)`）与浏览器 fixture 的目标宽度。用 `SetWindowPos` 强行把主窗压到 520px 会绕过 tao 的最小尺寸，露出 `.app-shell { min-width: 710px }` 的水平溢出、卡片操作栏被右侧裁掉——这是越界态，不能记成回归。真正窄的原生 surface 是 320px 悬浮窗。
+- **主题调色板来自 `themeColors`，不来自 `theme`。** `applyGeneralSettingsToDocument` 只调用 `applyThemeColors(settings.themeColors)`；`theme` 字段只是主题设置面板的选档，用户在面板里点 light/dark 时由面板把预设写进 `themeColors`。所以只预置 `general.theme = "light"` 得到的仍是默认深色——截图证据会三张一模一样。要复现某主题就得连同 `themeColors` 一起预置。
+
 ## Rust 模块结构
 
 添加新功能时按模块归属放置：

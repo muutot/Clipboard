@@ -86,6 +86,12 @@ clipboard text to a temp file. It does not cover the WebView format-paste write,
 Explorer paste or remote media — those stay manual, per
 `docs/NATIVE_VERIFICATION.md`.
 
+Native theme/width claims have `scripts/theme-screenshot-matrix.ps1`, which
+launches an isolated profile per scenario, seeds `themeColors`, and captures the
+real window with `scripts/capture-window.ps1`. The main window's enforced 730 px
+minimum means 520 px is a detail-panel/fixture breakpoint, not a native main
+window size; the narrow native surface is the 320 px float panel.
+
 Report skipped checks and why. Do not convert missing evidence into a passing claim.
 
 ## 8. Run the documentation currency gate before every commit

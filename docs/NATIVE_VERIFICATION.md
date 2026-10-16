@@ -131,13 +131,40 @@ backup operations before stopping every worker.
 Capture the **real** window, not browser fixtures. Structural/type checks do not
 prove appearance.
 
-1. Launch the isolated app with a seeded config for each theme (`dark`, `light`,
-   custom CSS) and window effect (`none`, `acrylic`/`mica`).
-2. Screenshot at the normal restored size and at 520 px wide.
-3. Include the Windows text-transparency toggle on and off.
-4. Assert readability: no clipped button text, no overlapping controls, and the
-   translucent layer still shows legible foreground text.
+`scripts/theme-screenshot-matrix.ps1` drives this: it launches an isolated copy
+per scenario, seeds `themeColors` (not just the `theme` selector — the applied
+palette comes from `themeColors`), seeds rows straight into the isolated SQLite
+database, and captures with `scripts/capture-window.ps1` (Win32 + GDI+
+`PrintWindow(PW_RENDERFULLCONTENT)`, with a screen-rectangle fallback when the
+bitmap comes back flat).
 
-Capture with Win32 + GDI+ `PrintWindow` against the target `MainWindowHandle`,
-and wait for the handle to be stable before grabbing the bitmap rather than
-sleeping a fixed interval.
+### Width contract
+
+The main window enforces a **730 px minimum** (`tauri.conf.json` `minWidth`, the
+backend `MAIN_WINDOW_MIN_WIDTH`, and `geometry.rs`). A native main window
+therefore cannot reach 520 px. The 520 px responsive breakpoint lives in
+`DetailPanel.svelte` (`width: min(520px, 100vw)`, `@media (max-width: 520px)`)
+and in the browser fixtures — not in a resizable native main window. Forcing the
+window below its minimum clips the layout (`+page.svelte` `.app-shell {
+min-width: 710px }` keeps the shell wide), which is out of contract, not a
+regression.
+
+The real narrow native surface is the 320 px float panel
+(`commands/float.rs`, `FLOAT_WIDTH = 320`). Capture that for the narrow theme
+rows.
+
+### Procedure
+
+1. Capture `dark`, `light` and a `custom` palette at the normal size and at the
+   enforced 730 px minimum.
+2. Capture the 320 px float panel per theme.
+3. Include the text-transparency toggle combined with `acrylic`/`mica` on the
+   main window.
+4. Assert readability: no clipped controls, no overlapping text, and legible
+   foreground over the translucent layer.
+
+`PrintWindow` renders the window's own content, not the desktop behind it, so it
+cannot prove the _translucency_ itself. Judge that from an on-screen capture of
+the window over a controlled backdrop. A washed-out `light` + `mica` +
+text-transparency-at-85% frame was observed but is not yet attributed between
+real appearance and the capture method.

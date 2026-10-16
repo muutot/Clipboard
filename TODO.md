@@ -125,9 +125,10 @@
   - [ ] 慢速 S3 传输中途退出：已发布 head 不前进，pending 保留，重启后重试收敛。
 - [ ] 最终分支拿到 Windows/macOS/Linux CI 成功结果。
 - [ ] 深色/浅色/自定义主题 × 常规/窄宽度（含 Windows 文字透明度与背景/窗口特效组合）保持可读。**部分证据（Windows，2026-10-15）**：隔离数据目录 + 预置 conf.json（注意 PowerShell `Set-Content -Encoding utf8` 会写 BOM 导致配置被隔离成 corrupt，须用 `[System.IO.File]::WriteAllText` 无 BOM 写入）启动原生 GUI，验证配置被真实读取（应用回写的 `general.theme` / `privacy.paused` 与种子一致）与主窗口正常创建（746x709，标题 Clipboard）。**未取到有效视觉证据**：空状态为全幅背景图、与主题无关；且 `MainWindowHandle` 就绪时序不可靠，一次截图捕到了屏幕上的其他窗口。主题可读性对比与 520px 窄宽度仍未验证。
-  - [ ] 深色/浅色/自定义主题 × 常规宽度截图。
-  - [ ] 深色/浅色/自定义主题 × 520px 窄宽度截图。
-  - [ ] 文字透明度开关 + 背景/窗口特效（none/acrylic/mica）组合截图。
+  - [x] 深色/浅色/自定义主题 × 常规（746）与强制最小（730）宽度真实窗口截图，卡片操作栏/工具栏/状态栏完整可读。证据：`scripts/theme-screenshot-matrix.ps1` 6 张真实窗口截图（Windows，2026-10-16），隔离 profile + 预置 `themeColors`。
+  - [x] 修正验收口径：520px 是详情面板 CSS 断点（`DetailPanel.svelte` 的 `width: min(520px, 100vw)` 与 `@media (max-width: 520px)`），主窗口强制 `minWidth: 730`（`tauri.conf.json` + `MAIN_WINDOW_MIN_WIDTH` + `geometry.rs`），原生主窗口无法到达 520px。脚本保留一张 below-min 520px 压力截图，证实越界后卡片操作栏被 `.app-shell{min-width:710px}` 裁剪——该状态不在契约内，不是回归。
+  - [ ] 文字透明度开关 + 背景/窗口特效（off/acrylic/mica）组合：脚本已产出 acrylic/mica 截图，但 `PrintWindow` 不渲染窗口背后的桌面，透明/毛玻璃观感需在受控背景下用屏幕截图复核（light+mica+文字 85% 实测对比度明显下降，待确认是真实观感还是截图方式所致）。
+  - [ ] 320px 悬浮窗（真正的窄原生 surface）三主题截图。
 
 ### C. 下一版本候选（未立项；按「最小可验证单元」排期，取自各文档已记录的决议）
 
