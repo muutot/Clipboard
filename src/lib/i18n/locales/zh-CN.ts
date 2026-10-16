@@ -698,6 +698,8 @@ const zhCN: LocaleDefinition = {
   },
   bulk: {
     copyN: "复制 {count} 项",
+    pasteNextN: "按序粘贴（剩 {count} 项）",
+    pasteNextHint: "按选中顺序逐项粘贴到上一个应用；每贴一项，剩余数减一",
     favoriteN: "收藏 {count} 项",
     unfavoriteN: "取消收藏 {count} 项",
     deleteN: "删除 {count} 项",

@@ -51,8 +51,12 @@
     itemStore: store,
     settings,
     history,
+    // Mirror the route: selection order (insertion-ordered set) drives the
+    // derived items, not list order.
     get selectedLoadedItems() {
-      return store.history.filter((i) => bulk.selectedIds.has(i.id));
+      return [...bulk.selectedIds]
+        .map((id) => store.history.find((entry) => entry.id === id))
+        .filter((item): item is ClipboardItem => item !== undefined);
     },
     get allSelectedFavorites() {
       return store.history.filter((i) => bulk.selectedIds.has(i.id)).every((i) => i.favorite);

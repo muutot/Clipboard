@@ -343,7 +343,8 @@
     },
     translate: _t,
   });
-  const { bulkCopy, bulkFavorite, bulkRestore, bulkPermanentDelete, bulkDelete } = bulk;
+  const { bulkCopy, bulkPasteNext, bulkFavorite, bulkRestore, bulkPermanentDelete, bulkDelete } =
+    bulk;
 
   let lastClickedIndex = $state(-1);
 
@@ -2296,6 +2297,7 @@
       {allSelectedFavorites}
       ondeselect={() => (bulk.selectedIds = new Set())}
       oncopy={bulkCopy}
+      onpastenext={bulkPasteNext}
       ondelete={bulkDelete}
       onfavorite={bulkFavorite}
       onrestore={bulkRestore}

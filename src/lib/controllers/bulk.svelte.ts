@@ -9,6 +9,7 @@ import {
 } from "$lib/utils/store/item-store";
 import {
   hydrateClipboardItem,
+  pasteClipboardItem,
   writeClipboardText,
   persistBatchFavorite,
   persistBatchRestore,
@@ -62,6 +63,23 @@ export function createBulkController(deps: BulkDependencies) {
       .catch(() => {
         showToast(deps.translate("toast.copyFailed"), "error");
       });
+  }
+
+  // Sequential paste: the multi-selection doubles as the paste queue, so the
+  // feature adds no second piece of state. The selection set is
+  // insertion-ordered and `selectedLoadedItems` derives from it in that order,
+  // which makes the head the first item the user picked.
+  async function bulkPasteNext() {
+    const [next] = deps.selectedLoadedItems;
+    if (!next) return;
+    // The shared paste path (clipboard write + restore/paste into the
+    // previous application, or a plain copy outside Tauri) already reports
+    // its own failures through toasts; advancing matches the single-item
+    // paste behavior, where a failed write leaves the same stale clipboard.
+    await pasteClipboardItem(next);
+    // Only the delivered head leaves the selection, so the next invocation
+    // continues with the following item.
+    selectedIds = new Set([...selectedIds].filter((id) => id !== next.id));
   }
 
   function bulkFavorite() {
@@ -267,6 +285,7 @@ export function createBulkController(deps: BulkDependencies) {
   }
   return {
     bulkCopy,
+    bulkPasteNext,
     bulkFavorite,
     bulkRestore,
     bulkPermanentDelete,

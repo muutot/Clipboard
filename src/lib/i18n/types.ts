@@ -664,6 +664,8 @@ export interface LocaleDefinition {
   };
   bulk: {
     copyN: string;
+    pasteNextN: string;
+    pasteNextHint: string;
     favoriteN: string;
     unfavoriteN: string;
     deleteN: string;

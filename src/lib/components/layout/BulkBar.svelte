@@ -13,6 +13,7 @@
     allSelectedFavorites: boolean;
     ondeselect: () => void;
     oncopy: () => void;
+    onpastenext: () => void;
     ondelete: () => void;
     onfavorite: () => void;
     onrestore: () => void;
@@ -27,6 +28,7 @@
     allSelectedFavorites,
     ondeselect,
     oncopy,
+    onpastenext,
     ondelete,
     onfavorite,
     onrestore,
@@ -36,15 +38,17 @@
 
 {#if selectedCount > 0}
   <div class="bulk-bar">
-    <button type="button" class="bulk-deselect" onclick={ondeselect} title={_t("bulk.deselectAll")}>
-      <AppIcon name="x" size={14} strokeWidth={2.5} />
-      <span>{selectedCount}</span>
-    </button>
     <div class="bulk-actions">
       <button type="button" onclick={oncopy}>
         <AppIcon name="copy" size={14} />
         <span>{_t("bulk.copyN", { count: selectedCount })}</span>
       </button>
+      {#if selectedActiveCount > 0}
+        <button type="button" onclick={onpastenext} title={_t("bulk.pasteNextHint")}>
+          <AppIcon name="clipboard" size={14} />
+          <span>{_t("bulk.pasteNextN", { count: selectedActiveCount })}</span>
+        </button>
+      {/if}
       {#if selectedActiveCount > 0 && activeFilter !== "favorite"}
         <button type="button" class="danger" onclick={ondelete}>
           <AppIcon name="trash" size={14} />
@@ -70,6 +74,9 @@
         </button>
       {/if}
     </div>
+    <button type="button" class="bulk-deselect" onclick={ondeselect} title={_t("bulk.deselectAll")}>
+      <AppIcon name="x" size={14} strokeWidth={2.5} />
+    </button>
   </div>
 {/if}
 
@@ -86,10 +93,10 @@
   .bulk-deselect {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
+    margin-left: auto;
     padding: 4px 8px;
     border: 1px solid var(--border-color);
-    border-radius: 14px;
+    border-radius: 6px;
     color: var(--text-muted);
     background: transparent;
     cursor: pointer;

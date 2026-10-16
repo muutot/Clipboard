@@ -728,6 +728,8 @@ const en: LocaleDefinition = {
   },
   bulk: {
     copyN: "Copy {count} items",
+    pasteNextN: "Paste in order ({count} left)",
+    pasteNextHint: "Paste the selection one item at a time in selection order",
     favoriteN: "Favorite {count} items",
     unfavoriteN: "Unfavorite {count} items",
     deleteN: "Delete {count} items",

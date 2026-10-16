@@ -15,6 +15,7 @@ vi.mock("$lib/services/clipboard", async (original) => ({
   loadDeletedClipboardHistory: vi.fn(async () => []),
   searchClipboardHistory: vi.fn(),
   persistBatchFavorite: vi.fn(),
+  pasteClipboardItem: vi.fn(),
 }));
 vi.mock("$lib/services/toast", () => ({ showToast: vi.fn() }));
 const item = (id: string): ClipboardItem => ({
@@ -122,6 +123,28 @@ it("rolls back a failed bulk favorite without losing a concurrent capture", asyn
   await settle();
   expect(out.store!.current.byId.get("initial")!.favorite).toBe(false);
   expect(out.store!.current.byId.has("arrived")).toBe(true);
+});
+it("pastes the multi-selection in selection order, one head at a time", async () => {
+  out.store!.current = appendItems(
+    out.store!.current,
+    [item("a"), item("b"), item("c")],
+    "history",
+  );
+  out.bulk!.selectedIds = new Set(["a", "b", "c"]);
+  await out.bulk!.bulkPasteNext();
+  expect(vi.mocked(service.pasteClipboardItem).mock.calls[0][0].id).toBe("a");
+  expect([...out.bulk!.selectedIds]).toEqual(["b", "c"]);
+  await out.bulk!.bulkPasteNext();
+  expect(vi.mocked(service.pasteClipboardItem).mock.calls[1][0].id).toBe("b");
+  expect([...out.bulk!.selectedIds]).toEqual(["c"]);
+  await out.bulk!.bulkPasteNext();
+  expect(vi.mocked(service.pasteClipboardItem).mock.calls[2][0].id).toBe("c");
+  expect([...out.bulk!.selectedIds]).toEqual([]);
+});
+it("keeps the selection when there is nothing to paste", async () => {
+  out.bulk!.selectedIds = new Set();
+  await out.bulk!.bulkPasteNext();
+  expect(service.pasteClipboardItem).not.toHaveBeenCalled();
 });
 it("disposes late native listener registrations exactly once", async () => {
   const scope = createListenerScope(),
