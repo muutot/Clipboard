@@ -3,6 +3,7 @@
   import ClipboardCard from "$lib/components/card/ClipboardCard.svelte";
   import type { ClipboardItem } from "$lib/types/clipboard";
   import type { VirtualListResult } from "$lib/utils/layout/virtual-scroll";
+  import { selectionOrder } from "$lib/utils/store/selection-order";
 
   interface Props {
     items: ClipboardItem[];
@@ -121,6 +122,9 @@
     oneditTag,
     listEl = $bindable(null),
   }: Props = $props();
+  // The multi-selection doubles as the paste queue, so selected cards show
+  // their 1-based paste position in selection order.
+  const selectOrder = $derived(selectionOrder(selectedIds));
 </script>
 
 <section class="history-panel" aria-label={panelLabel}>
@@ -132,6 +136,7 @@
       now={currentTime}
       selected={selectedIds.has(item.id) || item.id === selectedId}
       checked={selectedIds.has(item.id)}
+      selectIndex={selectOrder.get(item.id)}
       showCheckbox={false}
       hideActions={selectedIds.size > 0 || splitDetail}
       hideMetaRow={splitDetail}

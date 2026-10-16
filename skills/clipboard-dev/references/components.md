@@ -17,6 +17,9 @@ Owns one list item: text/link/image/file rendering, source metadata, quick/conte
 Key contracts:
 
 - The route owns collection state and persistence decisions; the card emits controlled callbacks keyed by item ID.
+- During bulk selection, `HistoryList` derives each selected row's 1-based position from
+  `selectionOrder(selectedIds)` and passes it as `selectIndex`; `ClipboardCard` renders that
+  insertion-order position as a non-interactive paste-order badge.
 - Inline editing is authoritative on the route's single `editingId` plus its draft, both passed down through
   `HistoryList` as the `editingId` and `editDraft` props. The card derives its open state from
   `editingId === item.id && editDraft != null` and reports keystrokes through `oneditingdraftchange`, so two

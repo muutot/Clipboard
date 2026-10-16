@@ -70,6 +70,8 @@
     selected: boolean;
     checked: boolean;
     showCheckbox: boolean;
+    /** 1-based position in the multi-selection paste order, when queued. */
+    selectIndex?: number;
     cardPaddingTop?: number;
     cardPaddingBottom?: number;
     cardGap?: number;
@@ -122,6 +124,7 @@
     selected,
     checked,
     showCheckbox,
+    selectIndex,
     cardPaddingTop = 1,
     cardPaddingBottom = 1,
     cardGap = 1,
@@ -632,6 +635,15 @@
     ondblclick={(e) => handleDoubleClick(e)}
   ></button>
 
+  {#if selectIndex !== undefined}
+    <span
+      class="card-order"
+      title={_t("card.pasteOrder", { position: selectIndex })}
+      aria-label={_t("card.pasteOrder", { position: selectIndex })}
+      data-testid="card-order">{selectIndex}</span
+    >
+  {/if}
+
   {#if showCheckbox}
     <label class="card-checkbox">
       <Checkbox {checked} onchange={handleToggleSelect} onclick={stopPropagation} size={20} />
@@ -848,6 +860,30 @@
     cursor: pointer;
     opacity: 0;
     transition: opacity 120ms ease;
+  }
+
+  /* Paste-order badge for the multi-selection queue, in the card's top-left
+     corner next to the select affordance so the order reads at a glance.
+     Uses the selection token like the checked card surface. */
+  .card-order {
+    position: absolute;
+    z-index: 4;
+    left: 6px;
+    top: 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--selection-color) 45%, transparent);
+    color: color-mix(in srgb, var(--selection-color) 80%, white);
+    background: color-mix(in srgb, var(--selection-color) 22%, var(--card-bg));
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 1;
+    pointer-events: none;
   }
 
   .clip-card:hover .card-checkbox,
