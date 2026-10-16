@@ -101,11 +101,33 @@
 
 ### B. 原生窗口手工回归（v1.8 遗留，依据 `docs/V1_8_FOLLOWUP.md`「Native verification still required」）
 
+> 审计结论（2026-10-16）：本节四项均为**运行时/视觉证据缺口**，不是缺失功能。底层能力已实现并有
+> 单测/契约测试覆盖——CF_HTML/RTF 读（`platform/windows/html.rs`、`rtf.rs`）、CF_HDROP 写
+> （`platform/windows/write.rs`）、格式化粘贴（`services/clipboard.ts::writeClipboardHtml`）、
+> 远程媒体物化（`commands/sync/mod.rs::materialize_clipboard_item`）、跨窗口设置广播
+> （`commands/config/settings.rs` + `services/settings.ts`）、条目状态事件
+> （`utils/store/item-changes.ts`）、退出取消与等待（`shutdown.rs` +
+> `background_operations.rs`）。CI 不覆盖真实 OS 剪贴板、第二个窗口与合成器，故按
+> 「最小可验证单元」拆子项，逐项实测取证后才能勾选。复现流程见 `docs/NATIVE_VERIFICATION.md`。
+
 - [ ] 原生窗口手工回归（1.5.3 遗留）：实际双窗口并发修改设置，以及 Windows 文字透明度开关与背景/窗口特效的视觉组合。
+  - [ ] 双窗口并发设置：主窗与悬浮窗同开，一侧改设置另一侧实时生效；两侧并发改不同字段时两个改动都保留。
+  - [ ] 双窗口条目联动：一侧收藏/复制/删除，另一侧对应行实时更新（`clipboard-items-changed`）。
+  - [ ] Windows 文字透明度开关 × 背景/窗口特效（none/acrylic/mica）视觉组合保持可读。
 - [ ] 原生文本、HTML、文件与远程媒体复制粘贴保持完整内容（一次性桌面会话 + 临时应用数据；注意原生 CF_HDROP 测试会覆盖系统剪贴板）。**文本部分已验证（Windows，2026-10-15）**：隔离数据目录运行 CLI（数据目录随可执行文件位置解析，GUI 子系统用 `Start-Process -RedirectStandardOutput` 捕获输出），真实系统剪贴板往返 `paste` 捕获 → `list` → `copy --query <id>` → 逐字节一致（先以占位符覆写排除假阳性）。HTML/文件/远程媒体、双窗口联动仍未验证。
+  - [ ] HTML 富文本：真实 CF_HTML 写入 → 捕获入库 `html_content` 保真 → GUI「格式化粘贴」回写 CF_HTML 后目标应用保留格式。（后端 `copy_clipboard_item` 只写纯文本，富文本回写仅走 format 粘贴，属既定设计。）
+  - [ ] 文件：真实 CF_HDROP 写入 → 捕获为 `file` 记录并物化受管副本 → 复制回 CF_HDROP，资源管理器粘贴出源文件且内容一致。
+  - [ ] 远程媒体：本地无资源的同步记录在复制/预览时经 `materialize_clipboard_item` 下载，落地字节与源 SHA-256 一致。
 - [ ] 标签、恢复与慢速 S3 传输过程中退出：线程 join、留下可重试数据。
+  - [ ] 退出路径：`RunEvent::ExitRequested → stop_runtime_services` 先取消并等待 `BackgroundOperations`（≤30s），再停各 worker（`shutdown.rs`）。
+  - [ ] 标签应用中途退出：未提交事务回滚，重跑不重复、不丢行。
+  - [ ] 恢复中途退出：导入事务回滚或整体提交，隔离快照保留，重跑可完成。
+  - [ ] 慢速 S3 传输中途退出：已发布 head 不前进，pending 保留，重启后重试收敛。
 - [ ] 最终分支拿到 Windows/macOS/Linux CI 成功结果。
 - [ ] 深色/浅色/自定义主题 × 常规/窄宽度（含 Windows 文字透明度与背景/窗口特效组合）保持可读。**部分证据（Windows，2026-10-15）**：隔离数据目录 + 预置 conf.json（注意 PowerShell `Set-Content -Encoding utf8` 会写 BOM 导致配置被隔离成 corrupt，须用 `[System.IO.File]::WriteAllText` 无 BOM 写入）启动原生 GUI，验证配置被真实读取（应用回写的 `general.theme` / `privacy.paused` 与种子一致）与主窗口正常创建（746x709，标题 Clipboard）。**未取到有效视觉证据**：空状态为全幅背景图、与主题无关；且 `MainWindowHandle` 就绪时序不可靠，一次截图捕到了屏幕上的其他窗口。主题可读性对比与 520px 窄宽度仍未验证。
+  - [ ] 深色/浅色/自定义主题 × 常规宽度截图。
+  - [ ] 深色/浅色/自定义主题 × 520px 窄宽度截图。
+  - [ ] 文字透明度开关 + 背景/窗口特效（none/acrylic/mica）组合截图。
 
 ### C. 下一版本候选（未立项；按「最小可验证单元」排期，取自各文档已记录的决议）
 

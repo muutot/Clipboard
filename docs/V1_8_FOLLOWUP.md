@@ -27,6 +27,8 @@ mock invoke bridge; they establish layout and cancel-button behavior, not native
 
 Use a disposable desktop session and temporary application data for these checks.
 An isolated database alone does not isolate the OS clipboard or global shortcuts.
+The reproducible procedure, the audited necessity conclusion and the
+per-representation acceptance criteria live in `docs/NATIVE_VERIFICATION.md`.
 
 - [ ] Native text, HTML, files and remote-media copy/paste preserves full content.
 - [ ] Two real windows observe settings edits, task status/cancellation and item invalidation.
