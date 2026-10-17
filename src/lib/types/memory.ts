@@ -23,6 +23,12 @@ export interface MemoryProcess {
 }
 
 export interface MemoryProcessGroup {
+  /**
+   * Sum of private resident pages for processes that expose the metric.
+   * `null` means no process in the group could provide a safe value.
+   */
+  privateWorkingSetBytes: number | null;
+  /** Sum including shared pages; WebView processes may double-count them. */
   workingSetBytes: number;
   privateBytes: number;
   virtualBytes: number;

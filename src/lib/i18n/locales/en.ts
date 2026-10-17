@@ -484,13 +484,18 @@ const en: LocaleDefinition = {
     sampleTime: "Sample time: ",
     reading: "Reading…",
     refreshNow: "Refresh now",
-    processWorkingSet: "Process Working Set",
-    processWorkingSetDesc: "Rust main process resident memory, the Clipboard entry in Task Manager",
-    processPrivateMem: "Process Private Memory",
+    processWorkingSet: "Rust Main Process Working Set",
+    processWorkingSetDesc:
+      "Main process resident memory, including shared pages; not the whole app's physical usage",
+    processPrivateMem: "Rust Main Process Private Commit",
     processPrivateMemDesc:
-      "Committed memory not shared with other processes, better for judging actual growth",
-    processGroupWorkingSet: "Process Group Working Set",
-    processGroupWorkingSetDesc: "Main process plus Settings/WebView child processes combined",
+      "Private committed memory that is not necessarily resident; useful for tracking growth",
+    processGroupPrivateWorkingSet: "App Process Group Private Resident",
+    processGroupPrivateWorkingSetDesc:
+      "Private resident memory across the main and Settings/WebView child processes, excluding shareable pages",
+    processGroupWorkingSet: "App Process Group Working Set (Diagnostic)",
+    processGroupWorkingSetDesc:
+      "Sum across the main and Settings/WebView child processes; includes shared pages that WebView processes may count more than once",
     systemAvailableMemory: "System Available Memory",
     systemAvailableMemoryDesc:
       "Physical memory on this machine available for the app to continue using",
@@ -498,7 +503,10 @@ const en: LocaleDefinition = {
     jsHeapDesc: "Only this Settings WebView, not the entire app process",
     processDetail: "Process Detail",
     processDetailDesc:
-      "To determine whether memory primarily resides in the main process or WebView child processes",
+      "Private resident and shared-page-inclusive working set side by side for locating a specific child process",
+    processColumnProcess: "Process",
+    processColumnPrivateWorkingSet: "Private resident",
+    processColumnWorkingSet: "Working set",
     ocrModelDownloading: "Installing...",
     ocrModelNotInstalled: "Model files not installed",
     ocrModelFileCount: "files",
@@ -506,7 +514,7 @@ const en: LocaleDefinition = {
     memoryDiagLoading: "Reading memory diagnostics…",
     memoryDiagEmpty: "Memory diagnostics unavailable",
     memoryNote:
-      "Data auto-refreshes every 3 seconds; working set and private memory use different measurement scopes",
+      "Private resident memory is the primary measure of the app's physical footprint; working set includes shared pages that summing across WebView2 processes may count more than once. Data auto-refreshes every 3 seconds.",
     currentProfile: "Current Profile",
     open: "Open",
     nextLaunch: "On Next Launch",

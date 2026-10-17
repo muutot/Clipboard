@@ -30,10 +30,47 @@ fn group_sums_available_process_metrics_without_panicking_on_missing_values() {
         },
     ];
     let group = summarize_process_group(processes);
+    assert_eq!(group.private_working_set_bytes, Some(8));
     assert_eq!(group.working_set_bytes, 10);
     assert_eq!(group.private_bytes, 24);
     assert_eq!(group.virtual_bytes, 35);
     assert_eq!(group.processes.len(), 2);
+}
+
+#[test]
+fn group_private_working_set_is_unknown_when_every_process_omits_it() {
+    let processes = vec![MemoryProcess {
+        pid: 1,
+        parent_pid: None,
+        name: "main".to_owned(),
+        role: Some("main".to_owned()),
+        working_set_bytes: Some(10),
+        private_bytes: None,
+        private_working_set_bytes: None,
+        virtual_bytes: Some(30),
+    }];
+
+    let group = summarize_process_group(processes);
+    assert_eq!(group.private_working_set_bytes, None);
+    assert_eq!(group.working_set_bytes, 10);
+}
+
+#[test]
+fn process_group_serializes_private_working_set_as_camel_case() {
+    let group = summarize_process_group(vec![MemoryProcess {
+        pid: 1,
+        parent_pid: None,
+        name: "main".to_owned(),
+        role: Some("main".to_owned()),
+        working_set_bytes: Some(10),
+        private_bytes: Some(20),
+        private_working_set_bytes: Some(8),
+        virtual_bytes: Some(30),
+    }]);
+
+    let value = serde_json::to_value(group).unwrap();
+    assert_eq!(value["privateWorkingSetBytes"], 8);
+    assert_eq!(value["workingSetBytes"], 10);
 }
 
 #[test]

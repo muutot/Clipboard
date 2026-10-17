@@ -233,6 +233,17 @@ Every S3 request is issued through `s3::send_with_retry`, which allows four atte
 
 A direct `invoke` in a component is still a public cross-layer contract and receives the same audit.
 
+### Memory diagnostics
+
+`get_memory_diagnostics` returns camelCase `MemoryDiagnostics` with the current process,
+the descendant process group, system memory, and OCR model readiness. Each `MemoryProcess`
+carries resident working set, private commit, private resident working set when the platform
+can safely expose it, and virtual bytes; unavailable probes are `null` rather than zero.
+`processGroup.privateWorkingSetBytes` is the primary whole-app resident metric: it sums the
+private resident values that were available, and is `null` only when no process in the group
+provided one. `processGroup.workingSetBytes` remains a diagnostic total and includes shared
+pages, so summing it across WebView2 child processes can count the same pages more than once.
+
 ## Event contract
 
 Long operations use polling rather than payload-bearing events:

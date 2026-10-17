@@ -35,6 +35,11 @@ pub struct MemoryProcess {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MemoryProcessGroup {
+    /// Sum of private resident pages for processes that expose the metric.
+    /// `None` means no process in the group could provide a safe value.
+    pub private_working_set_bytes: Option<u64>,
+    /// Sum of resident pages including shared pages. WebView child processes
+    /// can map the same pages, so this total may double-count them.
     pub working_set_bytes: u64,
     pub private_bytes: u64,
     pub virtual_bytes: u64,

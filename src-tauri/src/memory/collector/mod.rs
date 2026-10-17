@@ -74,6 +74,10 @@ pub fn collect_memory_diagnostics(
 }
 
 pub(crate) fn summarize_process_group(mut processes: Vec<MemoryProcess>) -> MemoryProcessGroup {
+    let private_working_set_bytes = processes
+        .iter()
+        .filter_map(|process| process.private_working_set_bytes)
+        .reduce(u64::saturating_add);
     let working_set_bytes = processes
         .iter()
         .filter_map(|process| process.working_set_bytes)
@@ -93,6 +97,7 @@ pub(crate) fn summarize_process_group(mut processes: Vec<MemoryProcess>) -> Memo
     processes.sort_by_key(|process| process.pid != std::process::id());
 
     MemoryProcessGroup {
+        private_working_set_bytes,
         working_set_bytes,
         private_bytes,
         virtual_bytes,

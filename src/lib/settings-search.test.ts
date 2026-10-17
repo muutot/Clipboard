@@ -8,6 +8,9 @@ const sectionFor = (id: string): string | undefined =>
 const fontSectionFor = (id: string): string | undefined =>
   SETTINGS_SEARCH_ITEM_TEMPLATES.find((item) => item.id === id)?.fontSection;
 
+const statisticsTabFor = (id: string): string | undefined =>
+  SETTINGS_SEARCH_ITEM_TEMPLATES.find((item) => item.id === id)?.statisticsTab;
+
 describe("settings search section targets", () => {
   // These ids are rendered by a panel that is lazily loaded for one section;
   // a stale `section` makes the settings search highlight nothing.
@@ -29,5 +32,11 @@ describe("settings search section targets", () => {
     expect(fontSectionFor("font.search")).toBe("interface");
     expect(fontSectionFor("font.card-title")).toBe("card");
     expect(fontSectionFor("font.card-preview")).toBe("card");
+  });
+
+  it("routes process-group memory metrics to the memory tab", () => {
+    expect(statisticsTabFor("statistics.memory.process-group-private-working-set")).toBe("memory");
+    expect(statisticsTabFor("statistics.memory.process-group-working-set")).toBe("memory");
+    expect(statisticsTabFor("statistics.memory.process-details")).toBe("memory");
   });
 });

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import { listen } from "@tauri-apps/api/event";
   import AppIcon from "$lib/components/card/AppIcon.svelte";
   import { messages, resolvePath } from "$lib/i18n";
@@ -103,7 +104,7 @@
       }, 250);
     };
 
-    void refreshVisibleStatistics();
+    void untrack(() => refreshVisibleStatistics?.());
     listen("clipboard-item-added", scheduleRefresh).then((unlisten) => {
       if (disposed) unlisten();
       else unlistenAdd = unlisten;
@@ -122,7 +123,7 @@
 
   $effect(() => {
     if (activeTab !== "memory") return;
-    void loadMemoryDiagnostics();
+    void untrack(() => loadMemoryDiagnostics());
     const interval = setInterval(() => void loadMemoryDiagnostics(), 3000);
     return () => clearInterval(interval);
   });
@@ -374,7 +375,55 @@
         </button>
       </div>
 
-      <section class="setting-card stats-metric-card">
+      <section
+        class="setting-card stats-metric-card"
+        data-settings-search-id="statistics.memory.process-group-private-working-set"
+      >
+        <div class="setting-heading stats-metric-heading">
+          <span class="setting-icon"><AppIcon name="grid" size={17} /></span>
+          <div class="stats-metric-copy">
+            <strong>
+              {memoryDiagnostics.processGroup.privateWorkingSetBytes == null
+                ? _t("storage.processGroupWorkingSet")
+                : _t("storage.processGroupPrivateWorkingSet")}
+            </strong>
+            <p>
+              {memoryDiagnostics.processGroup.privateWorkingSetBytes == null
+                ? _t("storage.processGroupWorkingSetDesc")
+                : _t("storage.processGroupPrivateWorkingSetDesc")}
+            </p>
+          </div>
+        </div>
+        <span class="stats-metric-value">
+          {formatMaybeBytes(
+            memoryDiagnostics.processGroup.privateWorkingSetBytes ??
+              memoryDiagnostics.processGroup.workingSetBytes,
+          )}
+        </span>
+      </section>
+
+      {#if memoryDiagnostics.processGroup.privateWorkingSetBytes != null}
+        <section
+          class="setting-card stats-metric-card"
+          data-settings-search-id="statistics.memory.process-group-working-set"
+        >
+          <div class="setting-heading stats-metric-heading">
+            <span class="setting-icon"><AppIcon name="grid" size={17} /></span>
+            <div class="stats-metric-copy">
+              <strong>{_t("storage.processGroupWorkingSet")}</strong>
+              <p>{_t("storage.processGroupWorkingSetDesc")}</p>
+            </div>
+          </div>
+          <span class="stats-metric-value"
+            >{formatBytes(memoryDiagnostics.processGroup.workingSetBytes)}</span
+          >
+        </section>
+      {/if}
+
+      <section
+        class="setting-card stats-metric-card"
+        data-settings-search-id="statistics.memory.current-working-set"
+      >
         <div class="setting-heading stats-metric-heading">
           <span class="setting-icon"><AppIcon name="bar-chart" size={17} /></span>
           <div class="stats-metric-copy">
@@ -387,7 +436,10 @@
         >
       </section>
 
-      <section class="setting-card stats-metric-card">
+      <section
+        class="setting-card stats-metric-card"
+        data-settings-search-id="statistics.memory.current-private-bytes"
+      >
         <div class="setting-heading stats-metric-heading">
           <span class="setting-icon"><AppIcon name="bar-chart" size={17} /></span>
           <div class="stats-metric-copy">
@@ -397,19 +449,6 @@
         </div>
         <span class="stats-metric-value"
           >{formatMaybeBytes(memoryDiagnostics.currentProcess.privateBytes)}</span
-        >
-      </section>
-
-      <section class="setting-card stats-metric-card">
-        <div class="setting-heading stats-metric-heading">
-          <span class="setting-icon"><AppIcon name="grid" size={17} /></span>
-          <div class="stats-metric-copy">
-            <strong>{_t("storage.processGroupWorkingSet")}</strong>
-            <p>{_t("storage.processGroupWorkingSetDesc")}</p>
-          </div>
-        </div>
-        <span class="stats-metric-value"
-          >{formatBytes(memoryDiagnostics.processGroup.workingSetBytes)}</span
         >
       </section>
 
@@ -454,11 +493,22 @@
           </div>
         </div>
         <div class="memory-process-list">
+          <div class="memory-process-row memory-process-header">
+            <span>{_t("storage.processColumnProcess")}</span>
+            <span>PID</span>
+            <span>{_t("storage.processColumnPrivateWorkingSet")}</span>
+            <span>{_t("storage.processColumnWorkingSet")}</span>
+          </div>
           {#each memoryDiagnostics.processGroup.processes as process (process.pid)}
             <div class="memory-process-row">
               <span class="memory-process-name">{process.role || process.name}</span>
               <span class="memory-process-pid">PID {process.pid}</span>
-              <span class="memory-process-size">{formatMaybeBytes(process.workingSetBytes)}</span>
+              <span class="memory-process-private"
+                >{formatMaybeBytes(process.privateWorkingSetBytes)}</span
+              >
+              <span class="memory-process-working-set"
+                >{formatMaybeBytes(process.workingSetBytes)}</span
+              >
             </div>
           {/each}
         </div>
@@ -593,12 +643,23 @@
 
   .memory-process-row {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-columns: minmax(0, 1fr) auto minmax(62px, auto) minmax(76px, auto);
     align-items: center;
     gap: 8px;
     min-width: 0;
     color: var(--text-muted);
     font-size: var(--settings-description-size);
+  }
+
+  .memory-process-header {
+    align-items: end;
+    color: var(--text-muted);
+    font-size: var(--settings-note-size);
+    line-height: 1.3;
+  }
+
+  .memory-process-header span:not(:first-child) {
+    text-align: right;
   }
 
   .memory-process-name {
@@ -615,10 +676,20 @@
     white-space: nowrap;
   }
 
-  .memory-process-size {
+  .memory-process-private,
+  .memory-process-working-set {
     color: var(--text-secondary);
     font-variant-numeric: tabular-nums;
     text-align: right;
     white-space: nowrap;
+  }
+
+  .memory-process-private {
+    color: var(--text-primary);
+    font-weight: 560;
+  }
+
+  .memory-process-working-set {
+    color: var(--text-muted);
   }
 </style>

@@ -449,6 +449,8 @@ export interface LocaleDefinition {
     processWorkingSetDesc: string;
     processPrivateMem: string;
     processPrivateMemDesc: string;
+    processGroupPrivateWorkingSet: string;
+    processGroupPrivateWorkingSetDesc: string;
     processGroupWorkingSet: string;
     processGroupWorkingSetDesc: string;
     systemAvailableMemory: string;
@@ -457,6 +459,9 @@ export interface LocaleDefinition {
     jsHeapDesc: string;
     processDetail: string;
     processDetailDesc: string;
+    processColumnProcess: string;
+    processColumnPrivateWorkingSet: string;
+    processColumnWorkingSet: string;
     ocrModelDownloading: string;
     ocrModelNotInstalled: string;
     ocrModelFileCount: string;
