@@ -66,8 +66,8 @@ use platform::hotkey_common::{
 };
 use platform::windows::hotkey::HotkeyManager;
 use platform::{
-    show_main_window, sync_autostart, ClipboardMonitor, SingleInstanceError, SingleInstanceGuard,
-    SystemTray,
+    hide_main_window, main_window_focused, show_main_window, sync_autostart, ClipboardMonitor,
+    SingleInstanceError, SingleInstanceGuard, SystemTray,
 };
 use privacy::PrivacyManager;
 use search::{SearchIndex, SearchSyncWorker, SearchSynchronizer};
@@ -727,26 +727,34 @@ pub fn run() {
                 let app_handle = app.handle().clone();
                 let window_to_hide = window.clone();
                 window.on_window_event(move |event| {
-                    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                        let close_to_tray = match app_handle
-                            .state::<Mutex<ConfigStore>>()
-                            .lock()
-                        {
-                            Ok(config) => config.close_to_tray(),
-                            Err(_) => {
-                                crate::log_error!(
-                                    "[tray] configuration lock is poisoned; allowing window close"
-                                );
-                                false
-                            }
-                        };
+                    match event {
+                        tauri::WindowEvent::CloseRequested { api, .. } => {
+                            let close_to_tray = match app_handle
+                                .state::<Mutex<ConfigStore>>()
+                                .lock()
+                            {
+                                Ok(config) => config.close_to_tray(),
+                                Err(_) => {
+                                    crate::log_error!(
+                                        "[tray] configuration lock is poisoned; allowing window close"
+                                    );
+                                    false
+                                }
+                            };
 
-                        if close_to_tray {
-                            api.prevent_close();
-                            if let Err(error) = window_to_hide.hide() {
-                                crate::log_error!("[tray] failed to hide the main window: {error}");
+                            if close_to_tray {
+                                api.prevent_close();
+                                if let Err(error) = hide_main_window(&window_to_hide) {
+                                    crate::log_error!(
+                                        "[tray] failed to hide the main window: {error}"
+                                    );
+                                }
                             }
                         }
+                        tauri::WindowEvent::Focused(true) => {
+                            main_window_focused(&window_to_hide);
+                        }
+                        _ => {}
                     }
                 });
             }
@@ -863,6 +871,8 @@ pub fn run() {
             set_general_settings,
             get_window_config,
             set_window_config,
+            hide_main_window_command,
+            show_main_window_command,
             get_export_config,
             open_float_panel,
             toggle_float_panel,

@@ -454,6 +454,27 @@ pub fn set_window_config(
     Ok(())
 }
 
+/// Frontend entry point for hiding the main window. Keeping this in the
+/// backend ensures the WebView2 suspension follows every native hide.
+#[tauri::command]
+pub fn hide_main_window_command(app: tauri::AppHandle) -> Result<(), String> {
+    let window = app
+        .get_webview_window("main")
+        .ok_or_else(|| "main window is unavailable".to_owned())?;
+    crate::platform::hide_main_window(&window).map_err(|error| error.to_string())
+}
+
+/// Frontend entry point for showing the main window, shared by the float
+/// panel and other windows. Resuming before `show` avoids exposing a blank
+/// suspended surface.
+#[tauri::command]
+pub fn show_main_window_command(app: tauri::AppHandle) -> Result<(), String> {
+    let window = app
+        .get_webview_window("main")
+        .ok_or_else(|| "main window is unavailable".to_owned())?;
+    crate::platform::restore_main_window(&window).map_err(|error| error.to_string())
+}
+
 #[tauri::command]
 pub fn save_window_position(
     config: tauri::State<'_, Mutex<ConfigStore>>,

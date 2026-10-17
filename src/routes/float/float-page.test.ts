@@ -13,7 +13,6 @@ const bridge = vi.hoisted(() => ({
   copy: vi.fn(),
   emit: vi.fn(),
   showMain: vi.fn(),
-  focusMain: vi.fn(),
 }));
 
 vi.mock("@tauri-apps/api/event", () => ({
@@ -25,12 +24,14 @@ vi.mock("@tauri-apps/api/event", () => ({
 }));
 vi.mock("@tauri-apps/api/webviewWindow", () => ({
   WebviewWindow: {
-    getByLabel: vi.fn(async (label) =>
-      label === "main" ? { show: bridge.showMain, setFocus: bridge.focusMain } : null,
-    ),
+    getByLabel: vi.fn(async () => null),
   },
 }));
 vi.mock("@tauri-apps/api/window", () => ({ getCurrentWindow: () => null }));
+vi.mock("$lib/services/window-control", () => ({
+  showMainWindow: bridge.showMain,
+  hideMainWindow: vi.fn(),
+}));
 vi.mock("$lib/services/runtime", async (original) => ({
   ...(await original<object>()),
   isTauriRuntime: () => true,
@@ -83,7 +84,6 @@ beforeEach(() => {
   bridge.copy.mockReset();
   bridge.emit.mockReset().mockResolvedValue(undefined);
   bridge.showMain.mockReset().mockResolvedValue(undefined);
-  bridge.focusMain.mockReset().mockResolvedValue(undefined);
 });
 afterEach(async () => {
   for (const cleanup of cleanups.splice(0)) await cleanup();
@@ -162,7 +162,6 @@ describe("float history reconciliation", () => {
       expect.objectContaining({ id: "a" }),
     );
     expect(bridge.showMain).toHaveBeenCalledOnce();
-    expect(bridge.focusMain).toHaveBeenCalledOnce();
   });
 
   it("keeps each copying row disabled until its own operation completes", async () => {

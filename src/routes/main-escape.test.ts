@@ -4,16 +4,17 @@ import MainPage from "./+page.svelte";
 
 // The browser (non-Tauri) runtime seeds `demoClipboardItems`, so the mounted
 // main route renders real rows without a backend. The main-window hide call
-// goes through `@tauri-apps/api/window`, mocked here so the test can prove
-// that an Escape press over a bulk selection exits the selection instead of
+// goes through the backend-owned window service, mocked here so the test can
+// prove that Escape over a bulk selection exits the selection instead of
 // hiding the window (hideWindow's default chord is Escape).
 
 const bridge = vi.hoisted(() => ({
   hide: vi.fn(async () => {}),
 }));
 
-vi.mock("@tauri-apps/api/window", () => ({
-  getCurrentWindow: () => ({ hide: bridge.hide }),
+vi.mock("$lib/services/window-control", () => ({
+  hideMainWindow: bridge.hide,
+  showMainWindow: vi.fn(),
 }));
 
 vi.mock("@tauri-apps/api/event", () => ({

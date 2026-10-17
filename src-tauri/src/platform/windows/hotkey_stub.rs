@@ -286,14 +286,9 @@ impl HotkeyManager {
                             let is_visible = window.is_visible().unwrap_or(false);
                             let is_focused = window.is_focused().unwrap_or(false);
                             if is_visible && is_focused {
-                                let _ = window.hide();
+                                let _ = crate::platform::hide_main_window(&window);
                             } else {
-                                if !is_visible {
-                                    let _ = window.show();
-                                }
-                                if !is_focused {
-                                    let _ = window.set_focus();
-                                }
+                                let _ = crate::platform::restore_main_window(&window);
                             }
                         }
                         HotkeyAction::ToggleFloat => {

@@ -138,6 +138,9 @@ pub mod hotkey;
 #[path = "hotkey_stub.rs"]
 pub mod hotkey;
 
+#[cfg(target_os = "windows")]
+pub mod webview_memory;
+
 #[cfg(all(test, target_os = "windows"))]
 #[path = "hotkey_stub.rs"]
 pub(crate) mod portable_hotkey_compile_test;

@@ -21,6 +21,7 @@
   import { getDisplayTitle } from "$lib/utils/content/display-text";
   import { generalSettings } from "$lib/services/settings";
   import { applyGeneralSettingsToDocument } from "$lib/services/settings-bootstrap";
+  import { showMainWindow } from "$lib/services/window-control";
   import type {
     ClipboardItem,
     ClipboardItemsChangedPayload,
@@ -151,11 +152,8 @@
     }
     if (action === "detail") {
       try {
-        const main = await WebviewWindow.getByLabel("main");
-        if (!main) throw new Error("main window is unavailable");
-        await main.show();
+        await showMainWindow();
         await emitTo("main", "clipboard-open-detail", item);
-        await main.setFocus();
       } catch (error) {
         console.error("Unable to open clipboard details", error);
         showToast(_t("float.detailFailed"), "error");

@@ -7,6 +7,41 @@ use tauri::{AppHandle, Manager, Runtime};
 use crate::config::ConfigStore;
 use crate::platform::windows::hotkey::HotkeyManager;
 
+/// Hides the main window and asks WebView2 to release its active page
+/// resources. The suspension is best-effort; hiding still succeeds if the
+/// native webview cannot suspend.
+pub fn hide_main_window<R: Runtime>(window: &tauri::WebviewWindow<R>) -> tauri::Result<()> {
+    #[cfg(target_os = "windows")]
+    crate::platform::windows::webview_memory::begin_hide();
+    if let Err(error) = window.hide() {
+        #[cfg(target_os = "windows")]
+        crate::platform::windows::webview_memory::cancel_hide();
+        return Err(error);
+    }
+    #[cfg(target_os = "windows")]
+    crate::platform::windows::webview_memory::suspend_main_webview(window);
+    Ok(())
+}
+
+/// Resumes the webview before showing, then restores and focuses the main
+/// window. Every native show path must use this instead of calling
+/// `Window::show` directly.
+pub fn restore_main_window<R: Runtime>(window: &tauri::WebviewWindow<R>) -> tauri::Result<()> {
+    #[cfg(target_os = "windows")]
+    crate::platform::windows::webview_memory::resume_main_webview(window);
+    window.show()?;
+    window.unminimize()?;
+    window.set_focus()?;
+    Ok(())
+}
+
+/// Safety net for frontend or OS-initiated show paths that bypass
+/// [`restore_main_window`].
+pub fn main_window_focused<R: Runtime>(window: &tauri::WebviewWindow<R>) {
+    #[cfg(target_os = "windows")]
+    crate::platform::windows::webview_memory::resume_main_webview(window);
+}
+
 pub fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
     let Some(window) = app.get_webview_window("main") else {
         crate::log_warn!("[tray] main window is unavailable");
@@ -25,14 +60,8 @@ pub fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
         }
     }
 
-    if let Err(error) = window.show() {
+    if let Err(error) = restore_main_window(&window) {
         crate::log_error!("[tray] failed to show the main window: {error}");
-    }
-    if let Err(error) = window.unminimize() {
-        crate::log_error!("[tray] failed to restore the main window: {error}");
-    }
-    if let Err(error) = window.set_focus() {
-        crate::log_error!("[tray] failed to focus the main window: {error}");
     }
 }
 

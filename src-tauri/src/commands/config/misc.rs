@@ -360,15 +360,14 @@ pub fn paste_to_previous_application(
 
     let main_window = app.get_webview_window("main");
     if let Some(window) = &main_window {
-        window.hide().map_err(|error| error.to_string())?;
+        platform::hide_main_window(window).map_err(|error| error.to_string())?;
     }
     thread::sleep(Duration::from_millis(40));
 
     if let Err(error) = platform::windows::hotkey::restore_window_and_paste(target) {
         crate::dbg_log(&format!("paste_to_previous_application: error={error}"));
         if let Some(window) = &main_window {
-            let _ = window.show();
-            let _ = window.set_focus();
+            let _ = platform::restore_main_window(window);
         }
         return Err(error);
     }

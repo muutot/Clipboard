@@ -194,14 +194,9 @@ impl HotkeyManager {
                             }
                         }
                         if is_visible && is_focused {
-                            let _ = window.hide();
+                            let _ = crate::platform::hide_main_window(&window);
                         } else {
-                            if !is_visible {
-                                let _ = window.show();
-                            }
-                            if !is_focused {
-                                let _ = window.set_focus();
-                            }
+                            let _ = crate::platform::restore_main_window(&window);
                         }
                     }
                     HotkeyAction::ToggleFloat => {

@@ -1,11 +1,11 @@
 <script lang="ts">
   import { createMainWindowController } from "$lib/controllers/window-lifecycle";
+  import { hideMainWindow, showMainWindow } from "$lib/services/window-control";
   import { createBulkController } from "$lib/controllers/bulk.svelte";
   import { createSearchController } from "$lib/controllers/search.svelte";
   import { createHistoryController } from "$lib/controllers/history.svelte";
   import { flushSync, onMount, tick, untrack } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
-  import { getCurrentWindow } from "@tauri-apps/api/window";
   import BulkBar from "$lib/components/layout/BulkBar.svelte";
   import StatusBar from "$lib/components/layout/StatusBar.svelte";
   import Toolbar from "$lib/components/layout/Toolbar.svelte";
@@ -888,9 +888,9 @@
       // The replay entry lives in the settings window, and the main window may
       // currently be hidden behind it, so surface the window the guide opens in.
       if (isTauriRuntime()) {
-        const appWindow = getCurrentWindow();
-        void appWindow.show();
-        void appWindow.setFocus();
+        void showMainWindow().catch((error) => {
+          console.error("Unable to show the main window for onboarding", error);
+        });
       }
     });
 
@@ -1935,9 +1935,7 @@
         bulk.selectedIds = new Set(filteredItems.map((i) => i.id));
         break;
       case "escape-hide-window":
-        getCurrentWindow()
-          .hide()
-          .catch(() => {});
+        void hideMainWindow().catch(() => {});
         break;
       case "escape-toggle-tag":
         toggleTagFilter(action.tag);
