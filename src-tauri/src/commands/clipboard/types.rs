@@ -318,6 +318,7 @@ pub(crate) fn permanently_delete_storage_kind_for(
     database: &Database,
     paths: &StoragePaths,
     search_index: &SearchIndex,
+    search_cache: &SearchResultCache,
     kind: ClipboardKind,
     expected: Option<KindStorageStats>,
 ) -> Result<StorageKindDeleteResult, String> {
@@ -329,6 +330,10 @@ pub(crate) fn permanently_delete_storage_kind_for(
             .permanently_delete_by_kind(kind, STORAGE_KIND_DELETE_SCOPE)
             .map_err(|error| error.to_string())?,
     };
+    // The outbox drain below acknowledges the delete events itself, so the
+    // normal "pending events clear the result cache" check in search would
+    // otherwise never fire and a cached page could keep serving deleted rows.
+    search_cache.clear();
     let mut warnings = Vec::new();
     let search_sync = match SearchSynchronizer::default().sync_until_idle(database, search_index) {
         Ok(summary) => Some(summary),

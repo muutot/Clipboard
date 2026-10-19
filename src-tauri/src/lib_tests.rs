@@ -734,14 +734,29 @@ mod storage_cleanup_tests {
             .unwrap();
         assert_eq!(search_index.search("recognized", 20).unwrap().len(), 1);
 
+        let search_cache = SearchResultCache::new();
+        search_cache.set(
+            search_cache.write_token(),
+            "recognized".to_owned(),
+            Vec::new(),
+            20,
+            vec![image.clone()],
+            1,
+            false,
+        );
+        assert!(search_cache.get("recognized", &[], 20, 0, 10).is_some());
+
         let result = permanently_delete_storage_kind_for(
             &database,
             &paths,
             &search_index,
+            &search_cache,
             ClipboardKind::Image,
             None,
         )
         .unwrap();
+
+        assert!(search_cache.get("recognized", &[], 20, 0, 10).is_none());
 
         assert_eq!(result.deleted_count, 1);
         assert_eq!(result.deleted_size_bytes, image.size_bytes);

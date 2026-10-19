@@ -212,6 +212,8 @@ pub async fn permanently_delete_storage_kind(
             app.state::<Database>().inner(),
             app.state::<StoragePaths>().inner(),
             app.state::<Arc<SearchIndex>>().inner(),
+            app.state::<crate::commands::clipboard::SearchResultCache>()
+                .inner(),
             kind,
             Some(expected),
         )?;
