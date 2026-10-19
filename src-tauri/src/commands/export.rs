@@ -231,6 +231,12 @@ pub fn import_clipboard_items(
     json: String,
     format: Option<String>,
 ) -> Result<ImportSummary, String> {
+    if json.len() as u64 > MAX_IMPORT_FILE_BYTES {
+        return Err(format!(
+            "import payload is {} bytes, over the {MAX_IMPORT_FILE_BYTES} byte import limit",
+            json.len()
+        ));
+    }
     let normalized = format
         .as_deref()
         .map(str::to_ascii_lowercase)
@@ -261,15 +267,27 @@ pub fn import_clipboard_items(
     }
 }
 
+const MAX_IMPORT_FILE_BYTES: u64 = 256 * 1024 * 1024;
+
+fn read_import_file(path: &str) -> Result<String, String> {
+    let metadata =
+        std::fs::metadata(path).map_err(|error| format!("failed to inspect {path}: {error}"))?;
+    if metadata.len() > MAX_IMPORT_FILE_BYTES {
+        return Err(format!(
+            "{path} is {} bytes, over the {MAX_IMPORT_FILE_BYTES} byte import limit",
+            metadata.len()
+        ));
+    }
+    std::fs::read_to_string(path).map_err(|error| format!("failed to read {path}: {error}"))
+}
+
 fn import_database_from_path(database: &Database, path: &str) -> Result<ImportSummary, String> {
     let lower = path.to_ascii_lowercase();
     if lower.ends_with(".csv") {
-        let content = std::fs::read_to_string(path)
-            .map_err(|error| format!("failed to read {path}: {error}"))?;
+        let content = read_import_file(path)?;
         return import_from_csv(&content, database);
     }
-    let content =
-        std::fs::read_to_string(path).map_err(|error| format!("failed to read {path}: {error}"))?;
+    let content = read_import_file(path)?;
     let is_json = lower.ends_with(".json") || content.trim_start().starts_with('[');
     if is_json {
         import_from_json(&content, database)
