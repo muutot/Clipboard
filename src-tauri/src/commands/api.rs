@@ -230,14 +230,22 @@ pub fn run_cli_command(
     result
 }
 
-#[tauri::command]
-pub fn start_local_api(
-    app: tauri::AppHandle,
-    self_trigger: tauri::State<'_, SelfTriggerState>,
-    api: tauri::State<'_, Mutex<LocalApiServer>>,
-    paths: tauri::State<'_, StoragePaths>,
-    config: tauri::State<'_, Mutex<ConfigStore>>,
-    capture: tauri::State<'_, CaptureState>,
+fn write_api_port(project_directory: &Path, port: u16) -> Result<(), String> {
+    let path = project_directory.join("conf").join("api.port");
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    }
+    std::fs::write(&path, format!("{port}\n"))
+        .map_err(|error| format!("failed to write {}: {error}", path.display()))
+}
+
+pub(crate) fn start_local_api_with(
+    app: &tauri::AppHandle,
+    self_trigger: &SelfTriggerState,
+    api: &Mutex<LocalApiServer>,
+    paths: &StoragePaths,
+    config: &Mutex<ConfigStore>,
+    capture: &CaptureState,
     port: Option<u16>,
 ) -> Result<LocalApiStatus, String> {
     let database = Arc::new(Database::open(&paths.database).map_err(|error| error.to_string())?);
@@ -250,24 +258,46 @@ pub fn start_local_api(
         api.set_limits(config.page_size_limit(), config.search_page_size_limit());
     }
     api.set_copy_context(crate::item_operations::CopyContext {
-        paths: Some(paths.inner().clone()),
+        paths: Some(paths.clone()),
         self_trigger: Some(self_trigger.0.clone()),
     });
     // The paste endpoint writes to the database directly instead of going
     // through the clipboard worker, so it needs the live capture policy
     // (pause state, sensitive patterns, size ceiling) to gate itself.
-    api.set_capture_state(capture.inner().clone());
+    api.set_capture_state(capture.clone());
+    let app = app.clone();
     api.set_change_callback(Arc::new(move || {
         crate::item_operations::invalidate_desktop(&app)
     }));
     api.set_token(load_or_create_api_token(&paths.project)?);
     let bound_port = api.start_with_database(database)?;
+    write_api_port(&paths.project, bound_port)?;
     Ok(LocalApiStatus {
         running: true,
         port: bound_port,
     })
 }
 
+#[tauri::command]
+pub fn start_local_api(
+    app: tauri::AppHandle,
+    self_trigger: tauri::State<'_, SelfTriggerState>,
+    api: tauri::State<'_, Mutex<LocalApiServer>>,
+    paths: tauri::State<'_, StoragePaths>,
+    config: tauri::State<'_, Mutex<ConfigStore>>,
+    capture: tauri::State<'_, CaptureState>,
+    port: Option<u16>,
+) -> Result<LocalApiStatus, String> {
+    start_local_api_with(
+        &app,
+        self_trigger.inner(),
+        api.inner(),
+        paths.inner(),
+        config.inner(),
+        capture.inner(),
+        port,
+    )
+}
 #[tauri::command]
 pub fn stop_local_api(
     api: tauri::State<'_, Mutex<LocalApiServer>>,

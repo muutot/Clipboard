@@ -701,6 +701,17 @@ pub fn run() {
             app.manage(Mutex::new(thumbnail_worker));
             app.manage(Mutex::new(cleanup_worker));
             app.manage(Mutex::new(LocalApiServer::new(0)));
+            if let Err(error) = commands::api::start_local_api_with(
+                app.handle(),
+                app.state::<SelfTriggerState>().inner(),
+                app.state::<Mutex<LocalApiServer>>().inner(),
+                app.state::<StoragePaths>().inner(),
+                app.state::<Mutex<ConfigStore>>().inner(),
+                app.state::<CaptureState>().inner(),
+                Some(0),
+            ) {
+                crate::log_warn!("[api] failed to start local API: {error}");
+            }
 
             // Background auto-sync worker. It re-reads `auto_sync` and
             // `auto_sync_interval_secs` from the managed config each tick, so
