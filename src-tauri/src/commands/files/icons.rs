@@ -154,10 +154,14 @@ pub fn list_icon_cache(
 
 #[tauri::command]
 pub fn delete_icon_files(
+    database: tauri::State<'_, Database>,
     paths: tauri::State<'_, StoragePaths>,
     names: Vec<String>,
 ) -> Result<u64, String> {
     let icons_dir = paths.storage.join("icons");
+    let referenced = database
+        .list_storage_file_references()
+        .map_err(|error| error.to_string())?;
     let mut deleted = 0u64;
     for name in &names {
         // Names arrive from the webview: strip any directory components and
@@ -178,6 +182,13 @@ pub fn delete_icon_files(
             _ => false,
         };
         if !in_icons_dir {
+            continue;
+        }
+        if referenced
+            .icon_paths
+            .iter()
+            .any(|referenced_name| referenced_name == file_name)
+        {
             continue;
         }
         if path.extension().is_some_and(|e| e == "png") && path.exists() {
