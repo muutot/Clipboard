@@ -3,7 +3,7 @@
 ## Quick Reference
 
 ```sh
-# Normal release (bump version, generate changelog, build)
+# Normal release (bump version, generate changelog, tag)
 node skills/version-release/scripts/release.mjs 0.2.0
 
 # Semantic version bump
@@ -21,7 +21,7 @@ node skills/version-release/scripts/release.mjs --regenerate 0.1.0
 ## Prerequisites
 
 - Working directory must be clean (`git status` shows no changes)
-- All verification passes (`npm run verify`)
+- Pre-release gate passes: `npm run format:check`, `npm run check`, and `npm run lint:rust`
 - Git remote is configured for push
 
 ## Release Flow
@@ -32,14 +32,17 @@ The release script refuses to start unless the working directory is clean: the
 release commit stages every changed path, so an unreviewed in-progress edit
 would otherwise be tagged and shipped. Commit or stash first.
 
-### 2. Verification
+### 2. Pre-release gate
 
-Runs the full verification suite:
+The local gate runs on the final tree; it does not build locally:
 
 ```sh
-npm run verify
-# = format:check + check + build + test:rust + lint:rust
+npm run format:check
+npm run check
+npm run lint:rust
 ```
+
+The GitHub Actions `release.yml` workflow performs the build after the `v*` tag is pushed.
 
 ### 3. Version Bump
 
@@ -190,5 +193,5 @@ git push --delete origin v0.2.0
 
 # Revert to previous version
 node skills/version-release/scripts/version.mjs 0.1.0
-git commit -m "⏪ revert[release]: rollback to v0.1.0"
+git commit -m "🐛 fix[release]: rollback to v0.1.0"
 ```
