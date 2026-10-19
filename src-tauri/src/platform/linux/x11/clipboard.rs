@@ -16,6 +16,11 @@ pub const IMAGE_PNG_TARGET: &str = "image/png";
 /// File list target (URI list).
 pub const TEXT_URI_LIST_TARGET: &str = "text/uri-list";
 
+/// Native X11 text reads are untrusted; match the 64 MiB ceiling used by the
+/// Windows and command-based adapters instead of growing without bound.
+#[cfg(target_os = "linux")]
+const MAX_NATIVE_TEXT_BYTES: usize = 64 * 1024 * 1024;
+
 // ---------------------------------------------------------------------------
 // X11ClipboardMonitor
 // ---------------------------------------------------------------------------
@@ -306,13 +311,21 @@ pub fn read_clipboard_text() -> Option<String> {
                 break;
             }
             if !prop.is_null() && nitems > 0 && actual_format == 8 {
-                let slice = std::slice::from_raw_parts(prop, nitems as usize);
-                data.extend_from_slice(slice);
+                if data.len().saturating_add(nitems as usize) > MAX_NATIVE_TEXT_BYTES {
+                    read_failed = true;
+                    // `prop` is freed below on this path.
+                } else {
+                    let slice = std::slice::from_raw_parts(prop, nitems as usize);
+                    data.extend_from_slice(slice);
+                }
             }
             // `XGetWindowProperty` allocates `prop` on every call, so it must
             // be freed on every path.
             if !prop.is_null() {
                 x11_ffi::XFree(prop as *mut std::ffi::c_void);
+            }
+            if read_failed {
+                break;
             }
             // `long_offset` counts 32-bit units; for 8-bit data one unit holds
             // 4 bytes, so advance by the rounded-up byte count just read.
