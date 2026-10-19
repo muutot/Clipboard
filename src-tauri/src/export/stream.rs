@@ -1,4 +1,4 @@
-use super::{clipboard_kind_name, escape_csv, ExportFormat, ExportOptions, CSV_TEXT_ENCODING};
+﻿use super::{clipboard_kind_name, escape_csv, ExportFormat, ExportOptions, CSV_TEXT_ENCODING};
 use crate::{
     domain::ClipboardItem,
     storage::{Database, StorageError},
@@ -21,6 +21,28 @@ pub(super) fn matches(item: &ClipboardItem, options: &ExportOptions) -> bool {
                 .content_types
                 .iter()
                 .any(|kind| kind.eq_ignore_ascii_case(clipboard_kind_name(item.kind))))
+}
+
+fn write_escaped_plain_text<W: Write>(writer: &mut W, text: &str) -> Result<(), StorageError> {
+    for line in text.split_inclusive('\n') {
+        let (content, ending) = if let Some(content) = line.strip_suffix("\r\n") {
+            (content, "\r\n")
+        } else if let Some(content) = line.strip_suffix('\n') {
+            (content, "\n")
+        } else {
+            (line, "")
+        };
+        if content == "---" {
+            writer.write_all(b"\\---")?;
+        } else if content.starts_with('\\') {
+            writer.write_all(b"\\")?;
+            writer.write_all(content.as_bytes())?;
+        } else {
+            writer.write_all(content.as_bytes())?;
+        }
+        writer.write_all(ending.as_bytes())?;
+    }
+    Ok(())
 }
 
 struct ExportWriter<'a, W> {
@@ -73,7 +95,7 @@ impl<'a, W: Write> ExportWriter<'a, W> {
                     if self.has_text {
                         self.writer.write_all(b"\n---\n")?;
                     }
-                    self.writer.write_all(text.as_bytes())?;
+                    write_escaped_plain_text(&mut self.writer, text)?;
                     self.has_text |= !text.is_empty();
                 }
             }

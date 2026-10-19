@@ -569,3 +569,24 @@ fn csv_export_import_keeps_distinct_media_rows() {
         "hash-image-2"
     );
 }
+#[test]
+fn plain_text_round_trip_escapes_delimiter_and_backslash_lines() {
+    let body = "alpha\n---\n\\---\nbeta";
+    let mut item = sample_items().remove(0);
+    item.text_content = Some(body.to_owned());
+    let options = ExportOptions {
+        format: ExportFormat::PlainText,
+        include_favorites: true,
+        date_from_ms: None,
+        date_to_ms: None,
+        content_types: vec!["text".to_owned()],
+    };
+    let exported = export_items(&[item], &options).unwrap();
+    let database = Database::open_in_memory().unwrap();
+    let summary = import_from_plain_text(&exported, &database).unwrap();
+    assert_eq!(summary.imported_count, 1);
+    let items = database
+        .list_recent(10, 0, &crate::storage::HistoryFilter::default())
+        .unwrap();
+    assert_eq!(items[0].text_content.as_deref(), Some(body));
+}

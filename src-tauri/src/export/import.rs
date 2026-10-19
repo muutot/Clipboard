@@ -78,6 +78,32 @@ pub(crate) fn normalize_imported_icon_key(icon_path: Option<&str>) -> Option<Str
     Some(file_name.to_owned())
 }
 
+/// Reverses the plain-text escaping used by export: a content line that is
+/// exactly `---` is written as `\---`, and any line starting with a backslash
+/// gains one leading backslash.
+fn unescape_plain_text(chunk: &str) -> String {
+    let mut output = String::with_capacity(chunk.len());
+    for line in chunk.split_inclusive('\n') {
+        let (content, ending) = if let Some(content) = line.strip_suffix("\r\n") {
+            (content, "\r\n")
+        } else if let Some(content) = line.strip_suffix('\n') {
+            (content, "\n")
+        } else {
+            (line, "")
+        };
+        if content == "\\---" {
+            output.push_str("---");
+        } else if let Some(rest) = content.strip_prefix("\\\\") {
+            output.push('\\');
+            output.push_str(rest);
+        } else {
+            output.push_str(content);
+        }
+        output.push_str(ending);
+    }
+    output
+}
+
 /// Imports a plain-text backup. Records are separated by a line containing
 /// `---`; blank chunks are ignored and duplicate content is handled by the
 /// database's normal content-hash upsert path.
@@ -98,7 +124,8 @@ pub fn import_from_plain_text(text: &str, database: &Database) -> Result<ImportS
     chunks.push(&text[start..]);
 
     for (index, chunk) in chunks.into_iter().enumerate() {
-        let content = chunk.trim_matches(['\r', '\n']);
+        let unescaped = unescape_plain_text(chunk);
+        let content = unescaped.trim_matches(['\r', '\n']);
         if content.trim().is_empty() {
             continue;
         }
