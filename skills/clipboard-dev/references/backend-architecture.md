@@ -55,7 +55,7 @@ delete the only recovery copy or claim that default settings were persisted.
 
 `export::stream` writes JSON/CSV/plain text incrementally from `Database::visit_active_items`, a single read transaction with one materialized row. GUI and CLI file exports use a buffered temporary file, fsync and atomic replacement; write failure preserves the destination. IPC/stdout compatibility wrappers still return a complete String. The visitor holds the database mutex and must not reenter it. A real WAL regression mutates recency on a second connection while exporting and verifies complete unique IDs and original snapshot values.
 
-Plain-text import recognizes a `---` delimiter line with LF or CRLF endings, while preserving line endings inside each record. Delimiters at the file boundary create empty chunks that are ignored; they never create clipboard records. The CRLF regression imports two records and verifies the first record's internal CRLF bytes.
+Plain-text import recognizes a `---` delimiter line with LF or CRLF endings, while preserving line endings inside each record. Delimiters at the file boundary create empty chunks that are ignored; they never create clipboard records. The CRLF regression imports two records and verifies the first record's internal CRLF bytes. Export escapes a content line that is exactly `---` as `\---` and doubles a leading backslash on any content line; import reverses that escaping, so a record containing a delimiter-looking line round-trips as one record.
 
 Historical auto tags use `Database::with_task_connection`: an existing file is reopened
 without schema initialization, with a small cache and file-backed temporary storage. The
