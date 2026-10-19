@@ -253,6 +253,7 @@ let tagVersion = `v${currentVersion}`;
 // documented two-pass flow impossible to complete.
 const RELEASE_FILES = new Set([
   "package.json",
+  "package-lock.json",
   "src-tauri/tauri.conf.json",
   "src-tauri/Cargo.toml",
   "src-tauri/Cargo.lock",

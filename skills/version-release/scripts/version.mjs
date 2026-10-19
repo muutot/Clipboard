@@ -45,6 +45,16 @@ function writeToml(filePath, content) {
   writeFileSync(filePath, content, "utf-8");
 }
 
+function writePackageLockVersion(newVersion) {
+  const filePath = resolve(ROOT, "package-lock.json");
+  const data = readJson(filePath);
+  data.version = newVersion;
+  if (data.packages && data.packages[""]) {
+    data.packages[""].version = newVersion;
+  }
+  writeJson(filePath, data);
+}
+
 function getCurrentVersion() {
   const pkg = readJson(resolve(ROOT, "package.json"));
   return pkg.version;
@@ -105,6 +115,8 @@ function setVersion(newVersion) {
     console.log(`  ✓ ${file.path}`);
   }
 
+  writePackageLockVersion(newVersion);
+  console.log(`  ✓ package-lock.json`);
   console.log(`\nVersion set to ${newVersion}`);
   return newVersion;
 }

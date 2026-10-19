@@ -97,7 +97,12 @@ if (rustFiles.length === 0) {
 }
 
 // 4. A release commit must only carry the version artifacts (version-release skill).
-const VERSION_FILES = ["package.json", "src-tauri/tauri.conf.json", "src-tauri/Cargo.toml"];
+const VERSION_FILES = [
+  "package.json",
+  "package-lock.json",
+  "src-tauri/tauri.conf.json",
+  "src-tauri/Cargo.toml",
+];
 const RELEASE_ALLOWED = [...VERSION_FILES, "src-tauri/Cargo.lock", "CHANGELOG.md", "RELEASE.md"];
 
 function manifestVersion(path, text) {

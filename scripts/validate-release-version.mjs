@@ -53,6 +53,7 @@ const readVersionFile = (file) =>
 try {
   const declared = {
     "package.json": JSON.parse(readVersionFile("package.json")).version,
+    "package-lock.json": JSON.parse(readVersionFile("package-lock.json")).version,
     "src-tauri/tauri.conf.json": JSON.parse(readVersionFile("src-tauri/tauri.conf.json")).version,
     "src-tauri/Cargo.toml":
       readVersionFile("src-tauri/Cargo.toml").match(/^version\s*=\s*"([^"]+)"/m)?.[1],
@@ -72,6 +73,7 @@ if (git("log", "-1", "--pretty=%s", sha) !== expectedSubject) {
 }
 const releaseFiles = new Set([
   "package.json",
+  "package-lock.json",
   "src-tauri/tauri.conf.json",
   "src-tauri/Cargo.toml",
   "src-tauri/Cargo.lock",
