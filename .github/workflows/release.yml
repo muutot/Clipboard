@@ -241,9 +241,8 @@ jobs:
       # pinned appimagetool, then replace the draft-release asset that
       # tauri-action already uploaded.
       - name: Repair AppImage modes and repack
+        id: appimage_repack
         if: runner.os == 'Linux'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           appimage=$(find src-tauri/target -type f -name '*.AppImage' \
@@ -258,13 +257,22 @@ jobs:
           chmod -R a+rX,go-w "$work/squashfs-root"
           curl -fsSL --retry 3 -o "$work/appimagetool.AppImage" \
             "https://github.com/AppImage/AppImageKit/releases/download/13/obsolete-appimagetool-x86_64.AppImage"
+          echo "df3baf5ca5facbecfc2f3fa6713c29ab9cefa8fd8c1eac5d283b79cab33e4acb  $work/appimagetool.AppImage" | sha256sum -c -
           chmod +x "$work/appimagetool.AppImage"
           "$work/appimagetool.AppImage" --appimage-extract-and-run \
             "$work/squashfs-root" "$appimage"
           rm -rf "$work"
-          gh release upload "$RELEASE_TAG" "$appimage" --clobber \
+          echo "appimage=$appimage" >> "$GITHUB_OUTPUT"
+
+      - name: Upload repacked AppImage
+        if: runner.os == 'Linux'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release upload "$RELEASE_TAG" "${{ steps.appimage_repack.outputs.appimage }}" --clobber \
             --repo "$GITHUB_REPOSITORY"
-          echo "Repacked $(basename "$appimage") with normalized modes and replaced the draft asset."
+          echo "Repacked $(basename "${{ steps.appimage_repack.outputs.appimage }}") with normalized modes and replaced the draft asset."
 
       # Gate, not just the fix above: fail the build if any file in the
       # AppImage is still limited to its owner or group, so the defect can
