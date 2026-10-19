@@ -3,10 +3,11 @@
 use std::sync::{Arc, Mutex};
 use std::thread;
 #[cfg(target_os = "windows")]
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 #[cfg(target_os = "windows")]
 const QUICK_PASTE_FOCUS_DELAY: Duration = Duration::from_millis(60);
+const QUICK_PASTE_MODIFIER_TIMEOUT: Duration = Duration::from_millis(400);
 pub(super) const EVENT_SYSTEM_FOREGROUND: u32 = 0x0003;
 pub(super) const OBJID_WINDOW: i32 = 0;
 pub(super) const WINEVENT_OUTOFCONTEXT: u32 = 0x0000;
@@ -210,7 +211,27 @@ fn send_ctrl_v() -> Result<(), String> {
 
     extern "system" {
         fn SendInput(input_count: u32, inputs: *const Input, input_size: i32) -> u32;
+        fn GetAsyncKeyState(virtual_key: i32) -> i16;
         fn GetLastError() -> u32;
+    }
+
+    const VK_SHIFT: i32 = 0x10;
+    const VK_CONTROL_MOD: i32 = 0x11;
+    const VK_MENU: i32 = 0x12;
+    const VK_LWIN: i32 = 0x5B;
+    const VK_RWIN: i32 = 0x5C;
+    let deadline = Instant::now() + QUICK_PASTE_MODIFIER_TIMEOUT;
+    loop {
+        let held = [VK_SHIFT, VK_CONTROL_MOD, VK_MENU, VK_LWIN, VK_RWIN]
+            .into_iter()
+            .any(|key| unsafe { GetAsyncKeyState(key) as u16 & 0x8000 != 0 });
+        if !held {
+            break;
+        }
+        if Instant::now() >= deadline {
+            return Err("release keys before pasting".to_string());
+        }
+        thread::sleep(Duration::from_millis(10));
     }
 
     let inputs = [
