@@ -17,6 +17,18 @@ def nsis_string(value: Path) -> str:
     return str(value).replace("$", "$$")
 
 
+def marker_text(project: Path, role: str) -> str:
+    key = str(project.resolve()).replace("\\", "/").lower()
+    return f"clipboard-resource-root-v1\nproject={key}\nrole={role}\n"
+
+
+def storage_root_from_result(path: Path) -> str:
+    for line in path.read_bytes().decode("utf-16-le").lstrip("\ufeff").splitlines():
+        if line.startswith("S|"):
+            return line[2:]
+    return ""
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--makensis", type=Path, default=Path(os.environ.get("LOCALAPPDATA", ".")) / "tauri/NSIS/makensis.exe")
@@ -75,10 +87,48 @@ def main() -> None:
         add("fallback-default", '{}')
         add("fallback-custom", json.dumps({"storage": {"dataDirectory": custom.as_posix()}}, indent=2), custom / "storage")
 
+        custom_cases = []
+
+        def add_custom(name, valid_image, valid_file):
+            project = workspace / name
+            storage = project / "storage"
+            (storage / "database").mkdir(parents=True)
+            (storage / "database/clipboard.sqlite3").write_bytes(b"fixture database")
+            image = workspace / (name + "-images")
+            files = workspace / (name + "-files")
+            image.mkdir()
+            files.mkdir()
+            (image / "keep.txt").write_text("image", encoding="utf-8")
+            (files / "keep.txt").write_text("files", encoding="utf-8")
+            (image / ".clipboard-resource-root").write_bytes(
+                (marker_text(project, "image") if valid_image else "foreign marker").encode("utf-8")
+            )
+            (files / ".clipboard-resource-root").write_bytes(
+                (marker_text(project, "file") if valid_file else "foreign marker").encode("utf-8")
+            )
+            config = project / "conf/conf.json"
+            config.parent.mkdir()
+            config.write_text(
+                json.dumps(
+                    {
+                        "storage": {
+                            "dataDirectory": str(project),
+                            "imageStoragePath": str(image),
+                            "fileStoragePath": str(files),
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            custom_cases.append((name, project, image, files, valid_image, valid_file))
+
+        add_custom("custom-owned", True, True)
+        add_custom("custom-invalid-markers", False, False)
+
         executable = workspace / "resolve-test.exe"
         fixture = workspace / "resolve-test.nsi"
         calls = "".join(
-            f'StrCpy $INSTDIR "{nsis_string(workspace / "separate-install" if name.startswith("fallback-") else project)}"\nStrCpy $UninstallProjectRoot "{nsis_string(project)}"\nCall ResolveStorageRoot\nFileOpen $9 "{nsis_string(workspace / (name + ".result"))}" w\nFileWriteUTF16LE $9 "$UninstallStorageRoot"\nFileClose $9\n'
+            f'StrCpy $INSTDIR "{nsis_string(workspace / "separate-install" if name.startswith("fallback-") else project)}"\nStrCpy $UninstallProjectRoot "{nsis_string(project)}"\nCall ResolveStorageRoot\nFileOpen $9 "{nsis_string(workspace / (name + ".result"))}" w\nFileWriteUTF16LE $9 "S|$UninstallStorageRoot"\nFileClose $9\n'
             for name, project, _ in cases
         )
         cleanup_cases = []
@@ -96,25 +146,53 @@ def main() -> None:
                     marker.write_text("fixture", encoding="utf-8")
                 cleanup_cases.append((storage, config, original_config, data, models))
                 calls += f'StrCpy $UninstallProjectRoot "{nsis_string(project)}"\nStrCpy $DeleteDataState {data}\nStrCpy $DeleteModelsState {models}\nCall DeleteStorageAt\n'
+        for name, project, _, _, _, _ in custom_cases:
+            calls += (
+                f'StrCpy $UninstallProjectRoot "{nsis_string(project)}"\n'
+                f'Call ResolveStorageRoot\n'
+                f'FileOpen $9 "{nsis_string(workspace / (name + ".roots"))}" w\n'
+                f'FileWriteUTF16LE $9 "$UninstallStorageRoot|$UninstallImageRoot|$UninstallFileRoot"\n'
+                f'FileClose $9\n'
+                f'StrCpy $DeleteDataState 1\n'
+                f'StrCpy $DeleteModelsState 0\n'
+                f'Call DeleteStorageAt\n'
+            )
         fixture.write_text(
             'Unicode true\nRequestExecutionLevel user\nSilentInstall silent\n'
             '!include LogicLib.nsh\n!include FileFunc.nsh\n'
-            f'OutFile "{nsis_string(executable)}"\nVar UninstallStorageRoot\nVar UninstallProjectRoot\nVar DeleteDataState\nVar DeleteModelsState\n{functions}\nSection\n{calls}SectionEnd\n', encoding="utf-8")
+            f'OutFile "{nsis_string(executable)}"\nVar UninstallStorageRoot\nVar UninstallImageRoot\nVar UninstallFileRoot\nVar UninstallProjectRoot\nVar DeleteDataState\nVar DeleteModelsState\n{functions}\nSection\n{calls}SectionEnd\n', encoding="utf-8")
         subprocess.run([str(args.makensis.resolve()), "/V2", str(fixture)], check=True, timeout=30)
         subprocess.run([str(executable), "/S"], check=True, timeout=60, creationflags=subprocess.CREATE_NO_WINDOW)
         failures = []
         for name, _, expected in cases:
-            actual = (workspace / (name + ".result")).read_bytes().decode("utf-16-le").lstrip("\ufeff")
+            actual = storage_root_from_result(workspace / (name + ".result"))
             correct = actual == "" if expected == "" else bool(actual) and Path(actual).resolve() == expected.resolve()
             if not correct:
                 failures.append(name)
+        for name, project, image, files, valid_image, valid_file in custom_cases:
+            roots = (
+                (workspace / (name + ".roots"))
+                .read_bytes()
+                .decode("utf-16-le")
+                .lstrip("\ufeff")
+                .split("|")
+            )
+            assert len(roots) == 3, f"Unexpected custom roots output: {roots}"
+            assert Path(roots[0]).resolve() == (project / "storage").resolve(), f"custom roots: {roots}"
+            assert (Path(roots[1]).resolve() == image.resolve()) == valid_image, f"image roots: {roots}, image={image}"
+            assert (Path(roots[2]).resolve() == files.resolve()) == valid_file
+            assert image.exists() != valid_image, f"Incorrect custom image cleanup: {name}"
+            assert files.exists() != valid_file, f"Incorrect custom file cleanup: {name}"
         assert not failures, "Incorrect storage resolution: " + ", ".join(failures)
         for storage, config, original_config, data, models in cleanup_cases:
             for folder in ("database", "image", "files", "icons", "models", "unrelated"):
                 deleted = bool(models) if folder == "models" else bool(data) if folder != "unrelated" else False
                 assert (storage / folder / "keep.txt").exists() != deleted, f"Incorrect cleanup: {data}/{models}/{folder}"
             assert config.read_bytes() == original_config, "Storage cleanup changed configuration"
-    print(f"PASS: {len(cases)} compiled NSIS storage resolution scenarios and {len(cleanup_cases)} cleanup option combinations")
+    print(
+        f"PASS: {len(cases)} compiled NSIS storage resolution scenarios, "
+        f"{len(custom_cases)} custom-root cases and {len(cleanup_cases)} cleanup option combinations"
+    )
 
 
 if __name__ == "__main__":

@@ -445,6 +445,8 @@ Var DeleteModelsState
 Var DeleteSettingsCheckbox
 Var DeleteSettingsState
 Var UninstallStorageRoot
+Var UninstallImageRoot
+Var UninstallFileRoot
 Var UninstallProjectRoot
 !define /ifndef WS_EX_LAYOUTRTL         0x00400000
 !define MUI_PAGE_CUSTOMFUNCTION_SHOW un.ConfirmShow
@@ -503,6 +505,8 @@ Function un.WriteStorageResolver
   FileWrite $0 `$$ErrorActionPreference = 'Stop'$\r$\n`
   FileWrite $0 `try {$\r$\n`
   FileWrite $0 `  $$root = $$ProjectPath$\r$\n`
+  FileWrite $0 `  $$imageRoot = $$null$\r$\n`
+  FileWrite $0 `  $$fileRoot = $$null$\r$\n`
   FileWrite $0 `  $$text = $$null$\r$\n`
   FileWrite $0 `  $$utf8 = New-Object System.Text.UTF8Encoding -ArgumentList $$false, $$true$\r$\n`
   FileWrite $0 `  try { $$text = [IO.File]::ReadAllText($$ConfigPath, $$utf8) }$\r$\n`
@@ -519,15 +523,53 @@ Function un.WriteStorageResolver
   FileWrite $0 `        if ($$directory[0].Value -isnot [string]) { throw 'Invalid directory type' }$\r$\n`
   FileWrite $0 `        $$root = $$directory[0].Value$\r$\n`
   FileWrite $0 `      }$\r$\n`
+  FileWrite $0 `      $$image = @($$storage[0].Value.PSObject.Properties | Where-Object { $$_.Name -ceq 'imageStoragePath' })$\r$\n`
+  FileWrite $0 `      if ($$image.Count -gt 0 -and $$null -ne $$image[0].Value) {$\r$\n`
+  FileWrite $0 `        if ($$image[0].Value -isnot [string]) { throw 'Invalid image directory type' }$\r$\n`
+  FileWrite $0 `        $$imageRoot = $$image[0].Value$\r$\n`
+  FileWrite $0 `      }$\r$\n`
+  FileWrite $0 `      $$files = @($$storage[0].Value.PSObject.Properties | Where-Object { $$_.Name -ceq 'fileStoragePath' })$\r$\n`
+  FileWrite $0 `      if ($$files.Count -gt 0 -and $$null -ne $$files[0].Value) {$\r$\n`
+  FileWrite $0 `        if ($$files[0].Value -isnot [string]) { throw 'Invalid file directory type' }$\r$\n`
+  FileWrite $0 `        $$fileRoot = $$files[0].Value$\r$\n`
+  FileWrite $0 `      }$\r$\n`
   FileWrite $0 `    }$\r$\n`
   FileWrite $0 `  }$\r$\n`
-  FileWrite $0 `  if ($$root -notmatch '^(?:[A-Za-z]:[\\/]|\\\\[^\\/]+[\\/][^\\/]+(?:[\\/]|$$))') { throw 'Directory must be absolute' }$\r$\n`
-  FileWrite $0 `  if ($$root.IndexOfAny([IO.Path]::GetInvalidPathChars()) -ge 0) { throw 'Invalid path characters' }$\r$\n`
-  FileWrite $0 `  $$root = [IO.Path]::GetFullPath($$root)$\r$\n`
+  FileWrite $0 `  function Normalize-Directory([string]$$value) {$\r$\n`
+  FileWrite $0 `    if ($$value -notmatch '^(?:[A-Za-z]:[\\/]|\\\\[^\\/]+[\\/][^\\/]+(?:[\\/]|$$))') { throw 'Directory must be absolute' }$\r$\n`
+  FileWrite $0 `    if ($$value.IndexOfAny([IO.Path]::GetInvalidPathChars()) -ge 0) { throw 'Invalid path characters' }$\r$\n`
+  FileWrite $0 `    return [IO.Path]::GetFullPath($$value)$\r$\n`
+  FileWrite $0 `  }$\r$\n`
+  FileWrite $0 `  $$root = Normalize-Directory $$root$\r$\n`
   FileWrite $0 `  if ([IO.Path]::GetFileName($$root.TrimEnd([char[]]'\/')) -cne 'storage') {$\r$\n`
   FileWrite $0 `    $$root = [IO.Path]::Combine($$root, 'storage')$\r$\n`
   FileWrite $0 `  }$\r$\n`
-  FileWrite $0 `  [IO.File]::WriteAllText($$ResultPath, $$root, [Text.Encoding]::Unicode)$\r$\n`
+  FileWrite $0 `  $$lines = New-Object System.Collections.Generic.List[string]$\r$\n`
+  FileWrite $0 `  $$hasStorage = $$false$\r$\n`
+  FileWrite $0 `  foreach ($$item in @('database\clipboard.sqlite3', 'database\search-index', 'models', 'image', 'files')) {$\r$\n`
+  FileWrite $0 `    if (Test-Path -LiteralPath (Join-Path $$root $$item)) { $$hasStorage = $$true; break }$\r$\n`
+  FileWrite $0 `  }$\r$\n`
+  FileWrite $0 `  if ($$hasStorage) { $$lines.Add("S|$$root") }$\r$\n`
+  FileWrite $0 `  $$projectPath = Normalize-Directory $$ProjectPath$\r$\n`
+  FileWrite $0 `  $$projectKey = $$projectPath.Replace('\','/').ToLowerInvariant()$\r$\n`
+  FileWrite $0 `  function Add-OwnedRoot([string]$$value, [string]$$role, [string]$$prefix) {$\r$\n`
+  FileWrite $0 `    if ([string]::IsNullOrWhiteSpace($$value)) { return }$\r$\n`
+  FileWrite $0 `    $$path = Normalize-Directory $$value$\r$\n`
+  FileWrite $0 `    $$comparison = [StringComparison]::OrdinalIgnoreCase$\r$\n`
+  FileWrite $0 `    $$trimmed = $$path.TrimEnd([char[]]'\/')$\r$\n`
+  FileWrite $0 `    if ([string]::Equals($$trimmed, $$projectPath.TrimEnd([char[]]'\/'), $$comparison)) { return }$\r$\n`
+  FileWrite $0 `    if ($$projectPath.StartsWith($$trimmed + '\', $$comparison)) { return }$\r$\n`
+  FileWrite $0 `    $$marker = Join-Path $$path '.clipboard-resource-root'$\r$\n`
+  FileWrite $0 `    if (-not (Test-Path -LiteralPath $$marker -PathType Leaf)) { return }$\r$\n`
+  FileWrite $0 `    $$expected = 'clipboard-resource-root-v1' + [char]10 + 'project=' + $$projectKey + [char]10 + 'role=' + $$role + [char]10$\r$\n`
+  FileWrite $0 `    $$actual = [IO.File]::ReadAllText($$marker, $$utf8)$\r$\n`
+  FileWrite $0 `    if ($$actual -ceq $$expected) { $$lines.Add("$$prefix|$$path") }$\r$\n`
+  FileWrite $0 `  }$\r$\n`
+  FileWrite $0 `  Add-OwnedRoot $$imageRoot 'image' 'I'$\r$\n`
+  FileWrite $0 `  Add-OwnedRoot $$fileRoot 'file' 'F'$\r$\n`
+  FileWrite $0 `  $$output = [string]::Join([char]10, $$lines)$\r$\n`
+  FileWrite $0 `  if ($$lines.Count -gt 0) { $$output += [char]10 }$\r$\n`
+  FileWrite $0 `  [IO.File]::WriteAllText($$ResultPath, $$output, [Text.Encoding]::Unicode)$\r$\n`
   FileWrite $0 `  exit 0$\r$\n`
   FileWrite $0 `} catch { exit 1 }$\r$\n`
   FileClose $0
@@ -535,6 +577,8 @@ FunctionEnd
 
 Function un.ResolveStorageRoot
   StrCpy $UninstallStorageRoot ""
+  StrCpy $UninstallImageRoot ""
+  StrCpy $UninstallFileRoot ""
   Call un.WriteStorageResolver
   Delete "$PLUGINSDIR\clipboard-storage-root.txt"
   ; -File treats paths as arguments; no config values are embedded in code.
@@ -558,43 +602,54 @@ Function un.ResolveStorageRoot
   ${EndIf}
   ; The helper writes UTF-16LE with a BOM; never decode using a code page.
   FileSeek $0 2 SET
-  FileReadUTF16LE $0 $UninstallStorageRoot
+  read_storage_line:
+    FileReadUTF16LE $0 $1
+    IfErrors storage_lines_done
+    ; FileReadUTF16LE keeps the line ending; the helper writes LF only.
+    StrCpy $1 $1 -1
+    StrCmp $1 "" storage_lines_done
+    StrCpy $2 $1 2
+    StrCpy $3 $1 "" 2
+    StrCmp $2 "S|" 0 +2
+      StrCpy $UninstallStorageRoot $3
+    StrCmp $2 "I|" 0 +2
+      StrCpy $UninstallImageRoot $3
+    StrCmp $2 "F|" 0 +2
+      StrCpy $UninstallFileRoot $3
+    Goto read_storage_line
+  storage_lines_done:
   FileClose $0
-  ${If} ${Errors}
-    StrCpy $UninstallStorageRoot ""
-    Return
-  ${EndIf}
-  ${If} $UninstallStorageRoot == ""
-    Return
-  ${EndIf}
-  ${If} ${FileExists} "$UninstallStorageRoot\database\clipboard.sqlite3"
-  ${OrIf} ${FileExists} "$UninstallStorageRoot\database\search-index\*.*"
-  ${OrIf} ${FileExists} "$UninstallStorageRoot\models\*.*"
-  ${OrIf} ${FileExists} "$UninstallStorageRoot\image\*.*"
-  ${OrIf} ${FileExists} "$UninstallStorageRoot\files\*.*"
-    Return
-  ${EndIf}
-  StrCpy $UninstallStorageRoot ""
 FunctionEnd
 
 ; Apply the independent data/model options to one known project root.
 Function un.DeleteStorageAt
   Call un.ResolveStorageRoot
-  ${If} $UninstallStorageRoot == ""
-    Return
-  ${EndIf}
   ${If} $DeleteDataState = 1
-    DetailPrint "Deleting clipboard data from $UninstallStorageRoot"
-    RmDir /r "$UninstallStorageRoot\database"
-    RmDir /r "$UninstallStorageRoot\image"
-    RmDir /r "$UninstallStorageRoot\files"
-    RmDir /r "$UninstallStorageRoot\icons"
+    ${If} $UninstallStorageRoot != ""
+      DetailPrint "Deleting clipboard data from $UninstallStorageRoot"
+      RmDir /r "$UninstallStorageRoot\database"
+      RmDir /r "$UninstallStorageRoot\image"
+      RmDir /r "$UninstallStorageRoot\files"
+      RmDir /r "$UninstallStorageRoot\icons"
+    ${EndIf}
+    ${If} $UninstallImageRoot != ""
+      DetailPrint "Deleting custom image storage from $UninstallImageRoot"
+      RmDir /r "$UninstallImageRoot"
+    ${EndIf}
+    ${If} $UninstallFileRoot != ""
+      DetailPrint "Deleting custom file storage from $UninstallFileRoot"
+      RmDir /r "$UninstallFileRoot"
+    ${EndIf}
   ${EndIf}
   ${If} $DeleteModelsState = 1
-    DetailPrint "Deleting OCR models from $UninstallStorageRoot"
-    RmDir /r "$UninstallStorageRoot\models"
+    ${If} $UninstallStorageRoot != ""
+      DetailPrint "Deleting OCR models from $UninstallStorageRoot"
+      RmDir /r "$UninstallStorageRoot\models"
+    ${EndIf}
   ${EndIf}
-  RmDir "$UninstallStorageRoot"
+  ${If} $UninstallStorageRoot != ""
+    RmDir "$UninstallStorageRoot"
+  ${EndIf}
 FunctionEnd
 
 ; Stack: application data root. Shared by both Windows user-data locations.
