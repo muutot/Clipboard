@@ -1,4 +1,4 @@
-# Release Process
+﻿# Release Process
 
 ## Quick Reference
 
@@ -43,9 +43,10 @@ npm run verify
 
 ### 3. Version Bump
 
-Updates version in three files atomically:
+Updates version in four files atomically:
 
 - `package.json`
+- `package-lock.json`
 - `src-tauri/tauri.conf.json`
 - `src-tauri/Cargo.toml`
 
@@ -159,10 +160,11 @@ git push origin refs/tags/v<version> --force
 | File                        | Key        | Format      |
 | :-------------------------- | :--------- | :---------- |
 | `package.json`              | `.version` | JSON string |
+| `package-lock.json`         | `.version` | JSON string |
 | `src-tauri/tauri.conf.json` | `.version` | JSON string |
 | `src-tauri/Cargo.toml`      | `version`  | TOML string |
 
-All three must stay in sync. The `skills/version-release/scripts/version.mjs` script ensures atomic updates.
+All four must stay in sync. The `skills/version-release/scripts/version.mjs` script ensures atomic updates.
 
 ### Pre-release Versions
 

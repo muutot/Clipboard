@@ -89,6 +89,7 @@ Before running the release script, ensure that **every other change** has alread
 The release commit (`🔖 chore[release]: bump version to x.x.x`) **must only contain**:
 
 - `package.json`
+- `package-lock.json`
 - `src-tauri/tauri.conf.json`
 - `src-tauri/Cargo.toml`
 - `src-tauri/Cargo.lock`
@@ -107,7 +108,7 @@ The script does the following:
 
 | Step | What                                                                                       |
 | ---- | ------------------------------------------------------------------------------------------ |
-| 1    | Bump version in `package.json`, `tauri.conf.json`, `Cargo.toml`                            |
+| 1    | Bump version in `package.json`, `package-lock.json`, `tauri.conf.json`, `Cargo.toml`       |
 | 2    | Generate `CHANGELOG.md` from commits since last tag                                        |
 | 3    | Check `RELEASE.md` — if stale, prints instructions and exits cleanly                       |
 | 4    | Commit version files + CHANGELOG.md + RELEASE.md                                           |
@@ -259,10 +260,11 @@ The separate `.github/workflows/sync-gitcode.yml` workflow mirrors the published
 | File                        | Key        |
 | :-------------------------- | :--------- |
 | `package.json`              | `.version` |
+| `package-lock.json`         | `.version` |
 | `src-tauri/tauri.conf.json` | `.version` |
 | `src-tauri/Cargo.toml`      | `version`  |
 
-All three are updated atomically by `skills/version-release/scripts/version.mjs`.
+All four are updated atomically by `skills/version-release/scripts/version.mjs`.
 
 ## Error recovery
 
