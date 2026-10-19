@@ -44,25 +44,28 @@ pub fn read_clipboard_image() -> Option<(Vec<u8>, u32, u32)> {
         // CF_BITMAP yields an HBITMAP, not an HGLOBAL, so GlobalSize/GlobalLock
         // cannot read it. Convert it to a DIB with GetDIBits and reuse the DIB
         // decoder; a plain DIB/DIBV5 still takes the shared-memory path.
-        let result = if format == CF_BITMAP {
-            hbitmap_to_dib_bytes(handle).and_then(|dib| dib_to_png(&dib))
+        // Copy the DIB bytes while the clipboard is locked, then close it
+        // before PNG encoding so a large screenshot cannot hold the system
+        // clipboard open for the entire decode.
+        let dib_bytes = if format == CF_BITMAP {
+            hbitmap_to_dib_bytes(handle)
         } else {
             let size = GlobalSize(handle);
             if !native_payload_size_allowed(size, MAX_NATIVE_IMAGE_BYTES) {
-                CloseClipboard();
-                return None;
+                None
+            } else {
+                let ptr = GlobalLock(handle);
+                if ptr.is_null() {
+                    None
+                } else {
+                    let bytes = std::slice::from_raw_parts(ptr, size).to_vec();
+                    GlobalUnlock(handle);
+                    Some(bytes)
+                }
             }
-            let ptr = GlobalLock(handle);
-            if ptr.is_null() {
-                CloseClipboard();
-                return None;
-            }
-            let result = dib_to_png(std::slice::from_raw_parts(ptr, size));
-            GlobalUnlock(handle);
-            result
         };
         CloseClipboard();
-        result
+        dib_bytes.and_then(|dib| dib_to_png(&dib))
     }
 }
 
