@@ -16,6 +16,7 @@ use super::{HotkeyAction, HotkeyRegistration};
 
 pub struct HotkeyManager {
     handle: Option<thread::JoinHandle<()>>,
+    dispatch_handle: Option<thread::JoinHandle<()>>,
     window: Option<tauri::WebviewWindow>,
     /// Chord bindings per global action in `global_action_ids()` order
     /// (index 0 = `toggleWindow`, 1 = `toggleFloatPanel`). A new registry row
@@ -37,6 +38,7 @@ impl HotkeyManager {
     pub fn new() -> Self {
         Self {
             handle: None,
+            dispatch_handle: None,
             window: None,
             global_chords: Vec::new(),
             toggle_doubles: Vec::new(),
@@ -167,7 +169,7 @@ impl HotkeyManager {
         let quick_paste_target = Arc::clone(&self.quick_paste_target);
         let app = self.app.clone();
 
-        thread::spawn(move || {
+        let dispatch_handle = thread::spawn(move || {
             while let Ok(action) = rx.recv() {
                 match action {
                     HotkeyAction::ToggleMain => {
@@ -217,13 +219,15 @@ impl HotkeyManager {
                                     quick_paste_target.remember(window_handle);
                                 }
                             }
-                            if let Err(error) =
-                                crate::commands::float::toggle_float_panel(app.clone())
-                            {
-                                crate::log_error!(
-                                    "[hotkey] failed to toggle the float panel: {error}"
-                                );
-                            }
+                            let app = app.clone();
+                            tauri::async_runtime::spawn_blocking(move || {
+                                if let Err(error) = crate::commands::float::toggle_float_panel(app)
+                                {
+                                    crate::log_error!(
+                                        "[hotkey] failed to toggle the float panel: {error}"
+                                    );
+                                }
+                            });
                         }
                     }
                     HotkeyAction::Forward(index) => {
@@ -247,6 +251,7 @@ impl HotkeyManager {
         });
 
         self.handle = Some(handle);
+        self.dispatch_handle = Some(dispatch_handle);
     }
 
     pub fn restart_with_hotkeys(
@@ -298,6 +303,24 @@ impl HotkeyManager {
                     "[hotkey] message loop thread never became stoppable; leaking it so shutdown can proceed"
                 );
             }
+        }
+        // The dispatch receiver disconnects when the message loop drops its
+        // sender. Do not join a dispatcher whose message loop was leaked: it
+        // would wait forever on `recv`.
+        if joinable {
+            if let Some(handle) = self.dispatch_handle.take() {
+                if handle.thread().id() != thread::current().id() {
+                    if let Err(panic) = handle.join() {
+                        crate::log_error!(
+                            "[hotkey] dispatch thread terminated with a panic: {panic:?}"
+                        );
+                    }
+                } else {
+                    self.dispatch_handle = Some(handle);
+                }
+            }
+        } else {
+            self.dispatch_handle.take();
         }
         self.quick_paste_target.clear();
     }
