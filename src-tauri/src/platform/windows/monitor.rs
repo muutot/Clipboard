@@ -320,6 +320,7 @@ impl WindowsClipboardMonitor {
             .name("clipboard-monitor".to_owned())
             .spawn(move || {
                 let mut poll_state = crate::platform::ClipboardPollState::new();
+                let mut last_sequence: Option<u32> = None;
                 let mut sequence = 0u32;
 
                 loop {
@@ -329,6 +330,14 @@ impl WindowsClipboardMonitor {
                     }
 
                     let platform = crate::platform::platform();
+                    // macOS exposes NSPasteboard.changeCount; Linux normally
+                    // returns None and keeps the content comparison below.
+                    if let Some(current) = platform.read_clipboard_sequence() {
+                        if last_sequence == Some(current) {
+                            continue;
+                        }
+                        last_sequence = Some(current);
+                    }
                     let current_text = platform.read_clipboard_text();
                     // Text is the cheap signal. File and image reads only run
                     // when there is no text, so image decoding does not happen
