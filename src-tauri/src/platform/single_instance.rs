@@ -200,6 +200,19 @@ fn read_instance_lock_pid(lock_path: &Path) -> io::Result<Option<u32>> {
     Ok(content.trim().parse::<u32>().ok().filter(|pid| *pid != 0))
 }
 
+/// `create_instance_lock` publishes the file before writing the PID. A second
+/// launch that reads that short empty window must retry instead of deleting the
+/// live owner's lock.
+const LOCK_WRITE_GRACE: Duration = Duration::from_secs(2);
+
+fn lock_is_freshly_written(lock_path: &Path) -> io::Result<bool> {
+    let age = fs::metadata(lock_path)?
+        .modified()?
+        .elapsed()
+        .unwrap_or_default();
+    Ok(age < LOCK_WRITE_GRACE)
+}
+
 impl SingleInstanceGuard {
     pub fn acquire(project_dir: &Path) -> Result<Self, SingleInstanceError> {
         let lock_path = project_dir.join("instance.lock");
@@ -242,7 +255,25 @@ impl SingleInstanceGuard {
                             }
                             return Err(SingleInstanceError::AlreadyRunning(owner_pid));
                         }
-                        Ok(_) => {}
+                        Ok(_) => match lock_is_freshly_written(&lock_path) {
+                            Ok(true) => {
+                                if attempt < 9 {
+                                    sleep(Duration::from_millis(300));
+                                    continue;
+                                }
+                                return Err(SingleInstanceError::LockFile(
+                                    "instance lock is still being created; retrying later"
+                                        .to_string(),
+                                ));
+                            }
+                            Ok(false) => {}
+                            Err(error) => {
+                                return Err(SingleInstanceError::LockFile(format!(
+                                    "failed to inspect instance lock {}: {error}",
+                                    lock_path.display()
+                                )));
+                            }
+                        },
                         Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
                         Err(error) => {
                             return Err(SingleInstanceError::LockFile(format!(
@@ -402,6 +433,25 @@ mod tests {
         ));
         fs::create_dir_all(&directory).expect("create temp dir");
         directory
+    }
+
+    #[test]
+    fn a_freshly_created_empty_lock_is_not_treated_as_stale() {
+        use std::time::SystemTime;
+
+        let directory = temp_dir();
+        let lock_path = directory.join("instance.lock");
+        fs::write(&lock_path, b"").unwrap();
+        assert!(lock_is_freshly_written(&lock_path).unwrap());
+
+        let file = fs::OpenOptions::new().write(true).open(&lock_path).unwrap();
+        file.set_modified(SystemTime::now() - Duration::from_secs(5))
+            .unwrap();
+        drop(file);
+        assert!(!lock_is_freshly_written(&lock_path).unwrap());
+
+        fs::remove_file(&lock_path).unwrap();
+        fs::remove_dir(&directory).unwrap();
     }
 
     #[test]
