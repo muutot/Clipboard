@@ -103,8 +103,8 @@ The pre-release gate is `npm run format:check` + `npm run check` +
 After successful build, push to remote:
 
 ```sh
-git push origin core
-git push origin v0.2.0
+git push origin refs/heads/core
+git push origin refs/tags/v0.2.0
 ```
 
 Pushing the tag triggers the CI/CD pipeline (`.github/workflows/release.yml`) which:
@@ -148,8 +148,8 @@ If a release commit and tag already exist for the version, the script automatica
 The old release commit is **removed from the Git DAG**, as if it never existed. All subsequent commits are rewired on top of the parent, preserving their timestamps and content. After pushing:
 
 ```sh
-git push origin core --force-with-lease
-git push origin v<version> --force
+git push origin refs/heads/core --force-with-lease
+git push origin refs/tags/v<version> --force
 ```
 
 ## Version Management

@@ -414,12 +414,12 @@ if (!isDryRun) {
 if (!isDryRun) {
   console.log("\n[6/6] Remote push — skipped (local-only by design)");
   console.log("  The release commit and tag exist only locally. Push them yourself:");
-  console.log(`    git push origin ${BRANCH}`);
-  console.log(`    git push origin ${tagVersion}`);
+  console.log(`    git push origin refs/heads/${BRANCH}`);
+  console.log(`    git push origin refs/tags/${tagVersion}`);
   if (forcePush) {
     console.log("  History was rewritten by --regenerate; use --force-with-lease when pushing:");
-    console.log(`    git push origin ${BRANCH} --force-with-lease`);
-    console.log(`    git push origin ${tagVersion} --force`);
+    console.log(`    git push origin refs/heads/${BRANCH} --force-with-lease`);
+    console.log(`    git push origin refs/tags/${tagVersion} --force`);
   }
 } else {
   console.log("\n[6/6] Push (skipped in dry-run mode)");
