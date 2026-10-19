@@ -574,7 +574,10 @@
 
   // --- Virtual scrolling ---
 
-  const effectiveContainerWidth = $derived(Math.max(680, containerWidth));
+  // Use the measured list width once ResizeObserver has a value; 680 is only
+  // the pre-measurement estimate. Split mode can be narrower than 680px, and
+  // flooring there would under-estimate wrapped text height and clip cards.
+  const effectiveContainerWidth = $derived(containerWidth > 0 ? containerWidth : 680);
   const cardTextHeight = $derived($generalSettings.cardTextHeight);
   const cardTallTextHeight = $derived($generalSettings.cardTallTextHeight);
   const cardImageHeight = $derived($generalSettings.cardImageHeight);
@@ -1222,7 +1225,9 @@
         return;
       }
       const start = Math.min(lastClickedIndex, currentIdx);
-      const end = Math.max(lastClickedIndex, currentIdx);
+      // The anchor can be older than the current filtered list after a
+      // search/filter/removal. Never index past the live array.
+      const end = Math.min(Math.max(lastClickedIndex, currentIdx), filteredItems.length - 1);
       const rangeIds = new Set<string>();
       for (let i = start; i <= end; i++) {
         rangeIds.add(filteredItems[i].id);
