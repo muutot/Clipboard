@@ -949,6 +949,37 @@ impl ClipboardRepository for Database {
                     );
                 }
             }
+
+            let mut metadata_paths = connection.prepare(
+                "SELECT json_extract(metadata_json, '$.resourcePath')
+                   FROM clipboard_items
+                  WHERE metadata_json IS NOT NULL AND json_valid(metadata_json)
+                 UNION ALL
+                 SELECT json_extract(metadata_json, '$.storagePath')
+                   FROM clipboard_items
+                  WHERE metadata_json IS NOT NULL AND json_valid(metadata_json)
+                 UNION ALL
+                 SELECT json_extract(metadata_json, '$.originalPath')
+                   FROM clipboard_items
+                  WHERE metadata_json IS NOT NULL AND json_valid(metadata_json)
+                 UNION ALL
+                 SELECT json_extract(value, '$.storagePath')
+                   FROM clipboard_items, json_each(clipboard_items.metadata_json, '$.files')
+                  WHERE metadata_json IS NOT NULL AND json_valid(metadata_json)
+                 UNION ALL
+                 SELECT json_extract(value, '$.originalPath')
+                   FROM clipboard_items, json_each(clipboard_items.metadata_json, '$.files')
+                  WHERE metadata_json IS NOT NULL AND json_valid(metadata_json)",
+            )?;
+            let metadata_paths =
+                metadata_paths.query_map([], |row| row.get::<_, Option<String>>(0))?;
+            for path in metadata_paths {
+                if let Some(path) = path? {
+                    if !path.trim().is_empty() {
+                        paths.resource_paths.push(path);
+                    }
+                }
+            }
             Ok(paths)
         })
     }
@@ -973,6 +1004,21 @@ impl ClipboardRepository for Database {
                            AND EXISTS (
                                SELECT 1 FROM json_each(clipboard_items.text_content)
                                WHERE value = ?2
+                           )
+                       )
+                       OR (
+                           metadata_json IS NOT NULL
+                           AND json_valid(metadata_json)
+                           AND (
+                               json_extract(metadata_json, '$.resourcePath') = ?2
+                               OR json_extract(metadata_json, '$.storagePath') = ?2
+                               OR json_extract(metadata_json, '$.originalPath') = ?2
+                               OR EXISTS (
+                                   SELECT 1
+                                     FROM json_each(clipboard_items.metadata_json, '$.files')
+                                    WHERE json_extract(value, '$.storagePath') = ?2
+                                       OR json_extract(value, '$.originalPath') = ?2
+                               )
                            )
                        )
                    )",

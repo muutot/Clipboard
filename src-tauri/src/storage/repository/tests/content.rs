@@ -236,6 +236,35 @@ fn storage_references_include_every_path_from_multi_file_records() {
 }
 
 #[test]
+fn metadata_only_file_references_are_visible_to_cleanup_and_rename() {
+    let database = Database::open_in_memory().unwrap();
+    let mut item = text_item("metadata-only", "hash-metadata-only", 100);
+    item.kind = ClipboardKind::File;
+    item.resource_path = None;
+    item.text_content = None;
+    item.metadata_json = Some(
+        serde_json::json!({
+            "files": [
+                {"storagePath": "C:\\managed\\metadata-only.bin", "originalPath": "C:\\managed\\metadata-only.bin"}
+            ]
+        })
+        .to_string(),
+    );
+    database.save_item(&item).unwrap();
+
+    let references = database.list_storage_file_references().unwrap();
+    assert!(references
+        .resource_paths
+        .contains(&"C:\\managed\\metadata-only.bin".to_owned()));
+    assert_eq!(
+        database
+            .resource_reference_count("C:\\managed\\metadata-only.bin", "other")
+            .unwrap(),
+        1
+    );
+}
+
+#[test]
 fn resource_reference_count_reports_shared_files_excluding_the_current_record() {
     let database = Database::open_in_memory().unwrap();
     let mut image = text_item("image-1", "hash-1", 100);
