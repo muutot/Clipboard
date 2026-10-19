@@ -450,7 +450,12 @@ impl ConfigStore {
     }
 
     pub fn max_file_copy_size_bytes(&self) -> u64 {
-        self.config.storage.max_file_copy_size_bytes
+        // The capture worker treats 0 as unlimited, so a hand-edited or
+        // restored config must not bypass the setter's clamp.
+        self.config
+            .storage
+            .max_file_copy_size_bytes
+            .clamp(MIN_FILE_COPY_SIZE_BYTES, MAX_FILE_COPY_SIZE_BYTES)
     }
 
     pub fn max_screenshot_size_bytes(&self) -> u64 {
@@ -458,15 +463,19 @@ impl ConfigStore {
     }
 
     pub fn retention_days(&self) -> u32 {
-        self.config.history.retention_days
+        // Cleanup uses this directly; a loaded 0 would delete the whole
+        // non-favorite history on the next maintenance tick.
+        self.config.history.retention_days.clamp(1, 365)
     }
 
     pub fn max_items(&self) -> u32 {
-        self.config.history.max_items
+        // Capacity cleanup uses this directly; a loaded value below the
+        // documented minimum could evict almost the entire history.
+        self.config.history.max_items.clamp(100, 1_000_000)
     }
 
     pub fn recycle_bin_days(&self) -> u32 {
-        self.config.history.recycle_bin_days
+        self.config.history.recycle_bin_days.clamp(0, 365)
     }
 
     pub fn set_retention_days(&mut self, value: u32) -> Result<(), StorageError> {

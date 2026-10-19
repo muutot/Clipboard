@@ -800,6 +800,34 @@ fn history_limits_clamp_out_of_range_values() {
 }
 
 #[test]
+fn loaded_out_of_range_limits_are_clamped_before_use() {
+    let project = temporary_test_directory("loaded-limit-clamp");
+    fs::create_dir_all(project.join("conf")).unwrap();
+    fs::write(
+        project.join("conf/conf.json"),
+        br#"{
+            "history": {
+                "maxItems": 1,
+                "retentionDays": 0,
+                "recycleBinDays": 9999
+            },
+            "storage": {
+                "maxFileCopySizeBytes": 0
+            }
+        }"#,
+    )
+    .unwrap();
+
+    let store = ConfigStore::load(&project).unwrap();
+    assert_eq!(store.max_items(), 100);
+    assert_eq!(store.retention_days(), 1);
+    assert_eq!(store.recycle_bin_days(), 365);
+    assert_eq!(store.max_file_copy_size_bytes(), 1);
+
+    fs::remove_dir_all(project).unwrap();
+}
+
+#[test]
 fn max_file_copy_size_clamps_out_of_range_values() {
     let project = temporary_test_directory("file-copy-clamp");
     let mut store = ConfigStore::load(&project).unwrap();
