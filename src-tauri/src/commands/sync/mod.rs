@@ -72,6 +72,7 @@ pub struct SyncConfigInfo {
     auto_sync: bool,
     auto_sync_interval_secs: u64,
     segment_max_entries: u32,
+    resource_gc_mode: String,
     max_sync_image_bytes: u64,
     max_sync_file_bytes: u64,
 }
@@ -120,6 +121,7 @@ pub(crate) struct SyncSettings {
     secret_key: String,
     sync_password: Option<String>,
     segment_max_entries: usize,
+    resource_gc_mode: v1::ResourceGcMode,
     max_sync_image_bytes: u64,
     max_sync_file_bytes: u64,
 }
@@ -141,6 +143,7 @@ impl std::fmt::Debug for SyncSettings {
                 &self.sync_password.as_ref().map(|_| "<redacted>"),
             )
             .field("segment_max_entries", &self.segment_max_entries)
+            .field("resource_gc_mode", &self.resource_gc_mode)
             .field("max_sync_image_bytes", &self.max_sync_image_bytes)
             .field("max_sync_file_bytes", &self.max_sync_file_bytes)
             .finish()
@@ -179,6 +182,7 @@ impl SyncSettings {
             secret_key: self.secret_key.clone(),
             sync_password,
             segment_max_entries: self.segment_max_entries,
+            resource_gc_mode: self.resource_gc_mode,
             max_sync_image_bytes: self.max_sync_image_bytes,
             max_sync_file_bytes: self.max_sync_file_bytes,
         }
@@ -214,6 +218,10 @@ impl SyncSettings {
                 .clone()
                 .filter(|password| !password.is_empty()),
             segment_max_entries: sync.segment_max_entries.clamp(16, 10_000) as usize,
+            resource_gc_mode: sync
+                .resource_gc_mode
+                .parse::<v1::ResourceGcMode>()
+                .unwrap_or_default(),
             max_sync_image_bytes: sync
                 .max_sync_image_bytes
                 .clamp(MIN_SYNC_RESOURCE_BYTES, MAX_SYNC_RESOURCE_BYTES),
@@ -267,6 +275,7 @@ impl SyncSettings {
                 file_bytes: self.max_sync_file_bytes,
                 icon_bytes: MAX_SYNC_ICON_BYTES,
             },
+            resource_gc_mode: self.resource_gc_mode,
         }
     }
 }
@@ -297,6 +306,12 @@ pub fn get_sync_config(
         auto_sync: sync.auto_sync,
         auto_sync_interval_secs: sync.auto_sync_interval_secs,
         segment_max_entries: sync.segment_max_entries,
+        resource_gc_mode: sync
+            .resource_gc_mode
+            .parse::<v1::ResourceGcMode>()
+            .unwrap_or_default()
+            .as_str()
+            .to_string(),
         max_sync_image_bytes: sync.max_sync_image_bytes,
         max_sync_file_bytes: sync.max_sync_file_bytes,
     })
@@ -311,6 +326,7 @@ pub fn set_sync_config(
     auto_sync: bool,
     auto_sync_interval_secs: u64,
     segment_max_entries: u32,
+    resource_gc_mode: String,
     max_sync_image_bytes: u64,
     max_sync_file_bytes: u64,
     s3_region: Option<String>,
@@ -347,6 +363,11 @@ pub fn set_sync_config(
         auto_sync,
         auto_sync_interval_secs: auto_sync_interval_secs.clamp(10, 86_400),
         segment_max_entries: segment_max_entries.clamp(16, 10_000),
+        resource_gc_mode: resource_gc_mode
+            .parse::<v1::ResourceGcMode>()
+            .unwrap_or_default()
+            .as_str()
+            .to_string(),
         max_sync_image_bytes: max_sync_image_bytes
             .clamp(MIN_SYNC_RESOURCE_BYTES, MAX_SYNC_RESOURCE_BYTES),
         max_sync_file_bytes: max_sync_file_bytes
@@ -1444,6 +1465,7 @@ mod tests {
             auto_sync: false,
             auto_sync_interval_secs: 300,
             segment_max_entries: 512,
+            resource_gc_mode: "off".to_string(),
             max_sync_image_bytes: 5_242_880,
             max_sync_file_bytes: 10_485_760,
         }

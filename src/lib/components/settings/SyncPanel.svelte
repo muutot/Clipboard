@@ -21,6 +21,7 @@
     setSyncConfig,
     testSyncConnection,
     type SyncConfig,
+    type SyncResourceGcMode,
   } from "$lib/services/storage";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
@@ -49,6 +50,7 @@
   let syncAutoSync = $state(false);
   let syncAutoInterval = $state(300);
   let syncSegmentMaxEntries = $state(512);
+  let syncResourceGcMode = $state<SyncResourceGcMode>("off");
   let syncMaxImageBytes = $state(5242880);
   let syncMaxImageUnit = $state<"byte" | "KB" | "MB" | "GB">("MB");
   let syncMaxImageDisplay = $state(5);
@@ -156,6 +158,7 @@
       syncAutoSync = cfg.autoSync ?? false;
       syncAutoInterval = cfg.autoSyncIntervalSecs ?? 300;
       syncSegmentMaxEntries = cfg.segmentMaxEntries ?? 512;
+      syncResourceGcMode = cfg.resourceGcMode ?? "off";
       syncMaxImageBytes = cfg.maxSyncImageBytes ?? 5242880;
       syncMaxImageDisplay = toDisplaySize(syncMaxImageBytes, syncMaxImageUnit);
       syncMaxFileBytes = cfg.maxSyncFileBytes ?? 10485760;
@@ -198,6 +201,7 @@
       autoSync: syncAutoSync,
       autoSyncIntervalSecs: syncAutoInterval,
       segmentMaxEntries: syncSegmentMaxEntries,
+      resourceGcMode: syncResourceGcMode,
       maxSyncImageBytes: syncMaxImageBytes,
       maxSyncFileBytes: syncMaxFileBytes,
       s3Region: syncS3Region || null,
@@ -392,6 +396,26 @@
       <BackgroundOperationStatus {operation} />
     </section>
   {:else if tab === "advanced"}
+    <SelectEntry
+      config={{
+        type: "select",
+        variant: "row",
+        icon: "trash",
+        label: _t("storage.syncResourceGc"),
+        ariaLabel: _t("storage.syncResourceGc"),
+        options: [
+          { value: "off", label: _t("storage.syncResourceGcOff") },
+          { value: "referenceScan", label: _t("storage.syncResourceGcReferenceScan") },
+          { value: "manifest", label: _t("storage.syncResourceGcManifest") },
+        ],
+        get: () => syncResourceGcMode,
+        set: (v) => {
+          syncResourceGcMode = v as SyncResourceGcMode;
+          void saveSyncConfig();
+        },
+      }}
+    />
+
     <NumberEntry
       config={{
         type: "number",

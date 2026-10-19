@@ -299,7 +299,7 @@ pub(super) fn publish_bootstrap(
         epoch: state.epoch.clone(),
         through_sequence: 0,
     };
-    let (encoded, export) = encode_database_pack(
+    let (encoded, export, _resource_keys) = encode_database_pack(
         store,
         database,
         paths,

@@ -36,6 +36,7 @@ const syncConfig = {
   autoSync: false,
   autoSyncIntervalSecs: 300,
   segmentMaxEntries: 512,
+  resourceGcMode: "off" as const,
   maxSyncImageBytes: 5242880,
   maxSyncFileBytes: 10485760,
   s3Region: "us-east-1",
@@ -89,6 +90,26 @@ function render(tab: "cloud" | "advanced" | "s3" = "s3") {
   component = mount(SyncPanel, { target, props: { tab, onfeedback: feedback } });
   flushSync();
 }
+
+it("persists the remote resource cleanup mode", async () => {
+  render("advanced");
+  await settle();
+
+  const trigger = target.querySelector<HTMLButtonElement>(
+    `button[aria-label='Remote Resource Cleanup']`,
+  )!;
+  trigger.click();
+  flushSync();
+  const option = [...target.querySelectorAll<HTMLButtonElement>("[role='option']")].find(
+    (candidate) => candidate.textContent?.trim() === "Manifest (faster)",
+  )!;
+  option.click();
+  await settle();
+
+  expect(bridge.setConfig).toHaveBeenCalledWith(
+    expect.objectContaining({ resourceGcMode: "manifest" }),
+  );
+});
 
 it("blocks the form until the stored configuration arrives", async () => {
   let resolveConfig!: (value: typeof syncConfig) => void;

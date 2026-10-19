@@ -27,6 +27,7 @@ mod encryption;
 mod flow;
 mod namespace;
 mod orphan;
+mod resource_gc;
 
 #[derive(Default)]
 struct MemoryStore {
@@ -35,6 +36,7 @@ struct MemoryStore {
     drop_checkpoint_after_success: Mutex<bool>,
     list_without_etags: Mutex<bool>,
     get_without_etags: Mutex<bool>,
+    list_modified_ms: Mutex<Option<i64>>,
     deleted: Mutex<Vec<String>>,
     gets: Mutex<Vec<String>>,
     lists: Mutex<Vec<String>>,
@@ -57,7 +59,7 @@ impl ObjectStore for MemoryStore {
             .map(|(key, bytes)| ObjectInfo {
                 key: key.clone(),
                 size_bytes: Some(bytes.len() as u64),
-                modified_ms: None,
+                modified_ms: *self.list_modified_ms.lock().unwrap(),
                 etag: include_etags.then(|| format!("\"{}\"", hex::encode(Sha256::digest(bytes)))),
             })
             .collect())
@@ -221,6 +223,7 @@ fn maybe_compact(
     local_state: &SyncRemoteState,
     session_key: Option<&SessionKey>,
     resource_limits: ResourceLimits,
+    resource_gc_mode: ResourceGcMode,
     result: &mut SyncEngineResult,
 ) -> Result<(), String> {
     engine::test_support::maybe_compact(
@@ -232,6 +235,7 @@ fn maybe_compact(
         local_state,
         session_key,
         resource_limits,
+        resource_gc_mode,
         result,
     )
 }
@@ -317,6 +321,7 @@ fn options() -> SyncEngineOptions {
             file_bytes: 1024 * 1024,
             icon_bytes: 1024 * 1024,
         },
+        resource_gc_mode: ResourceGcMode::Off,
     }
 }
 

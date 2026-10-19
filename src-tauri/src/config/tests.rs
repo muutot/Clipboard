@@ -636,12 +636,14 @@ fn sync_settings_use_documented_defaults() {
     assert_eq!(sync.remote_path.as_deref(), Some("clipboard-sync"));
     assert_eq!(sync.s3_region.as_deref(), Some("us-east-1"));
     assert_eq!(sync.segment_max_entries, 512);
+    assert_eq!(sync.resource_gc_mode, "off");
     assert_eq!(sync.max_sync_image_bytes, 5_242_880);
     assert_eq!(sync.max_sync_file_bytes, 10_485_760);
 
     let saved: Value = serde_json::from_slice(&fs::read(store.path()).unwrap()).unwrap();
     assert_eq!(saved["sync"]["autoSyncIntervalSecs"], 300);
     assert_eq!(saved["sync"]["segmentMaxEntries"], 512);
+    assert_eq!(saved["sync"]["resourceGcMode"], "off");
     assert_eq!(saved["sync"]["maxSyncImageBytes"], 5_242_880);
     assert_eq!(saved["sync"]["maxSyncFileBytes"], 10_485_760);
     assert!(saved["sync"].get("maxRemoteOplogFiles").is_none());
@@ -672,6 +674,7 @@ fn partial_sync_settings_use_current_defaults() {
     assert_eq!(sync.remote_path.as_deref(), Some("clipboard-sync"));
     assert_eq!(sync.s3_region.as_deref(), Some("us-east-1"));
     assert_eq!(sync.segment_max_entries, 512);
+    assert_eq!(sync.resource_gc_mode, "off");
     assert_eq!(sync.max_sync_image_bytes, 5_242_880);
     assert_eq!(sync.max_sync_file_bytes, 10_485_760);
 

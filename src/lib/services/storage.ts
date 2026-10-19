@@ -331,9 +331,12 @@ export interface SyncConfig {
   autoSync: boolean;
   autoSyncIntervalSecs: number;
   segmentMaxEntries: number;
+  resourceGcMode: SyncResourceGcMode;
   maxSyncImageBytes: number;
   maxSyncFileBytes: number;
 }
+
+export type SyncResourceGcMode = "off" | "referenceScan" | "manifest";
 
 export interface S3TestResult {
   success: boolean;
@@ -348,6 +351,7 @@ export interface SyncConfigUpdate {
   autoSync: boolean;
   autoSyncIntervalSecs: number;
   segmentMaxEntries: number;
+  resourceGcMode: SyncResourceGcMode;
   maxSyncImageBytes: number;
   maxSyncFileBytes: number;
   s3Region: string | null;
@@ -368,6 +372,7 @@ export async function getSyncConfig(): Promise<SyncConfig> {
     autoSync: false,
     autoSyncIntervalSecs: 300,
     segmentMaxEntries: 512,
+    resourceGcMode: "off",
     maxSyncImageBytes: 5242880,
     maxSyncFileBytes: 10485760,
     s3Region: "us-east-1",

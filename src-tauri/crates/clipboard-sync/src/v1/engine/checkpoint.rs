@@ -244,8 +244,16 @@ pub(super) fn encode_database_pack(
     session_key: Option<&SessionKey>,
     resource_limits: ResourceLimits,
     result: &mut SyncEngineResult,
-) -> Result<(EncodedFile, SyncSnapshotExport), String> {
+) -> Result<
+    (
+        EncodedFile,
+        SyncSnapshotExport,
+        std::collections::BTreeSet<String>,
+    ),
+    String,
+> {
     cancellation::check()?;
+    let mut resource_keys = std::collections::BTreeSet::new();
     let mut writer = match kind {
         LargePackKind::Snapshot => LargePackWriter::new(
             &paths.temporary_directory,
@@ -286,6 +294,9 @@ pub(super) fn encode_database_pack(
                 .checked_add(resources.transferred_bytes)
                 .ok_or_else(|| "uploaded sync byte count overflowed".to_string())?;
             let resource_refs = collect_mutation_resource_refs(&mutations)?;
+            for reference in resource_refs.values().flatten() {
+                resource_keys.insert(reference.object_key.clone());
+            }
             cancellation::check()?;
             database.record_sync_resource_refs(remote_scope, &mutations, &resource_refs)?;
             write_large_pack_batch(&mut writer, mutations)
@@ -302,7 +313,7 @@ pub(super) fn encode_database_pack(
     if encoded.record_count != export.record_count {
         return Err("sync pack record count changed during export".to_string());
     }
-    Ok((encoded, export))
+    Ok((encoded, export, resource_keys))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -315,6 +326,7 @@ pub(super) fn maybe_compact(
     local_state: &SyncRemoteState,
     session_key: Option<&SessionKey>,
     resource_limits: ResourceLimits,
+    resource_gc_mode: ResourceGcMode,
     result: &mut SyncEngineResult,
 ) -> Result<(), String> {
     cancellation::check()?;
@@ -363,6 +375,7 @@ pub(super) fn maybe_compact(
                 &current.head,
                 None,
                 session_key,
+                resource_gc_mode,
                 &paths.temporary_directory,
                 result,
             )?;
@@ -381,7 +394,7 @@ pub(super) fn maybe_compact(
         generation,
         vector: vector.clone(),
     };
-    let (encoded, export) = encode_database_pack(
+    let (encoded, export, resource_refs) = encode_database_pack(
         store,
         database,
         paths,
@@ -398,6 +411,9 @@ pub(super) fn maybe_compact(
     }
     let key = crate::v1::checkpoint_object_key(generation, &encoded.sha256)?;
     put_immutable_file(store, &key, &encoded, result)?;
+    if resource_gc_mode == ResourceGcMode::Manifest {
+        publish_resource_manifest(store, generation, &encoded.sha256, &resource_refs)?;
+    }
     let checkpoint_ref = ObjectRef {
         key,
         sha256: encoded.sha256.clone(),
@@ -449,6 +465,7 @@ pub(super) fn maybe_compact(
             .as_ref()
             .map(|current| current.head.vector.as_slice()),
         session_key,
+        resource_gc_mode,
         &paths.temporary_directory,
         result,
     )
@@ -491,6 +508,7 @@ fn finalize_checkpoint_publication(
     head: &CheckpointHead,
     covered_vector_hint: Option<&[DeviceCursor]>,
     session_key: Option<&SessionKey>,
+    resource_gc_mode: ResourceGcMode,
     temporary_directory: &std::path::Path,
     result: &mut SyncEngineResult,
 ) -> Result<(), String> {
@@ -532,6 +550,19 @@ fn finalize_checkpoint_publication(
         )?;
     }
     let deleted = prune_unreferenced_checkpoints(store, head)?;
+    result.deleted_remote_objects = checked_add(
+        result.deleted_remote_objects,
+        deleted,
+        "deleted remote object count",
+    )?;
+    let deleted = garbage_collect_resources(
+        store,
+        head,
+        resource_gc_mode,
+        session_key,
+        temporary_directory,
+        result,
+    )?;
     result.deleted_remote_objects = checked_add(
         result.deleted_remote_objects,
         deleted,

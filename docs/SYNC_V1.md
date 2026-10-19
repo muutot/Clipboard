@@ -43,8 +43,14 @@ v1/
 ├─ checkpoints/{generation:020}-{sha256}.pack
 ├─ snapshots/{device_id}/{epoch}/{sha256}.pack
 ├─ segments/{device_id}/{epoch}/{first:020}-{last:020}-{sha256}.pack
+├─ resource-refs/{generation:020}-{sha256}.json
 └─ resources/{image|file|icon}/sha256-{digest}.{ext}
 ```
+
+`resource-refs/` objects are optional GC manifests written only while the
+`manifest` resource-cleanup mode is selected. They list the resource keys
+referenced by one checkpoint and are not part of the checkpoint pointer or pack
+format; readers that do not know them ignore them.
 
 `namespace.json` version 1 holds a public 64-hex derivation scope and an optional
 domain-separated HMAC key check. It contains no login credential, password or AES
@@ -310,7 +316,12 @@ A compactor:
    immediately previous checkpoint vector; keys under a covered segment prefix that do not parse
    as canonical segments (a directory marker, or a partial or foreign upload) are skipped rather
    than aborting the pass, so one stray object cannot block compaction;
-7. retains the current and immediately previous checkpoints and atomically records the new local
+7. if enabled, runs resource GC: `referenceScan` decodes every surviving checkpoint, snapshot and
+   segment; `manifest` reads the per-checkpoint `resource-refs/` sidecars and falls back to a pack
+   decode when a sidecar is missing or invalid. Both modes delete only canonical resource keys
+   outside the union that are older than a seven-day in-flight grace window, and retain objects
+   whose listing omits `LastModified`;
+8. retains the current and immediately previous checkpoints and atomically records the new local
    baseline only after cleanup completes.
 
 Concurrent compactors are safe: only a conditional pointer update winner whose pointer is durably

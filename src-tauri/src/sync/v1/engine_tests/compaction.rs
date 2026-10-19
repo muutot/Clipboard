@@ -40,6 +40,7 @@ fn checkpoint_cas_loser_never_garbage_collects_history() {
         &state,
         None,
         options().resource_limits,
+        ResourceGcMode::Off,
         &mut result,
     )
     .unwrap();
@@ -98,6 +99,7 @@ fn compaction_survives_stores_that_omit_etags() {
         &state,
         None,
         options().resource_limits,
+        ResourceGcMode::Off,
         &mut result,
     )
     .unwrap();
@@ -153,6 +155,7 @@ fn checkpoint_pointer_must_be_readable_before_garbage_collection() {
         &state,
         None,
         options().resource_limits,
+        ResourceGcMode::Off,
         &mut result,
     )
     .unwrap_err();
@@ -207,6 +210,7 @@ fn successful_compaction_keeps_current_and_previous_checkpoints_only() {
         &first_state,
         None,
         options().resource_limits,
+        ResourceGcMode::Off,
         &mut first_compaction,
     )
     .unwrap();
@@ -236,6 +240,7 @@ fn successful_compaction_keeps_current_and_previous_checkpoints_only() {
         &state,
         None,
         options().resource_limits,
+        ResourceGcMode::Off,
         &mut second_compaction,
     )
     .unwrap();
@@ -374,6 +379,7 @@ fn fourth_device_bootstraps_after_three_device_compaction_and_gc() {
         &first_state,
         None,
         options().resource_limits,
+        ResourceGcMode::Off,
         &mut compacted,
     )
     .unwrap();

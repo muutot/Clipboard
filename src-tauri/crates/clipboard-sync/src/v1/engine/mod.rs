@@ -33,17 +33,50 @@ const MAX_LARGE_PACK_STORED_BYTES: u64 = 1024 * 1024 * 1024;
 mod checkpoint;
 mod publish;
 mod pull;
+mod resource_gc;
 mod transfer;
 
 use checkpoint::*;
 use publish::*;
 use pull::*;
+use resource_gc::*;
 use transfer::*;
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum ResourceGcMode {
+    #[default]
+    Off,
+    ReferenceScan,
+    Manifest,
+}
+
+impl ResourceGcMode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Off => "off",
+            Self::ReferenceScan => "referenceScan",
+            Self::Manifest => "manifest",
+        }
+    }
+}
+
+impl std::str::FromStr for ResourceGcMode {
+    type Err = std::convert::Infallible;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Ok(match value {
+            "referenceScan" => Self::ReferenceScan,
+            "manifest" => Self::Manifest,
+            _ => Self::Off,
+        })
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SyncEngineOptions {
     pub segment_max_entries: usize,
     pub resource_limits: ResourceLimits,
+    pub resource_gc_mode: ResourceGcMode,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -230,6 +263,7 @@ pub fn sync_database_with_progress(
             &state,
             session_key,
             options.resource_limits,
+            options.resource_gc_mode,
             &mut result,
         )?;
     }
@@ -412,6 +446,7 @@ pub mod test_support {
         local_state: &SyncRemoteState,
         session_key: Option<&SessionKey>,
         resource_limits: ResourceLimits,
+        resource_gc_mode: ResourceGcMode,
         result: &mut SyncEngineResult,
     ) -> Result<(), String> {
         super::maybe_compact(
@@ -423,6 +458,7 @@ pub mod test_support {
             local_state,
             session_key,
             resource_limits,
+            resource_gc_mode,
             result,
         )
     }

@@ -443,6 +443,7 @@ pub struct SyncConfig {
     pub auto_sync: bool,
     pub auto_sync_interval_secs: u64,
     pub segment_max_entries: u32,
+    pub resource_gc_mode: String,
     pub max_sync_image_bytes: u64,
     pub max_sync_file_bytes: u64,
 }
@@ -463,6 +464,7 @@ impl Default for SyncConfig {
             auto_sync: false,
             auto_sync_interval_secs: 300,
             segment_max_entries: 512,
+            resource_gc_mode: "off".to_string(),
             max_sync_image_bytes: 5_242_880,
             max_sync_file_bytes: 10_485_760,
         }

@@ -297,6 +297,7 @@ fn options() -> SyncEngineOptions {
             file_bytes: 1024 * 1024,
             icon_bytes: 1024 * 1024,
         },
+        resource_gc_mode: ResourceGcMode::Off,
     }
 }
 
@@ -310,6 +311,7 @@ fn resource_options() -> SyncEngineOptions {
             file_bytes: 8 * 1024 * 1024,
             icon_bytes: 1024 * 1024,
         },
+        resource_gc_mode: ResourceGcMode::Off,
     }
 }
 

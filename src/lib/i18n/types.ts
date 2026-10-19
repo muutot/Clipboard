@@ -240,6 +240,10 @@ export interface LocaleDefinition {
     syncAutoSyncEnable: string;
     syncAutoInterval: string;
     syncSegmentMaxEntries: string;
+    syncResourceGc: string;
+    syncResourceGcOff: string;
+    syncResourceGcReferenceScan: string;
+    syncResourceGcManifest: string;
     syncMaxImageBytes: string;
     syncMaxFileBytes: string;
     syncEntriesUnit: string;

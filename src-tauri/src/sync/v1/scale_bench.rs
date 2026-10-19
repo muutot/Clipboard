@@ -591,6 +591,7 @@ fn options(segment_max_entries: usize) -> SyncEngineOptions {
             file_bytes: 256 * 1024 * 1024,
             icon_bytes: 4 * 1024 * 1024,
         },
+        resource_gc_mode: ResourceGcMode::Off,
     }
 }
 
