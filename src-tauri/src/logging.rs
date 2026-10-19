@@ -270,11 +270,15 @@ fn timestamp_now() -> String {
         .to_string()
 }
 
+/// Win32 defines the standard handles as `(DWORD)-10/-11/-12`; using the
+/// positive value 12 targets no valid standard handle and silently leaves
+/// release builds without a log file.
+#[cfg(target_os = "windows")]
+const STD_ERROR_HANDLE: u32 = (-12i32) as u32;
+
 #[cfg(target_os = "windows")]
 fn redirect_stderr(file: &File) -> bool {
     use std::os::windows::io::AsRawHandle;
-
-    const STD_ERROR_HANDLE: u32 = 12;
 
     #[link(name = "kernel32")]
     unsafe extern "system" {
@@ -288,6 +292,12 @@ fn redirect_stderr(file: &File) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn stderr_redirection_targets_the_documented_win32_handle() {
+        assert_eq!(STD_ERROR_HANDLE, (-12i32) as u32);
+    }
 
     #[test]
     fn rotates_oversized_log_into_backup() {
