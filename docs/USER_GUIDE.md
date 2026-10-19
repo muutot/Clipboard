@@ -165,7 +165,7 @@ macOS 上 `Ctrl` 对应 `⌘`。
 ## CLI 与本地 API
 
 - **CLI**：安装目录下的 `clipboard` 命令，支持 `list`、`search`、`copy`、`paste`、`delete`、`export`、`stats`，可与脚本、终端工作流集成。
-- **本地 API**（面向本地自动化）：仅监听环回地址的 HTTP 接口，请求须携带 `Authorization: Bearer <token>`；token 首次启动时自动生成，保存在数据目录的 `conf/api.token`，不对外网开放。
+- **本地 API**（面向本地自动化）：仅监听环回地址的 HTTP 接口，请求须携带 `Authorization: Bearer <token>`；token 首次启动时自动生成，保存在数据目录的 `conf/api.token`（服务启动后把绑定端口写入 `conf/api.port`），不对外网开放。
 
 ## 设置分区导览
 
