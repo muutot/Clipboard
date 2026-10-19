@@ -74,9 +74,9 @@ use search::{SearchIndex, SearchSyncWorker, SearchSynchronizer};
 use shutdown::stop_runtime_services;
 use state::{CaptureState, CaptureWorker, SelfTriggerState};
 use storage::{
-    discard_database_backups, discard_database_quarantine, quarantine_search_index,
-    recover_database_if_needed, refresh_database_backup, Database, KindDeleteScope, OcrRepository,
-    StoragePaths,
+    cleanup_stale_sync_snapshots, discard_database_backups, discard_database_quarantine,
+    quarantine_search_index, recover_database_if_needed, refresh_database_backup, Database,
+    KindDeleteScope, OcrRepository, StoragePaths,
 };
 use tauri::{Emitter, Manager};
 mod background_operations;
@@ -393,6 +393,11 @@ pub fn run() {
                 config.image_storage_path().map(PathBuf::from),
                 config.file_storage_path().map(PathBuf::from),
             )?;
+            if let Err(error) =
+                cleanup_stale_sync_snapshots(&paths.data_directory, Duration::from_secs(3600))
+            {
+                crate::log_warn!("[sync] failed to clean stale database snapshots: {error}");
+            }
             // The static asset scope in tauri.conf.json is empty on purpose:
             // `$EXE` and `$RESOURCE` both resolve to the install directory on
             // Windows, which also holds `conf/api.token`, `conf/conf.json`,

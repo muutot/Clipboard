@@ -1,4 +1,4 @@
-use std::{fs, path::Path};
+use std::{fs, path::Path, time::Duration};
 
 use crate::sync::v1::{
     DeviceCursor, DeviceHead, MutationBatch, ObjectRef, SyncHeadCache, SyncIncomingBatch,
@@ -41,6 +41,49 @@ impl Drop for TemporaryDatabaseSnapshot {
         let _ = fs::remove_file(format!("{}-wal", self.path.display()));
         let _ = fs::remove_file(format!("{}-shm", self.path.display()));
     }
+}
+
+/// Removes point-in-time sync snapshots left behind by a crash or hard kill.
+/// A live snapshot is created and consumed quickly, so an hour-old file under
+/// the data directory cannot belong to the current run.
+pub(crate) fn cleanup_stale_sync_snapshots(
+    directory: &Path,
+    max_age: Duration,
+) -> Result<u64, StorageError> {
+    let entries = match fs::read_dir(directory) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(0),
+        Err(error) => return Err(error.into()),
+    };
+    let mut removed = 0u64;
+    for entry in entries {
+        let entry = entry?;
+        let name = entry.file_name();
+        if !name
+            .to_string_lossy()
+            .starts_with(".sync-database-snapshot-")
+        {
+            continue;
+        }
+        let Ok(metadata) = entry.metadata() else {
+            continue;
+        };
+        let Ok(age) = metadata
+            .modified()
+            .and_then(|modified| modified.elapsed().map_err(std::io::Error::other))
+        else {
+            continue;
+        };
+        if age < max_age {
+            continue;
+        }
+        match fs::remove_file(entry.path()) {
+            Ok(()) => removed += 1,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.into()),
+        }
+    }
+    Ok(removed)
 }
 
 fn sync_error(error: String) -> StorageError {
@@ -275,5 +318,43 @@ impl SyncRepository for Database {
             resource_refs,
         )
         .map_err(|error| error.to_string())
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::SystemTime;
+
+    #[test]
+    fn removes_only_stale_sync_snapshots() {
+        let directory = std::env::temp_dir().join(format!(
+            "clipboard-sync-snapshot-cleanup-{}-{:016x}",
+            std::process::id(),
+            rand::random::<u64>()
+        ));
+        fs::create_dir_all(&directory).unwrap();
+        let stale = directory.join(".sync-database-snapshot-1-0000000000000001.sqlite3");
+        let stale_wal = directory.join(".sync-database-snapshot-1-0000000000000001.sqlite3-wal");
+        let fresh = directory.join(".sync-database-snapshot-2-0000000000000002.sqlite3");
+        let unrelated = directory.join("history.sqlite3");
+        for path in [&stale, &stale_wal, &fresh, &unrelated] {
+            fs::write(path, b"fixture").unwrap();
+        }
+        let old = SystemTime::now() - Duration::from_secs(2 * 60 * 60);
+        for path in [&stale, &stale_wal] {
+            let file = fs::OpenOptions::new().write(true).open(path).unwrap();
+            file.set_modified(old).unwrap();
+        }
+
+        assert_eq!(
+            cleanup_stale_sync_snapshots(&directory, Duration::from_secs(60 * 60)).unwrap(),
+            2
+        );
+        assert!(!stale.exists());
+        assert!(!stale_wal.exists());
+        assert!(fresh.exists());
+        assert!(unrelated.exists());
+
+        fs::remove_dir_all(&directory).unwrap();
     }
 }

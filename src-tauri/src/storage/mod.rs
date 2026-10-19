@@ -31,3 +31,4 @@ pub use repository::{
     TagInfo, TextItemUpdate, TransactionalSaveSummary,
 };
 pub use search_repository::{SearchDocument, SearchOperation, SearchOutboxEvent, SearchRepository};
+pub(crate) use sync_repository::cleanup_stale_sync_snapshots;
