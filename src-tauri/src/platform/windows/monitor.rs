@@ -348,7 +348,14 @@ impl WindowsClipboardMonitor {
 
                     if poll_state.observe(current_text, current_files, current_image) {
                         sequence = sequence.wrapping_add(1);
-                        let _ = sender_for_thread.send(ClipboardChange { sequence });
+                        if sender_for_thread
+                            .send(ClipboardChange { sequence })
+                            .is_err()
+                        {
+                            // Capture worker is gone; do not leave the monitor
+                            // thread alive and block a restart.
+                            break;
+                        }
                     }
                 }
             })

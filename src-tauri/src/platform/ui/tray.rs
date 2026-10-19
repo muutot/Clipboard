@@ -175,7 +175,13 @@ impl SystemTray {
                         let focused = panel.is_focused().unwrap_or(false);
                         visible && focused
                     })
-                    .unwrap_or(false);
+                    .unwrap_or(false)
+                    || app
+                        .get_webview_window("main")
+                        .map(|main| {
+                            main.is_visible().unwrap_or(false) && main.is_focused().unwrap_or(false)
+                        })
+                        .unwrap_or(false);
                 if !own_focused {
                     if let Some(hm) = app.try_state::<Mutex<HotkeyManager>>() {
                         if let Ok(hm) = hm.lock() {

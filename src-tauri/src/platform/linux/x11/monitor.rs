@@ -143,7 +143,7 @@ pub(crate) fn try_spawn_xfixes_monitor(
                 },
             ];
             let mut sequence: u32 = 0;
-            loop {
+            'monitor: loop {
                 // SAFETY: both fds are valid for the lifetime of the loop.
                 let ready = unsafe { libc::poll(fds.as_mut_ptr(), 2, -1) };
                 if ready < 0 {
@@ -182,7 +182,7 @@ pub(crate) fn try_spawn_xfixes_monitor(
                         sequence = sequence.wrapping_add(1);
                         if sender.send(ClipboardChange { sequence }).is_err() {
                             // Capture worker is gone; stop the monitor.
-                            break;
+                            break 'monitor;
                         }
                     }
                 }

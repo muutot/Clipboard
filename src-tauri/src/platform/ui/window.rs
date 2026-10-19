@@ -49,7 +49,12 @@ pub fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
     };
 
     let is_visible = window.is_visible().unwrap_or(false);
-    if !is_visible {
+    let own_focused = window.is_focused().unwrap_or(false)
+        || app
+            .get_webview_window(crate::commands::float::FLOAT_WINDOW_LABEL)
+            .map(|panel| panel.is_visible().unwrap_or(false) && panel.is_focused().unwrap_or(false))
+            .unwrap_or(false);
+    if !is_visible && !own_focused {
         // Remember which window was active before the clipboard is brought up,
         // so "paste to previous application" works when opened from the tray
         // (the toggle hotkey records the target inside its own loop).
