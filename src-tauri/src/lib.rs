@@ -764,7 +764,6 @@ pub fn run() {
             // chord list simply registers nothing for that action.
             #[allow(unused_mut)]
             let mut hotkey_manager = HotkeyManager::new();
-            #[cfg(target_os = "windows")]
             if let Some(window) = app.get_webview_window("main") {
                 let kb_config = keyboard.config();
                 let (mut chords, double_modifiers) = resolve_global_hotkey_plan(&kb_config);

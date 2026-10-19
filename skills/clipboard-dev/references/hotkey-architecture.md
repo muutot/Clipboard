@@ -196,6 +196,9 @@ Window-only (main window focused):
   `(!editableTarget || ctrlKey || metaKey || altKey)` guard as focus-search, so
   the shipped Alt+V still works from a field while a custom bare key only fires
   outside editables.
+- Filter cycling defaults to `Alt+ArrowRight` / `Alt+ArrowLeft`; `Tab` and
+  `Shift+Tab` stay unbound so WebView focus navigation and modal focus traps
+  keep working outside editable fields.
 
 ## Verification
 

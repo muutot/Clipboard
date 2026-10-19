@@ -14,8 +14,8 @@ describe("keyboard defaults (single source: keyboard-defaults.json)", () => {
     expect(defaultShortcutsFor("addTag")).toEqual(["Ctrl+T"]);
     expect(defaultShortcutsFor("moveSelectionUp")).toEqual(["Arrowup"]);
     expect(defaultShortcutsFor("moveSelectionDown")).toEqual(["Arrowdown"]);
-    expect(defaultShortcutsFor("switchFilterNext")).toEqual(["Tab"]);
-    expect(defaultShortcutsFor("switchFilterPrev")).toEqual(["Shift+Tab"]);
+    expect(defaultShortcutsFor("switchFilterNext")).toEqual(["Alt+Arrowright"]);
+    expect(defaultShortcutsFor("switchFilterPrev")).toEqual(["Alt+Arrowleft"]);
     expect(defaultShortcutsFor("switchFilter1")).toEqual(["Alt+1"]);
     expect(defaultShortcutsFor("switchFilter7")).toEqual(["Alt+7"]);
     expect(defaultShortcutsFor("clearSelection")).toEqual(["Backspace"]);

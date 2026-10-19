@@ -345,8 +345,14 @@ mod tests {
             saved["shortcuts"]["moveSelectionDown"],
             json!(["Arrowdown"])
         );
-        assert_eq!(saved["shortcuts"]["switchFilterNext"], json!(["Tab"]));
-        assert_eq!(saved["shortcuts"]["switchFilterPrev"], json!(["Shift+Tab"]));
+        assert_eq!(
+            saved["shortcuts"]["switchFilterNext"],
+            json!(["Alt+Arrowright"])
+        );
+        assert_eq!(
+            saved["shortcuts"]["switchFilterPrev"],
+            json!(["Alt+Arrowleft"])
+        );
         assert_eq!(saved["shortcuts"]["switchFilter1"], json!(["Alt+1"]));
         assert_eq!(saved["shortcuts"]["switchFilter7"], json!(["Alt+7"]));
         fs::remove_dir_all(project).unwrap();
