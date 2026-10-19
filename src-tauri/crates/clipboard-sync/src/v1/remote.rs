@@ -89,6 +89,13 @@ pub struct S3ObjectStore {
     metrics: Option<S3RequestMetrics>,
 }
 
+impl Drop for S3ObjectStore {
+    fn drop(&mut self) {
+        use zeroize::Zeroize;
+        self.secret_key.zeroize();
+    }
+}
+
 impl S3ObjectStore {
     #[allow(clippy::too_many_arguments)]
     pub fn new(

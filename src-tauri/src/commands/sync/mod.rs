@@ -147,6 +147,16 @@ impl std::fmt::Debug for SyncSettings {
     }
 }
 
+impl Drop for SyncSettings {
+    fn drop(&mut self) {
+        use zeroize::Zeroize;
+        self.secret_key.zeroize();
+        if let Some(password) = self.sync_password.as_mut() {
+            password.zeroize();
+        }
+    }
+}
+
 impl SyncSettings {
     fn from_config(config: &ConfigStore) -> Result<Self, String> {
         Self::from_sync_config(&config.sync_config())
@@ -157,6 +167,21 @@ impl SyncSettings {
             return Err("S3 sync is disabled".to_string());
         }
         Self::validated_from_sync_config(sync)
+    }
+
+    fn with_rotated_scope(&self, remote_path: String, sync_password: Option<String>) -> Self {
+        Self {
+            endpoint: self.endpoint.clone(),
+            remote_path,
+            region: self.region.clone(),
+            bucket: self.bucket.clone(),
+            access_key: self.access_key.clone(),
+            secret_key: self.secret_key.clone(),
+            sync_password,
+            segment_max_entries: self.segment_max_entries,
+            max_sync_image_bytes: self.max_sync_image_bytes,
+            max_sync_file_bytes: self.max_sync_file_bytes,
+        }
     }
 
     /// The connection test must work before the user turns the sync switch
@@ -865,11 +890,10 @@ fn run_namespace_rotation(app: &tauri::AppHandle, new_password: String) -> Resul
         old_settings.remote_path.trim_matches('/'),
         current_time_ms()
     );
-    let new_settings = SyncSettings {
-        remote_path: new_prefix.clone(),
-        sync_password: Some(new_password).filter(|password| !password.is_empty()),
-        ..old_settings.clone()
-    };
+    let new_settings = old_settings.with_rotated_scope(
+        new_prefix.clone(),
+        Some(new_password).filter(|password| !password.is_empty()),
+    );
     if new_settings.sync_password.is_none() && old_settings.sync_password.is_some() {
         // Toggling encryption off is legal but must be deliberate: the caller
         // passes an explicitly empty password, which the UI confirms.
@@ -2014,11 +2038,8 @@ mod tests {
 
         let new_password = "brand-new-rotation-password";
         let new_prefix = "clipboard-rotated-42";
-        let new_settings = SyncSettings {
-            remote_path: new_prefix.to_string(),
-            sync_password: Some(new_password.to_string()),
-            ..old_settings.clone()
-        };
+        let new_settings =
+            old_settings.with_rotated_scope(new_prefix.to_string(), Some(new_password.to_string()));
         let new_store = RotationStore::default();
         let token = clipboard_sync::cancellation::CancellationToken::default();
         let mut config_committed = false;
@@ -2189,11 +2210,8 @@ mod tests {
 
         let new_password = "brand-new-rotation-password";
         let new_prefix = "clipboard-rotated-interrupted";
-        let new_settings = SyncSettings {
-            remote_path: new_prefix.to_string(),
-            sync_password: Some(new_password.to_string()),
-            ..settings.clone()
-        };
+        let new_settings =
+            settings.with_rotated_scope(new_prefix.to_string(), Some(new_password.to_string()));
         // The old namespace cannot be cleaned up.
         old_store.fail_deletes.store(true, Ordering::Relaxed);
         let new_store = RotationStore::default();
