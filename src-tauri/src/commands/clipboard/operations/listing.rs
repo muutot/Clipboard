@@ -52,13 +52,47 @@ pub fn list_source_applications(
 
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
-pub fn search_clipboard_items(
-    database: tauri::State<'_, Database>,
-    search_index: tauri::State<'_, Arc<SearchIndex>>,
-    config: tauri::State<'_, Mutex<ConfigStore>>,
-    performance_tracker: tauri::State<'_, PerformanceTracker>,
-    search_cache: tauri::State<'_, SearchResultCache>,
-    search_worker: tauri::State<'_, Mutex<Option<SearchSyncWorker>>>,
+pub async fn search_clipboard_items(
+    app: tauri::AppHandle,
+    query: String,
+    limit: Option<usize>,
+    offset: Option<usize>,
+    sort_rules: Option<Vec<SearchSortRule>>,
+    filter: Option<HistoryFilterArgs>,
+) -> Result<SearchPage, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let database = app.state::<Database>();
+        let search_index = app.state::<Arc<SearchIndex>>();
+        let config = app.state::<Mutex<ConfigStore>>();
+        let performance_tracker = app.state::<PerformanceTracker>();
+        let search_cache = app.state::<SearchResultCache>();
+        let search_worker = app.state::<Mutex<Option<SearchSyncWorker>>>();
+        search_clipboard_items_blocking(
+            database.inner(),
+            search_index.inner().as_ref(),
+            config.inner(),
+            performance_tracker.inner(),
+            search_cache.inner(),
+            search_worker.inner(),
+            query,
+            limit,
+            offset,
+            sort_rules,
+            filter,
+        )
+    })
+    .await
+    .map_err(|error| format!("search task join failed: {error}"))?
+}
+
+#[allow(clippy::too_many_arguments)]
+fn search_clipboard_items_blocking(
+    database: &Database,
+    search_index: &SearchIndex,
+    config: &Mutex<ConfigStore>,
+    performance_tracker: &PerformanceTracker,
+    search_cache: &SearchResultCache,
+    search_worker: &Mutex<Option<SearchSyncWorker>>,
     query: String,
     limit: Option<usize>,
     offset: Option<usize>,
@@ -111,9 +145,7 @@ pub fn search_clipboard_items(
     if !background {
         let pending = database.has_pending_outbox_events().unwrap_or(true);
         if pending {
-            match SearchSynchronizer::default()
-                .sync_until_idle(database.inner(), search_index.inner())
-            {
+            match SearchSynchronizer::default().sync_until_idle(database, search_index) {
                 Ok(summary) if summary.processed_events > 0 => search_cache.clear(),
                 Ok(_) => {}
                 Err(error) => {
@@ -192,14 +224,29 @@ pub fn search_clipboard_items(
 }
 
 #[tauri::command]
-pub fn rebuild_search_index(
-    database: tauri::State<'_, Database>,
-    search_index: tauri::State<'_, Arc<SearchIndex>>,
-    search_cache: tauri::State<'_, SearchResultCache>,
+pub async fn rebuild_search_index(app: tauri::AppHandle) -> Result<SearchSyncSummary, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let database = app.state::<Database>();
+        let search_index = app.state::<Arc<SearchIndex>>();
+        let search_cache = app.state::<SearchResultCache>();
+        rebuild_search_index_blocking(
+            database.inner(),
+            search_index.inner().as_ref(),
+            search_cache.inner(),
+        )
+    })
+    .await
+    .map_err(|error| format!("search rebuild task join failed: {error}"))?
+}
+
+fn rebuild_search_index_blocking(
+    database: &Database,
+    search_index: &SearchIndex,
+    search_cache: &SearchResultCache,
 ) -> Result<SearchSyncSummary, String> {
     search_cache.clear();
     SearchSynchronizer::default()
-        .rebuild(database.inner(), search_index.inner())
+        .rebuild(database, search_index)
         .map_err(|error| error.to_string())
 }
 

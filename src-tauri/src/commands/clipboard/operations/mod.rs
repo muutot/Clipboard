@@ -8,7 +8,7 @@
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-use tauri::{AppHandle, Emitter, Runtime};
+use tauri::{AppHandle, Emitter, Manager, Runtime};
 
 use crate::commands::lock::lock_state;
 use crate::config::ConfigStore;
@@ -114,7 +114,7 @@ fn emit_items_changed(app: &AppHandle, payload: ClipboardItemsChanged) {
 ///
 /// Usage is not a content change, so it travels on its own field: the receiving
 /// window only has to move the row up. Without this the copy looked inert in the
-/// window that did not initiate it — the database order was already correct, so
+/// window that did not initiate it 鈥?the database order was already correct, so
 /// the row jumped to the top on the next reload, which is exactly the confusing
 /// "it only sorts after a refresh" behaviour this replaces.
 ///

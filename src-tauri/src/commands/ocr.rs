@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use tokio::io::AsyncWriteExt;
 
 use serde::Serialize;
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 
 use crate::commands::lock::lock_state;
 use crate::config::ConfigStore;
@@ -125,10 +125,21 @@ pub fn apply_ocr_runtime_settings(
 }
 
 #[tauri::command]
-pub fn get_ocr_status(
-    database: tauri::State<'_, Database>,
-    config: tauri::State<'_, Mutex<ConfigStore>>,
-    paths: tauri::State<'_, StoragePaths>,
+pub async fn get_ocr_status(app: tauri::AppHandle) -> Result<OcrStatusInfo, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let database = app.state::<Database>();
+        let config = app.state::<Mutex<ConfigStore>>();
+        let paths = app.state::<StoragePaths>();
+        get_ocr_status_blocking(database.inner(), config.inner(), paths.inner())
+    })
+    .await
+    .map_err(|error| format!("OCR status task join failed: {error}"))?
+}
+
+fn get_ocr_status_blocking(
+    database: &Database,
+    config: &Mutex<ConfigStore>,
+    paths: &StoragePaths,
 ) -> Result<OcrStatusInfo, String> {
     let pending = database.count_pending_ocr().map_err(|e| e.to_string())?;
     let completed = database.count_completed_ocr().map_err(|e| e.to_string())?;
@@ -176,26 +187,39 @@ pub fn get_ocr_config(
 }
 
 #[tauri::command]
-pub fn set_ocr_config(
-    config: tauri::State<'_, Mutex<ConfigStore>>,
-    paths: tauri::State<'_, StoragePaths>,
-    worker: tauri::State<'_, OcrWorkerManager>,
+pub async fn set_ocr_config(
+    app: tauri::AppHandle,
     settings: OcrConfigUpdate,
 ) -> Result<OcrConfigResponse, String> {
     if settings.engine.is_none() {
         return Err("OCR engine is required".to_owned());
     }
-    apply_ocr_runtime_settings(&config, &paths, &worker, settings)
+    tauri::async_runtime::spawn_blocking(move || {
+        let config = app.state::<Mutex<ConfigStore>>();
+        let paths = app.state::<StoragePaths>();
+        let worker = app.state::<OcrWorkerManager>();
+        apply_ocr_runtime_settings(config.inner(), paths.inner(), worker.inner(), settings)
+    })
+    .await
+    .map_err(|error| format!("OCR config task join failed: {error}"))?
 }
 
 #[tauri::command]
-pub fn restart_ocr_engine(
-    config: tauri::State<'_, Mutex<ConfigStore>>,
-    paths: tauri::State<'_, StoragePaths>,
-    worker: tauri::State<'_, OcrWorkerManager>,
-) -> Result<(), String> {
-    apply_ocr_runtime_settings(&config, &paths, &worker, OcrConfigUpdate::default())?;
-    Ok(())
+pub async fn restart_ocr_engine(app: tauri::AppHandle) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let config = app.state::<Mutex<ConfigStore>>();
+        let paths = app.state::<StoragePaths>();
+        let worker = app.state::<OcrWorkerManager>();
+        apply_ocr_runtime_settings(
+            config.inner(),
+            paths.inner(),
+            worker.inner(),
+            OcrConfigUpdate::default(),
+        )?;
+        Ok::<(), String>(())
+    })
+    .await
+    .map_err(|error| format!("OCR restart task join failed: {error}"))?
 }
 
 #[tauri::command]
@@ -256,9 +280,19 @@ pub async fn install_ppocr(
 }
 
 #[tauri::command]
-pub fn check_ppocr_status(
-    paths: tauri::State<'_, StoragePaths>,
-    config: tauri::State<'_, Mutex<ConfigStore>>,
+pub async fn check_ppocr_status(app: tauri::AppHandle) -> Result<PpOcrStatus, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let paths = app.state::<StoragePaths>();
+        let config = app.state::<Mutex<ConfigStore>>();
+        check_ppocr_status_blocking(paths.inner(), config.inner())
+    })
+    .await
+    .map_err(|error| format!("PP-OCR status task join failed: {error}"))?
+}
+
+fn check_ppocr_status_blocking(
+    paths: &StoragePaths,
+    config: &Mutex<ConfigStore>,
 ) -> Result<PpOcrStatus, String> {
     let models_dir = ocr::models::models_dir(&paths.storage);
     // `configured_ppocr_model` returns a 'static spec, so the guard can be
