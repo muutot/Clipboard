@@ -293,11 +293,18 @@ pub fn set_sync_config(
     s3_access_key: Option<String>,
     s3_secret_key: Option<String>,
     sync_password: Option<String>,
+    database: tauri::State<'_, Database>,
     config: tauri::State<'_, Mutex<ConfigStore>>,
 ) -> Result<(), String> {
     let mut guard = lock_state(&config, "configuration lock is poisoned")?;
     let previous = guard.sync_config();
-    let sync = SyncConfig {
+    let previous_scope = previous
+        .provider
+        .eq(&SyncProvider::S3)
+        .then(|| SyncSettings::validated_from_sync_config(&previous).ok())
+        .flatten()
+        .map(|settings| settings.remote_scope_id());
+    let mut sync = SyncConfig {
         provider: if provider == "s3" {
             SyncProvider::S3
         } else {
@@ -320,8 +327,27 @@ pub fn set_sync_config(
         max_sync_file_bytes: max_sync_file_bytes
             .clamp(MIN_SYNC_RESOURCE_BYTES, MAX_SYNC_RESOURCE_BYTES),
     };
-    if let Some(endpoint) = sync.endpoint.as_deref() {
-        validate_sync_endpoint(endpoint)?;
+    if let Some(endpoint) = sync.endpoint.clone() {
+        sync.endpoint = Some(validate_sync_endpoint(&endpoint)?);
+    }
+    // The outbox is local state shared by every remote target. When the user
+    // points sync at a different endpoint/bucket/prefix, the new target must
+    // bootstrap the complete local state instead of consuming changes that
+    // another target may already have acknowledged. Resetting the target's
+    // publication state also covers switching back to an older target after
+    // its pending outbox rows were drained elsewhere.
+    let next_scope = sync
+        .provider
+        .eq(&SyncProvider::S3)
+        .then(|| SyncSettings::validated_from_sync_config(&sync).ok())
+        .flatten()
+        .map(|settings| settings.remote_scope_id());
+    if let (Some(previous_scope), Some(next_scope)) = (previous_scope, next_scope) {
+        if previous_scope != next_scope {
+            database
+                .reset_sync_remote_state(&next_scope)
+                .map_err(|error| error.to_string())?;
+        }
     }
     guard
         .set_sync_config(sync)
@@ -1126,21 +1152,42 @@ fn required_value(value: Option<&str>, label: &str) -> Result<String, String> {
 /// else must use `https://` (a scheme-less host is upgraded to https).
 fn validate_sync_endpoint(endpoint: &str) -> Result<String, String> {
     let trimmed = endpoint.trim();
-    if !trimmed.to_ascii_lowercase().starts_with("http://") {
+    if trimmed.is_empty() {
+        return Ok(String::new());
+    }
+    // Scheme-less endpoints are upgraded to https by the transport, so they
+    // stay plaintext-safe. Explicit schemes are normalized and parsed rather
+    // than string-split: `http://127.0.0.1:80@evil.com` is userinfo plus a
+    // remote host, not a loopback endpoint.
+    let lower = trimmed.to_ascii_lowercase();
+    let normalized = if lower.starts_with("http://") {
+        format!("http://{}", &trimmed["http://".len()..])
+    } else if lower.starts_with("https://") {
+        format!("https://{}", &trimmed["https://".len()..])
+    } else {
         return Ok(trimmed.to_string());
-    }
-    let host_port = &trimmed["http://".len()..];
-    let host_part = host_port.split('/').next().unwrap_or("");
-    let host = if let Some(rest) = host_part.strip_prefix('[') {
-        rest.split(']').next().unwrap_or("")
-    } else {
-        host_part.split(':').next().unwrap_or("")
     };
-    if host.eq_ignore_ascii_case("localhost") || host == "127.0.0.1" || host == "::1" {
-        Ok(trimmed.to_string())
-    } else {
-        Err("S3 endpoint must use https (plaintext http is only allowed for localhost)".to_string())
+    let parsed = reqwest::Url::parse(&normalized)
+        .map_err(|error| format!("invalid S3 endpoint: {error}"))?;
+    if !parsed.username().is_empty() || parsed.password().is_some() {
+        return Err("S3 endpoint must not contain credentials".to_string());
     }
+    if parsed.scheme() == "http" {
+        let host = parsed
+            .host_str()
+            .ok_or_else(|| "S3 endpoint host is empty".to_string())?;
+        let loopback = host.eq_ignore_ascii_case("localhost")
+            || host == "127.0.0.1"
+            || host == "::1"
+            || host == "[::1]";
+        if !loopback {
+            return Err(
+                "S3 endpoint must use https (plaintext http is only allowed for localhost)"
+                    .to_string(),
+            );
+        }
+    }
+    Ok(normalized)
 }
 
 fn normalized_optional(value: Option<String>) -> Option<String> {
@@ -1223,9 +1270,18 @@ mod tests {
         );
         assert!(validate_sync_endpoint("http://127.0.0.1:9000").is_ok());
         assert!(validate_sync_endpoint("http://localhost:9000").is_ok());
-        assert!(validate_sync_endpoint("HTTP://[::1]:9000").is_ok());
+        assert_eq!(
+            validate_sync_endpoint("HTTP://[::1]:9000").unwrap(),
+            "http://[::1]:9000"
+        );
         assert!(validate_sync_endpoint("http://minio.example.com").is_err());
         assert!(validate_sync_endpoint("http://10.0.0.5:9000").is_err());
+
+        // Userinfo must not be mistaken for a loopback host.
+        assert!(validate_sync_endpoint("http://127.0.0.1:80@evil.com").is_err());
+        assert!(validate_sync_endpoint("http://localhost:9000@evil.com").is_err());
+        assert!(validate_sync_endpoint("http://[::1]:80@evil.com").is_err());
+        assert!(validate_sync_endpoint("https://user:pass@example.com").is_err());
     }
 
     #[test]

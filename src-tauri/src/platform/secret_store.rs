@@ -153,16 +153,28 @@ mod os_backend {
     fn ensure_platform_store() {
         #[cfg(any(target_os = "macos", target_os = "linux"))]
         {
-            static INIT: std::sync::OnceLock<()> = std::sync::OnceLock::new();
-            INIT.get_or_init(|| {
-                #[cfg(target_os = "macos")]
-                let store = apple_native_keyring_store::keychain::Store::new();
-                #[cfg(target_os = "linux")]
-                let store = dbus_secret_service_keyring_store::Store::new();
-                if let Ok(store) = store {
-                    keyring_core::set_default_store(store);
-                }
-            });
+            use std::sync::{Mutex, OnceLock};
+
+            static INIT: OnceLock<()> = OnceLock::new();
+            static INIT_LOCK: Mutex<()> = Mutex::new(());
+
+            let _guard = INIT_LOCK
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            if INIT.get().is_some() {
+                return;
+            }
+            #[cfg(target_os = "macos")]
+            let store = apple_native_keyring_store::keychain::Store::new();
+            #[cfg(target_os = "linux")]
+            let store = dbus_secret_service_keyring_store::Store::new();
+            // A transiently unavailable Secret Service/Keychain must be
+            // retried on the next call instead of downgrading every later
+            // secret write to plaintext for the rest of the session.
+            if let Ok(store) = store {
+                keyring_core::set_default_store(store);
+                let _ = INIT.set(());
+            }
         }
     }
 
