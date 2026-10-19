@@ -96,16 +96,90 @@ fn transfer(
     Ok((size, hex::encode(hash.finalize())))
 }
 
+fn is_regular_file(path: &str) -> bool {
+    !path.trim().is_empty()
+        && std::fs::metadata(path)
+            .map(|metadata| metadata.is_file())
+            .unwrap_or(false)
+}
+
+/// Drop only path references that cannot be archived as regular files while
+/// preserving the record's tags and other metadata. A directory-valued file
+/// capture and an imported media placeholder are valid history rows; they must
+/// not make the whole backup fail.
+fn sanitize_archivable_media(item: &mut ClipboardItem) {
+    if !matches!(item.kind, ClipboardKind::Image | ClipboardKind::File) {
+        return;
+    }
+    if item
+        .resource_path
+        .as_deref()
+        .is_none_or(|path| !is_regular_file(path))
+    {
+        item.resource_path = None;
+    }
+    item.preview_path = None;
+    item.icon_path = None;
+    if item.kind == ClipboardKind::File {
+        if let Some(text) = &item.text_content {
+            match serde_json::from_str::<Vec<String>>(text) {
+                Ok(paths) => {
+                    let kept = paths
+                        .into_iter()
+                        .filter(|path| is_regular_file(path))
+                        .collect::<Vec<_>>();
+                    item.text_content = (!kept.is_empty())
+                        .then(|| serde_json::to_string(&kept).unwrap_or_default());
+                }
+                Err(_) => item.text_content = None,
+            }
+        }
+    }
+    let Some(raw) = item.metadata_json.as_deref() else {
+        return;
+    };
+    let Ok(mut value) = serde_json::from_str::<serde_json::Value>(raw) else {
+        item.metadata_json = None;
+        return;
+    };
+    let Some(object) = value.as_object_mut() else {
+        item.metadata_json = None;
+        return;
+    };
+    for key in ["resourcePath", "storagePath", "originalPath"] {
+        if object
+            .get(key)
+            .and_then(|value| value.as_str())
+            .is_some_and(|path| !is_regular_file(path))
+        {
+            object.remove(key);
+        }
+    }
+    object.remove("previewPath");
+    object.remove("iconPath");
+    if let Some(files) = object
+        .get_mut("files")
+        .and_then(|value| value.as_array_mut())
+    {
+        files.retain(|file| {
+            ["storagePath", "originalPath"].iter().any(|key| {
+                file.get(key)
+                    .and_then(|value| value.as_str())
+                    .is_some_and(is_regular_file)
+            })
+        });
+        if files.is_empty() {
+            object.remove("files");
+        }
+    }
+    item.metadata_json = Some(value.to_string());
+}
+
 /// Rewrite only known resource fields. Foreign paths are never retained during restore.
 fn remap_item(
     item: &mut ClipboardItem,
     map: &mut impl FnMut(&str) -> Result<String, String>,
 ) -> Result<(), String> {
-    if matches!(item.kind, ClipboardKind::Image | ClipboardKind::File)
-        && item.resource_path.as_deref().is_none_or(str::is_empty)
-    {
-        return Err(format!("media record {} has no resource", item.id));
-    }
     if let Some(path) = item.resource_path.as_mut() {
         *path = map(path)?;
     }
@@ -189,6 +263,7 @@ pub fn create_with_progress(
                 progress(OperationPhase::Creating, manifest.item_count as u64, None)
                     .map_err(invalid)?;
                 Database::validate_restore_items(std::slice::from_ref(&item))?;
+                sanitize_archivable_media(&mut item);
                 remap_item(&mut item, &mut |path| {
                     if let Some(name) = paths.get(path) {
                         return Ok(name.clone());
@@ -683,6 +758,56 @@ mod tests {
             3
         );
     }
+    #[test]
+    fn backup_creation_skips_unarchivable_media_instead_of_failing() {
+        let root = Scratch::at(&std::env::temp_dir()).unwrap();
+        let database = Database::open_in_memory().unwrap();
+        let directory = root.0.join("folder");
+        fs::create_dir(&directory).unwrap();
+        let directory_text = directory.to_string_lossy().into_owned();
+
+        let mut directory_item = item(
+            "directory",
+            ClipboardKind::File,
+            Some(directory_text.clone()),
+        );
+        directory_item.metadata_json = Some(
+            serde_json::json!({
+                "tags": ["keep"],
+                "files": [{
+                    "storagePath": directory_text.clone(),
+                    "originalPath": directory_text
+                }]
+            })
+            .to_string(),
+        );
+        database.save_item(&directory_item).unwrap();
+
+        let mut placeholder = item("placeholder", ClipboardKind::Image, None);
+        placeholder.metadata_json = Some(serde_json::json!({"tags": ["keep"]}).to_string());
+        database.save_item(&placeholder).unwrap();
+
+        let archive = root.0.join("bundle.clipbackup");
+        create(&database, &archive).unwrap();
+        let target = Database::open_in_memory().unwrap();
+        let checked = preview(&archive, &target).unwrap();
+        assert_eq!((checked.item_count, checked.resource_count), (2, 0));
+
+        let paths = StoragePaths::initialize(root.0.join("target")).unwrap();
+        assert_eq!(
+            restore(&archive, &checked.fingerprint, &target, &paths)
+                .unwrap()
+                .imported_count,
+            2
+        );
+        let restored = target.get_item("directory").unwrap().unwrap();
+        assert_eq!(restored.resource_path, None);
+        assert!(restored.metadata_json.as_deref().unwrap().contains("keep"));
+        let restored = target.get_item("placeholder").unwrap().unwrap();
+        assert_eq!(restored.resource_path, None);
+        assert!(restored.metadata_json.as_deref().unwrap().contains("keep"));
+    }
+
     #[test]
     fn corrupt_or_changed_bundles_and_traversal_are_rejected_without_writes() {
         let root = Scratch::at(&std::env::temp_dir()).unwrap();
