@@ -49,10 +49,18 @@ fn fixture(path: &Path, count: usize) -> u64 {
 #[test]
 #[ignore = "synthetic memory benchmark; set CLIPBOARD_BACKUP_BENCH_ITEMS and run with --ignored --nocapture --test-threads=1"]
 fn preview_large_backup() {
-    let count: usize = std::env::var("CLIPBOARD_BACKUP_BENCH_ITEMS")
-        .expect("set CLIPBOARD_BACKUP_BENCH_ITEMS to 1000, 10000 or 100000")
-        .parse()
-        .unwrap();
+    let raw = match std::env::var("CLIPBOARD_BACKUP_BENCH_ITEMS") {
+        Ok(raw) => raw,
+        Err(_) => {
+            // Coverage and CI sweeps run with `--ignored`; skipping keeps
+            // those runs green while the benchmark stays opt-in.
+            eprintln!(
+                "skipping preview_large_backup: set CLIPBOARD_BACKUP_BENCH_ITEMS to 1000, 10000 or 100000"
+            );
+            return;
+        }
+    };
+    let count: usize = raw.parse().unwrap();
     assert!([1000, 10000, 100000].contains(&count));
     let root = Scratch::at(&std::env::temp_dir()).unwrap();
     let archive = root.0.join("synthetic.clipbackup");
