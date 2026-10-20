@@ -139,3 +139,77 @@ pub fn validate_search_index(
 ) -> Result<bool, String> {
     Ok(search_index.validate())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::content::TransformOperation;
+
+    /// The dispatch table is the unit under test here: every wire name the
+    /// frontend may send must resolve to its operation. The operation
+    /// implementations themselves are covered by `content::transform` tests.
+    #[test]
+    fn transform_text_dispatches_every_supported_operation() {
+        for (name, input, expected) in [
+            ("stripWhitespace", "a b\tc", "abc"),
+            ("stripNewlines", "a\nb\r\nc", "a b c"),
+            ("toUpperCase", "aB", "AB"),
+            ("toLowerCase", "aB", "ab"),
+            ("trimWhitespace", "  ab  ", "ab"),
+            ("collapseWhitespace", " a   b ", "a b"),
+            ("base64Encode", "hi", "aGk="),
+            ("base64Decode", "aGk=", "hi"),
+            ("urlEncode", "a b", "a%20b"),
+            ("urlDecode", "a%20b", "a b"),
+        ] {
+            let transform = transform_text(input.to_owned(), name.to_owned())
+                .unwrap_or_else(|e| panic!("{name} must dispatch: {e}"));
+            assert_eq!(transform.result, expected, "{name}");
+            assert_eq!(transform.input, input, "{name} must echo the input");
+        }
+    }
+
+    #[test]
+    fn transform_text_maps_hash_and_format_operations() {
+        for name in [
+            "jsonFormat",
+            "md5",
+            "sha256",
+            "sha512",
+            "stripUrlTrackingParams",
+            "cleanPaste",
+        ] {
+            transform_text("input".to_owned(), name.to_owned())
+                .unwrap_or_else(|e| panic!("{name} must dispatch: {e}"));
+        }
+        let upper = transform_text("x".to_owned(), "toUpperCase".to_owned()).unwrap();
+        assert_eq!(upper.operation, TransformOperation::ToUpperCase);
+    }
+
+    #[test]
+    fn transform_text_rejects_unknown_operations() {
+        let error = transform_text("x".to_owned(), "rot13".to_owned()).unwrap_err();
+        assert!(error.contains("rot13"), "{error}");
+    }
+
+    #[test]
+    fn content_marker_commands_mirror_direct_detection() {
+        let markers = detect_content_markers("reach me at me@example.com".to_owned());
+        assert!(markers.has_email);
+        assert_eq!(markers.emails, vec!["me@example.com".to_owned()]);
+
+        let empty = detect_content_markers("   ".to_owned());
+        assert_eq!(empty, content::ContentMarkers::default());
+
+        let actions = detect_content_actions("https://example.com/docs".to_owned());
+        assert!(!actions.is_empty(), "a URL must surface quick actions");
+    }
+
+    #[test]
+    fn log_frontend_message_accepts_every_level() {
+        log_frontend_message("error".to_owned(), "synthetic error line".to_owned());
+        log_frontend_message("warn".to_owned(), "synthetic warn line".to_owned());
+        log_frontend_message("info".to_owned(), "synthetic info line".to_owned());
+        log_frontend_message("anything".to_owned(), "synthetic fallback line".to_owned());
+    }
+}

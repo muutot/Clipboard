@@ -495,3 +495,216 @@ pub struct OcrConfigUpdate {
     det_box_threshold: Option<f32>,
     det_unclip_ratio: Option<f32>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::path::PathBuf;
+
+    use crate::config::ConfigStore;
+    use crate::ocr::NoopOcrEngine;
+    use crate::storage::{Database, StoragePaths};
+
+    /// A fresh project root with a real config store, storage layout, and a
+    /// worker driven by the noop engine. Every probe-reachable engine surface
+    /// is empty, so PP-OCR is deterministically "not installed" and the tests
+    /// only exercise branches that run before any child process spawn.
+    struct OcrFixture {
+        root: PathBuf,
+        config: Mutex<ConfigStore>,
+        paths: StoragePaths,
+        worker: OcrWorkerManager,
+    }
+
+    impl OcrFixture {
+        /// Stops the worker (joining the thread and releasing its database
+        /// handle) before removing the tree — on Windows an open SQLite file
+        /// makes `remove_dir_all` fail.
+        fn cleanup(self) {
+            self.worker.stop();
+            let _ = fs::remove_dir_all(&self.root);
+        }
+    }
+
+    fn fixture(name: &str) -> OcrFixture {
+        let root =
+            std::env::temp_dir().join(format!("clipboard-ocr-cmd-{name}-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).unwrap();
+        let config = ConfigStore::load(&root).unwrap();
+        let paths = StoragePaths::initialize(root.join("storage")).unwrap();
+        let database = Database::open(&paths.database).unwrap();
+        let worker = OcrWorkerManager::start(Arc::new(NoopOcrEngine), Arc::new(database)).unwrap();
+        OcrFixture {
+            root,
+            config: Mutex::new(config),
+            paths,
+            worker,
+        }
+    }
+
+    #[test]
+    fn configured_ppocr_model_falls_back_to_default_for_unknown_variant() {
+        let fixture = fixture("fallback");
+        let mut cfg = fixture.config.lock().unwrap();
+        cfg.set_ocr_settings(
+            "ppocr".to_owned(),
+            "bogus-variant".to_owned(),
+            0.5,
+            0.3,
+            1.6,
+        )
+        .unwrap();
+        assert_eq!(
+            configured_ppocr_model(&cfg).id,
+            ocr::models::default_model_spec().id,
+            "an unsupported saved variant must not crash the status path"
+        );
+        drop(cfg);
+        fixture.cleanup();
+    }
+
+    #[test]
+    fn ocr_config_response_reflects_saved_settings() {
+        let fixture = fixture("response");
+        let mut cfg = fixture.config.lock().unwrap();
+        cfg.set_ocr_settings("ppocr".to_owned(), "medium".to_owned(), 0.42, 0.31, 1.7)
+            .unwrap();
+        let response = ocr_config_response(&cfg);
+        assert_eq!(response.engine, "ppocr");
+        assert_eq!(response.ppocr_model_variant, "medium");
+        assert_eq!(response.det_score_threshold, 0.42);
+        assert_eq!(response.det_box_threshold, 0.31);
+        assert_eq!(response.det_unclip_ratio, 1.7);
+        assert_eq!(response.tesseract_languages, cfg.tesseract_languages());
+        drop(cfg);
+        fixture.cleanup();
+    }
+
+    #[test]
+    fn apply_rejects_unsupported_engine_without_touching_config() {
+        let fixture = fixture("bad-engine");
+        let update = OcrConfigUpdate {
+            engine: Some("bogus".to_owned()),
+            ..Default::default()
+        };
+        let error =
+            apply_ocr_runtime_settings(&fixture.config, &fixture.paths, &fixture.worker, update)
+                .unwrap_err();
+        assert!(error.contains("unsupported OCR engine"), "{error}");
+        assert_ne!(
+            fixture.config.lock().unwrap().ocr_engine(),
+            "bogus",
+            "a rejected update must not persist"
+        );
+        fixture.cleanup();
+    }
+
+    #[test]
+    fn apply_rejects_unknown_ppocr_variant_without_touching_config() {
+        let fixture = fixture("bad-variant");
+        let (initial_engine, initial_variant) = {
+            let cfg = fixture.config.lock().unwrap();
+            (
+                cfg.ocr_engine().to_owned(),
+                cfg.ppocr_model_variant().to_owned(),
+            )
+        };
+        let update = OcrConfigUpdate {
+            engine: Some("ppocr".to_owned()),
+            ppocr_model_variant: Some("bogus".to_owned()),
+            ..Default::default()
+        };
+        let error =
+            apply_ocr_runtime_settings(&fixture.config, &fixture.paths, &fixture.worker, update)
+                .unwrap_err();
+        assert!(
+            error.contains("unsupported PP-OCR model variant"),
+            "{error}"
+        );
+        let cfg = fixture.config.lock().unwrap();
+        assert_eq!(
+            cfg.ocr_engine(),
+            initial_engine,
+            "a rejected variant must not change the engine"
+        );
+        assert_eq!(
+            cfg.ppocr_model_variant(),
+            initial_variant,
+            "a rejected variant must not persist"
+        );
+        drop(cfg);
+        fixture.cleanup();
+    }
+
+    #[test]
+    fn apply_reports_missing_ppocr_models_before_persisting() {
+        let fixture = fixture("missing-models");
+        let (initial_engine, initial_variant) = {
+            let cfg = fixture.config.lock().unwrap();
+            (
+                cfg.ocr_engine().to_owned(),
+                cfg.ppocr_model_variant().to_owned(),
+            )
+        };
+        let update = OcrConfigUpdate {
+            engine: Some("ppocr".to_owned()),
+            ppocr_model_variant: Some("medium".to_owned()),
+            ..Default::default()
+        };
+        let error =
+            apply_ocr_runtime_settings(&fixture.config, &fixture.paths, &fixture.worker, update)
+                .unwrap_err();
+        assert!(
+            error.contains("model files are not installed"),
+            "a fresh storage layout has no model files: {error}"
+        );
+        let cfg = fixture.config.lock().unwrap();
+        assert_eq!(
+            cfg.ocr_engine(),
+            initial_engine,
+            "activation must wait until the probe passes"
+        );
+        assert_eq!(
+            cfg.ppocr_model_variant(),
+            initial_variant,
+            "a failed probe must not switch the saved model variant"
+        );
+        drop(cfg);
+        fixture.cleanup();
+    }
+
+    #[test]
+    fn ocr_status_counts_zero_tasks_on_a_fresh_database() {
+        let fixture = fixture("status");
+        let database = Database::open(&fixture.paths.database).unwrap();
+        let status = get_ocr_status_blocking(&database, &fixture.config, &fixture.paths).unwrap();
+        assert_eq!(status.total_tasks, 0);
+        assert_eq!(status.pending_tasks, 0);
+        assert_eq!(status.completed_tasks, 0);
+        assert_eq!(status.failed_tasks, 0);
+        assert!(status.installed_variants.is_empty());
+        assert!(!status.ppocr_available);
+        assert!(
+            !status.engine_available,
+            "no model files are installed and the default engine is ppocr"
+        );
+        assert_eq!(status.engine, "ppocr");
+        assert_eq!(
+            status.has_engine, status.tesseract_available,
+            "with no installed variants the fallback flag is exactly tesseract availability"
+        );
+        drop(database);
+        fixture.cleanup();
+    }
+
+    #[test]
+    fn ppocr_status_is_unavailable_without_models() {
+        let fixture = fixture("ppocr-status");
+        let status = check_ppocr_status_blocking(&fixture.paths, &fixture.config).unwrap();
+        assert!(!status.available);
+        assert!(status.installed_variants.is_empty());
+        assert_eq!(status.active_variant, ocr::models::default_model_spec().id);
+        fixture.cleanup();
+    }
+}
