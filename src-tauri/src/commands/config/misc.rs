@@ -440,3 +440,178 @@ pub fn set_clipboard_ignored_apps(
 ) -> Result<Vec<String>, String> {
     apply_ignored_applications(config.inner(), monitor.inner(), capture.inner(), apps)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{apply_ignored_applications, preview_auto_tag_rules};
+    use crate::config::{AutoTagRule, ConfigStore};
+    use crate::domain::ClipboardKind;
+    use crate::platform::ClipboardMonitor;
+    use crate::privacy::PrivacyManager;
+    use crate::state::CaptureState;
+    use std::fs;
+    use std::path::PathBuf;
+    use std::sync::Mutex;
+
+    fn config_fixture(name: &str) -> (PathBuf, Mutex<ConfigStore>) {
+        let root = std::env::temp_dir().join(format!(
+            "clipboard-config-misc-{name}-{}-{:016x}",
+            std::process::id(),
+            rand::random::<u64>()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        let store = Mutex::new(ConfigStore::load(&root).unwrap());
+        (root, store)
+    }
+
+    fn rule(
+        pattern: &str,
+        tag: &str,
+        source_app: &str,
+        kind: Option<ClipboardKind>,
+    ) -> AutoTagRule {
+        AutoTagRule {
+            pattern: pattern.to_owned(),
+            tag: tag.to_owned(),
+            source_app: source_app.to_owned(),
+            kind,
+        }
+    }
+
+    #[test]
+    fn preview_auto_tag_rules_matches_pattern_source_app_and_kind() {
+        let rules = vec![
+            rule("TODO|FIXME", "work", "code", None),
+            rule("TODO", "from-image", "", Some(ClipboardKind::Image)),
+        ];
+
+        // Text kind: the source-app-conditional rule matches, the image-only
+        // rule must not.
+        let tags = preview_auto_tag_rules(
+            rules.clone(),
+            "TODO: fix the parser".to_owned(),
+            "Visual Studio Code".to_owned(),
+            ClipboardKind::Text,
+        )
+        .unwrap();
+        assert_eq!(tags, vec!["work".to_owned()]);
+
+        // Image kind: both rules apply (kind-free rule + image-only rule).
+        let tags = preview_auto_tag_rules(
+            rules.clone(),
+            "TODO: fix the parser".to_owned(),
+            "code.exe".to_owned(),
+            ClipboardKind::Image,
+        )
+        .unwrap();
+        assert_eq!(tags, vec!["work".to_owned(), "from-image".to_owned()]);
+
+        // Source app outside the condition suppresses the first rule even
+        // though the pattern matches.
+        let tags = preview_auto_tag_rules(
+            rules,
+            "TODO: fix the parser".to_owned(),
+            "notepad".to_owned(),
+            ClipboardKind::Text,
+        )
+        .unwrap();
+        assert!(tags.is_empty());
+    }
+
+    #[test]
+    fn preview_auto_tag_rules_rejects_oversized_samples() {
+        let oversized_text = "a".repeat(1_000_001);
+        let error = preview_auto_tag_rules(
+            Vec::new(),
+            oversized_text,
+            "app".to_owned(),
+            ClipboardKind::Text,
+        )
+        .unwrap_err();
+        assert_eq!(error, "sample is too large");
+
+        let oversized_app = "a".repeat(4097);
+        let error = preview_auto_tag_rules(
+            Vec::new(),
+            "text".to_owned(),
+            oversized_app,
+            ClipboardKind::Text,
+        )
+        .unwrap_err();
+        assert_eq!(error, "sample is too large");
+
+        // Exactly at the limits the preview still runs.
+        let boundary_text = "b".repeat(1_000_000);
+        let tags = preview_auto_tag_rules(
+            Vec::new(),
+            boundary_text,
+            "a".repeat(4096),
+            ClipboardKind::Text,
+        )
+        .unwrap();
+        assert!(tags.is_empty());
+    }
+
+    #[test]
+    fn preview_auto_tag_rules_rejects_invalid_rule_patterns() {
+        let error = preview_auto_tag_rules(
+            vec![rule("([", "broken", "", None)],
+            "text".to_owned(),
+            "app".to_owned(),
+            ClipboardKind::Text,
+        )
+        .unwrap_err();
+        assert!(error.contains("invalid auto-tag pattern"), "{error}");
+
+        let error = preview_auto_tag_rules(
+            vec![rule("", "empty", "", None)],
+            "text".to_owned(),
+            "app".to_owned(),
+            ClipboardKind::Text,
+        )
+        .unwrap_err();
+        assert!(error.contains("needs a pattern, source or type"), "{error}");
+    }
+
+    #[test]
+    fn apply_ignored_applications_normalizes_and_propagates_everywhere() {
+        let (root, config) = config_fixture("ignored");
+        let monitor = Mutex::new(ClipboardMonitor::new());
+        let privacy = PrivacyManager::new();
+        let capture = CaptureState::new(&privacy, Vec::new(), 10 * 1024 * 1024, 100 * 1024);
+
+        // Trimming, empty-entry filtering, and case-insensitive dedup all
+        // happen before the value reaches config, capture, and the monitor.
+        let normalized = apply_ignored_applications(
+            &config,
+            &monitor,
+            &capture,
+            vec![" Notepad ".to_owned(), "notepad".to_owned(), String::new()],
+        )
+        .unwrap();
+        assert_eq!(normalized, vec!["Notepad".to_owned()]);
+        assert_eq!(
+            config.lock().unwrap().ignored_applications().to_vec(),
+            vec!["Notepad".to_owned()]
+        );
+        assert_eq!(
+            monitor.lock().unwrap().ignored_applications,
+            vec!["Notepad".to_owned()]
+        );
+        assert_eq!(capture.ignored_apps(), vec!["Notepad".to_owned()]);
+
+        // A follow-up call replaces the list instead of appending to it.
+        let normalized =
+            apply_ignored_applications(&config, &monitor, &capture, vec!["chrome.exe".to_owned()])
+                .unwrap();
+        assert_eq!(normalized, vec!["chrome.exe".to_owned()]);
+        assert_eq!(capture.ignored_apps(), vec!["chrome.exe".to_owned()]);
+        assert_eq!(
+            monitor.lock().unwrap().ignored_applications,
+            vec!["chrome.exe".to_owned()]
+        );
+
+        drop(config);
+        let _ = fs::remove_dir_all(&root);
+    }
+}
