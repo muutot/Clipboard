@@ -1020,6 +1020,144 @@ fn disposable_s3_edge_branches() {
 }
 
 #[test]
+#[ignore = "requires an explicitly configured disposable S3-compatible server"]
+fn disposable_s3_connection_and_streaming_paths() {
+    let endpoint = std::env::var("CLIPBOARD_S3_TEST_ENDPOINT")
+        .expect("CLIPBOARD_S3_TEST_ENDPOINT must be set");
+    let region =
+        std::env::var("CLIPBOARD_S3_TEST_REGION").unwrap_or_else(|_| "us-east-1".to_string());
+    let bucket =
+        std::env::var("CLIPBOARD_S3_TEST_BUCKET").expect("CLIPBOARD_S3_TEST_BUCKET must be set");
+    let access_key = std::env::var("CLIPBOARD_S3_TEST_ACCESS_KEY")
+        .expect("CLIPBOARD_S3_TEST_ACCESS_KEY must be set");
+    let secret_key = std::env::var("CLIPBOARD_S3_TEST_SECRET_KEY")
+        .expect("CLIPBOARD_S3_TEST_SECRET_KEY must be set");
+
+    // Connection diagnostics agree with the live server: success, an
+    // authentication rejection, a missing bucket, and an unreachable host.
+    let ok = test_s3_connection(&endpoint, &region, &bucket, &access_key, &secret_key);
+    assert!(ok.success, "connection test failed: {}", ok.message);
+    assert_eq!(ok.status_code, Some(200));
+    let rejected = test_s3_connection(&endpoint, &region, &bucket, &access_key, "wrong-secret");
+    assert!(!rejected.success);
+    assert_eq!(rejected.status_code, Some(403));
+    let missing_bucket = test_s3_connection(
+        &endpoint,
+        &region,
+        "clipboard-sync-no-such-bucket",
+        &access_key,
+        &secret_key,
+    );
+    assert!(!missing_bucket.success);
+    assert_eq!(missing_bucket.status_code, Some(404));
+    let refused = test_s3_connection(
+        "http://127.0.0.1:9",
+        &region,
+        &bucket,
+        &access_key,
+        &secret_key,
+    );
+    assert!(!refused.success);
+    assert_eq!(refused.status_code, None);
+
+    // Creating the configured bucket twice stays idempotent.
+    ensure_test_bucket(&endpoint, &region, &bucket, &access_key, &secret_key).unwrap();
+
+    // A multi-buffer streaming round trip keeps every byte and reports the
+    // caller-supplied digest back from the streaming download.
+    let prefix = format!("transport-streaming-{}/", uuid::Uuid::new_v4());
+    let key = format!("{prefix}stream.bin");
+    let payload: Vec<u8> = (0..5 * 1024 * 1024).map(|i: u64| (i >> 7) as u8).collect();
+    let source = std::env::temp_dir().join(format!(
+        "clipboard-s3-streaming-source-{}-{}.bin",
+        std::process::id(),
+        uuid::Uuid::new_v4()
+    ));
+    std::fs::write(&source, &payload).unwrap();
+    let digest = hex::encode(Sha256::digest(&payload));
+    let put_etag = put_s3_file(
+        &endpoint,
+        &region,
+        &bucket,
+        &key,
+        &source,
+        &digest,
+        payload.len() as u64,
+        &access_key,
+        &secret_key,
+        S3PutCondition::Unconditional,
+    )
+    .unwrap();
+    let S3PutOutcome::Stored { etag: stored_etag } = put_etag else {
+        panic!("unconditional streaming upload must store");
+    };
+    let metadata = head_s3_object(&endpoint, &region, &bucket, &key, &access_key, &secret_key)
+        .unwrap()
+        .expect("streamed object must exist");
+    assert_eq!(metadata.size_bytes, Some(payload.len() as u64));
+    assert_eq!(metadata.etag, stored_etag);
+
+    let destination = std::env::temp_dir().join(format!(
+        "clipboard-s3-streaming-destination-{}-{}.bin",
+        std::process::id(),
+        uuid::Uuid::new_v4()
+    ));
+    let downloaded = get_s3_object_to_file(
+        &endpoint,
+        &region,
+        &bucket,
+        &key,
+        &destination,
+        payload.len() as u64 + 1,
+        &access_key,
+        &secret_key,
+    )
+    .unwrap()
+    .expect("streamed download must succeed");
+    assert_eq!(downloaded.size_bytes, payload.len() as u64);
+    assert_eq!(downloaded.sha256, digest);
+    assert_eq!(std::fs::read(&destination).unwrap(), payload);
+
+    // A download limit below the object size fails up front and the refused
+    // attempt never leaves a partial destination behind.
+    let limited_destination = std::env::temp_dir().join(format!(
+        "clipboard-s3-limited-destination-{}-{}.bin",
+        std::process::id(),
+        uuid::Uuid::new_v4()
+    ));
+    let limited = get_s3_object_to_file(
+        &endpoint,
+        &region,
+        &bucket,
+        &key,
+        &limited_destination,
+        payload.len() as u64 - 1,
+        &access_key,
+        &secret_key,
+    );
+    assert!(limited.is_err());
+    assert!(!limited_destination.exists());
+
+    // The in-memory download helper reports absent keys as an explicit error.
+    let missing_key = format!("{prefix}missing.bin");
+    let missing = download_from_s3(
+        &endpoint,
+        &region,
+        &bucket,
+        &missing_key,
+        &access_key,
+        &secret_key,
+    );
+    assert!(missing
+        .unwrap_err()
+        .contains(&format!("S3 object not found: {missing_key}")));
+
+    delete_from_s3(&endpoint, &region, &bucket, &key, &access_key, &secret_key).unwrap();
+    let _ = std::fs::remove_file(source);
+    let _ = std::fs::remove_file(destination);
+}
+
+#[test]
 fn list_page_exposes_continuation_and_decodes_object_names() {
     let page = parse_s3_list_page(
         r#"<ListBucketResult>

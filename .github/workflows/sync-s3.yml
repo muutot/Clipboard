@@ -193,6 +193,7 @@ jobs:
           run_smoke "sync v1 engine smokes" "s3_smoke"
           run_smoke "clipboard-sync transport round trip" "disposable_s3_round_trip"
           run_smoke "clipboard-sync transport edge branches" "disposable_s3_edge_branches"
+          run_smoke "clipboard-sync transport connection and streaming" "disposable_s3_connection_and_streaming_paths"
           if [ "$status" -ne 0 ]; then
             echo "::error::real-S3 smoke suite failed" >&2
             exit 1
