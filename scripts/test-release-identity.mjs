@@ -31,7 +31,7 @@ function fixture(t) {
   git("add", ".");
   git("commit", "-qm", "initial fixture");
   mkdirSync(join(root, "src-tauri"));
-  for (const path of ["package.json", "src-tauri/tauri.conf.json"]) {
+  for (const path of ["package.json", "package-lock.json", "src-tauri/tauri.conf.json"]) {
     writeFileSync(join(root, path), '{"version":"1.2.3"}\n');
   }
   writeFileSync(join(root, "src-tauri/Cargo.toml"), '[package]\nversion = "1.2.3"\n');
