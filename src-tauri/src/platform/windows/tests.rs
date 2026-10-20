@@ -426,6 +426,176 @@ fn read_clipboard_file_paths_reads_a_cf_hdrop() {
     assert_eq!(read_clipboard_file_paths(), vec![long_path]);
 }
 
+#[cfg(target_os = "windows")]
+fn set_clipboard_format_bytes(format: u32, bytes: &[u8]) {
+    extern "system" {
+        fn OpenClipboard(hwnd: isize) -> i32;
+        fn EmptyClipboard() -> i32;
+        fn CloseClipboard() -> i32;
+        fn SetClipboardData(format: u32, handle: isize) -> isize;
+        fn GlobalAlloc(flags: u32, bytes: usize) -> isize;
+        fn GlobalLock(handle: isize) -> *const u8;
+        fn GlobalUnlock(handle: isize) -> i32;
+    }
+    const GMEM_MOVEABLE: u32 = 0x0002;
+
+    let handle = unsafe { GlobalAlloc(GMEM_MOVEABLE, bytes.len().max(1)) };
+    assert_ne!(handle, 0, "GlobalAlloc failed");
+    let ptr = unsafe { GlobalLock(handle) } as *mut u8;
+    assert!(!ptr.is_null(), "GlobalLock failed");
+    unsafe {
+        std::ptr::copy_nonoverlapping(bytes.as_ptr(), ptr, bytes.len());
+        GlobalUnlock(handle);
+    }
+
+    let mut opened = false;
+    for _ in 0..100 {
+        if unsafe { OpenClipboard(0) } != 0 {
+            opened = true;
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    assert!(opened, "OpenClipboard failed");
+    unsafe {
+        EmptyClipboard();
+        assert_ne!(
+            SetClipboardData(format, handle),
+            0,
+            "SetClipboardData failed"
+        );
+        CloseClipboard();
+    }
+}
+
+/// Reads raw bytes for one clipboard format. Test-only mirror of the native
+/// read paths, used to verify the self-trigger marker the write path stores.
+#[cfg(target_os = "windows")]
+fn get_clipboard_format_bytes(format: u32) -> Option<Vec<u8>> {
+    extern "system" {
+        fn OpenClipboard(hwnd: isize) -> i32;
+        fn CloseClipboard() -> i32;
+        fn GetClipboardData(format: u32) -> isize;
+        fn GlobalLock(handle: isize) -> *const u8;
+        fn GlobalUnlock(handle: isize) -> i32;
+        fn GlobalSize(handle: isize) -> usize;
+        fn IsClipboardFormatAvailable(format: u32) -> i32;
+    }
+    unsafe {
+        if IsClipboardFormatAvailable(format) == 0 {
+            return None;
+        }
+        if OpenClipboard(0) == 0 {
+            return None;
+        }
+        let handle = GetClipboardData(format);
+        if handle == 0 {
+            CloseClipboard();
+            return None;
+        }
+        let size = GlobalSize(handle);
+        let ptr = GlobalLock(handle);
+        let data = if ptr.is_null() {
+            None
+        } else {
+            Some(std::slice::from_raw_parts(ptr, size).to_vec())
+        };
+        GlobalUnlock(handle);
+        CloseClipboard();
+        data
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn register_clipboard_format(name: &str) -> u32 {
+    use std::ffi::OsStr;
+    use std::os::windows::ffi::OsStrExt;
+
+    extern "system" {
+        fn RegisterClipboardFormatW(name: *const u16) -> u32;
+    }
+    let wide: Vec<u16> = OsStr::new(name)
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+    let format = unsafe { RegisterClipboardFormatW(wide.as_ptr()) };
+    assert_ne!(format, 0, "RegisterClipboardFormatW failed");
+    format
+}
+
+/// Exercises the native write/read paths end to end against the real system
+/// clipboard. Like the CF_HDROP test above, this destroys the user's current
+/// clipboard contents, so it only runs when explicitly permitted; CI's
+/// Windows runner sets the variable.
+#[cfg(target_os = "windows")]
+#[test]
+fn real_clipboard_round_trips_cover_native_write_and_read_paths() {
+    if std::env::var_os("CLIPBOARD_ALLOW_REAL_CLIPBOARD_TEST").is_none() {
+        eprintln!(
+            "skipping real_clipboard_round_trips: set \
+             CLIPBOARD_ALLOW_REAL_CLIPBOARD_TEST=1 to allow overwriting the real system clipboard"
+        );
+        return;
+    }
+
+    // The production text write stores the payload plus the self-trigger
+    // marker; both must be readable back and the marker must suppress a
+    // capture of our own text.
+    let text = "real clipboard round trip caf\u{e9}";
+    write_clipboard_text_with_self_trigger(text).unwrap();
+    assert_eq!(read_clipboard_text().as_deref(), Some(text));
+    if let Some(marker_format) = self_trigger_format_id() {
+        let marker = get_clipboard_format_bytes(marker_format)
+            .expect("self-trigger marker must be set after a text write");
+        assert!(clipboard_change_is_self_write(&marker, text));
+        assert!(!clipboard_change_is_self_write(&marker, "unrelated text"));
+    }
+
+    // RTF payloads decode lossily as trimmed text through the registered
+    // format name.
+    let rtf = "{\\rtf1\\ansi Hello RTF}";
+    set_clipboard_format_bytes(
+        register_clipboard_format("Rich Text Format"),
+        rtf.as_bytes(),
+    );
+    assert_eq!(read_clipboard_rtf().as_deref(), Some(rtf));
+
+    // CF_HTML payloads decode through the fragment offsets.
+    let html_payload = cf_html_payload("<b>frag</b>");
+    set_clipboard_format_bytes(register_clipboard_format("HTML Format"), &html_payload);
+    assert_eq!(read_clipboard_html().as_deref(), Some("<b>frag</b>"));
+
+    // A synthetic 1x1 opaque 32-bpp DIB placed as CF_DIB decodes to a PNG.
+    let mut header = [0u8; 40];
+    header[0..4].copy_from_slice(&40u32.to_le_bytes()); // biSize
+    header[4..8].copy_from_slice(&1i32.to_le_bytes()); // biWidth
+    header[8..12].copy_from_slice(&1i32.to_le_bytes()); // biHeight
+    header[12..14].copy_from_slice(&1u16.to_le_bytes()); // biPlanes
+    header[14..16].copy_from_slice(&32u16.to_le_bytes()); // biBitCount
+    header[16..20].copy_from_slice(&0u32.to_le_bytes()); // BI_RGB
+    let mut dib = header.to_vec();
+    dib.extend_from_slice(&[0x30, 0x20, 0x10, 0xFF]); // B, G, R, A
+    set_clipboard_format_bytes(CF_DIB, &dib);
+    let (png, width, height) = read_clipboard_image().expect("CF_DIB must decode");
+    assert_eq!((width, height), (1, 1));
+    image::load_from_memory(&png).expect("decoded image bytes are a valid PNG");
+
+    // The file write path round-trips a real temporary file reference.
+    let file_path = std::env::temp_dir().join(format!(
+        "clipboard-real-files-round-trip-{}.txt",
+        std::process::id()
+    ));
+    std::fs::write(&file_path, b"round trip").unwrap();
+    let path_string = file_path.to_string_lossy().into_owned();
+    write_clipboard_files_with_self_trigger(&[path_string.clone()]).unwrap();
+    assert_eq!(read_clipboard_file_paths(), vec![path_string]);
+
+    // The change sequence is observable after every write above.
+    assert!(read_clipboard_sequence().is_some());
+
+    let _ = std::fs::remove_file(file_path);
+}
+
 /// Builds a CF_HTML payload with accurate byte offsets. Header widths are
 /// fixed-width (10 digits), so header length is independent of the values.
 fn cf_html_payload(fragment: &str) -> Vec<u8> {
