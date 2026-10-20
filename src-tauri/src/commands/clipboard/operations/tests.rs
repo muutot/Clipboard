@@ -3,16 +3,22 @@
 
 use super::{
     apply_sort_rules, cmp_by_field, duplicate_clipboard_item_record, generated_clipboard_title,
-    is_owned_rename_source, metadata_custom_title, record_item_usage, rename_item_record,
-    resolve_custom_title, rewrite_stored_resource_paths, sanitize_file_stem,
-    save_clipboard_item_as_new_record, set_custom_title_metadata,
+    is_owned_rename_source, metadata_custom_title, permanently_delete_storage_kind_for,
+    record_item_usage, rename_item_record, resolve_custom_title, rewrite_stored_resource_paths,
+    sanitize_file_stem, save_clipboard_item_as_new_record, search_clipboard_items_blocking,
+    set_custom_title_metadata,
 };
 use crate::commands::clipboard::types::{
-    SearchResultCache, SearchSortDirection, SearchSortField, SearchSortRule,
+    HistoryFilterArgs, SearchResultCache, SearchSortDirection, SearchSortField, SearchSortRule,
 };
+use crate::config::ConfigStore;
 use crate::domain::{ClipboardItem, ClipboardKind};
+use crate::performance::PerformanceTracker;
+use crate::search::{SearchIndex, SearchSyncWorker};
 use crate::storage::ClipboardRepository;
-use crate::storage::{Database, StoragePaths};
+use crate::storage::{Database, HistoryCursor, KindStorageStats, StoragePaths};
+use crate::STORAGE_KIND_DELETE_SCOPE;
+use std::sync::Mutex;
 
 fn item(id: &str, title: &str) -> ClipboardItem {
     ClipboardItem {
@@ -765,4 +771,340 @@ fn set_custom_title_metadata_preserves_existing_fields() {
     );
 
     assert!(set_custom_title_metadata(None, true).is_ok());
+}
+
+// ---------------------------------------------------------------------------
+// search_clipboard_items_blocking: the search pipeline in front of Tantivy.
+// ---------------------------------------------------------------------------
+
+struct SearchFixture {
+    root: std::path::PathBuf,
+    database: Database,
+    index: SearchIndex,
+    config: Mutex<ConfigStore>,
+    tracker: PerformanceTracker,
+    cache: SearchResultCache,
+    worker: Mutex<Option<SearchSyncWorker>>,
+}
+
+impl SearchFixture {
+    fn new(name: &str) -> Self {
+        let root = std::env::temp_dir().join(format!(
+            "clipboard-search-test-{name}-{}-{:016x}",
+            std::process::id(),
+            rand::random::<u64>()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        Self {
+            database: Database::open_in_memory().unwrap(),
+            index: SearchIndex::in_memory().unwrap(),
+            config: Mutex::new(ConfigStore::load(&root).unwrap()),
+            tracker: PerformanceTracker::new(),
+            cache: SearchResultCache::new(),
+            worker: Mutex::new(None),
+            root,
+        }
+    }
+
+    fn search(
+        &self,
+        query: &str,
+        limit: Option<usize>,
+        offset: Option<usize>,
+        rules: Option<Vec<SearchSortRule>>,
+        filter: Option<HistoryFilterArgs>,
+    ) -> (Vec<String>, usize, bool) {
+        let page = search_clipboard_items_blocking(
+            &self.database,
+            &self.index,
+            &self.config,
+            &self.tracker,
+            &self.cache,
+            &self.worker,
+            query.to_owned(),
+            limit,
+            offset,
+            rules,
+            filter,
+        )
+        .unwrap();
+        (
+            page.items
+                .iter()
+                .map(|entry| entry.item.id.clone())
+                .collect(),
+            page.total_count,
+            page.truncated,
+        )
+    }
+}
+
+impl Drop for SearchFixture {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.root);
+    }
+}
+
+fn text_item(id: &str, title: &str, text: &str, last_used: i64) -> ClipboardItem {
+    let mut entry = item(id, title);
+    entry.text_content = Some(text.to_owned());
+    entry.last_used_at_ms = Some(last_used);
+    entry
+}
+
+#[test]
+fn search_blocking_sorts_paginates_and_counts_totals() {
+    let fixture = SearchFixture::new("pipeline");
+    fixture
+        .database
+        .save_item(&text_item("a", "alpha zed", "alpha zed body", 200))
+        .unwrap();
+    fixture
+        .database
+        .save_item(&text_item("b", "alpha air", "alpha air body", 100))
+        .unwrap();
+    fixture
+        .database
+        .save_item(&text_item("c", "unrelated", "delta body", 300))
+        .unwrap();
+
+    // Default rule: lastUsedAt desc → the newer "alpha zed" first.
+    let (ids, total, truncated) = fixture.search("alpha", None, None, None, None);
+    assert_eq!(ids, vec!["a".to_owned(), "b".to_owned()]);
+    assert_eq!(total, 2);
+    assert!(!truncated);
+
+    // Explicit createdAt... title asc flips the order.
+    let (ids, _, _) = fixture.search(
+        "alpha",
+        None,
+        None,
+        Some(vec![rule(SearchSortField::Title, SearchSortDirection::Asc)]),
+        None,
+    );
+    assert_eq!(ids, vec!["b".to_owned(), "a".to_owned()]);
+
+    // Pagination slices the sorted candidate list; totals stay global.
+    let (ids, total, _) = fixture.search("alpha", Some(1), Some(0), None, None);
+    assert_eq!(ids, vec!["a".to_owned()]);
+    assert_eq!(total, 2);
+    let (ids, total, _) = fixture.search("alpha", Some(1), Some(1), None, None);
+    assert_eq!(ids, vec!["b".to_owned()]);
+    assert_eq!(total, 2);
+    let (ids, total, _) = fixture.search("alpha", Some(1), Some(9), None, None);
+    assert!(ids.is_empty());
+    assert_eq!(total, 2);
+}
+
+#[test]
+fn search_blocking_refreshes_cached_pages_after_new_captures() {
+    let fixture = SearchFixture::new("cache-refresh");
+    fixture
+        .database
+        .save_item(&text_item("first", "hello one", "hello world", 100))
+        .unwrap();
+    let (ids, total, _) = fixture.search("hello", None, None, None, None);
+    assert_eq!(ids, vec!["first".to_owned()]);
+    assert_eq!(total, 1);
+
+    // The second run hits the pending outbox, re-syncs the index, and must
+    // clear the cached page instead of serving the stale single result.
+    fixture
+        .database
+        .save_item(&text_item("second", "hello two", "hello again", 200))
+        .unwrap();
+    let (ids, total, _) = fixture.search("hello", None, None, None, None);
+    assert_eq!(ids, vec!["second".to_owned(), "first".to_owned()]);
+    assert_eq!(total, 2);
+}
+
+#[test]
+fn search_blocking_applies_filters_through_allowed_ids() {
+    let fixture = SearchFixture::new("filter");
+    let mut favorite = text_item("fav", "needle record", "needle text", 100);
+    favorite.is_favorite = true;
+    fixture.database.save_item(&favorite).unwrap();
+    fixture
+        .database
+        .save_item(&text_item("plain", "needle too", "needle text", 200))
+        .unwrap();
+
+    // Both rows match the query, but the favorite filter narrows the
+    // candidate set before the index is consulted.
+    let filter = HistoryFilterArgs {
+        favorite: Some(true),
+        ..HistoryFilterArgs::default()
+    };
+    let (ids, total, _) = fixture.search("needle", None, None, None, Some(filter));
+    assert_eq!(ids, vec!["fav".to_owned()]);
+    assert_eq!(total, 1);
+}
+
+#[test]
+fn history_filter_args_keep_the_frontend_camel_case_contract() {
+    let args: HistoryFilterArgs = serde_json::from_str(
+        r#"{"kind":"text","favorite":true,"tag":"work","sourceApp":"Code",
+            "dateFromMs":1,"dateToMs":2,"cursor":{"lastUsedAtMs":42,"id":"row"}}"#,
+    )
+    .unwrap();
+    assert_eq!(args.kind, Some(ClipboardKind::Text));
+    assert_eq!(args.favorite, Some(true));
+    assert_eq!(args.tag.as_deref(), Some("work"));
+    assert_eq!(args.source_app.as_deref(), Some("Code"));
+    assert_eq!(args.date_from_ms, Some(1));
+    assert_eq!(args.date_to_ms, Some(2));
+    let cursor: HistoryCursor = args.cursor.expect("cursor parsed").into();
+    assert_eq!(cursor.last_used_at_ms, 42);
+    assert_eq!(cursor.id, "row");
+
+    // Sort rule field names carry explicit frontend spellings.
+    let rule: SearchSortRule =
+        serde_json::from_str(r#"{"field":"lastUsedAt","direction":"desc"}"#).unwrap();
+    assert_eq!(rule.field, SearchSortField::LastUsedAt);
+    let created: SearchSortField = serde_json::from_str(r#""createdAt""#).unwrap();
+    assert_eq!(created, SearchSortField::CreatedAt);
+}
+
+// ---------------------------------------------------------------------------
+// rename_item_record: rejection paths the happy-path tests do not reach.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn rename_item_record_rejects_unusable_names_and_existing_targets() {
+    let project = std::env::temp_dir().join(format!(
+        "clipboard-rename-errs-{}-{:016x}",
+        std::process::id(),
+        rand::random::<u64>()
+    ));
+    std::fs::create_dir_all(&project).unwrap();
+    let paths = StoragePaths::initialize(project.clone()).unwrap();
+    let database = Database::open(&paths.database).unwrap();
+
+    let images_dir = paths.images.clone();
+    std::fs::create_dir_all(&images_dir).unwrap();
+    let old_path = images_dir.join("old.png");
+    std::fs::write(&old_path, b"png").unwrap();
+    let mut record = item("img-1", "old");
+    record.kind = ClipboardKind::Image;
+    record.resource_path = Some(old_path.display().to_string());
+    database.save_item(&record).unwrap();
+
+    assert_eq!(
+        rename_item_record(&database, &paths, "missing".to_owned(), "x".to_owned()).unwrap_err(),
+        "item not found"
+    );
+    assert_eq!(
+        rename_item_record(&database, &paths, "img-1".to_owned(), "   ".to_owned()).unwrap_err(),
+        "name cannot be empty"
+    );
+    assert_eq!(
+        rename_item_record(&database, &paths, "img-1".to_owned(), "...".to_owned()).unwrap_err(),
+        "name contains no usable characters"
+    );
+
+    // A colliding managed file must abort before any rename happens.
+    let taken = images_dir.join("taken.png");
+    std::fs::write(&taken, b"other bytes").unwrap();
+    let error =
+        rename_item_record(&database, &paths, "img-1".to_owned(), "taken".to_owned()).unwrap_err();
+    assert!(error.contains("file already exists"), "{error}");
+    assert!(old_path.exists());
+    assert_eq!(
+        database.get_item("img-1").unwrap().unwrap().resource_path,
+        Some(old_path.display().to_string())
+    );
+
+    database
+        .with_connection(|connection| {
+            connection.execute_batch("DROP TABLE clipboard_items")?;
+            Ok(())
+        })
+        .unwrap();
+    drop(database);
+    let _ = std::fs::remove_dir_all(&project);
+}
+
+// ---------------------------------------------------------------------------
+// permanently_delete_storage_kind_for: optimistic stats guard + cache clear.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn permanently_delete_storage_kind_enforces_expected_stats_and_clears_cache() {
+    let project = std::env::temp_dir().join(format!(
+        "clipboard-kind-delete-{}-{:016x}",
+        std::process::id(),
+        rand::random::<u64>()
+    ));
+    std::fs::create_dir_all(&project).unwrap();
+    let paths = StoragePaths::initialize(project.clone()).unwrap();
+    let database = Database::open(&paths.database).unwrap();
+    let index = SearchIndex::in_memory().unwrap();
+    let cache = SearchResultCache::new();
+
+    database
+        .save_item(&text_item("t1", "one", "body one", 100))
+        .unwrap();
+    database
+        .save_item(&text_item("t2", "two", "body two", 200))
+        .unwrap();
+    let mut favorite = text_item("fav", "kept", "body kept", 300);
+    favorite.is_favorite = true;
+    database.save_item(&favorite).unwrap();
+
+    // A cached page must exist before the delete so the clear is observable.
+    let token = cache.write_token();
+    cache.set(
+        token,
+        "q".to_owned(),
+        Vec::new(),
+        100,
+        vec![item("cached", "cached")],
+        1,
+        false,
+    );
+    assert!(cache.get("q", &[], 100, 0, 10).is_some());
+
+    let stats = database
+        .kind_storage_stats(ClipboardKind::Text, STORAGE_KIND_DELETE_SCOPE)
+        .unwrap();
+    assert_eq!(stats.item_count, 2);
+
+    // Stale expectations (another window deleted or captured meanwhile) must
+    // refuse the bulk delete instead of silently removing the wrong set.
+    let stale = KindStorageStats {
+        item_count: stats.item_count + 1,
+        ..stats
+    };
+    assert!(permanently_delete_storage_kind_for(
+        &database,
+        &paths,
+        &index,
+        &cache,
+        ClipboardKind::Text,
+        Some(stale)
+    )
+    .is_err());
+
+    let result = permanently_delete_storage_kind_for(
+        &database,
+        &paths,
+        &index,
+        &cache,
+        ClipboardKind::Text,
+        Some(stats),
+    )
+    .unwrap();
+    assert_eq!(result.deleted_count, 2);
+    assert_eq!(result.deleted_ids.len(), 2);
+    assert_eq!(result.removed_files, 0);
+    assert!(result.warnings.is_empty());
+    assert!(result.search_sync.is_some());
+    assert!(database.get_item("t1").unwrap().is_none());
+    assert!(database.get_item("t2").unwrap().is_none());
+    // The configured scope keeps favorites and also the cached page is gone.
+    assert!(database.get_item("fav").unwrap().is_some());
+    assert!(cache.get("q", &[], 100, 0, 10).is_none());
+
+    drop(database);
+    let _ = std::fs::remove_dir_all(&project);
 }

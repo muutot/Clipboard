@@ -54,6 +54,8 @@ pub use tags::*;
 #[cfg(test)]
 use delete::{clear_non_favorite_records, delete_clipboard_item_record};
 #[cfg(test)]
+use listing::search_clipboard_items_blocking;
+#[cfg(test)]
 use rename::{
     is_owned_rename_source, rename_item_record, rewrite_stored_resource_paths, sanitize_file_stem,
 };

@@ -86,7 +86,7 @@ pub async fn search_clipboard_items(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn search_clipboard_items_blocking(
+pub(super) fn search_clipboard_items_blocking(
     database: &Database,
     search_index: &SearchIndex,
     config: &Mutex<ConfigStore>,
