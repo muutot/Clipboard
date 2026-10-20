@@ -1,7 +1,7 @@
 use super::{
     captured_file_metadata, foreground_app_name, normalize_platform_image_to_png,
-    register_image_self_trigger, should_skip_self_triggered_hash, should_skip_self_triggered_text,
-    store_captured_file_references, CapturedFileReference,
+    read_managed_image, register_image_self_trigger, should_skip_self_triggered_hash,
+    should_skip_self_triggered_text, store_captured_file_references, CapturedFileReference,
 };
 use crate::content::self_trigger::SelfTriggerGuard;
 use crate::content::RESOURCE_METADATA_SCHEMA_VERSION;
@@ -291,6 +291,35 @@ fn store_captured_file_references_copies_small_files_into_storage() {
 
     fs::remove_dir_all(&source_dir).unwrap();
     fs::remove_dir_all(&storage_dir).unwrap();
+}
+
+#[test]
+fn read_managed_image_enforces_the_managed_root_boundary() {
+    let root = temp_dir("managed-root");
+    let inside = root.join("shot.png");
+    fs::write(&inside, b"png-bytes").unwrap();
+    assert_eq!(
+        read_managed_image(&root, inside.to_str().expect("temp path is utf-8")).unwrap(),
+        b"png-bytes"
+    );
+
+    let outside_root = temp_dir("managed-outside");
+    let outside = outside_root.join("secret.png");
+    fs::write(&outside, b"external").unwrap();
+    let error = read_managed_image(&root, outside.to_str().expect("temp path is utf-8"))
+        .expect_err("a path outside the managed root must be rejected");
+    assert_eq!(error.kind(), std::io::ErrorKind::PermissionDenied);
+
+    assert!(read_managed_image(
+        &root,
+        root.join("missing.png")
+            .to_str()
+            .expect("temp path is utf-8")
+    )
+    .is_err());
+
+    fs::remove_dir_all(&root).unwrap();
+    fs::remove_dir_all(&outside_root).unwrap();
 }
 
 fn sample_reference(name: &str, size: u64) -> CapturedFileReference {

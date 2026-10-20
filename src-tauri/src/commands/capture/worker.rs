@@ -553,3 +553,54 @@ pub(crate) fn run_capture_loop(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn breaker_counts_failures_without_pausing_below_the_threshold() {
+        let (sender, receiver) = mpsc::channel();
+        let flag = AtomicBool::new(false);
+        let mut consecutive = 0u32;
+        for _ in 0..9 {
+            assert!(!note_capture_save_failure(
+                &mut consecutive,
+                &receiver,
+                &flag
+            ));
+        }
+        assert_eq!(consecutive, 9);
+        drop(sender);
+    }
+
+    #[test]
+    fn breaker_exits_when_stop_arrives_during_the_pause() {
+        let (_sender, receiver) = mpsc::channel();
+        // A pre-set stop flag makes the 5-second pause return immediately.
+        let flag = AtomicBool::new(true);
+        let mut consecutive = 9u32;
+        assert!(note_capture_save_failure(
+            &mut consecutive,
+            &receiver,
+            &flag
+        ));
+        assert_eq!(consecutive, 10, "the tripping failure is counted");
+    }
+
+    #[test]
+    fn breaker_resets_after_surviving_the_pause() {
+        // The sender must stay alive: a dropped channel reads as a stop
+        // signal, which would exit instead of exercising the reset path.
+        let (sender, receiver) = mpsc::channel();
+        let flag = AtomicBool::new(false);
+        let mut consecutive = 9u32;
+        assert!(!note_capture_save_failure(
+            &mut consecutive,
+            &receiver,
+            &flag
+        ));
+        assert_eq!(consecutive, 0, "surviving the pause must reset the breaker");
+        drop(sender);
+    }
+}

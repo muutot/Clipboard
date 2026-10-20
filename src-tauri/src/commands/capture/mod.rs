@@ -202,21 +202,6 @@ pub fn unmark_self_triggered_image(
     Ok(())
 }
 
-/// Shared clipboard ingestion loop used by both the startup path in `lib.rs`
-/// and the `start_clipboard_monitoring` Tauri command. Handles all clipboard
-/// content kinds (text/html, image, files) so a monitor (re)started at runtime
-/// behaves identically to the one launched at startup — previously the command
-/// path only ingested text/html and silently dropped image/file copies.
-///
-/// The function owns the worker thread's lifecycle resources (database, stop
-/// flag, stop receiver, app handle) and returns once the loop has terminated.
-/// Callers are responsible for spawning the thread and installing the
-/// resulting `CaptureWorker`.
-/// Counts one failed `save_item` and applies the shared backoff: after 10
-/// consecutive failures the capture loop pauses briefly so a persistently
-/// broken database cannot spin the worker. Returns true when a stop signal
-/// arrived during the pause and the loop should exit. Media captures use the
-/// same breaker as text captures — image/file writes fail just as hard when
 // ---------------------------------------------------------------------------
 // Submodules
 // ---------------------------------------------------------------------------
