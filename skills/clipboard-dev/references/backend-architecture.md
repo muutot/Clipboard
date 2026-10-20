@@ -121,9 +121,17 @@ a thin ObjectStore decorator cancels after a successful immutable snapshot/segme
 real head must stay unchanged; retry preserves pending rows and converges), an encrypted
 image resource must upload as multi-chunk ciphertext, defer its body during an ordinary pull,
 and materialize byte-identical on the peer, a rotation tombstone at the prefix root must
-make a stale peer refuse, and the full rotation flow (materialize-all → publish at the new
+make a stale peer refuse, the full rotation flow (materialize-all → publish at the new
 prefix → tombstone → delete the old namespace → byte-identical body) must hold over the wire
-(`real_s3_namespace_rotation_moves_state_and_tombstones`). CI runs the smokes through
+(`real_s3_namespace_rotation_moves_state_and_tombstones`), the opt-in GC modes must publish
+and prune checkpoint sidecars, fall back to pack decoding, and retain fresh orphans through
+the server-`LastModified` grace window (`real_s3_resource_gc_reads_sidecars_and_retains_fresh_resources`),
+the typed connection probe must answer success / 403 wrong-secret / 404 missing-bucket
+(`real_s3_connection_probe_reports_success_and_failure_modes`), the streamed resource
+download must refuse a body above the caller limit from its declared `Content-Length`
+without leaving a partial file (`real_s3_streamed_download_enforces_the_limit_and_leaves_no_partial_file`),
+and PUT/GET/LIST/HEAD must agree on the raw quoted ETag text
+(`real_s3_conditional_writes_and_etags_match_the_transport_contract`). CI runs the smokes through
 `.github/workflows/sync-s3.yml` (ubuntu + checksum-verified pinned rustfs); locally use
 `scripts/sync-s3-test.ps1 -Test smoke`, which exports the password. None of it proves native
 exit timing.

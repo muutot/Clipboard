@@ -705,6 +705,20 @@ fn real_s3_conditional_writes_and_etags_match_the_transport_contract() {
         Some(current_etag.as_str()),
         "a LIST must return the current quoted ETag text the PUT reported"
     );
+
+    // The engine's immutable-write reconciliation and the GC retention checks
+    // HEAD objects, so a HEAD ETag that disagreed with GET/LIST would make the
+    // same object look stale or fresh depending on the read method.
+    assert_eq!(
+        store
+            .head("conditional-writes/probe")
+            .expect("HEAD must be answerable")
+            .expect("stored object must be headable")
+            .etag
+            .as_deref(),
+        Some(current_etag.as_str()),
+        "a HEAD must return the current quoted ETag text the PUT reported"
+    );
 }
 
 #[test]
@@ -1265,4 +1279,116 @@ fn real_s3_resource_gc_reads_sidecars_and_retains_fresh_resources() {
     assert!(store.head(&orphan_key).unwrap().is_some());
 
     drop(device);
+}
+
+/// The typed connection probe behind the settings panel's "Test Connection"
+/// button. Unit tests cover request signing in isolation; only a real server
+/// proves the answers the UI branches on: success with valid credentials, an
+/// authentication failure for a wrong secret, and a missing-bucket failure.
+#[test]
+#[ignore = "requires a disposable S3-compatible server; run scripts/sync-s3-test.ps1"]
+fn real_s3_connection_probe_reports_success_and_failure_modes() {
+    let config = require_config!();
+    let scope = SmokeScope::new(&config, "connection-probe");
+    scope.ensure_bucket();
+
+    let ok = s3::test_s3_connection(
+        &config.endpoint,
+        &config.region,
+        &config.bucket,
+        &config.access_key,
+        &config.secret_key,
+    );
+    assert!(ok.success, "valid credentials must pass: {}", ok.message);
+    assert_eq!(ok.status_code, Some(200));
+
+    let wrong_secret = s3::test_s3_connection(
+        &config.endpoint,
+        &config.region,
+        &config.bucket,
+        &config.access_key,
+        "not-the-configured-secret",
+    );
+    assert!(!wrong_secret.success);
+    assert_eq!(
+        wrong_secret.status_code,
+        Some(403),
+        "a wrong secret must surface as authentication failed, got: {}",
+        wrong_secret.message
+    );
+
+    let missing_bucket = s3::test_s3_connection(
+        &config.endpoint,
+        &config.region,
+        "clipboard-sync-smoke-missing-bucket",
+        &config.access_key,
+        &config.secret_key,
+    );
+    assert!(!missing_bucket.success);
+    assert_eq!(
+        missing_bucket.status_code,
+        Some(404),
+        "a missing bucket must surface as a server error, got: {}",
+        missing_bucket.message
+    );
+}
+
+/// The streamed download path (`ObjectStore::get_to_file`) is what materializes
+/// resource bodies under a caller-provided byte limit. `MemoryStore` checks the
+/// limit in memory; only a real server proves that a body the server itself
+/// sizes above the limit is refused from its declared `Content-Length` and
+/// leaves no partial file, while a body inside the limit streams back with the
+/// exact digest, size, and ETag the PUT reported.
+#[test]
+#[ignore = "requires a disposable S3-compatible server; run scripts/sync-s3-test.ps1"]
+fn real_s3_streamed_download_enforces_the_limit_and_leaves_no_partial_file() {
+    let config = require_config!();
+    let scope = SmokeScope::new(&config, "streamed-download-limit");
+    scope.ensure_bucket();
+    let store = scope.store(None);
+
+    let body: Vec<u8> = (0..=255u8).cycle().take(1024 * 1024 + 1234).collect();
+    let put = store
+        .put(
+            "v1/resources/image/limit-probe",
+            body.clone(),
+            PutCondition::IfAbsent,
+        )
+        .unwrap();
+    let PutOutcome::Stored { etag } = put else {
+        panic!("the probe object must publish, got {put:?}");
+    };
+    let etag = etag.expect("a real server must return an ETag for a stored object");
+
+    let destination = std::env::temp_dir().join(format!(
+        "clipboard-s3-smoke-limit-{}-{}",
+        std::process::id(),
+        uuid::Uuid::new_v4()
+    ));
+    let limit = options().resource_limits.image_bytes;
+    let error = store
+        .get_to_file("v1/resources/image/limit-probe", &destination, limit)
+        .expect_err("a body above the caller limit must be refused");
+    assert!(
+        error.contains(&limit.to_string()) && error.contains("limit"),
+        "the refusal must name the byte limit, got: {error}"
+    );
+    assert!(
+        !destination.exists(),
+        "a refused download must not leave a partial file"
+    );
+
+    let downloaded = store
+        .get_to_file("v1/resources/image/limit-probe", &destination, limit + 4096)
+        .expect("a body inside the caller limit must download")
+        .expect("the probe object must exist");
+    assert_eq!(downloaded.size_bytes, body.len() as u64);
+    assert_eq!(downloaded.sha256, hex::encode(Sha256::digest(&body)));
+    assert_eq!(
+        downloaded.etag.as_deref(),
+        Some(etag.as_str()),
+        "a streamed download must report the ETag the PUT stored"
+    );
+    assert_eq!(fs::read(&destination).unwrap(), body);
+    let _ = fs::remove_file(&destination);
 }
