@@ -21,7 +21,7 @@
     "test:watch": "vitest",
     "test:rust": "cargo test -j 1 --manifest-path src-tauri/Cargo.toml --workspace",
     "coverage:rust": "cargo llvm-cov -j 1 --manifest-path src-tauri/Cargo.toml --workspace --lib --summary-only",
-    "coverage:rust:lcov": "cargo llvm-cov report -j 1 --manifest-path src-tauri/Cargo.toml --workspace --lcov --output-path target/lcov.info",
+    "coverage:rust:lcov": "cargo llvm-cov report --manifest-path src-tauri/Cargo.toml --workspace --lcov --output-path src-tauri/target/lcov.info",
     "lint:rust": "cargo clippy -j 1 --manifest-path src-tauri/Cargo.toml --workspace --all-targets -- -D warnings",
     "verify": "npm run format:check && npm run test && npm run check && npm run build && npm run test:rust && npm run lint:rust",
     "ci:local": "powershell -ExecutionPolicy Bypass -File scripts/local-ci.ps1",
