@@ -40,6 +40,10 @@ pub fn restore_main_window<R: Runtime>(window: &tauri::WebviewWindow<R>) -> taur
 pub fn main_window_focused<R: Runtime>(window: &tauri::WebviewWindow<R>) {
     #[cfg(target_os = "windows")]
     crate::platform::windows::webview_memory::resume_main_webview(window);
+    // Only the Windows webview-suspension path consumes the handle; other
+    // platforms take the hook purely to keep the call sites uniform.
+    #[cfg(not(target_os = "windows"))]
+    let _ = window;
 }
 
 pub fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
