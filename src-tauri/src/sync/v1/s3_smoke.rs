@@ -356,6 +356,35 @@ fn run_sync(store: &S3ObjectStore, device: &SmokeDevice, scope: &SmokeScope) -> 
     .expect("real-S3 sync run must succeed")
 }
 
+/// Force the next sync to compact even when the local checkpoint baseline is
+/// already current, so the GC path runs against a real resource listing.
+fn force_compaction(
+    store: &S3ObjectStore,
+    device: &SmokeDevice,
+    scope: &SmokeScope,
+    options: SyncEngineOptions,
+) -> SyncEngineResult {
+    device
+        .database()
+        .with_connection(|connection| {
+            connection.execute(
+                "DELETE FROM sync_checkpoint_cursors WHERE remote_scope = ?1",
+                [scope.remote_scope.as_str()],
+            )?;
+            Ok(())
+        })
+        .expect("reset the checkpoint cursors");
+    sync_database(
+        store,
+        device.database(),
+        &device.engine_paths(),
+        &scope.remote_scope,
+        scope.session_key().as_ref(),
+        options,
+    )
+    .expect("forced real-S3 compaction must succeed")
+}
+
 /// All I/O reaches the real server. Interrupt only after an immutable PUT has
 /// completed, exercising the orphan/publication boundary deterministically.
 struct CancelAfterPut<'a> {
@@ -1110,4 +1139,130 @@ fn real_s3_namespace_rotation_moves_state_and_tombstones() {
 
     drop(source);
     drop(target);
+}
+
+/// The opt-in resource GC modes over the wire: checkpoint sidecar publication,
+/// sidecar pruning, reference-scan fallback, resource retention, and the
+/// seven-day grace decision driven by the server's real `LastModified`.
+///
+/// This does not prove deletion of an old orphan body, because S3 has no
+/// portable way to backdate `LastModified`; `MemoryStore` covers that branch.
+/// It does prove the listing/HEAD/DELETE and sidecar operations the GC relies
+/// on against a real S3 implementation.
+#[test]
+#[ignore = "requires a disposable S3-compatible server; run scripts/sync-s3-test.ps1"]
+fn real_s3_resource_gc_reads_sidecars_and_retains_fresh_resources() {
+    let config = require_config!();
+    let scope = SmokeScope::new(&config, "resource-gc");
+    scope.ensure_bucket();
+    let store = scope.store(None);
+    let device = SmokeDevice::new("resource-gc");
+
+    let image_path = device.paths.images.join("resource-gc-image.png");
+    fs::write(&image_path, b"real-s3-resource-gc-image").expect("write resource GC image");
+    device.save_image("resource-gc-image", &fs::read(&image_path).unwrap());
+
+    let mut manifest_options = options();
+    manifest_options.resource_gc_mode = ResourceGcMode::Manifest;
+    let first = sync_database(
+        &store,
+        device.database(),
+        &device.engine_paths(),
+        &scope.remote_scope,
+        scope.session_key().as_ref(),
+        manifest_options,
+    )
+    .expect("initial manifest-mode sync must succeed");
+    assert!(first.uploaded_resources >= 1);
+
+    let resource_keys: Vec<String> = store
+        .list("v1/resources/image/", None)
+        .unwrap()
+        .into_iter()
+        .map(|object| object.key)
+        .collect();
+    assert_eq!(resource_keys.len(), 1, "expected one live image resource");
+    let live_resource = resource_keys[0].clone();
+    let sidecars: Vec<String> = store
+        .list("v1/resource-refs/", None)
+        .unwrap()
+        .into_iter()
+        .map(|object| object.key)
+        .collect();
+    assert!(
+        !sidecars.is_empty(),
+        "manifest mode must publish a checkpoint sidecar"
+    );
+
+    let orphan_key = resource_object_key(ResourceCategory::Image, &"b".repeat(64), "png").unwrap();
+    store
+        .put(
+            &orphan_key,
+            b"fresh orphan must survive the grace window".to_vec(),
+            PutCondition::IfAbsent,
+        )
+        .unwrap();
+    let stale_sidecar = format!("v1/resource-refs/{:020}-{}.json", 0, "a".repeat(64));
+    store
+        .put(&stale_sidecar, b"{}".to_vec(), PutCondition::IfAbsent)
+        .unwrap();
+
+    let manifest_run = force_compaction(&store, &device, &scope, manifest_options);
+    assert!(
+        manifest_run.deleted_remote_objects >= 1,
+        "the stale sidecar must be pruned"
+    );
+    assert!(
+        store.head(&stale_sidecar).unwrap().is_none(),
+        "the stale sidecar must be gone"
+    );
+    assert!(
+        store.head(&live_resource).unwrap().is_some(),
+        "a referenced resource must survive"
+    );
+    assert!(
+        store.head(&orphan_key).unwrap().is_some(),
+        "a fresh orphan must survive the grace window"
+    );
+    let orphan = store
+        .list("v1/resources/image/", None)
+        .unwrap()
+        .into_iter()
+        .find(|object| object.key == orphan_key)
+        .expect("the fresh orphan must remain listed");
+    assert!(
+        orphan.modified_ms.is_some(),
+        "the real server must report LastModified for the grace decision"
+    );
+
+    // Remove the sidecar and force Manifest again: GC must fall back to
+    // decoding the remaining checkpoint/snapshot/segment objects.
+    for sidecar in sidecars {
+        store.delete(&sidecar).unwrap();
+    }
+    let fallback = force_compaction(&store, &device, &scope, manifest_options);
+    assert_eq!(
+        fallback.deleted_remote_objects, 0,
+        "sidecar fallback must not delete referenced or fresh objects"
+    );
+    assert!(store.head(&live_resource).unwrap().is_some());
+    assert!(store.head(&orphan_key).unwrap().is_some());
+
+    let scan = force_compaction(
+        &store,
+        &device,
+        &scope,
+        SyncEngineOptions {
+            resource_gc_mode: ResourceGcMode::ReferenceScan,
+            ..manifest_options
+        },
+    );
+    assert_eq!(
+        scan.deleted_remote_objects, 0,
+        "reference scan must retain referenced and fresh objects"
+    );
+    assert!(store.head(&live_resource).unwrap().is_some());
+    assert!(store.head(&orphan_key).unwrap().is_some());
+
+    drop(device);
 }
