@@ -587,7 +587,7 @@ fn real_clipboard_round_trips_cover_native_write_and_read_paths() {
     ));
     std::fs::write(&file_path, b"round trip").unwrap();
     let path_string = file_path.to_string_lossy().into_owned();
-    write_clipboard_files_with_self_trigger(&[path_string.clone()]).unwrap();
+    write_clipboard_files_with_self_trigger(std::slice::from_ref(&path_string)).unwrap();
     assert_eq!(read_clipboard_file_paths(), vec![path_string]);
 
     // The change sequence is observable after every write above.
