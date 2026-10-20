@@ -11,15 +11,17 @@ use crate::platform::windows::hotkey::HotkeyManager;
 /// resources. The suspension is best-effort; hiding still succeeds if the
 /// native webview cannot suspend.
 pub fn hide_main_window<R: Runtime>(window: &tauri::WebviewWindow<R>) -> tauri::Result<()> {
+    #[cfg(not(target_os = "windows"))]
+    window.hide()?;
     #[cfg(target_os = "windows")]
-    crate::platform::windows::webview_memory::begin_hide();
-    if let Err(error) = window.hide() {
-        #[cfg(target_os = "windows")]
-        crate::platform::windows::webview_memory::cancel_hide();
-        return Err(error);
+    {
+        crate::platform::windows::webview_memory::begin_hide();
+        if let Err(error) = window.hide() {
+            crate::platform::windows::webview_memory::cancel_hide();
+            return Err(error);
+        }
+        crate::platform::windows::webview_memory::suspend_main_webview(window);
     }
-    #[cfg(target_os = "windows")]
-    crate::platform::windows::webview_memory::suspend_main_webview(window);
     Ok(())
 }
 
