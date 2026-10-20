@@ -366,6 +366,17 @@ pub(super) fn adopt_orphan_segments(
     if !state.initialized {
         return Ok(state);
     }
+    // An orphan segment can only come from an interrupted publish whose outbox
+    // rows are still pending: those rows are removed only by the commit that
+    // publishes the covering head (or by a full reset, which also clears the
+    // initialized state). An empty outbox therefore means there is nothing to
+    // adopt or clean up, so idle syncs can skip the segment-prefix LIST.
+    let pending_outbox = database
+        .get_sync_outbox_batch_for_scope(remote_scope, 1)?
+        .is_some();
+    if !pending_outbox {
+        return Ok(state);
+    }
     let prefix = segment_prefix(device_id, &state.epoch)?;
     loop {
         cancellation::check()?;
