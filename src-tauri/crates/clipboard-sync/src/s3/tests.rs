@@ -624,6 +624,67 @@ fn streaming_timeout_scales_with_size_and_is_bounded() {
 }
 
 #[test]
+fn streaming_put_rejects_bad_sources_before_any_request() {
+    let valid_sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+    let root = std::env::temp_dir().join(format!(
+        "clipboard-s3-stream-reject-{}-{}",
+        std::process::id(),
+        uuid::Uuid::new_v4()
+    ));
+    std::fs::create_dir_all(&root).unwrap();
+
+    // Missing source file fails before any client is built.
+    let missing = root.join("absent.bin");
+    assert!(put_s3_file(
+        "http://127.0.0.1:1",
+        "us-east-1",
+        "bucket",
+        "k",
+        &missing,
+        valid_sha256,
+        0,
+        AKID,
+        SECRET,
+        S3PutCondition::Unconditional,
+    )
+    .is_err());
+
+    // The caller's fingerprinted size no longer matches the on-disk file.
+    let sized = root.join("sized.bin");
+    std::fs::write(&sized, b"0123456789").unwrap();
+    assert!(put_s3_file(
+        "http://127.0.0.1:1",
+        "us-east-1",
+        "bucket",
+        "k",
+        &sized,
+        valid_sha256,
+        11,
+        AKID,
+        SECRET,
+        S3PutCondition::Unconditional,
+    )
+    .is_err());
+
+    // A directory is not a regular-file source.
+    assert!(put_s3_file(
+        "http://127.0.0.1:1",
+        "us-east-1",
+        "bucket",
+        "k",
+        &root,
+        valid_sha256,
+        0,
+        AKID,
+        SECRET,
+        S3PutCondition::Unconditional,
+    )
+    .is_err());
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
 fn request_metrics_are_shared_and_resettable() {
     let metrics = S3RequestMetrics::default();
     let shared = metrics.clone();
@@ -831,6 +892,131 @@ fn disposable_s3_round_trip_and_conditional_writes() {
             .unwrap()
             .is_none()
     );
+}
+
+#[test]
+#[ignore = "requires an explicitly configured disposable S3-compatible server"]
+fn disposable_s3_edge_branches() {
+    let endpoint = std::env::var("CLIPBOARD_S3_TEST_ENDPOINT")
+        .expect("CLIPBOARD_S3_TEST_ENDPOINT must be set");
+    let region =
+        std::env::var("CLIPBOARD_S3_TEST_REGION").unwrap_or_else(|_| "us-east-1".to_string());
+    let bucket =
+        std::env::var("CLIPBOARD_S3_TEST_BUCKET").expect("CLIPBOARD_S3_TEST_BUCKET must be set");
+    let access_key = std::env::var("CLIPBOARD_S3_TEST_ACCESS_KEY")
+        .expect("CLIPBOARD_S3_TEST_ACCESS_KEY must be set");
+    let secret_key = std::env::var("CLIPBOARD_S3_TEST_SECRET_KEY")
+        .expect("CLIPBOARD_S3_TEST_SECRET_KEY must be set");
+
+    ensure_test_bucket(&endpoint, &region, &bucket, &access_key, &secret_key).unwrap();
+
+    let prefix = format!("transport-edge-{}/", uuid::Uuid::new_v4());
+    let key = format!("{prefix}edge.bin");
+    upload_to_s3(
+        &endpoint,
+        &region,
+        &bucket,
+        &key,
+        b"edge".to_vec(),
+        &access_key,
+        &secret_key,
+    )
+    .unwrap();
+
+    // 404 semantics agree across metadata and streaming download, and the
+    // refused download never leaves a partial destination behind.
+    let missing_key = format!("{prefix}missing.bin");
+    assert!(head_s3_object(
+        &endpoint,
+        &region,
+        &bucket,
+        &missing_key,
+        &access_key,
+        &secret_key
+    )
+    .unwrap()
+    .is_none());
+    let missing_destination = std::env::temp_dir().join(format!(
+        "clipboard-s3-missing-destination-{}-{}.bin",
+        std::process::id(),
+        uuid::Uuid::new_v4()
+    ));
+    assert!(get_s3_object_to_file(
+        &endpoint,
+        &region,
+        &bucket,
+        &missing_key,
+        &missing_destination,
+        1024,
+        &access_key,
+        &secret_key,
+    )
+    .unwrap()
+    .is_none());
+    assert!(!missing_destination.exists());
+
+    // The unconditional helper round-trips through a plain GET.
+    let downloaded = get_s3_object(&endpoint, &region, &bucket, &key, &access_key, &secret_key)
+        .unwrap()
+        .unwrap();
+    assert_eq!(downloaded.bytes, b"edge");
+
+    // Streaming download refuses to clobber an existing destination file and
+    // leaves the original content untouched.
+    let occupied_destination = std::env::temp_dir().join(format!(
+        "clipboard-s3-occupied-destination-{}-{}.bin",
+        std::process::id(),
+        uuid::Uuid::new_v4()
+    ));
+    std::fs::write(&occupied_destination, b"occupied").unwrap();
+    assert!(get_s3_object_to_file(
+        &endpoint,
+        &region,
+        &bucket,
+        &key,
+        &occupied_destination,
+        1024,
+        &access_key,
+        &secret_key,
+    )
+    .is_err());
+    assert_eq!(std::fs::read(&occupied_destination).unwrap(), b"occupied");
+
+    // A streamed PUT with a stale IfMatch etag must lose its precondition.
+    let source = std::env::temp_dir().join(format!(
+        "clipboard-s3-edge-source-{}-{}.bin",
+        std::process::id(),
+        uuid::Uuid::new_v4()
+    ));
+    std::fs::write(&source, b"edge body").unwrap();
+    assert_eq!(
+        put_s3_file(
+            &endpoint,
+            &region,
+            &bucket,
+            &key,
+            &source,
+            &hex::encode(Sha256::digest(b"edge body")),
+            9,
+            &access_key,
+            &secret_key,
+            S3PutCondition::IfMatch("stale-etag".to_owned()),
+        )
+        .unwrap(),
+        S3PutOutcome::PreconditionFailed
+    );
+
+    // Deleting an already-absent key is treated as success.
+    delete_from_s3(&endpoint, &region, &bucket, &key, &access_key, &secret_key).unwrap();
+    delete_from_s3(&endpoint, &region, &bucket, &key, &access_key, &secret_key).unwrap();
+    assert!(
+        get_s3_object(&endpoint, &region, &bucket, &key, &access_key, &secret_key,)
+            .unwrap()
+            .is_none()
+    );
+
+    let _ = std::fs::remove_file(source);
+    let _ = std::fs::remove_file(occupied_destination);
 }
 
 #[test]
