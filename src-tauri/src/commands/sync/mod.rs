@@ -1,7 +1,8 @@
 use std::{
     collections::HashMap,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex, OnceLock, Weak},
+    time::SystemTime,
 };
 
 use serde::{Deserialize, Serialize};
@@ -592,6 +593,65 @@ fn resource_destination(
     }
 }
 
+/// Cap for the verified-resource memo. Entries are tiny (path + object key +
+/// file stat), so the limit only bounds growth across a session touching
+/// thousands of distinct synced resources; on overflow the memo is cleared and
+/// rebuilt from real verifications.
+const LOCAL_RESOURCE_VERIFY_CACHE_LIMIT: usize = 512;
+
+/// Identity of a successful `verify_local_resource` outcome: the file path,
+/// the object key (whose embedded digest already encodes the session key
+/// generation), the byte limit applied, and the file stat. Any mutation of the
+/// file changes size or mtime and misses the memo.
+type LocalResourceVerifyKey = (PathBuf, String, u64, u64, Option<SystemTime>);
+
+/// Memoizes successful `verify_local_resource` outcomes, mirroring the
+/// `digest_cache` convention in `ocr/models.rs`. Materialize re-verifies the
+/// local cache on every paste/copy/preview of a synced record; for a
+/// multi-gigabyte file that is a full re-hash per use. Only `true` outcomes
+/// are memoized: a failed verification must re-run until the file actually
+/// verifies (or gets re-materialized, which changes its stat and misses the
+/// memo anyway).
+fn local_resource_verified_cached(
+    path: &Path,
+    object_key: &str,
+    max_bytes: u64,
+    session_key: Option<&v1::SessionKey>,
+) -> bool {
+    static CACHE: OnceLock<Mutex<HashMap<LocalResourceVerifyKey, ()>>> = OnceLock::new();
+    let stat = match std::fs::metadata(path) {
+        Ok(stat) => (stat.len(), stat.modified().ok()),
+        Err(_) => return false,
+    };
+    let cache_key = (
+        path.to_path_buf(),
+        object_key.to_owned(),
+        max_bytes,
+        stat.0,
+        stat.1,
+    );
+    if CACHE
+        .get_or_init(|| Mutex::new(HashMap::new()))
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .contains_key(&cache_key)
+    {
+        return true;
+    }
+    if !v1::verify_local_resource(path, object_key, max_bytes, session_key).unwrap_or(false) {
+        return false;
+    }
+    let mut cache = CACHE
+        .get_or_init(|| Mutex::new(HashMap::new()))
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if cache.len() >= LOCAL_RESOURCE_VERIFY_CACHE_LIMIT {
+        cache.clear();
+    }
+    cache.insert(cache_key, ());
+    true
+}
+
 #[allow(clippy::too_many_arguments)]
 fn materialize_item_resources(
     store: &impl v1::ObjectStore,
@@ -619,8 +679,7 @@ fn materialize_item_resources(
                 }
             });
         let cache_path = if let Some(path) = existing.as_ref().filter(|path| {
-            v1::verify_local_resource(path, &reference.object_key, max_bytes, session_key)
-                .unwrap_or(false)
+            local_resource_verified_cached(path, &reference.object_key, max_bytes, session_key)
         }) {
             path.clone()
         } else {
