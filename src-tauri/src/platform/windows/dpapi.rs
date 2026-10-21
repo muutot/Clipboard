@@ -7,7 +7,7 @@
 //! transparently upgrades them.
 //!
 //! Non-Windows platforms intentionally return `None`: callers then store the
-//! value as before. This is a no-regression design 鈥?encryption is additive.
+//! value as before. This is a no-regression design — encryption is additive.
 
 const ENVELOPE_PREFIX: &str = "dpapi1:";
 

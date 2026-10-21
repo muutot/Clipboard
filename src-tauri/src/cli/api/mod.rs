@@ -35,8 +35,8 @@ mod tests;
 /// Every request must present `Authorization: Bearer <token>` (the token is
 /// persisted beside the config at `conf/api.token`), must target
 /// `Host: 127.0.0.1:<port>` (or `localhost:<port>`), and must NOT carry an
-/// `Origin` header. The last rule is what keeps browser pages 閳?the CSRF and
-/// DNS-rebinding threat model 閳?unable to reach the clipboard history even
+/// `Origin` header. The last rule is what keeps browser pages — the CSRF and
+/// DNS-rebinding threat model — unable to reach the clipboard history even
 /// from a malicious website running on the same machine.
 pub struct LocalApiServer {
     pub port: u16,

@@ -226,7 +226,8 @@ pub(super) fn handle_connection(
 
 /// Loopback hardening applied before any endpoint logic:
 ///
-/// 1. Requests carrying an `Origin` header come from a browser context 閳?///    exactly the CSRF/DNS-rebinding threat model 閳?and are rejected even
+/// 1. Requests carrying an `Origin` header come from a browser context —
+///    exactly the CSRF/DNS-rebinding threat model — and are rejected even
 ///    with a valid token.
 /// 2. `Host` must name the loopback address the server actually bound, which
 ///    defeats DNS-rebinding where a public hostname resolves to 127.0.0.1.
