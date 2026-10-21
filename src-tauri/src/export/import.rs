@@ -16,6 +16,7 @@ pub fn import_from_json(json: &str, database: &Database) -> Result<ImportSummary
         item.icon_path = normalize_imported_icon_key(item.icon_path.as_deref());
         item.resource_path = sanitize_imported_path(item.resource_path.as_deref());
         item.preview_path = sanitize_imported_path(item.preview_path.as_deref());
+        item.metadata_json = sanitize_imported_metadata(item.metadata_json.as_deref());
         let label = item.id.clone();
         entries.push((label, item));
     }
@@ -49,6 +50,100 @@ pub(crate) fn sanitize_imported_path(path: Option<&str>) -> Option<String> {
         return None;
     }
     if candidate.is_file() {
+        Some(trimmed.to_owned())
+    } else {
+        None
+    }
+}
+
+/// Applies the import path rule to the path-valued keys inside a record's
+/// `metadata_json`.
+///
+/// The JSON importer already drops an unusable `resource_path` /
+/// `preview_path`, but the file-list paths inside `metadata_json` were stored
+/// verbatim — and those are the ones the copy path actually reads
+/// (`resolve_clipboard_file_paths` prefers `files[].originalPath`). A crafted
+/// backup could therefore name an arbitrary local file there, and the same
+/// JSON would also make that path count as a live resource reference, so the
+/// file could never be reclaimed as an orphan. The rule matches
+/// [`sanitize_imported_path`]: a relative traversal is rejected and the path
+/// must exist on this machine, which keeps the deliberate local-machine
+/// migration behavior for a backup that names real local files.
+pub(crate) fn sanitize_imported_metadata(metadata: Option<&str>) -> Option<String> {
+    let metadata = metadata?.trim();
+    if metadata.is_empty() {
+        return None;
+    }
+    let mut value: serde_json::Value = serde_json::from_str(metadata).ok()?;
+    sanitize_metadata_paths(&mut value);
+    if value.as_object().is_some_and(|object| object.is_empty()) {
+        return None;
+    }
+    serde_json::to_string(&value).ok()
+}
+
+const METADATA_PATH_KEYS: [&str; 3] = ["resourcePath", "storagePath", "originalPath"];
+const METADATA_FILE_PATH_KEYS: [&str; 3] = ["storagePath", "path", "originalPath"];
+
+fn sanitize_metadata_paths(value: &mut serde_json::Value) {
+    let Some(object) = value.as_object_mut() else {
+        return;
+    };
+    for key in METADATA_PATH_KEYS {
+        sanitize_metadata_path_value(object, key);
+    }
+    let Some(files) = object
+        .get_mut("files")
+        .and_then(serde_json::Value::as_array_mut)
+    else {
+        return;
+    };
+    for file in files {
+        let Some(file) = file.as_object_mut() else {
+            continue;
+        };
+        for key in METADATA_FILE_PATH_KEYS {
+            sanitize_metadata_path_value(file, key);
+        }
+    }
+}
+
+fn sanitize_metadata_path_value(
+    object: &mut serde_json::Map<String, serde_json::Value>,
+    key: &str,
+) {
+    let Some(value) = object.get(key) else {
+        return;
+    };
+    let Some(text) = value.as_str() else {
+        return;
+    };
+    match sanitize_imported_metadata_path(text) {
+        Some(sanitized) => {
+            object.insert(key.to_owned(), serde_json::Value::String(sanitized));
+        }
+        None => {
+            object.remove(key);
+        }
+    }
+}
+
+/// A file record may reference a directory and the copy path accepts one, so
+/// an existing directory is kept here even though [`sanitize_imported_path`]
+/// only keeps regular files.
+fn sanitize_imported_metadata_path(path: &str) -> Option<String> {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let candidate = std::path::Path::new(trimmed);
+    if candidate
+        .components()
+        .any(|component| matches!(component, std::path::Component::ParentDir))
+    {
+        return None;
+    }
+    if candidate.exists() {
         Some(trimmed.to_owned())
     } else {
         None

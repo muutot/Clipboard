@@ -168,6 +168,66 @@ fn imported_resource_path_is_sanitized() {
     let _ = std::fs::remove_file(&temp);
 }
 
+/// The file-list paths inside `metadata_json` are the ones the copy path
+/// actually reads, so a crafted backup must not be able to plant an
+/// arbitrary local path there — and the same path must not become a live
+/// resource reference that the orphan cleanup can never reclaim.
+#[test]
+fn imported_metadata_paths_follow_the_import_path_rule() {
+    let database = crate::storage::Database::open_in_memory().unwrap();
+    let temp = std::env::temp_dir().join(format!(
+        "clipboard-import-metadata-{}-{:016x}.txt",
+        std::process::id(),
+        rand::random::<u64>()
+    ));
+    std::fs::write(&temp, b"local file").unwrap();
+    let local = temp.to_string_lossy().into_owned();
+
+    let mut items = sample_items();
+    items[0].kind = ClipboardKind::File;
+    items[0].metadata_json = Some(
+        serde_json::json!({
+            "files": [{
+                "name": "kept.txt",
+                "storagePath": local,
+                "originalPath": "../escape/secret.txt",
+            }],
+            "originalPath": "C:/definitely/not/existing/secret.txt",
+            "tags": ["kept-tag"],
+        })
+        .to_string(),
+    );
+    let json = serde_json::to_string(&items).unwrap();
+
+    let summary = import_from_json(&json, &database).unwrap();
+    assert_eq!(summary.imported_count, 2);
+
+    let stored = database.get_item("item-1").unwrap().unwrap();
+    let metadata: serde_json::Value =
+        serde_json::from_str(stored.metadata_json.as_deref().unwrap()).unwrap();
+    let file = &metadata["files"][0];
+    assert_eq!(
+        file["storagePath"].as_str(),
+        Some(local.as_str()),
+        "a path that exists on this machine stays usable for local migration"
+    );
+    assert!(
+        file.get("originalPath").is_none(),
+        "a traversal path is dropped: {metadata}"
+    );
+    assert!(
+        metadata.get("originalPath").is_none(),
+        "a path that does not exist is dropped: {metadata}"
+    );
+    assert_eq!(
+        metadata["tags"][0].as_str(),
+        Some("kept-tag"),
+        "non-path metadata survives: {metadata}"
+    );
+
+    let _ = std::fs::remove_file(&temp);
+}
+
 #[test]
 fn imported_icon_key_normalization_preserves_legacy_keys_and_rejects_unsafe_names() {
     assert_eq!(normalize_imported_icon_key(None), None);
