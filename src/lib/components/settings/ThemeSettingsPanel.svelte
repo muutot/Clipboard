@@ -7,6 +7,7 @@
   import type { ThemeColors, ThemeMode, ThemePreset } from "$lib/types/clipboard";
   import { DARK_THEME_COLORS, LIGHT_THEME_COLORS } from "$lib/types/clipboard";
   import { generalSettings } from "$lib/services/settings";
+  import { createFeedback } from "$lib/utils/settings/feedback.svelte";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);
@@ -19,9 +20,7 @@
   let { onclose, showHeader = true }: Props = $props();
 
   let s = $state($generalSettings);
-  let feedback = $state("");
-  let feedbackSuccess = $state(false);
-  let feedbackTimer: ReturnType<typeof setTimeout> | undefined;
+  const feedback = createFeedback(2000);
   let themeColors = $state<ThemeColors>({ ...DARK_THEME_COLORS });
 
   $effect(() => {
@@ -35,15 +34,10 @@
   });
 
   function showFeedback(msg: string, success: boolean) {
-    feedback = msg;
-    feedbackSuccess = success;
-    clearTimeout(feedbackTimer);
-    feedbackTimer = setTimeout(() => {
-      feedback = "";
-    }, 2000);
+    feedback.show(msg, success);
   }
 
-  onDestroy(() => clearTimeout(feedbackTimer));
+  onDestroy(() => feedback.dispose());
 
   function changeTheme(value: ThemeMode) {
     generalSettings.updateSetting("theme", value);
@@ -392,8 +386,8 @@
   {/each}
 </div>
 
-{#if feedback}
-  <div class:success={feedbackSuccess} class="settings-feedback">{feedback}</div>
+{#if feedback.message}
+  <div class:success={feedback.success} class="settings-feedback">{feedback.message}</div>
 {/if}
 
 <style>
