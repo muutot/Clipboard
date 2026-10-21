@@ -38,7 +38,7 @@ fn quick_paste_target_is_consumed_once() {
     let target = QuickPasteTarget::default();
     target.remember(42);
 
-    assert_eq!(target.take(), Some(42));
+    assert_eq!(target.take().map(|target| target.window_handle), Some(42));
     assert_eq!(target.take(), None);
 }
 
@@ -57,7 +57,7 @@ fn foreground_hook_records_window_objects_only() {
     unsafe {
         foreground_hook_proc(0, EVENT_SYSTEM_FOREGROUND, 77, OBJID_WINDOW, 0, 0, 0);
     }
-    assert_eq!(shared.take(), Some(77));
+    assert_eq!(shared.take().map(|target| target.window_handle), Some(77));
     unsafe {
         // Non-window objects and null handles must not become targets.
         foreground_hook_proc(0, EVENT_SYSTEM_FOREGROUND, 78, 1, 0, 0, 0);

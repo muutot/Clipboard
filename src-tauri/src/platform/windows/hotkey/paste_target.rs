@@ -5,8 +5,26 @@ use std::thread;
 #[cfg(target_os = "windows")]
 use std::time::{Duration, Instant};
 
+/// Opaque quick-paste target handed from the hotkey watcher to the restore
+/// routine. Carries the owning process id captured at remember time so the
+/// restore can prove the handle was not recycled to another process while the
+/// main window was hidden (mirrors `platform::quick_paste::Target`, which is
+/// not compiled into Windows release builds).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct QuickPasteHandle {
+    pub window_handle: isize,
+    pub process_id: u32,
+}
+
+impl std::fmt::UpperHex for QuickPasteHandle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::UpperHex::fmt(&self.window_handle, f)
+    }
+}
+
 #[cfg(target_os = "windows")]
-const QUICK_PASTE_FOCUS_DELAY: Duration = Duration::from_millis(60);
+const QUICK_PASTE_FOCUS_TIMEOUT: Duration = Duration::from_millis(400);
+const QUICK_PASTE_FOCUS_POLL: Duration = Duration::from_millis(15);
 const QUICK_PASTE_MODIFIER_TIMEOUT: Duration = Duration::from_millis(400);
 pub(super) const EVENT_SYSTEM_FOREGROUND: u32 = 0x0003;
 pub(super) const OBJID_WINDOW: i32 = 0;
@@ -15,7 +33,7 @@ pub(super) const WINEVENT_SKIPOWNPROCESS: u32 = 0x0002;
 
 #[derive(Default)]
 pub(super) struct QuickPasteTarget {
-    window_handle: Mutex<Option<isize>>,
+    target: Mutex<Option<QuickPasteHandle>>,
 }
 
 impl QuickPasteTarget {
@@ -23,23 +41,40 @@ impl QuickPasteTarget {
         if window_handle == 0 {
             return;
         }
-        if let Ok(mut target) = self.window_handle.lock() {
-            *target = Some(window_handle);
+        if let Ok(mut target) = self.target.lock() {
+            *target = Some(QuickPasteHandle {
+                window_handle,
+                process_id: window_process_id(window_handle),
+            });
         }
     }
 
-    pub(super) fn take(&self) -> Option<isize> {
-        self.window_handle
-            .lock()
-            .ok()
-            .and_then(|mut target| target.take())
+    pub(super) fn take(&self) -> Option<QuickPasteHandle> {
+        self.target.lock().ok().and_then(|mut target| target.take())
     }
 
     pub(super) fn clear(&self) {
-        if let Ok(mut target) = self.window_handle.lock() {
+        if let Ok(mut target) = self.target.lock() {
             *target = None;
         }
     }
+}
+
+#[cfg(target_os = "windows")]
+fn window_process_id(window_handle: isize) -> u32 {
+    extern "system" {
+        fn GetWindowThreadProcessId(window: isize, process_id: *mut u32) -> u32;
+    }
+    let mut process_id = 0u32;
+    unsafe {
+        GetWindowThreadProcessId(window_handle, &mut process_id);
+    }
+    process_id
+}
+
+#[cfg(not(target_os = "windows"))]
+fn window_process_id(_window_handle: isize) -> u32 {
+    0
 }
 
 static FOREGROUND_TARGET: Mutex<Option<Arc<QuickPasteTarget>>> = Mutex::new(None);
@@ -98,7 +133,7 @@ pub(super) fn foreground_window_handle() -> Option<isize> {
 }
 
 #[cfg(target_os = "windows")]
-pub fn restore_window_and_paste(window_handle: isize) -> Result<(), String> {
+pub fn restore_window_and_paste(target: QuickPasteHandle) -> Result<(), String> {
     const SW_RESTORE: i32 = 9;
 
     extern "system" {
@@ -110,29 +145,41 @@ pub fn restore_window_and_paste(window_handle: isize) -> Result<(), String> {
         fn GetForegroundWindow() -> isize;
     }
 
-    if window_handle == 0 || unsafe { IsWindow(window_handle) } == 0 {
+    if target.window_handle == 0 || unsafe { IsWindow(target.window_handle) } == 0 {
         return Err("the previous foreground window is no longer available".to_owned());
+    }
+    // HWNDs are recycled by the OS: a window closed while the main panel was
+    // hidden can be reused by an unrelated process. The owner pid captured at
+    // remember time proves the handle still names the same window.
+    if target.process_id != 0 && window_process_id(target.window_handle) != target.process_id {
+        return Err("the previous window's owner changed".to_owned());
     }
 
     unsafe {
-        let iconic = IsIconic(window_handle);
+        let iconic = IsIconic(target.window_handle);
         if iconic != 0 {
-            ShowWindow(window_handle, SW_RESTORE);
+            ShowWindow(target.window_handle, SW_RESTORE);
         }
-        BringWindowToTop(window_handle);
-        SetForegroundWindow(window_handle);
+        BringWindowToTop(target.window_handle);
+        SetForegroundWindow(target.window_handle);
     }
 
-    thread::sleep(QUICK_PASTE_FOCUS_DELAY);
-    if unsafe { GetForegroundWindow() } != window_handle {
-        return Err("failed to restore the previous foreground window".to_owned());
+    // Focus changes are asynchronous: poll until the target actually owns the
+    // foreground instead of a single fixed sleep, which both slowed the common
+    // case and still raced on slow focus transitions.
+    let deadline = Instant::now() + QUICK_PASTE_FOCUS_TIMEOUT;
+    while unsafe { GetForegroundWindow() } != target.window_handle {
+        if Instant::now() >= deadline {
+            return Err("failed to restore the previous foreground window".to_owned());
+        }
+        thread::sleep(QUICK_PASTE_FOCUS_POLL);
     }
 
     send_ctrl_v()
 }
 
 #[cfg(not(target_os = "windows"))]
-pub fn restore_window_and_paste(_window_handle: isize) -> Result<(), String> {
+pub fn restore_window_and_paste(_target: QuickPasteHandle) -> Result<(), String> {
     Err("quick paste is only implemented on Windows".to_owned())
 }
 

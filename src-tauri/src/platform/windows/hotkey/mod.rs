@@ -28,7 +28,7 @@ pub use manager::HotkeyManager;
 pub use message_loop::{
     clear_hotkey_state, set_hotkey_hwnd, set_hotkey_sender, stop_hotkey_thread,
 };
-pub use paste_target::restore_window_and_paste;
+pub use paste_target::{restore_window_and_paste, QuickPasteHandle};
 
 /// OS hotkey action selected by the fired registration id.
 ///

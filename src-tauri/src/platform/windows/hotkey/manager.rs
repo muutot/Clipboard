@@ -11,7 +11,7 @@ use crate::platform::hotkey_common::plan_registrations;
 use super::message_loop::{
     spawn_hotkey_thread_with_registrations, stop_hotkey_thread, wait_for_hotkey_hwnd_or_exit,
 };
-use super::paste_target::{foreground_window_handle, QuickPasteTarget};
+use super::paste_target::{foreground_window_handle, QuickPasteHandle, QuickPasteTarget};
 use super::{HotkeyAction, HotkeyRegistration};
 
 pub struct HotkeyManager {
@@ -264,7 +264,7 @@ impl HotkeyManager {
         }
     }
 
-    pub fn take_quick_paste_target(&self) -> Option<isize> {
+    pub fn take_quick_paste_target(&self) -> Option<QuickPasteHandle> {
         self.quick_paste_target.take()
     }
 
