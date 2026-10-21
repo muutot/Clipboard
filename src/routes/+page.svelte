@@ -300,6 +300,18 @@
       "searchSortRules",
       search.sortRules.map((rule) => ({ ...rule })),
     );
+    // Like every other filter-change path (setFilter, toggleTagFilter, ...),
+    // the paginated history must rebuild from page zero: the keyset cursor
+    // still anchors the previous filter's query, and scrolling would only
+    // append rows *below* it, permanently hiding rows that match the applied
+    // search but sit above the stale cursor.
+    if (search.activeFilter === "deleted") {
+      if (!history.deletedHistoryLoaded) {
+        void loadDeletedHistoryPage();
+      }
+    } else {
+      void invalidateActiveHistoryPagination();
+    }
   }
   // Mirrors the global card-context-menu visibility (reported by ClipboardCard
   // through the context-menu service) so Escape yields to the open menu: one
