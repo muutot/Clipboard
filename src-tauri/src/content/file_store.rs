@@ -50,8 +50,11 @@ impl FileStore {
         // Reject oversized files BEFORE staging them. Copying a multi-GB source
         // into the managed directory only to delete it can fill the disk and
         // stall the capture worker. The source is not stored in this branch, so
-        // the staged-bytes race described below does not apply; hash it
-        // directly for dedup identity.
+        // the staged-bytes race described below does not apply — but the hash
+        // is still read live from a source that may mutate mid-read, so the
+        // recorded identity can describe bytes that no longer (or never did)
+        // exist on disk. Accepted here because the path stores an external
+        // reference, not managed content; identity only feeds dedup checks.
         if max_copy_size > 0 && metadata.len() > max_copy_size {
             let content_hash = hash_file(source_path)?;
             return Ok(FileStorageInfo {
@@ -93,7 +96,10 @@ impl FileStore {
         };
 
         // If the source grows, the stream stops staging at the cap but keeps
-        // hashing the source for the existing pass-through-file fallback.
+        // hashing the source for the existing pass-through-file fallback. As
+        // with the pre-staging reject above, the source is not stored, so the
+        // hash may describe a mid-mutation snapshot; accepted because identity
+        // only feeds dedup checks on an external reference.
         if max_copy_size > 0 && staged_size > max_copy_size {
             let _ = fs::remove_file(&staging);
             return Ok(FileStorageInfo {
@@ -112,7 +118,19 @@ impl FileStore {
             file_storage_dir.join(storage_file_name(&content_hash, source_path.extension()));
 
         if storage_path.exists() {
-            let _ = fs::remove_file(&staging);
+            // Content-addressed names imply their payload, so a shorter
+            // existing file is a leftover truncation from a pre-atomic writer
+            // and must be repaired from the staged bytes instead of keeping
+            // the corruption forever (mirrors `save_bytes_atomically`). A
+            // same-size file is the same payload: drop the staging copy.
+            let repair = fs::metadata(&storage_path)
+                .map(|metadata| metadata.len() != staged_size)
+                .unwrap_or(false);
+            if repair {
+                sync_and_replace(&staging, &storage_path)?;
+            } else {
+                let _ = fs::remove_file(&staging);
+            }
         } else {
             sync_and_replace(&staging, &storage_path)?;
         }
@@ -165,7 +183,13 @@ impl FileStore {
         fs::create_dir_all(screenshot_storage_dir)?;
         let storage_path = screenshot_storage_dir.join(format!("{}.{}", content_hash, ext));
 
-        if !storage_path.exists() {
+        // A shorter existing file is a leftover truncation from a pre-atomic
+        // writer and is repaired by rewriting (same policy as `save_file`);
+        // an equal-size file is the same payload and needs no write.
+        let repair = fs::metadata(&storage_path)
+            .map(|metadata| metadata.len() != size_bytes)
+            .unwrap_or(true);
+        if repair {
             store_atomically(&storage_path, |temporary| fs::write(temporary, data))?;
         }
 
