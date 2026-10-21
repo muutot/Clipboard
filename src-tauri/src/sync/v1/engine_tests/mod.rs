@@ -37,6 +37,7 @@ struct MemoryStore {
     list_without_etags: Mutex<bool>,
     get_without_etags: Mutex<bool>,
     list_modified_ms: Mutex<Option<i64>>,
+    modified_ms_overrides: Mutex<BTreeMap<String, i64>>,
     deleted: Mutex<Vec<String>>,
     gets: Mutex<Vec<String>>,
     lists: Mutex<Vec<String>>,
@@ -59,7 +60,13 @@ impl ObjectStore for MemoryStore {
             .map(|(key, bytes)| ObjectInfo {
                 key: key.clone(),
                 size_bytes: Some(bytes.len() as u64),
-                modified_ms: *self.list_modified_ms.lock().unwrap(),
+                modified_ms: self
+                    .modified_ms_overrides
+                    .lock()
+                    .unwrap()
+                    .get(key)
+                    .copied()
+                    .or(*self.list_modified_ms.lock().unwrap()),
                 etag: include_etags.then(|| format!("\"{}\"", hex::encode(Sha256::digest(bytes)))),
             })
             .collect())

@@ -33,6 +33,19 @@ fn insert_orphan(store: &MemoryStore) -> String {
     key
 }
 
+/// Stamps the live resources with a fresh store timestamp and the orphan with
+/// one past the grace window: the GC anchors its cutoff to the store's own
+/// newest stamp, so one shared fake stamp cannot model both at once.
+fn stamp_orphan_past_grace(store: &MemoryStore, orphan: &str) {
+    let now_ms = chrono::Utc::now().timestamp_millis();
+    *store.list_modified_ms.lock().unwrap() = Some(now_ms);
+    store
+        .modified_ms_overrides
+        .lock()
+        .unwrap()
+        .insert(orphan.to_owned(), now_ms - 8 * 24 * 60 * 60 * 1000);
+}
+
 fn compact(
     store: &MemoryStore,
     database: &Database,
@@ -72,7 +85,7 @@ fn compact(
 fn reference_scan_removes_only_unreferenced_old_resources() {
     let (store, paths, database, resource_key) = setup_image("resource-gc-scan");
     let orphan = insert_orphan(&store);
-    *store.list_modified_ms.lock().unwrap() = Some(0);
+    stamp_orphan_past_grace(&store, &orphan);
     store.deleted.lock().unwrap().clear();
 
     let result = compact(&store, &database, &paths, ResourceGcMode::ReferenceScan);
@@ -105,7 +118,7 @@ fn manifest_mode_uses_the_checkpoint_manifest_without_reading_the_pack() {
     )
     .unwrap();
     let orphan = insert_orphan(&store);
-    *store.list_modified_ms.lock().unwrap() = Some(0);
+    stamp_orphan_past_grace(&store, &orphan);
     store.deleted.lock().unwrap().clear();
     store.gets.lock().unwrap().clear();
 
@@ -170,7 +183,7 @@ fn manifest_mode_falls_back_to_reference_scan_when_sidecars_are_missing() {
         .unwrap()
         .retain(|key, _| !key.starts_with("v1/resource-refs/"));
     let orphan = insert_orphan(&store);
-    *store.list_modified_ms.lock().unwrap() = Some(0);
+    stamp_orphan_past_grace(&store, &orphan);
     store.deleted.lock().unwrap().clear();
 
     let result = compact(&store, &database, &paths, ResourceGcMode::Manifest);
