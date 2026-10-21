@@ -55,6 +55,37 @@ fn note_capture_save_failure(
     false
 }
 
+/// Shared tail of every successful capture save: auto-tags, the item-added
+/// emit, and the tray refresh. Branch-specific work (OCR enqueue, thumbnail
+/// generation) happens in the caller before this runs.
+fn finish_saved_capture(
+    database: &Database,
+    capture_state: &CaptureState,
+    app_handle: &AppHandle,
+    saved_id: &str,
+    item: &ClipboardItem,
+) {
+    apply_capture_auto_tags(database, capture_state, saved_id, item);
+    let emit_item = load_emit_item(database, saved_id, item);
+    if let Err(error) = app_handle.emit("clipboard-item-added", &emit_item) {
+        crate::log_error!("[clipboard-worker] failed to emit item-added: {error}");
+    }
+    crate::platform::refresh_tray_recent_menu(app_handle);
+}
+
+/// Logs a failed capture save with its branch context, then runs the shared
+/// circuit-breaker; returns whether the capture loop must stop.
+fn handle_capture_save_failure(
+    consecutive_errors: &mut u32,
+    stop_receiver: &mpsc::Receiver<()>,
+    stop_flag: &AtomicBool,
+    context: &str,
+    error: impl std::fmt::Display,
+) -> bool {
+    crate::log_error!("[clipboard-worker] failed to save {context}: {error}");
+    note_capture_save_failure(consecutive_errors, stop_receiver, stop_flag)
+}
+
 /// The function owns the worker thread's lifecycle resources (database, stop
 /// flag, stop receiver, app handle) and returns once the loop has terminated.
 /// Callers are responsible for spawning the thread and installing the
@@ -268,23 +299,22 @@ pub(crate) fn run_capture_loop(
                                 );
                             }
                             thumbnail_queue.enqueue(saved_id.clone(), img_path.clone());
-                            apply_capture_auto_tags(&database, &capture_state, &saved_id, &item);
-                            let emit_item = load_emit_item(&database, &saved_id, &item);
-                            if let Err(error) = app_handle.emit("clipboard-item-added", &emit_item)
-                            {
-                                crate::log_error!(
-                                    "[clipboard-worker] failed to emit item-added: {error}"
-                                );
-                            }
-                            crate::platform::refresh_tray_recent_menu(&app_handle);
+                            finish_saved_capture(
+                                &database,
+                                &capture_state,
+                                &app_handle,
+                                &saved_id,
+                                &item,
+                            );
                             continue;
                         }
                         Err(e) => {
-                            crate::log_error!("[clipboard-worker] failed to save image: {e}");
-                            if note_capture_save_failure(
+                            if handle_capture_save_failure(
                                 &mut consecutive_errors,
                                 &stop_receiver,
                                 &stop_flag,
+                                "image",
+                                &e,
                             ) {
                                 break;
                             }
@@ -347,28 +377,21 @@ pub(crate) fn run_capture_loop(
                         match database.save_item(&item) {
                             Ok(saved_id) => {
                                 consecutive_errors = 0;
-                                apply_capture_auto_tags(
+                                finish_saved_capture(
                                     &database,
                                     &capture_state,
+                                    &app_handle,
                                     &saved_id,
                                     &item,
                                 );
-                                let emit_item = load_emit_item(&database, &saved_id, &item);
-                                if let Err(error) =
-                                    app_handle.emit("clipboard-item-added", &emit_item)
-                                {
-                                    crate::log_error!(
-                                        "[clipboard-worker] failed to emit item-added: {error}"
-                                    );
-                                }
-                                crate::platform::refresh_tray_recent_menu(&app_handle);
                             }
                             Err(e) => {
-                                crate::log_error!("[clipboard-worker] failed to save file: {e}");
-                                if note_capture_save_failure(
+                                if handle_capture_save_failure(
                                     &mut consecutive_errors,
                                     &stop_receiver,
                                     &stop_flag,
+                                    "file",
+                                    &e,
                                 ) {
                                     break;
                                 }
@@ -422,30 +445,21 @@ pub(crate) fn run_capture_loop(
                         match database.save_item(&item) {
                             Ok(saved_id) => {
                                 consecutive_errors = 0;
-                                apply_capture_auto_tags(
+                                finish_saved_capture(
                                     &database,
                                     &capture_state,
+                                    &app_handle,
                                     &saved_id,
                                     &item,
                                 );
-                                let emit_item = load_emit_item(&database, &saved_id, &item);
-                                if let Err(error) =
-                                    app_handle.emit("clipboard-item-added", &emit_item)
-                                {
-                                    crate::log_error!(
-                                        "[clipboard-worker] failed to emit item-added: {error}"
-                                    );
-                                }
-                                crate::platform::refresh_tray_recent_menu(&app_handle);
                             }
                             Err(e) => {
-                                crate::log_error!(
-                                    "[clipboard-worker] failed to save file batch: {e}"
-                                );
-                                if note_capture_save_failure(
+                                if handle_capture_save_failure(
                                     &mut consecutive_errors,
                                     &stop_receiver,
                                     &stop_flag,
+                                    "file batch",
+                                    &e,
                                 ) {
                                     break;
                                 }
@@ -523,24 +537,23 @@ pub(crate) fn run_capture_loop(
                 match database.save_item(&item) {
                     Ok(saved_id) => {
                         consecutive_errors = 0;
-                        apply_capture_auto_tags(&database, &capture_state, &saved_id, &item);
-                        let emit_item = load_emit_item(&database, &saved_id, &item);
-                        if let Err(error) = app_handle.emit("clipboard-item-added", &emit_item) {
-                            crate::log_error!(
-                                "[clipboard-worker] failed to emit item-added: {error}"
-                            );
-                        }
-                        crate::platform::refresh_tray_recent_menu(&app_handle);
+                        finish_saved_capture(
+                            &database,
+                            &capture_state,
+                            &app_handle,
+                            &saved_id,
+                            &item,
+                        );
                     }
                     Err(e) => {
-                        crate::log_error!("[clipboard-worker] failed to save item: {e}");
-                        consecutive_errors += 1;
-                        if consecutive_errors >= 10 {
-                            crate::log_warn!("[clipboard-worker] too many errors, pausing");
-                            if wait_for_stop(&stop_receiver, &stop_flag, Duration::from_secs(5)) {
-                                break;
-                            }
-                            consecutive_errors = 0;
+                        if handle_capture_save_failure(
+                            &mut consecutive_errors,
+                            &stop_receiver,
+                            &stop_flag,
+                            "item",
+                            &e,
+                        ) {
+                            break;
                         }
                     }
                 }
