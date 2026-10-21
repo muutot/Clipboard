@@ -1,9 +1,16 @@
-use super::collector::{collect_processes, directory_size, summarize_process_group};
+use std::sync::Mutex;
+
+use super::collector::{
+    collect_ocr_memory, collect_processes, directory_size, summarize_process_group,
+};
 
 #[cfg(target_os = "windows")]
 use super::collector::collect_system_memory;
 
 use super::types::MemoryProcess;
+
+use crate::config::ConfigStore;
+use crate::storage::StoragePaths;
 
 #[test]
 fn group_sums_available_process_metrics_without_panicking_on_missing_values() {
@@ -96,6 +103,35 @@ fn directory_size_ignores_missing_roots() {
     let path =
         std::env::temp_dir().join(format!("clipboard-memory-missing-{}", std::process::id()));
     assert_eq!(directory_size(&path), (0, 0));
+}
+
+#[test]
+fn ocr_diagnostics_report_a_missing_model_as_not_installed() {
+    let root = std::env::temp_dir().join(format!(
+        "clipboard-memory-ocr-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|elapsed| elapsed.as_nanos())
+            .unwrap_or_default()
+    ));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).expect("temporary project root");
+    let config = ConfigStore::load(&root).expect("config store");
+    let paths = StoragePaths::initialize(root.join("storage")).expect("storage paths");
+
+    let diagnostics = collect_ocr_memory(&paths, &Mutex::new(config));
+
+    // The configured PP-OCR variant has no files on disk, so the diagnostics
+    // report an uninstalled model instead of a ready engine.
+    assert_eq!(diagnostics.engine, "ppocr");
+    assert_eq!(diagnostics.model_variant, "small");
+    assert!(!diagnostics.model_installed);
+    assert!(diagnostics.installed_variants.is_empty());
+    assert_eq!(diagnostics.model_bytes, 0);
+    assert_eq!(diagnostics.model_file_count, 0);
+
+    let _ = std::fs::remove_dir_all(&root);
 }
 
 #[test]

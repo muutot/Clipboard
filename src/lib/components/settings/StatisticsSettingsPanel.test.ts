@@ -56,7 +56,7 @@ function diagnostics(privateWorkingSetBytes: number | null): MemoryDiagnostics {
       modelBytes: 64 * MiB,
       modelFileCount: 4,
       modelDirectory: "C:\\models\\ppocr-small",
-      loaded: true,
+      modelInstalled: true,
       installedVariants: ["small"],
     },
   };
@@ -133,4 +133,40 @@ it("falls back to the working set without claiming a private-resident value", as
   expect(
     target.querySelector('[data-settings-search-id="statistics.memory.process-group-working-set"]'),
   ).toBeNull();
+});
+
+async function renderOcrCard(ocr: MemoryDiagnostics["ocr"]): Promise<string> {
+  const snapshot = diagnostics(160 * MiB);
+  snapshot.ocr = ocr;
+  const target = render(snapshot);
+  await settle();
+  return (
+    target.querySelector('[data-settings-search-id="statistics.memory.ocr-model"]')?.textContent ??
+    ""
+  );
+}
+
+it("names the installed model and its variant", async () => {
+  const text = await renderOcrCard(diagnostics(160 * MiB).ocr);
+  expect(text).toContain("ppocr / small");
+});
+
+it("claims no engine while the model files are missing", async () => {
+  const base = diagnostics(160 * MiB).ocr;
+  const text = await renderOcrCard({
+    ...base,
+    modelBytes: 0,
+    modelFileCount: 0,
+    modelInstalled: false,
+    installedVariants: [],
+  });
+  expect(text).not.toContain("ppocr");
+  expect(text).not.toContain("small");
+});
+
+it("does not attribute a PP-OCR variant to an external engine", async () => {
+  const base = diagnostics(160 * MiB).ocr;
+  const text = await renderOcrCard({ ...base, engine: "tesseract" });
+  expect(text).toContain("tesseract");
+  expect(text).not.toContain("small");
 });

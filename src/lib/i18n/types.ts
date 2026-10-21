@@ -468,6 +468,9 @@ export interface LocaleDefinition {
     processColumnWorkingSet: string;
     ocrModelDownloading: string;
     ocrModelNotInstalled: string;
+    ocrModelInstalledState: string;
+    ocrEngineNotSelected: string;
+    ocrExternalEngine: string;
     ocrModelFileCount: string;
     memoryDiagUnavailable: string;
     memoryDiagLoading: string;

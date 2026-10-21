@@ -247,6 +247,11 @@ can safely expose it, and virtual bytes; unavailable probes are `null` rather th
 private resident values that were available, and is `null` only when no process in the group
 provided one. `processGroup.workingSetBytes` remains a diagnostic total and includes shared
 pages, so summing it across WebView2 child processes can count the same pages more than once.
+`ocr.modelInstalled` is an install-state fact only — every file of the configured model variant
+is present on disk. It is deliberately not an engine-readiness flag: a configured PP-OCR
+variant without its files cannot run, so the statistics panel reports "no engine selected"
+instead of the configured engine id, and an external engine is reported without a PP-OCR
+variant. `ocr.installedVariants` lists the variants that pass the same install check.
 
 ## Event contract
 

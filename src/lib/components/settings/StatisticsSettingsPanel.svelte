@@ -9,7 +9,7 @@
     type StorageStatus,
   } from "$lib/services/storage";
   import { getMemoryDiagnostics } from "$lib/services/memory";
-  import type { MemoryDiagnostics } from "$lib/types/memory";
+  import type { MemoryDiagnostics, OcrMemoryDiagnostics } from "$lib/types/memory";
   import type { StatisticsTab } from "$lib/settings-navigation";
   import { formatBytes } from "$lib/utils/content/format";
 
@@ -40,6 +40,21 @@
 
   function formatMaybeBytes(bytes: number | null | undefined): string {
     return bytes == null ? "—" : formatBytes(bytes);
+  }
+
+  /**
+   * The OCR model card must never present an engine that is not in effect.
+   * A configured PP-OCR variant without its model files cannot run, so the
+   * card reports "no engine selected" instead of the configured engine id.
+   */
+  function ocrModelState(ocr: OcrMemoryDiagnostics): string {
+    if (ocr.engine !== "ppocr") {
+      return `${ocr.engine} · ${_t("storage.ocrExternalEngine")}`;
+    }
+    if (!ocr.modelInstalled) {
+      return `${_t("storage.ocrEngineNotSelected")} · ${_t("storage.ocrModelNotInstalled")}`;
+    }
+    return `${ocr.engine} / ${ocr.modelVariant} · ${_t("storage.ocrModelInstalledState")}`;
   }
 
   async function loadPerformanceMetrics() {
@@ -523,12 +538,7 @@
             <span class="setting-icon"><AppIcon name="eye" size={17} /></span>
             <div class="stats-metric-copy">
               <strong>{_t("storage.ocrModelLabel")}</strong>
-              <p>
-                {memoryDiagnostics.ocr.engine} / {memoryDiagnostics.ocr.modelVariant}
-                {memoryDiagnostics.ocr.loaded
-                  ? ` · ${_t("statistics.ocrEngineAvailable")}`
-                  : ` · ${_t("storage.ocrModelNotInstalled")}`}
-              </p>
+              <p>{ocrModelState(memoryDiagnostics.ocr)}</p>
             </div>
           </div>
           <span class="stats-metric-value"

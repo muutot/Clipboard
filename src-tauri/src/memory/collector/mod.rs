@@ -136,7 +136,10 @@ fn unix_timestamp_ms() -> u64 {
         .unwrap_or(0)
 }
 
-fn collect_ocr_memory(paths: &StoragePaths, config: &Mutex<ConfigStore>) -> OcrMemoryDiagnostics {
+pub(crate) fn collect_ocr_memory(
+    paths: &StoragePaths,
+    config: &Mutex<ConfigStore>,
+) -> OcrMemoryDiagnostics {
     let (engine, configured_variant) = config
         .lock()
         .map(|config| {
@@ -155,8 +158,7 @@ fn collect_ocr_memory(paths: &StoragePaths, config: &Mutex<ConfigStore>) -> OcrM
         .collect::<Vec<_>>();
     let model = ocr::models::model_spec(&configured_variant)
         .unwrap_or_else(ocr::models::default_model_spec);
-    let loaded = engine.eq_ignore_ascii_case("ppocr")
-        && ocr::models::model_is_installed(&model_directory, model);
+    let model_installed = ocr::models::model_is_installed(&model_directory, model);
 
     OcrMemoryDiagnostics {
         engine,
@@ -164,7 +166,7 @@ fn collect_ocr_memory(paths: &StoragePaths, config: &Mutex<ConfigStore>) -> OcrM
         model_bytes,
         model_file_count,
         model_directory: model_directory.to_string_lossy().into_owned(),
-        loaded,
+        model_installed,
         installed_variants,
     }
 }

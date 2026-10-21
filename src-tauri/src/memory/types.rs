@@ -61,9 +61,10 @@ pub struct OcrMemoryDiagnostics {
     pub model_bytes: u64,
     pub model_file_count: u64,
     pub model_directory: String,
-    /// Whether PP-OCR is selected and all files for the configured model
-    /// variant are present. OCR loads the model lazily, so this is a readiness
-    /// signal rather than a claim that the ONNX graph is resident right now.
-    pub loaded: bool,
+    /// Whether all files for the configured model variant are present on disk.
+    /// This is an install-state fact only: whether an engine is actually
+    /// selected additionally depends on the configured engine, and the UI
+    /// resolves that combination instead of reading it from this flag.
+    pub model_installed: bool,
     pub installed_variants: Vec<String>,
 }
