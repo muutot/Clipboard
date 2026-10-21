@@ -6,6 +6,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
+import { resolveBranchRefs } from "../skills/version-release/scripts/branch-ref.mjs";
+
 const scripts = dirname(fileURLToPath(import.meta.url));
 function fixture(t) {
   const root = mkdtempSync(join(tmpdir(), "clipboard-release-identity-"));
@@ -138,4 +140,26 @@ test("manual dispatch from a tag still uses its explicit version input", (t) => 
     GITHUB_EVENT_INPUTS_VERSION: "v1.2.3",
   });
   assert.equal(result.status, 0, result.stdout + result.stderr);
+});
+
+test("a release branch that shares its name with a tag resolves to a usable ref", (t) => {
+  const { git } = fixture(t);
+  // The release branch and the release tag are both the version string, so the
+  // same name usually exists as a branch *and* a tag. Git then reports the
+  // disambiguated `heads/<name>`, and a naive `refs/heads/${branch}`
+  // concatenation would name a ref that does not exist.
+  git("branch", "v1.2.3", "HEAD");
+  git("checkout", "-q", "v1.2.3");
+  const abbreviated = git("rev-parse", "--abbrev-ref", "HEAD");
+  assert.equal(abbreviated, "heads/v1.2.3", "git disambiguates the shared refname");
+
+  const { branch, ref } = resolveBranchRefs(abbreviated);
+  assert.equal(branch, "v1.2.3", "the short name is recovered");
+  assert.equal(ref, "refs/heads/v1.2.3", "the full ref path is used for git commands");
+  assert.equal(git("rev-parse", ref), git("rev-parse", "HEAD"), "the ref path resolves");
+  assert.throws(
+    () => git("rev-parse", "--verify", `refs/heads/${abbreviated}`),
+    /Needed a single revision|unknown revision/,
+    "the disambiguated value must never be concatenated into a ref path",
+  );
 });

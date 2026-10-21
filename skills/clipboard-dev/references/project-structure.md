@@ -94,6 +94,16 @@ Release workflow resolution uses `scripts/validate-release-version.mjs --resolve
 to validate the requested tag tree and pass one immutable SHA to verify/build jobs.
 Its dispatch, tag, commit-scope and version regressions run with
 `node --test scripts/test-release-identity.mjs` in temporary Git repositories.
+`skills/version-release/scripts/release.mjs` resolves the current branch through
+`skills/version-release/scripts/branch-ref.mjs`. The release branch and the release tag
+are both the version string, so a same-named tag normally exists and
+`git rev-parse --abbrev-ref HEAD` reports the disambiguated `heads/<name>`; the helper
+recovers the short name and the unambiguous `refs/heads/<name>` path. Every git
+invocation (rebase target, `update-ref` recovery, printed push refspec) uses the full ref
+path — concatenating `refs/heads/` with the disambiguated value would name
+`refs/heads/heads/<name>`, which matches no ref. `git checkout` keeps the short name,
+because `git checkout refs/heads/<name>` would detach HEAD. The regression test lives in
+`scripts/test-release-identity.mjs` and runs in the CI-wired `node --test` step.
 
 ## High-coupling files
 

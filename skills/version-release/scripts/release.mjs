@@ -26,9 +26,13 @@ import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { argv, exit } from "node:process";
 
+import { resolveBranchRefs } from "./branch-ref.mjs";
+
 const ROOT = execSync("git rev-parse --show-toplevel", { encoding: "utf-8" }).trim();
 const RELEASE_PATH = resolve(ROOT, "RELEASE.md");
-const BRANCH = execSync("git rev-parse --abbrev-ref HEAD", { cwd: ROOT, encoding: "utf-8" }).trim();
+const { branch: BRANCH, ref: BRANCH_REF } = resolveBranchRefs(
+  execSync("git rev-parse --abbrev-ref HEAD", { cwd: ROOT, encoding: "utf-8" }),
+);
 
 function run(cmd, opts = {}) {
   console.log(`  > ${cmd}`);
@@ -129,7 +133,7 @@ if (isRegenerate) {
             exit(1);
           }
 
-          const tip = gitOutput(`git rev-parse ${BRANCH}`);
+          const tip = gitOutput(`git rev-parse ${BRANCH_REF}`);
           const backupRef = `refs/backup/pre-release-delete-${shortSha}`;
           run(`git update-ref ${backupRef} ${tip}`);
           console.log(
@@ -166,7 +170,7 @@ if (isRegenerate) {
           );
           try {
             execSync(
-              `git rebase --committer-date-is-author-date --onto ${parentSha} ${tagCommit} ${BRANCH}`,
+              `git rebase --committer-date-is-author-date --onto ${parentSha} ${tagCommit} ${BRANCH_REF}`,
               { cwd: ROOT, encoding: "utf-8", stdio: "inherit", shell: true },
             );
           } catch {
@@ -180,7 +184,7 @@ if (isRegenerate) {
             } catch {
               // no rebase in progress
             }
-            execSync(`git update-ref refs/heads/${BRANCH} ${tip}`, {
+            execSync(`git update-ref ${BRANCH_REF} ${tip}`, {
               cwd: ROOT,
               encoding: "utf-8",
               stdio: "pipe",
@@ -188,18 +192,18 @@ if (isRegenerate) {
             console.error(
               `\n  ERROR: rebase failed (likely conflicts); '${BRANCH}' restored to its previous tip.`,
             );
-            console.error(`  Restore if needed: git update-ref refs/heads/${BRANCH} ${backupRef}`);
+            console.error(`  Restore if needed: git update-ref ${BRANCH_REF} ${backupRef}`);
             exit(1);
           }
 
-          const newTip = gitOutput(`git rev-parse ${BRANCH}`);
+          const newTip = gitOutput(`git rev-parse ${BRANCH_REF}`);
           // `git rebase --onto <parent> <commit> <branch>` updated the branch
           // ref but left HEAD detached: with our release branch and tag sharing
           // a name (v1.7.2), the branch argument is ambiguous and rebase treats
           // it as a commit-ish. Reattach so the release commit below lands on
-          // the branch instead of a detached HEAD.
-          const branchShort = BRANCH.replace(/^heads\//, "");
-          gitOutput(`git checkout -q "${branchShort}"`);
+          // the branch instead of a detached HEAD. The short name is required
+          // here: `git checkout refs/heads/<name>` would detach HEAD instead.
+          gitOutput(`git checkout -q "${BRANCH}"`);
           console.log(
             `  ✓ Dropped ${shortSha}: '${BRANCH}' ${tip.slice(0, 12)} → ${newTip.slice(0, 12)}`,
           );
@@ -415,11 +419,11 @@ if (!isDryRun) {
 if (!isDryRun) {
   console.log("\n[6/6] Remote push — skipped (local-only by design)");
   console.log("  The release commit and tag exist only locally. Push them yourself:");
-  console.log(`    git push origin refs/heads/${BRANCH}`);
+  console.log(`    git push origin ${BRANCH_REF}`);
   console.log(`    git push origin refs/tags/${tagVersion}`);
   if (forcePush) {
     console.log("  History was rewritten by --regenerate; use --force-with-lease when pushing:");
-    console.log(`    git push origin refs/heads/${BRANCH} --force-with-lease`);
+    console.log(`    git push origin ${BRANCH_REF} --force-with-lease`);
     console.log(`    git push origin refs/tags/${tagVersion} --force`);
   }
 } else {
