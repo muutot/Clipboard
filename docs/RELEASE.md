@@ -180,6 +180,8 @@ node skills/version-release/scripts/release.mjs 0.2.0-rc.1
 
 All releases start as draft releases in CI/CD; pre-release tags additionally get `prerelease: true` on publish.
 
+A pre-release is published **without** becoming the repository's "latest" release: GitHub rejects `make_latest` for a draft or a pre-release ("Drafts and prereleases cannot be set as latest"), so the publish job only sends `--latest` for tags without a pre-release suffix.
+
 ## Rollback
 
 If a release needs to be rolled back:

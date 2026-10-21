@@ -351,9 +351,19 @@ jobs:
       # behind for inspection instead of a published release that silently lacks
       # a platform.
       - name: Publish the draft release
+        shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ needs.resolve.outputs.release_tag }}
         run: |
           set -euo pipefail
-          gh release edit "$RELEASE_TAG" --draft=false --latest --repo "$GITHUB_REPOSITORY"
+          # GitHub refuses `make_latest` for a draft or a prerelease
+          # ("Drafts and prereleases cannot be set as latest"), so asking for
+          # `--latest` on a prerelease tag rejects the whole PATCH with a 422
+          # and leaves the release a draft forever, with every artifact
+          # uploaded but invisible. Only a full release may become "latest".
+          if [[ "$RELEASE_TAG" == *-* ]]; then
+            gh release edit "$RELEASE_TAG" --draft=false --repo "$GITHUB_REPOSITORY"
+          else
+            gh release edit "$RELEASE_TAG" --draft=false --latest --repo "$GITHUB_REPOSITORY"
+          fi

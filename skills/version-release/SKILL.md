@@ -252,6 +252,7 @@ Pushing a `v*` tag triggers `.github/workflows/release.yml` which:
 - Builds for Windows (x64), macOS (arm64), Linux (x64)
 - Intel macOS (x86_64-apple-darwin) is excluded: ort-sys ships no prebuilt ONNX Runtime for it
 - Publishes the GitHub Release as a draft (`releaseDraft: true`) and only flips it live in the final `publish` job once all artifacts are attached
+- A pre-release tag (`vX.Y.Z-beta.1`) is published without `--latest`: GitHub refuses `make_latest` for a draft or a pre-release, so sending it would fail the publish job with a 422 and leave the release a draft forever
 
 The separate `.github/workflows/sync-gitcode.yml` workflow mirrors the published release body + assets to GitCode via `scripts/sync_release.py`. It is decoupled from `release.yml` and is triggered **manually** (`workflow_dispatch` with the release tag) after a release is published, so it can be run once all assets are attached. It requires repo secret `GITCODE_TOKEN` (rotate immediately if ever committed in plaintext); optional `GITCODE_OWNER` overrides the default owner. All actions are pinned to commit SHAs and its Python dependencies come from the pinned `scripts/requirements-sync.txt` (installed with `pip install -r`) rather than an unpinned `pip install`, because this job holds `GITCODE_TOKEN` and `GITHUB_TOKEN`.
 
