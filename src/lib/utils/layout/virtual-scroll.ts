@@ -121,6 +121,26 @@ function fontFamily(): string {
 const MEASURE_CACHE_LIMIT = 8192;
 const _measureCache = new Map<string, number>();
 
+// Cache keys hash the measured text instead of embedding it: keys live for
+// the whole session and the text is clamped to 4000 characters, so embedding
+// it would retain tens of MB of key strings at the cache limit. A 32-bit
+// FNV-1a plus the exact length is collision-proof enough here — the only
+// consequence of a collision is reusing a sibling line estimate until the
+// mounted card reports its real height.
+function measureCacheKey(
+  clamped: string,
+  fontSize: number,
+  roundedMaxWidth: number,
+  limit: number,
+): string {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < clamped.length; i++) {
+    hash ^= clamped.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return `${fontSize}|${roundedMaxWidth}|${limit}|${clamped.length}|${hash >>> 0}`;
+}
+
 /**
  * Count visual lines a text string occupies inside a given pixel width,
  * accounting for explicit \\n breaks and word-wrapping.
@@ -141,7 +161,7 @@ export function measureVisualLines(
   // theme or system font changes. Calling it only on cache misses would let
   // a warm cache bypass font invalidation forever.
   fontFamily();
-  const cacheKey = `${fontSize}|${Math.round(maxWidth)}|${limit}|${clamped}`;
+  const cacheKey = measureCacheKey(clamped, fontSize, Math.round(maxWidth), limit);
   const cached = _measureCache.get(cacheKey);
   if (cached !== undefined) return cached;
 
