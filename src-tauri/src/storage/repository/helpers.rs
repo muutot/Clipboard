@@ -494,7 +494,7 @@ pub(super) fn history_predicates(
         args.push(Box::new(tag.clone()));
     }
     if let Some(app) = &filter.source_app {
-        conditions.push("source_app = ?".to_owned());
+        conditions.push("LOWER(TRIM(source_app)) = LOWER(TRIM(?))".to_owned());
         args.push(Box::new(app.clone()));
     }
     if let Some(from) = filter.date_from_ms {

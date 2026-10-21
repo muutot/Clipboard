@@ -131,6 +131,7 @@
     inset: 0;
     background: rgba(0, 0, 0, 0.5);
     backdrop-filter: blur(4px);
+    pointer-events: none;
   }
 
   .onboarding-panel {

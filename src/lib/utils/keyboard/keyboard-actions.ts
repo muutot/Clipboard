@@ -146,6 +146,12 @@ export function resolveKeyAction(event: KeyboardEvent, ctx: KeyActionContext): K
       return { type: "none", prevent: false };
     }
     if (ctx.detailEditor) return { type: "none", prevent: false };
+    // A detail panel owns the first Escape: close it instead of clearing a
+    // bulk selection. Clearing with `prevent: false` would also let the
+    // detail panel's own Escape handler fire, so the detail panel wins.
+    if (ctx.hasDetail) {
+      return { type: "none", prevent: false };
+    }
     // A bulk selection owns the first Escape (same handler as the Backspace
     // clearSelection binding): it exits multi-select instead of letting the
     // press fall through to the tag filter or the hideWindow branch. Editable
@@ -154,10 +160,6 @@ export function resolveKeyAction(event: KeyboardEvent, ctx: KeyActionContext): K
     // `detailEditor` guard.
     if (ctx.selectedCount > 0 && !editableTarget) {
       return { type: "clear-selection", prevent: false };
-    }
-    if (ctx.hasDetail) {
-      // DetailPanel handles its own Escape.
-      return { type: "none", prevent: false };
     }
     if (ctx.tagFilter) return { type: "escape-toggle-tag", tag: ctx.tagFilter, prevent: false };
     // Escape hides the window only while it remains one of the bound

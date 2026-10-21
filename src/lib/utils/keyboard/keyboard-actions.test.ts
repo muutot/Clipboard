@@ -154,7 +154,7 @@ describe("resolveKeyAction — Escape", () => {
         keyEvent({ key: "Escape" }),
         ctx({ isTauri: true, selectedCount: 2, hasDetail: true }),
       ),
-    ).toEqual({ type: "clear-selection", prevent: false });
+    ).toEqual({ type: "none", prevent: false }); // detail panel owns Escape
     // With the selection already gone the press is free to hide the window.
     expect(resolveKeyAction(keyEvent({ key: "Escape" }), ctx({ isTauri: true }))).toEqual({
       type: "escape-hide-window",

@@ -195,6 +195,31 @@ fn a_recapture_keeps_a_user_renamed_title() {
 }
 
 #[test]
+fn source_app_filter_is_case_insensitive() {
+    let database = Database::open_in_memory().unwrap();
+    let mut chrome1 = text_item("chrome-upper", "hash-1", 100);
+    chrome1.source_app = Some("Chrome".to_owned());
+    let mut chrome2 = text_item("chrome-lower", "hash-2", 200);
+    chrome2.source_app = Some("CHROME".to_owned());
+    database.save_item(&chrome1).unwrap();
+    database.save_item(&chrome2).unwrap();
+
+    let filter = HistoryFilter {
+        source_app: Some("chrome".to_owned()),
+        ..Default::default()
+    };
+    let results = database.list_recent(10, 0, &filter).unwrap();
+    assert_eq!(
+        results.len(),
+        2,
+        "filtering by source_app must be case-insensitive"
+    );
+    let ids: Vec<_> = results.iter().map(|i| i.id.as_str()).collect();
+    assert!(ids.contains(&"chrome-upper"));
+    assert!(ids.contains(&"chrome-lower"));
+}
+
+#[test]
 fn a_recapture_still_refreshes_an_automated_title() {
     let database = Database::open_in_memory().unwrap();
     let mut first = text_item("original", "same-hash", 100);

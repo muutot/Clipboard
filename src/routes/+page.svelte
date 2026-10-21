@@ -955,8 +955,11 @@
 
     // Registering the listeners above must precede the initial loads: a copy
     // landing between the page-1 query and listener registration would
-    // otherwise be dropped until the next invalidation.
-    void Promise.all([
+    // otherwise be dropped until the next invalidation. `Promise.allSettled`
+    // ensures that a listener registration that rejects (e.g. a temporary
+    // Tauri bridge hiccup) still lets the initial loads run instead of
+    // leaving the main window empty forever.
+    void Promise.allSettled([
       unlisten,
       unlistenHistoryInvalidated,
       unlistenSearchIndex,
@@ -1191,9 +1194,14 @@
         resizable: true,
         decorations: false,
         focus: true,
+        visible: false,
         backgroundColor: settingsBg,
       });
+      const revealFallback = setTimeout(() => {
+        void settingsWindow.show().catch(() => {});
+      }, 3000);
       settingsWindow.once("tauri://error", (event) => {
+        clearTimeout(revealFallback);
         console.error("settings window creation failed:", event.payload);
         showToast(_t("app.settingsOpenFailed"), "error");
       });
