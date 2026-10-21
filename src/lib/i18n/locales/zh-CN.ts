@@ -107,7 +107,6 @@ const zhCN: LocaleDefinition = {
     deleteFailed: "删除记录失败",
     browserPreview: "浏览器预览",
     coreConnected: "核心已连接",
-    shortcutHint: "唤起",
     restartBlockedInDev: "开发模式下请在终端重启应用，托盘/设置内重启会断开前端开发服务器",
     settingsOpenFailed: "设置窗口打开失败",
   },
@@ -168,7 +167,7 @@ const zhCN: LocaleDefinition = {
   },
   status: {
     searching: "搜索中…",
-    recordCount: "{count} 条记录",
+    recordCount: "记录数: {count}",
   },
   storage: {
     settings: "设置 / 存储",

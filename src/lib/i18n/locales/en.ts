@@ -108,7 +108,6 @@ const en: LocaleDefinition = {
     deleteFailed: "Failed to delete record",
     browserPreview: "Browser Preview",
     coreConnected: "Core Connected",
-    shortcutHint: "Toggle",
     restartBlockedInDev:
       "In dev mode, restart the app from the terminal; in-app restart would orphan the frontend dev server",
     settingsOpenFailed: "Could not open the settings window",
@@ -170,7 +169,7 @@ const en: LocaleDefinition = {
   },
   status: {
     searching: "Searching...",
-    recordCount: "{count} records",
+    recordCount: "Records: {count}",
   },
   storage: {
     settings: "Settings / Storage",

@@ -254,7 +254,7 @@ onclick={closeImageFullscreen}
 ```typescript
 // locales/en.ts
 copySuccess: "Copied to clipboard",
-recordCount: "{count} records",
+recordCount: "Records: {count}",
 
 // 使用
 _t("status.recordCount", { count: items.length })

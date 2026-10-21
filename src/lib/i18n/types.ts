@@ -99,7 +99,6 @@ export interface LocaleDefinition {
     deleteFailed: string;
     browserPreview: string;
     coreConnected: string;
-    shortcutHint: string;
     restartBlockedInDev: string;
     settingsOpenFailed: string;
   };

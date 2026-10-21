@@ -1,36 +1,25 @@
 <script lang="ts">
-  import { messages, resolvePath } from "$lib/i18n";
-
-  const _t = (path: string, params?: Record<string, string | number>) =>
-    resolvePath($messages, path, params);
-
   interface Props {
     resultSummary: string;
     runtimeLabel: string;
     statusMessage: string;
-    /** Current main-toggle binding (e.g. "Alt+C"), null when unbound. */
-    toggleHint: string | null;
   }
 
-  let { resultSummary, runtimeLabel, statusMessage, toggleHint }: Props = $props();
-
-  const hintParts = $derived(toggleHint === null ? [] : toggleHint.split("+"));
+  let { resultSummary, runtimeLabel, statusMessage }: Props = $props();
 </script>
 
+<!-- The record count is the only dynamically loaded text in this bar: it grows
+     while more records page in and it is replaced by the "searching" summary
+     during an index search. It therefore lives at the right edge, where a
+     width change only moves its own leading edge, instead of at the left,
+     where it used to push the runtime label and the status message along
+     with it. -->
 <footer class="status-bar" role="status" aria-live="polite">
   <span class="status-left">
-    <span class="result-count">{resultSummary}</span>
     <span class="runtime-status"><i></i>{runtimeLabel}</span>
   </span>
   <span class="status-msg">{statusMessage}</span>
-  {#if hintParts.length > 0}
-    <span class="shortcut-hints">
-      {#each hintParts as part, index (index)}
-        {#if index > 0}<b>+</b>{/if}<kbd>{part}</kbd>
-      {/each}
-      {_t("app.shortcutHint")}</span
-    >
-  {/if}
+  <span class="result-count">{resultSummary}</span>
 </footer>
 
 <style>
@@ -56,7 +45,9 @@
   }
 
   .result-count {
+    flex: 0 0 auto;
     color: var(--text-faint);
+    white-space: nowrap;
   }
 
   .runtime-status {
@@ -82,27 +73,6 @@
     white-space: nowrap;
     text-overflow: ellipsis;
     min-width: 0;
-  }
-
-  .shortcut-hints {
-    display: inline-flex;
-    flex: 0 0 auto;
-    align-items: center;
-    gap: 4px;
-  }
-
-  .shortcut-hints kbd {
-    padding: 1px 5px;
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
-    color: var(--text-muted);
-    background: var(--hover-bg);
-    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.4);
-    font: inherit;
-  }
-
-  .shortcut-hints b {
-    font-weight: 400;
   }
 
   /* Spans the route's split-detail grid. This deliberately escapes component

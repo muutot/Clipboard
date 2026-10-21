@@ -511,15 +511,6 @@
     resolveActionBindings(keyboardShortcuts, "focusSearch", defaultShortcutsFor("focusSearch")),
   );
 
-  // Main-toggle hint for the status bar; null hides the kbd chips when unbound.
-  const toggleWindowHint = $derived(
-    resolveActionBindings(
-      keyboardShortcuts,
-      "toggleWindow",
-      defaultShortcutsFor("toggleWindow"),
-    )[0] ?? null,
-  );
-
   async function loadKeyboardShortcuts() {
     try {
       const config = await getKeyboardConfig();
@@ -2334,7 +2325,7 @@
     {/if}
   </div>
 
-  <StatusBar {resultSummary} {runtimeLabel} {statusMessage} toggleHint={toggleWindowHint} />
+  <StatusBar {resultSummary} {runtimeLabel} {statusMessage} />
 </main>
 
 <Toast />
