@@ -344,7 +344,7 @@ pub fn reset_keyboard_config(
 }
 
 #[tauri::command]
-pub fn paste_to_previous_application(
+pub async fn paste_to_previous_application(
     app: tauri::AppHandle,
     hotkey_manager: tauri::State<'_, Mutex<HotkeyManager>>,
 ) -> Result<bool, String> {
@@ -362,18 +362,25 @@ pub fn paste_to_previous_application(
     if let Some(window) = &main_window {
         platform::hide_main_window(window).map_err(|error| error.to_string())?;
     }
-    thread::sleep(Duration::from_millis(40));
 
-    if let Err(error) = platform::windows::hotkey::restore_window_and_paste(target) {
-        crate::dbg_log(&format!("paste_to_previous_application: error={error}"));
-        if let Some(window) = &main_window {
-            let _ = platform::restore_main_window(window);
+    // The paste sequence sleeps and injects input; run it on the blocking
+    // pool so the synchronous command does not freeze the main thread (and
+    // with it every other window operation) for the whole duration.
+    let paste_window = main_window.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        thread::sleep(Duration::from_millis(40));
+        if let Err(error) = platform::windows::hotkey::restore_window_and_paste(target) {
+            crate::dbg_log(&format!("paste_to_previous_application: error={error}"));
+            if let Some(window) = &paste_window {
+                let _ = platform::restore_main_window(window);
+            }
+            return Err(error);
         }
-        return Err(error);
-    }
-
-    crate::dbg_log("paste_to_previous_application: OK");
-    Ok(true)
+        crate::dbg_log("paste_to_previous_application: OK");
+        Ok(true)
+    })
+    .await
+    .map_err(|error| format!("paste_to_previous_application task failed: {error}"))?
 }
 
 #[tauri::command]
