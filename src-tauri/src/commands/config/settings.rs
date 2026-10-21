@@ -37,17 +37,25 @@ pub fn set_general_settings(
     // Serialize mode transitions without holding the config lock while opening
     // a database or joining a worker. Searches inspect this same runtime state.
     let mut worker = lock_state(&search_worker, "search-sync lock is poisoned")?;
-    let (settings, previous_opacity_affects_text) = {
+    // Baseline opacity flag comes from the current configuration; resolution
+    // of the patch is deferred to the persistence closure so it runs against
+    // the configuration as it is at that moment, not against this snapshot.
+    let previous_opacity_affects_text = {
         let config = lock_state(&config, "configuration lock is poisoned")?;
-        (
-            resolve_general_settings(config.general_settings(), settings, patch)?,
-            config.general_settings().window_opacity_affects_text,
-        )
+        config.general_settings().window_opacity_affects_text
     };
     if worker.as_ref().is_some_and(|worker| !worker.is_running()) {
         *worker = None;
     }
+    // Decide the search mode from the incoming settings when present, falling
+    // back to the current configuration for a patch. The mode is only a
+    // performance hint; correctness of the persisted value is unaffected.
     let background = settings
+        .clone()
+        .unwrap_or_else(|| {
+            let config = lock_state(&config, "configuration lock is poisoned").unwrap();
+            config.general_settings().clone()
+        })
         .search_index_sync_mode
         .parse::<SearchIndexSyncMode>()
         == Ok(SearchIndexSyncMode::Background);
@@ -74,14 +82,16 @@ pub fn set_general_settings(
         },
         || {
             let mut config = lock_state(&config, "configuration lock is poisoned")?;
+            let settings = resolve_general_settings(
+                config.general_settings(),
+                settings.clone(),
+                patch.clone(),
+            )?;
             config
                 .set_general_settings(settings)
                 .map_err(|error| error.to_string())?;
             Ok((
                 config.general_settings().clone(),
-                // Use the clamped getter, not the raw stored field: the command
-                // accepts any u64, so an unclamped value would silently change the
-                // live capture cap while the config read-back reports the clamp.
                 config.max_text_capture_bytes(),
             ))
         },
