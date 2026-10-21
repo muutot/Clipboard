@@ -7,6 +7,7 @@ use crate::platform::ClipboardMonitor;
 use crate::state::{CaptureState, CaptureWorker, SelfTriggerState};
 use crate::storage::{Database, StoragePaths};
 use serde::Serialize;
+use tauri::Manager;
 
 #[tauri::command]
 /// Starts (or restarts) the background clipboard polling worker.
@@ -82,23 +83,28 @@ pub fn start_clipboard_monitoring(
     Ok(true)
 }
 
+/// Async: stopping joins the capture worker thread, which can block for the
+/// remainder of an in-flight ingestion (image encoding, SQLite writes), so it
+/// runs on the dedicated blocking pool instead of the main thread.
 #[tauri::command]
-/// Stops the clipboard polling worker and joins its thread.
-pub fn stop_clipboard_monitoring(
-    monitor: tauri::State<'_, Mutex<ClipboardMonitor>>,
-    capture: tauri::State<'_, CaptureState>,
-) -> Result<bool, String> {
-    // Always stop the capture worker, even when the monitor lock is
-    // poisoned: an early `?` here used to leak the writer thread while
-    // reporting the monitor as stopped.
-    let monitor_result =
-        lock_state(&monitor, "clipboard monitor lock is poisoned").and_then(|monitor| {
-            let mut monitor = monitor;
-            monitor.stop()
-        });
-    capture.stop_worker();
-    monitor_result?;
-    Ok(true)
+pub async fn stop_clipboard_monitoring(app: tauri::AppHandle) -> Result<bool, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let monitor = app.state::<Mutex<ClipboardMonitor>>();
+        let capture = app.state::<CaptureState>();
+        // Always stop the capture worker, even when the monitor lock is
+        // poisoned: an early `?` here used to leak the writer thread while
+        // reporting the monitor as stopped.
+        let monitor_result =
+            lock_state(&monitor, "clipboard monitor lock is poisoned").and_then(|monitor| {
+                let mut monitor = monitor;
+                monitor.stop()
+            });
+        capture.stop_worker();
+        monitor_result?;
+        Ok(true)
+    })
+    .await
+    .map_err(|error| format!("stop task join failed: {error}"))?
 }
 
 #[tauri::command]

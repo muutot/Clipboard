@@ -153,9 +153,12 @@ fn build_export_options(
     })
 }
 
+/// Async: exporting the full history performs blocking SQLite and
+/// serialization work, so it runs on the dedicated blocking pool instead of
+/// the main thread (same pattern as `export_to_file`).
 #[tauri::command]
-pub fn export_clipboard_items(
-    database: tauri::State<'_, Database>,
+pub async fn export_clipboard_items(
+    app: tauri::AppHandle,
     format: String,
     include_favorites: Option<bool>,
     date_from_ms: Option<i64>,
@@ -169,7 +172,12 @@ pub fn export_clipboard_items(
         date_to_ms,
         content_types,
     )?;
-    export_database(database.inner(), &options)
+    tauri::async_runtime::spawn_blocking(move || {
+        let database = app.state::<Database>();
+        export_database(database.inner(), &options)
+    })
+    .await
+    .map_err(|error| format!("export task join failed: {error}"))?
 }
 
 fn export_database_to_path(
@@ -225,9 +233,12 @@ pub async fn export_to_file(
     .map_err(|error| format!("export task join failed: {error}"))?
 }
 
+/// Async: importing a payload up to the 256 MiB cap performs blocking
+/// serialization and SQLite work, so it runs on the dedicated blocking pool
+/// (same pattern as `import_from_file`).
 #[tauri::command]
-pub fn import_clipboard_items(
-    database: tauri::State<'_, Database>,
+pub async fn import_clipboard_items(
+    app: tauri::AppHandle,
     json: String,
     format: Option<String>,
 ) -> Result<ImportSummary, String> {
@@ -257,14 +268,19 @@ pub fn import_clipboard_items(
                 "plaintext".to_owned()
             }
         });
-    match normalized.as_str() {
-        "json" => import_from_json(&json, database.inner()),
-        "csv" => import_from_csv(&json, database.inner()),
-        "text" | "txt" | "plain" | "plaintext" | "plain-text" => {
-            import_from_plain_text(&json, database.inner())
+    tauri::async_runtime::spawn_blocking(move || {
+        let database = app.state::<Database>();
+        match normalized.as_str() {
+            "json" => import_from_json(&json, database.inner()),
+            "csv" => import_from_csv(&json, database.inner()),
+            "text" | "txt" | "plain" | "plaintext" | "plain-text" => {
+                import_from_plain_text(&json, database.inner())
+            }
+            other => Err(format!("unknown import format: {other}")),
         }
-        other => Err(format!("unknown import format: {other}")),
-    }
+    })
+    .await
+    .map_err(|error| format!("import task join failed: {error}"))?
 }
 
 const MAX_IMPORT_FILE_BYTES: u64 = 256 * 1024 * 1024;

@@ -4,6 +4,7 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use serde::Serialize;
+use tauri::Manager;
 
 use crate::commands::lock::lock_state;
 use crate::config::ConfigStore;
@@ -47,27 +48,33 @@ impl CleanupPolicy {
     }
 }
 
+/// Async: the cleanup walks every resource root and canonicalizes every
+/// referenced path, which can take minutes on a large library, so it runs on
+/// the dedicated blocking pool instead of the main thread.
 #[tauri::command]
-pub fn enforce_history_cleanup(
-    database: tauri::State<'_, Database>,
-    config: tauri::State<'_, Mutex<ConfigStore>>,
-    paths: tauri::State<'_, StoragePaths>,
-    capture: tauri::State<'_, CaptureState>,
-) -> Result<u64, String> {
-    // Read the three values and drop the guard before doing any work: the
-    // cleanup walks every resource root and canonicalizes every referenced
-    // path, so holding the process-wide config mutex across it would stall
-    // every other command that reads configuration (settings, window config, the
-    // tray) and the auto-sync worker's per-tick read.
-    let policy = {
-        let guard = lock_state(&config, "configuration lock is poisoned")?;
-        CleanupPolicy::from_config(&guard)
-    };
-    let _maintenance = lock_state(
-        &capture.storage_maintenance_lock,
-        "storage maintenance lock is poisoned",
-    )?;
-    enforce_history_cleanup_with_policy(&database, &paths, policy, ORPHAN_FILE_GRACE)
+pub async fn enforce_history_cleanup(app: tauri::AppHandle) -> Result<u64, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let database = app.state::<Database>();
+        let config = app.state::<Mutex<ConfigStore>>();
+        let paths = app.state::<StoragePaths>();
+        let capture = app.state::<CaptureState>();
+        // Read the three values and drop the guard before doing any work: the
+        // cleanup walks every resource root and canonicalizes every referenced
+        // path, so holding the process-wide config mutex across it would stall
+        // every other command that reads configuration (settings, window config, the
+        // tray) and the auto-sync worker's per-tick read.
+        let policy = {
+            let guard = lock_state(&config, "configuration lock is poisoned")?;
+            CleanupPolicy::from_config(&guard)
+        };
+        let _maintenance = lock_state(
+            &capture.storage_maintenance_lock,
+            "storage maintenance lock is poisoned",
+        )?;
+        enforce_history_cleanup_with_policy(&database, &paths, policy, ORPHAN_FILE_GRACE)
+    })
+    .await
+    .map_err(|error| format!("cleanup task join failed: {error}"))?
 }
 
 pub fn enforce_history_cleanup_for(
@@ -350,17 +357,22 @@ fn cleanup_orphans_after_snapshot(
     })
 }
 
+/// Async: the orphan scan walks every resource root, so it runs on the
+/// dedicated blocking pool instead of the main thread.
 #[tauri::command]
-pub fn cleanup_storage_files(
-    database: tauri::State<'_, Database>,
-    paths: tauri::State<'_, StoragePaths>,
-    capture: tauri::State<'_, CaptureState>,
-) -> Result<StorageCleanupResult, String> {
-    let _maintenance = lock_state(
-        &capture.storage_maintenance_lock,
-        "storage maintenance lock is poisoned",
-    )?;
-    cleanup_orphan_storage_files_with_grace(&database, &paths, ORPHAN_FILE_GRACE)
+pub async fn cleanup_storage_files(app: tauri::AppHandle) -> Result<StorageCleanupResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let database = app.state::<Database>();
+        let paths = app.state::<StoragePaths>();
+        let capture = app.state::<CaptureState>();
+        let _maintenance = lock_state(
+            &capture.storage_maintenance_lock,
+            "storage maintenance lock is poisoned",
+        )?;
+        cleanup_orphan_storage_files_with_grace(&database, &paths, ORPHAN_FILE_GRACE)
+    })
+    .await
+    .map_err(|error| format!("cleanup task join failed: {error}"))?
 }
 
 fn resolve_storage_file_references(

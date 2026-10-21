@@ -2,6 +2,7 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use serde::Serialize;
+use tauri::Manager;
 
 use crate::cli::{CliArgs, CliCommand, LocalApiServer};
 use crate::commands::lock::lock_state;
@@ -167,15 +168,13 @@ pub struct LocalApiStatus {
     port: u16,
 }
 
+/// Async: CLI dispatch performs blocking SQLite work (and `export` can write
+/// large files), so it runs on the dedicated blocking pool instead of the
+/// main thread.
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
-pub fn run_cli_command(
+pub async fn run_cli_command(
     app: tauri::AppHandle,
-    paths: tauri::State<'_, StoragePaths>,
-    database: tauri::State<'_, Database>,
-    config: tauri::State<'_, Mutex<ConfigStore>>,
-    capture: tauri::State<'_, CaptureState>,
-    self_trigger: tauri::State<'_, SelfTriggerState>,
     command: String,
     query: Option<String>,
     limit: Option<usize>,
@@ -201,33 +200,44 @@ pub fn run_cli_command(
         output_path,
     };
 
-    let page_size_limit = lock_state(&config, "configuration lock is poisoned")?.page_size_limit();
-    let search_page_size_limit =
-        lock_state(&config, "configuration lock is poisoned")?.search_page_size_limit();
+    tauri::async_runtime::spawn_blocking(move || {
+        let paths = app.state::<StoragePaths>();
+        let database = app.state::<Database>();
+        let config = app.state::<Mutex<ConfigStore>>();
+        let capture = app.state::<CaptureState>();
+        let self_trigger = app.state::<SelfTriggerState>();
 
-    let result = crate::cli::run_cli_command_with_context(
-        &args,
-        database.inner(),
-        page_size_limit,
-        search_page_size_limit,
-        &crate::item_operations::CopyContext {
-            paths: Some(paths.inner().clone()),
-            self_trigger: Some(self_trigger.0.clone()),
-        },
-        // The paste command writes to the database directly instead of going
-        // through the clipboard worker, so it must enforce the same privacy
-        // rules itself.
-        Some(capture.inner()),
-    );
-    if result.is_ok()
-        && matches!(
-            args.command,
-            CliCommand::Copy | CliCommand::Paste | CliCommand::Delete
-        )
-    {
-        crate::item_operations::invalidate_desktop(&app);
-    }
-    result
+        let page_size_limit =
+            lock_state(&config, "configuration lock is poisoned")?.page_size_limit();
+        let search_page_size_limit =
+            lock_state(&config, "configuration lock is poisoned")?.search_page_size_limit();
+
+        let result = crate::cli::run_cli_command_with_context(
+            &args,
+            database.inner(),
+            page_size_limit,
+            search_page_size_limit,
+            &crate::item_operations::CopyContext {
+                paths: Some(paths.inner().clone()),
+                self_trigger: Some(self_trigger.0.clone()),
+            },
+            // The paste command writes to the database directly instead of going
+            // through the clipboard worker, so it must enforce the same privacy
+            // rules itself.
+            Some(capture.inner()),
+        );
+        if result.is_ok()
+            && matches!(
+                args.command,
+                CliCommand::Copy | CliCommand::Paste | CliCommand::Delete
+            )
+        {
+            crate::item_operations::invalidate_desktop(&app);
+        }
+        result
+    })
+    .await
+    .map_err(|error| format!("cli task join failed: {error}"))?
 }
 
 fn write_api_port(project_directory: &Path, port: u16) -> Result<(), String> {
