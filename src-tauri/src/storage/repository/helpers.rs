@@ -382,62 +382,75 @@ pub(super) fn kind_from_storage(kind: &str) -> Result<ClipboardKind, StorageErro
 /// Rewrites `metadata_json.tags` on every active record, replacing `target`
 /// with `replacement` (or removing it when `replacement` is `None`), preserving
 /// order and de-duplicating. Returns the number of records whose tags changed.
+///
+/// Runs in two passes on purpose: SQLite leaves the behaviour of updating a
+/// table while a `SELECT` cursor over it is still stepping undefined, so all
+/// rewrites are collected first and only applied after the read cursor is
+/// closed.
 pub(super) fn rewrite_item_tags(
     connection: &rusqlite::Connection,
     target: &str,
     replacement: Option<&str>,
 ) -> Result<u64, StorageError> {
-    let mut statement =
-        connection.prepare("SELECT id, metadata_json FROM clipboard_items WHERE deleted = 0")?;
-    let rows = statement.query_map([], |row| {
-        Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?))
-    })?;
+    let mut pending: Vec<(String, String)> = Vec::new();
+    {
+        let mut statement = connection
+            .prepare("SELECT id, metadata_json FROM clipboard_items WHERE deleted = 0")?;
+        let rows = statement.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?))
+        })?;
 
-    let mut updated = 0u64;
-    for row in rows {
-        let (id, json) = row?;
-        let Some(json) = json else { continue };
-        let Ok(serde_json::Value::Object(object)) =
-            serde_json::from_str::<serde_json::Value>(&json)
-        else {
-            continue;
-        };
-        let Some(serde_json::Value::Array(tags)) = object.get("tags") else {
-            continue;
-        };
-        let contains = tags
-            .iter()
-            .filter_map(serde_json::Value::as_str)
-            .any(|tag| tag.trim() == target);
-        if !contains {
-            continue;
-        }
-
-        let mut seen = std::collections::HashSet::new();
-        let mut rewritten: Vec<serde_json::Value> = Vec::new();
-        for tag in tags.iter().filter_map(serde_json::Value::as_str) {
-            let trimmed = tag.trim();
-            if trimmed == target {
-                if let Some(next) = replacement {
-                    if next.is_empty() || !seen.insert(next.to_owned()) {
-                        continue;
-                    }
-                    rewritten.push(serde_json::Value::String(next.to_owned()));
-                }
+        for row in rows {
+            let (id, json) = row?;
+            let Some(json) = json else { continue };
+            let Ok(serde_json::Value::Object(object)) =
+                serde_json::from_str::<serde_json::Value>(&json)
+            else {
+                continue;
+            };
+            let Some(serde_json::Value::Array(tags)) = object.get("tags") else {
+                continue;
+            };
+            let contains = tags
+                .iter()
+                .filter_map(serde_json::Value::as_str)
+                .any(|tag| tag.trim() == target);
+            if !contains {
                 continue;
             }
-            if !trimmed.is_empty() && seen.insert(trimmed.to_owned()) {
-                rewritten.push(serde_json::Value::String(trimmed.to_owned()));
-            }
-        }
 
-        let mut updated_object = object.clone();
-        if rewritten.is_empty() {
-            updated_object.remove("tags");
-        } else {
-            updated_object.insert("tags".to_owned(), serde_json::Value::Array(rewritten));
+            let mut seen = std::collections::HashSet::new();
+            let mut rewritten: Vec<serde_json::Value> = Vec::new();
+            for tag in tags.iter().filter_map(serde_json::Value::as_str) {
+                let trimmed = tag.trim();
+                if trimmed == target {
+                    if let Some(next) = replacement {
+                        if next.is_empty() || !seen.insert(next.to_owned()) {
+                            continue;
+                        }
+                        rewritten.push(serde_json::Value::String(next.to_owned()));
+                    }
+                    continue;
+                }
+                if !trimmed.is_empty() && seen.insert(trimmed.to_owned()) {
+                    rewritten.push(serde_json::Value::String(trimmed.to_owned()));
+                }
+            }
+
+            let mut updated_object = object.clone();
+            if rewritten.is_empty() {
+                updated_object.remove("tags");
+            } else {
+                updated_object.insert("tags".to_owned(), serde_json::Value::Array(rewritten));
+            }
+            let updated_json =
+                serde_json::to_string(&updated_object).map_err(StorageError::Json)?;
+            pending.push((id, updated_json));
         }
-        let updated_json = serde_json::to_string(&updated_object).map_err(StorageError::Json)?;
+    }
+
+    let mut updated = 0u64;
+    for (id, updated_json) in pending {
         connection.execute(
             "UPDATE clipboard_items SET metadata_json = ?2 WHERE id = ?1 AND deleted = 0",
             params![id, updated_json],
