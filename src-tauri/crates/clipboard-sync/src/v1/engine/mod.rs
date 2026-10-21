@@ -252,21 +252,27 @@ pub fn sync_database_with_progress(
         &mut result,
     )?;
     progress(SyncPhase::Compacting);
-    if result.failed_peers == 0 {
-        state = database.get_or_create_sync_remote_state(remote_scope)?;
-        maybe_compact(
-            store,
-            database,
-            paths,
-            remote_scope,
-            &device_id,
-            &state,
-            session_key,
-            options.resource_limits,
-            options.resource_gc_mode,
-            &mut result,
-        )?;
-    }
+    // A peer that failed to pull must not disable checkpoint publication for the
+    // whole namespace: the checkpoint is the only recovery artifact for
+    // pruned history, so one permanently broken peer would leave every peer
+    // without a way back. The destructive collection of the history the
+    // previous checkpoint covered stays gated on a healthy pull, so a lagging
+    // peer keeps its segment-chain recovery path.
+    let collect_covered_history = result.failed_peers == 0;
+    state = database.get_or_create_sync_remote_state(remote_scope)?;
+    maybe_compact(
+        store,
+        database,
+        paths,
+        remote_scope,
+        &device_id,
+        &state,
+        session_key,
+        options.resource_limits,
+        options.resource_gc_mode,
+        collect_covered_history,
+        &mut result,
+    )?;
     cancellation::check()?;
     Ok(result)
 }
@@ -447,6 +453,7 @@ pub mod test_support {
         session_key: Option<&SessionKey>,
         resource_limits: ResourceLimits,
         resource_gc_mode: ResourceGcMode,
+        collect_covered_history: bool,
         result: &mut SyncEngineResult,
     ) -> Result<(), String> {
         super::maybe_compact(
@@ -459,6 +466,7 @@ pub mod test_support {
             session_key,
             resource_limits,
             resource_gc_mode,
+            collect_covered_history,
             result,
         )
     }

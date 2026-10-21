@@ -327,6 +327,7 @@ pub(super) fn maybe_compact(
     session_key: Option<&SessionKey>,
     resource_limits: ResourceLimits,
     resource_gc_mode: ResourceGcMode,
+    collect_covered_history: bool,
     result: &mut SyncEngineResult,
 ) -> Result<(), String> {
     cancellation::check()?;
@@ -376,6 +377,7 @@ pub(super) fn maybe_compact(
                 None,
                 session_key,
                 resource_gc_mode,
+                collect_covered_history,
                 &paths.temporary_directory,
                 result,
             )?;
@@ -466,6 +468,7 @@ pub(super) fn maybe_compact(
             .map(|current| current.head.vector.as_slice()),
         session_key,
         resource_gc_mode,
+        collect_covered_history,
         &paths.temporary_directory,
         result,
     )
@@ -509,6 +512,7 @@ fn finalize_checkpoint_publication(
     covered_vector_hint: Option<&[DeviceCursor]>,
     session_key: Option<&SessionKey>,
     resource_gc_mode: ResourceGcMode,
+    collect_covered_history: bool,
     temporary_directory: &std::path::Path,
     result: &mut SyncEngineResult,
 ) -> Result<(), String> {
@@ -542,12 +546,19 @@ fn finalize_checkpoint_publication(
             }
         };
         validate_checkpoint_vector(&covered_vector)?;
-        let deleted = garbage_collect_covered_history(store, &covered_vector)?;
-        result.deleted_remote_objects = checked_add(
-            result.deleted_remote_objects,
-            deleted,
-            "deleted remote object count",
-        )?;
+        // Deleting the history the previous checkpoint covered is the one
+        // destructive step of a compaction: a peer that has not pulled the
+        // segments yet can only recover them from a checkpoint. It therefore
+        // stays gated on a healthy pull, while the checkpoint itself is
+        // published either way.
+        if collect_covered_history {
+            let deleted = garbage_collect_covered_history(store, &covered_vector)?;
+            result.deleted_remote_objects = checked_add(
+                result.deleted_remote_objects,
+                deleted,
+                "deleted remote object count",
+            )?;
+        }
     }
     let deleted = prune_unreferenced_checkpoints(store, head)?;
     result.deleted_remote_objects = checked_add(

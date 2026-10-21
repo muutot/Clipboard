@@ -271,6 +271,75 @@ fn successful_compaction_keeps_current_and_previous_checkpoints_only() {
 }
 
 #[test]
+fn a_deferred_history_collection_still_publishes_the_checkpoint() {
+    let store = MemoryStore::default();
+    let paths = temp_paths("checkpoint-deferred-collection");
+    let database = Database::open(&paths.database).unwrap();
+    database
+        .save_item(&text_item("initial", "initial"))
+        .unwrap();
+    sync_database(&store, &database, &paths, REMOTE_SCOPE, None, options()).unwrap();
+    let device_id = database.get_sync_device_id().unwrap();
+    let state = database
+        .get_or_create_sync_remote_state(REMOTE_SCOPE)
+        .unwrap();
+    let first_snapshot = state.snapshot.as_ref().unwrap().key.clone();
+    // A second item makes the next compaction cover the first snapshot.
+    database.save_item(&text_item("second", "second")).unwrap();
+    sync_database(&store, &database, &paths, REMOTE_SCOPE, None, options()).unwrap();
+    database
+        .with_connection(|connection| {
+            connection.execute(
+                "DELETE FROM sync_checkpoint_cursors WHERE remote_scope = ?1",
+                [REMOTE_SCOPE],
+            )?;
+            Ok(())
+        })
+        .unwrap();
+    let state = database
+        .get_or_create_sync_remote_state(REMOTE_SCOPE)
+        .unwrap();
+
+    // A peer failed to pull: the checkpoint is still published, but the history
+    // the previous checkpoint covered is not collected, so a lagging peer keeps
+    // its segment-chain recovery path.
+    let mut deferred = SyncEngineResult::default();
+    maybe_compact_deferring_history_collection(
+        &store,
+        &database,
+        &paths,
+        REMOTE_SCOPE,
+        &device_id,
+        &state,
+        None,
+        options().resource_limits,
+        ResourceGcMode::Off,
+        &mut deferred,
+    )
+    .unwrap();
+
+    assert!(
+        store.objects.lock().unwrap().contains_key(&first_snapshot),
+        "the covered history must survive a deferred collection"
+    );
+    let head = decode_checkpoint_head(
+        store
+            .objects
+            .lock()
+            .unwrap()
+            .get(CHECKPOINT_HEAD_KEY)
+            .unwrap()
+            .as_slice(),
+        None,
+    )
+    .unwrap();
+    assert!(head.generation >= 1);
+
+    drop(database);
+    fs::remove_dir_all(paths.project).unwrap();
+}
+
+#[test]
 fn stale_compactor_never_prunes_a_newer_checkpoint_candidate() {
     let store = MemoryStore::default();
     let device_id = "11111111-1111-4111-8111-111111111111";

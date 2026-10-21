@@ -243,6 +243,40 @@ fn maybe_compact(
         session_key,
         resource_limits,
         resource_gc_mode,
+        // The direct compaction tests cover the collection path; the engine
+        // decides the flag per run.
+        true,
+        result,
+    )
+}
+
+/// A compaction that publishes the checkpoint but defers the collection of the
+/// history the previous checkpoint covered — the shape the engine uses when a
+/// peer failed to pull.
+#[allow(clippy::too_many_arguments)]
+fn maybe_compact_deferring_history_collection(
+    store: &impl ObjectStore,
+    database: &Database,
+    paths: &StoragePaths,
+    remote_scope: &str,
+    local_device_id: &str,
+    local_state: &SyncRemoteState,
+    session_key: Option<&SessionKey>,
+    resource_limits: ResourceLimits,
+    resource_gc_mode: ResourceGcMode,
+    result: &mut SyncEngineResult,
+) -> Result<(), String> {
+    engine::test_support::maybe_compact(
+        store,
+        database,
+        &engine_paths(paths),
+        remote_scope,
+        local_device_id,
+        local_state,
+        session_key,
+        resource_limits,
+        resource_gc_mode,
+        false,
         result,
     )
 }
