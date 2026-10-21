@@ -1,5 +1,6 @@
 use std::io::Read;
 use std::process::{Command, Stdio};
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use super::{OcrEngine, OcrEngineError, OcrInput, OcrOutput};
@@ -11,6 +12,11 @@ const RECOGNIZE_TIMEOUT: Duration = Duration::from_secs(120);
 /// config lock (`apply_ocr_runtime_settings`), so a hung binary must not
 /// block every config-dependent command forever.
 const PROBE_TIMEOUT: Duration = Duration::from_secs(10);
+/// How long a `tesseract --version` probe result stays trusted. The status
+/// command is polled every few seconds while the OCR settings panel is open,
+/// and each uncached probe spawns a process, so the result is memoized
+/// briefly instead of re-probing per call.
+const AVAILABILITY_CACHE_TTL: Duration = Duration::from_secs(30);
 
 /// Fallback languages when the stored value is blank or contains characters
 /// outside the traineddata-stem alphabet. Passing an invalid `-l` value
@@ -61,8 +67,7 @@ impl TesseractOcrEngine {
     }
 
     pub fn is_available() -> bool {
-        run_probe_with_timeout("tesseract", &["--version"], PROBE_TIMEOUT)
-            .is_some_and(|output| output.status.success())
+        cached_availability()
     }
 }
 
@@ -273,6 +278,26 @@ fn detect_tesseract_version() -> Option<String> {
     let first_line = stdout.lines().next()?;
     let version = first_line.split_whitespace().nth(1).unwrap_or("unknown");
     Some(version.to_string())
+}
+
+/// Memoizes the last `tesseract --version` probe for `AVAILABILITY_CACHE_TTL`.
+/// Callers include the status command, which the settings panel polls every
+/// few seconds; without the memo each poll pays a process spawn plus up to
+/// `PROBE_TIMEOUT` on a hung binary.
+fn cached_availability() -> bool {
+    static CACHE: Mutex<Option<(Instant, bool)>> = Mutex::new(None);
+    let mut cache = CACHE
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if let Some((probed_at, available)) = *cache {
+        if probed_at.elapsed() < AVAILABILITY_CACHE_TTL {
+            return available;
+        }
+    }
+    let available = run_probe_with_timeout("tesseract", &["--version"], PROBE_TIMEOUT)
+        .is_some_and(|output| output.status.success());
+    *cache = Some((Instant::now(), available));
+    available
 }
 
 #[cfg(test)]
