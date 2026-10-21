@@ -59,7 +59,16 @@ pub(super) fn insert_item_row(
          -- `kind`/`content_hash`. With an explicit target, an `id` collision
          -- surfaces as an error instead of corrupting the victim row.
          ON CONFLICT (kind, content_hash) DO UPDATE SET
-            title = excluded.title,
+            -- A user-authored title must survive a re-capture of the same
+            -- content: the capture would otherwise overwrite it with the
+            -- first characters of the text, while the `customTitle` metadata
+            -- flag (merged below) still claims the title is custom.
+            title = CASE
+                WHEN json_valid(clipboard_items.metadata_json)
+                     AND json_extract(clipboard_items.metadata_json, '$.customTitle') = 1
+                THEN clipboard_items.title
+                ELSE excluded.title
+            END,
             text_content = excluded.text_content,
             html_content = COALESCE(
                 excluded.html_content,

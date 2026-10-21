@@ -172,6 +172,48 @@ fn repeated_content_reuses_the_existing_record() {
 }
 
 #[test]
+fn a_recapture_keeps_a_user_renamed_title() {
+    let database = Database::open_in_memory().unwrap();
+    let mut renamed = text_item("renamed", "same-hash", 100);
+    renamed.title = "deploy script".to_owned();
+    renamed.metadata_json = Some(r#"{"customTitle":true}"#.to_owned());
+    database.save_item(&renamed).unwrap();
+
+    // The same content captured again carries the auto-generated title.
+    let repeated = text_item("recaptured", "same-hash", 500);
+    let stored_id = database.save_item(&repeated).unwrap();
+    assert_eq!(stored_id, "renamed");
+    let stored = database.get_item("renamed").unwrap().unwrap();
+    assert_eq!(
+        stored.title, "deploy script",
+        "a user-authored title must survive a re-capture"
+    );
+    assert_eq!(
+        stored.metadata_json.as_deref(),
+        Some(r#"{"customTitle":true}"#)
+    );
+}
+
+#[test]
+fn a_recapture_still_refreshes_an_automated_title() {
+    let database = Database::open_in_memory().unwrap();
+    let mut first = text_item("original", "same-hash", 100);
+    first.title = "old automatic title".to_owned();
+    first.metadata_json = Some(r#"{"customTitle":false}"#.to_owned());
+    database.save_item(&first).unwrap();
+
+    let mut repeated = text_item("replacement", "same-hash", 500);
+    repeated.title = "new automatic title".to_owned();
+    database.save_item(&repeated).unwrap();
+
+    let stored = database.get_item("original").unwrap().unwrap();
+    assert_eq!(
+        stored.title, "new automatic title",
+        "a title that is not user-authored follows the newest capture"
+    );
+}
+
+#[test]
 fn re_copied_soft_deleted_content_resurrects_the_record() {
     let database = Database::open_in_memory().unwrap();
     database
