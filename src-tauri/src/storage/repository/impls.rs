@@ -20,6 +20,20 @@ use super::{
 use crate::domain::{ClipboardItem, ClipboardKind};
 use crate::storage::{Database, StorageError};
 
+/// The moment a record was last seen, used by every lifecycle decision that
+/// ages a record out (retention expiry, capacity eviction).
+///
+/// `created_at_ms` is the *original* capture time: the content-dedup upsert
+/// keeps it frozen on purpose, because it doubles as the replication version
+/// baseline, and only refreshes `last_used_at_ms` when the same content is
+/// captured again. Judging age by `created_at_ms` alone therefore expired a
+/// record the user had just copied again — it sat at the top of the history
+/// and was hard-deleted by the next cleanup run, and it was the first
+/// candidate evicted when the library exceeded its cap. `restore_deleted`
+/// already refreshes `created_at_ms` for exactly this reason; the retention
+/// and eviction queries now use the same "last activity" notion instead.
+const LAST_ACTIVITY_SQL: &str = "MAX(created_at_ms, COALESCE(last_used_at_ms, created_at_ms))";
+
 impl ClipboardRepository for Database {
     fn save_item(&self, item: &ClipboardItem) -> Result<String, StorageError> {
         let _resource_publication = self.begin_resource_write();
@@ -574,10 +588,12 @@ impl ClipboardRepository for Database {
         self.with_connection(|connection| {
             let cutoff_ms = current_time_ms() - i64::from(days) * 86_400_000;
             let deleted = connection.execute(
-                "DELETE FROM clipboard_items
+                &format!(
+                    "DELETE FROM clipboard_items
                  WHERE is_favorite = 0
                    AND deleted = 0
-                   AND created_at_ms < ?1",
+                   AND {LAST_ACTIVITY_SQL} < ?1"
+                ),
                 [cutoff_ms],
             )?;
             Ok(deleted as u64)
@@ -609,12 +625,14 @@ impl ClipboardRepository for Database {
             }
             let excess = count - max_items as i64;
             let deleted = transaction.execute(
-                "DELETE FROM clipboard_items WHERE id IN (
-                    SELECT id FROM clipboard_items
-                    WHERE is_favorite = 0 AND deleted = 0
-                    ORDER BY created_at_ms ASC
-                    LIMIT ?1
-                )",
+                &format!(
+                    "DELETE FROM clipboard_items WHERE id IN (
+                     SELECT id FROM clipboard_items
+                     WHERE is_favorite = 0 AND deleted = 0
+                     ORDER BY {LAST_ACTIVITY_SQL} ASC
+                     LIMIT ?1
+                 )"
+                ),
                 [excess],
             )?;
             transaction.commit()?;

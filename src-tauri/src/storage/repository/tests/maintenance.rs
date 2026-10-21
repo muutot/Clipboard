@@ -134,3 +134,84 @@ fn concurrent_capacity_enforcement_does_not_over_evict() {
     let _ = std::fs::remove_file(format!("{}-wal", path.display()));
     let _ = std::fs::remove_file(format!("{}-shm", path.display()));
 }
+
+/// A record that was captured again must not expire with its first capture.
+///
+/// The content-dedup upsert keeps the original `created_at_ms` (it doubles as
+/// the replication version baseline) and only refreshes `last_used_at_ms`.
+/// Ageing records out by `created_at_ms` alone therefore hard-deleted the
+/// entry the user had just copied again — it was displayed as the freshest
+/// row of the history and disappeared with the next cleanup run, and it was
+/// the first candidate evicted once the library exceeded its cap.
+#[test]
+fn retention_keeps_a_record_that_was_captured_again() {
+    let database = Database::open_in_memory().unwrap();
+    let day = 86_400_000i64;
+    let old = current_time_ms() - 40 * day;
+
+    database
+        .save_item(&text_item("recopied", "hash-recopied", old))
+        .unwrap();
+    // The same content captured again: the dedup upsert keeps the original
+    // row and records the reuse as usage.
+    let stored_id = database
+        .save_item(&text_item(
+            "recopied-again",
+            "hash-recopied",
+            current_time_ms(),
+        ))
+        .unwrap();
+    assert_eq!(
+        stored_id, "recopied",
+        "the dedup upsert keeps the first row"
+    );
+
+    let stored = database.get_item("recopied").unwrap().unwrap();
+    assert_eq!(
+        stored.created_at_ms, old,
+        "the original capture time stays frozen"
+    );
+    assert!(
+        stored.last_used_at_ms.unwrap() > old,
+        "the reuse is recorded as usage"
+    );
+
+    assert_eq!(database.delete_older_than(30).unwrap(), 0);
+    assert!(
+        database.get_item("recopied").unwrap().is_some(),
+        "a record copied again must survive the retention window"
+    );
+}
+
+#[test]
+fn capacity_eviction_spares_the_most_recently_captured_record() {
+    let database = Database::open_in_memory().unwrap();
+    let day = 86_400_000i64;
+    let old = current_time_ms() - 40 * day;
+
+    database
+        .save_item(&text_item("stale-a", "hash-stale-a", old))
+        .unwrap();
+    database
+        .save_item(&text_item("stale-b", "hash-stale-b", old + day))
+        .unwrap();
+    database
+        .save_item(&text_item("fresh", "hash-fresh", old))
+        .unwrap();
+    database
+        .save_item(&text_item("fresh-again", "hash-fresh", current_time_ms()))
+        .unwrap();
+
+    assert_eq!(database.enforce_capacity_limit(1).unwrap(), 2);
+    let survivors: Vec<String> = database
+        .list_recent(10, 0, &HistoryFilter::default())
+        .unwrap()
+        .into_iter()
+        .map(|item| item.id)
+        .collect();
+    assert_eq!(
+        survivors,
+        vec!["fresh".to_owned()],
+        "the least recently captured records are evicted first"
+    );
+}
