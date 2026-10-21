@@ -230,18 +230,34 @@ def fetch_all_github_releases():
 
 
 def fetch_existing_gitcode_tags():
-    """获取 GitCode 上已存在的 Release Tag 列表"""
+    """获取 GitCode 上已存在的 Release Tag 列表(分页拉全,镜像 GitHub 侧逻辑)"""
     url = f"{GITCODE_API_BASE}/repos/{GITCODE_OWNER}/{GITCODE_REPO}/releases"
-    response = http.get(url, headers=get_gitcode_headers(), timeout=(10, 30))
+    tags = set()
+    page = 1
 
-    if response.status_code == 200:
-        releases = response.json()
-        return {rel.get("tag_name") for rel in releases if isinstance(rel, dict)}
-    else:
-        print(
-            f"[!] 读取 GitCode 已有 Release 失败 (HTTP {response.status_code})，将尝试直接同步。"
+    while True:
+        response = http.get(
+            url,
+            headers=get_gitcode_headers(),
+            params={"page": page, "per_page": 100},
+            timeout=(10, 30),
         )
-        return set()
+        if response.status_code != 200:
+            print(
+                f"[!] 读取 GitCode 已有 Release 失败 (HTTP {response.status_code})，将尝试直接同步。"
+            )
+            return set()
+
+        data = response.json()
+        if not data:
+            break
+
+        tags.update(
+            rel.get("tag_name") for rel in data if isinstance(rel, dict)
+        )
+        page += 1
+
+    return tags
 
 
 def url_origin(url):
