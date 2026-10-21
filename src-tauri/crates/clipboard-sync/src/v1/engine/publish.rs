@@ -188,7 +188,19 @@ fn published_segment_matches_outbox(
     {
         return false;
     }
-    let mut segment_item_ids = segment
+    let segment_item_ids = segment_item_ids(&segment);
+    match database.sync_outbox_range_item_ids(state.published_sequence, head.published_sequence) {
+        Ok(outbox_item_ids) => outbox_item_ids == segment_item_ids,
+        Err(_) => false,
+    }
+}
+
+/// The item identities a segment carries, sorted and de-duplicated.
+///
+/// The outbox batch encodes at most one mutation per item id, so this is the
+/// shape the pending outbox range is compared against.
+fn segment_item_ids(segment: &Segment) -> Vec<String> {
+    let mut ids = segment
         .mutations
         .upserts
         .iter()
@@ -201,11 +213,9 @@ fn published_segment_matches_outbox(
                 .map(|tombstone| tombstone.item_id.clone()),
         )
         .collect::<Vec<_>>();
-    segment_item_ids.sort();
-    match database.sync_outbox_range_item_ids(state.published_sequence, head.published_sequence) {
-        Ok(outbox_item_ids) => outbox_item_ids == segment_item_ids,
-        Err(_) => false,
-    }
+    ids.sort();
+    ids.dedup();
+    ids
 }
 
 fn listed_head_identity(info: &ObjectInfo) -> Option<(&str, u64)> {
@@ -437,6 +447,25 @@ pub(super) fn adopt_orphan_segments(
             return Err(format!(
                 "orphan segment {key:?} does not match its key layout"
             ));
+        }
+        // The commit below deletes every outbox row up to the segment's last
+        // sequence, so the orphan may only be adopted when it really encodes
+        // the rows that are still pending. A database restored from an older
+        // backup fills the same sequence range with unrelated rows (the
+        // outbox sequence is an AUTOINCREMENT counter, so it restarts with
+        // the restored database), and adopting the orphan would then delete
+        // rows that were never encoded — the local change would be dropped
+        // instead of published. `published_segment_matches_outbox` applies
+        // the same identity check to the other half of the crash window.
+        let outbox_item_ids =
+            database.sync_outbox_range_item_ids(state.published_sequence, segment.last_sequence)?;
+        if outbox_item_ids != segment_item_ids(&segment) {
+            // Not our pending work: drop the stale object and let the caller
+            // publish the live outbox instead.
+            store.delete(&key)?;
+            result.deleted_remote_objects =
+                checked_add(result.deleted_remote_objects, 1, "deleted object count")?;
+            return Ok(state);
         }
         let resource_refs = collect_mutation_resource_refs(&segment.mutations)?;
         cancellation::check()?;

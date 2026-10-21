@@ -330,3 +330,114 @@ fn partially_overlapping_orphan_leftover_is_deleted_during_adoption() {
     fs::remove_dir_all(source_paths.project).unwrap();
     fs::remove_dir_all(peer_paths.project).unwrap();
 }
+
+/// An orphan may only be adopted when it encodes the rows that are still
+/// pending.
+///
+/// The adoption commit deletes every outbox row up to the segment's last
+/// sequence, so adopting an orphan that encodes *other* items silently drops
+/// the local changes instead of publishing them. That is exactly the shape a
+/// database restored from an older backup produces: the outbox sequence is an
+/// AUTOINCREMENT counter, so the restored database fills the same sequence
+/// range with unrelated rows.
+#[test]
+fn orphan_that_encodes_other_items_is_not_adopted() {
+    let store = MemoryStore::default();
+    let source_paths = temp_paths("orphan-restored-source");
+    let peer_paths = temp_paths("orphan-restored-peer");
+    let source = Database::open(&source_paths.database).unwrap();
+    let peer = Database::open(&peer_paths.database).unwrap();
+
+    source.save_item(&text_item("initial", "initial")).unwrap();
+    sync_database(
+        &store,
+        &source,
+        &source_paths,
+        REMOTE_SCOPE,
+        None,
+        options(),
+    )
+    .unwrap();
+
+    // An interrupted publish leaves an orphan segment for the next outbox row.
+    source
+        .save_item(&text_item("orphaned", "orphaned"))
+        .unwrap();
+    let device_id = source.get_sync_device_id().unwrap();
+    let state = source
+        .get_or_create_sync_remote_state(REMOTE_SCOPE)
+        .unwrap();
+    let expected_first = state.published_sequence + 1;
+    let batch = source
+        .get_sync_outbox_batch_for_scope(REMOTE_SCOPE, 16)
+        .unwrap()
+        .unwrap();
+    let orphan_segment = Segment {
+        device_id: device_id.clone(),
+        epoch: state.epoch.clone(),
+        first_sequence: batch.first_sequence,
+        last_sequence: batch.last_sequence,
+        mutations: batch.mutations,
+    };
+    let orphan_encoded = encode_segment(&orphan_segment, None).unwrap();
+    let orphan_key = segment_object_key(
+        &device_id,
+        &state.epoch,
+        orphan_segment.first_sequence,
+        orphan_segment.last_sequence,
+        &orphan_encoded.sha256,
+    )
+    .unwrap();
+    store
+        .put(&orphan_key, orphan_encoded.bytes, PutCondition::IfAbsent)
+        .unwrap();
+
+    // The database is rolled back: the pending row now points at a different
+    // item, while the orphan still encodes the old one.
+    source
+        .save_item(&text_item("restored", "restored"))
+        .unwrap();
+    source
+        .with_connection(|connection| {
+            let sequence = i64::try_from(expected_first).unwrap();
+            connection.execute(
+                "UPDATE sync_outbox SET item_id = 'restored' WHERE sequence = ?1",
+                [sequence],
+            )?;
+            connection.execute("DELETE FROM sync_outbox WHERE sequence > ?1", [sequence])?;
+            Ok(())
+        })
+        .unwrap();
+
+    sync_database(
+        &store,
+        &source,
+        &source_paths,
+        REMOTE_SCOPE,
+        None,
+        options(),
+    )
+    .unwrap();
+
+    // The stale orphan is dropped and the live outbox is published instead.
+    assert!(
+        !store.objects.lock().unwrap().contains_key(&orphan_key),
+        "an orphan that encodes other items must not be adopted"
+    );
+    assert_eq!(source.count_sync_outbox().unwrap(), 0);
+
+    sync_database(&store, &peer, &peer_paths, REMOTE_SCOPE, None, options()).unwrap();
+    assert!(
+        peer.get_item("restored").unwrap().is_some(),
+        "the pending change must reach the peer"
+    );
+    assert!(
+        peer.get_item("orphaned").unwrap().is_none(),
+        "the stale orphan content must not be published"
+    );
+
+    drop(source);
+    drop(peer);
+    fs::remove_dir_all(source_paths.project).unwrap();
+    fs::remove_dir_all(peer_paths.project).unwrap();
+}
