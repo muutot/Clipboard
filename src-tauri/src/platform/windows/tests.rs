@@ -40,6 +40,28 @@ fn format_name_lookup() {
     assert_eq!(format_id_to_name(15), "CF_HDROP");
 }
 
+/// The self-trigger marker decides whether a clipboard change is the
+/// application's own write, so the clipboard must be opened with the same
+/// retry every other reader uses: a clipboard that another application holds
+/// for a moment must not turn the check into a false negative.
+#[cfg(target_os = "windows")]
+#[test]
+fn the_clipboard_open_retries_while_another_application_holds_it() {
+    let mut attempts = 0u32;
+    assert!(access::open_clipboard_with_retry_using(|index| {
+        attempts = index + 1;
+        index >= 2
+    }));
+    assert_eq!(attempts, 3, "the open is retried until it succeeds");
+
+    let mut attempts = 0u32;
+    assert!(!access::open_clipboard_with_retry_using(|index| {
+        attempts = index + 1;
+        false
+    }));
+    assert_eq!(attempts, 20, "the retry is bounded");
+}
+
 #[cfg(target_os = "windows")]
 #[test]
 fn unknown_format_gets_fallback_name() {

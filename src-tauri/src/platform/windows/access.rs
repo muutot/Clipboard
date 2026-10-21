@@ -62,11 +62,18 @@ pub(super) fn read_self_trigger_marker() -> Option<Vec<u8>> {
     }
 
     let format = self_trigger_format_id()?;
+    if unsafe { IsClipboardFormatAvailable(format) } == 0 {
+        return None;
+    }
+    // The marker decides whether a clipboard change is the application's own
+    // write. Opening the clipboard with a single attempt turned a clipboard
+    // that another application holds for a moment into a false negative, so
+    // the application's own copy was captured as a new history entry. Every
+    // other reader in this module already uses the retrying open.
+    if !open_clipboard_with_retry() {
+        return None;
+    }
     unsafe {
-        if IsClipboardFormatAvailable(format) == 0 || OpenClipboard(0) == 0 {
-            return None;
-        }
-
         let handle = GetClipboardData(format);
         if handle == 0 {
             CloseClipboard();
@@ -136,8 +143,16 @@ impl Drop for ClipboardGuard {
 /// the capture path and fail pastes spuriously.
 #[cfg(target_os = "windows")]
 pub(super) fn open_clipboard_with_retry() -> bool {
-    for _ in 0..20 {
-        if unsafe { OpenClipboard(0) } != 0 {
+    open_clipboard_with_retry_using(|_| unsafe { OpenClipboard(0) != 0 })
+}
+
+/// The retry loop, separated from the Win32 call so the attempt behavior can
+/// be covered without touching the user's clipboard.
+#[cfg(target_os = "windows")]
+pub(super) fn open_clipboard_with_retry_using(mut attempt: impl FnMut(u32) -> bool) -> bool {
+    const ATTEMPTS: u32 = 20;
+    for index in 0..ATTEMPTS {
+        if attempt(index) {
             return true;
         }
         std::thread::sleep(std::time::Duration::from_millis(5));
