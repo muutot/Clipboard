@@ -593,16 +593,14 @@
   }
 
   .stats-metric-value {
-    min-width: 0;
-    max-width: 42%;
-    flex: 0 1 auto;
+    flex: 0 0 auto;
     color: var(--text-secondary);
     font-size: var(--settings-control-size);
     font-variant-numeric: tabular-nums;
     font-weight: 560;
     line-height: 1.45;
     text-align: right;
-    overflow-wrap: anywhere;
+    white-space: nowrap;
   }
 
   .memory-toolbar {
