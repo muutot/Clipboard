@@ -181,6 +181,8 @@ pub(super) fn garbage_collect_resources(
     let now_ms = current_time_ms();
     let oldest_eligible = now_ms.saturating_sub(RESOURCE_GC_GRACE_MS);
     let mut deleted = 0u64;
+    let mut newest_stored_ms: Option<i64> = None;
+    let mut candidates = Vec::new();
     for info in store.list("v1/resources/", None)? {
         cancellation::check()?;
         if parse_resource_key(&info.key).is_err() || keep.contains(&info.key) {
@@ -191,11 +193,28 @@ pub(super) fn garbage_collect_resources(
             // outside the in-flight grace window, so retain it.
             continue;
         };
+        newest_stored_ms = Some(match newest_stored_ms {
+            Some(current) => current.max(modified_ms),
+            None => modified_ms,
+        });
         if modified_ms > oldest_eligible {
             continue;
         }
-        store.delete(&info.key)?;
-        deleted = checked_add(deleted, 1, "deleted remote object count")?;
+        candidates.push(info.key);
+    }
+    // Clock-skew fail-safe: the cutoff is anchored to the newest timestamp
+    // the store itself reports in this sweep. When the local clock runs ahead
+    // of the store clock by more than the grace window, freshly uploaded
+    // objects would appear older than the grace window and could be deleted
+    // while a peer's in-flight upload still needs them. Skipping the sweep
+    // only delays cleanup; deleting on a skewed clock would lose data.
+    let clock_trustworthy = newest_stored_ms.is_some_and(|newest| oldest_eligible <= newest);
+    if clock_trustworthy {
+        for key in candidates {
+            cancellation::check()?;
+            store.delete(&key)?;
+            deleted = checked_add(deleted, 1, "deleted remote object count")?;
+        }
     }
 
     for info in store.list(RESOURCE_MANIFEST_PREFIX, None)? {
