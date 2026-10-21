@@ -2,7 +2,7 @@
 //! commands.
 
 use super::clipboard::managed_source_path;
-use super::icons::{app_icon_file_name, build_icon_cache};
+use super::icons::{app_icon_file_name, build_icon_cache, icon_reference_matches};
 use super::replace::{validate_replace_source, REPLACE_MAX_SOURCE_BYTES};
 use super::shell::{open_external_url, openable_scheme};
 
@@ -495,4 +495,38 @@ fn merged_entries_distinguish_apps_with_icon_orphans_and_iconless_apps() {
     assert_eq!(entries[3].app_name, None);
 
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The stored icon reference format differs per platform: Windows and Linux
+/// keep the bare file name, macOS the absolute path inside the icons
+/// directory. A still referenced icon must be recognized in both formats, and
+/// an absolute reference from outside the managed directory must not be.
+#[test]
+fn icon_references_match_by_name_inside_the_icons_directory() {
+    let root = std::env::temp_dir().join(format!(
+        "clipboard-icon-reference-{}-{:016x}",
+        std::process::id(),
+        rand::random::<u64>()
+    ));
+    let icons = root.join("icons");
+    std::fs::create_dir_all(&icons).unwrap();
+    let icon = icons.join("example.png");
+    std::fs::write(&icon, b"png").unwrap();
+    let outside = root.join("outside.png");
+    std::fs::write(&outside, b"png").unwrap();
+
+    assert!(icon_reference_matches("example.png", "example.png", &icons));
+    assert!(icon_reference_matches(
+        icon.to_string_lossy().as_ref(),
+        "example.png",
+        &icons
+    ));
+    assert!(!icon_reference_matches("other.png", "example.png", &icons));
+    assert!(!icon_reference_matches(
+        outside.to_string_lossy().as_ref(),
+        "example.png",
+        &icons
+    ));
+
+    let _ = std::fs::remove_dir_all(&root);
 }

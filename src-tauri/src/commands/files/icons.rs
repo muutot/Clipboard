@@ -152,6 +152,35 @@ pub fn list_icon_cache(
     Ok(build_icon_cache(&paths.storage.join("icons"), apps))
 }
 
+/// Whether a stored icon reference points at the icon file with this name.
+///
+/// The stored format differs per platform: Windows and Linux keep the bare
+/// file name, while macOS keeps the absolute path inside the icons directory.
+/// Comparing the raw strings therefore never matched on macOS, so a still
+/// referenced icon was treated as an orphan and deleted. An absolute reference
+/// must additionally resolve inside the managed icons directory.
+pub(super) fn icon_reference_matches(
+    reference: &str,
+    file_name: &str,
+    icons_dir: &std::path::Path,
+) -> bool {
+    let path = std::path::Path::new(reference.trim());
+    let name_matches = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name == file_name);
+    if !name_matches {
+        return false;
+    }
+    if !path.is_absolute() {
+        return true;
+    }
+    path.canonicalize()
+        .ok()
+        .zip(icons_dir.canonicalize().ok())
+        .is_some_and(|(resolved, root)| resolved.starts_with(root))
+}
+
 #[tauri::command]
 pub fn delete_icon_files(
     database: tauri::State<'_, Database>,
@@ -192,7 +221,7 @@ pub fn delete_icon_files(
         if referenced
             .icon_paths
             .iter()
-            .any(|referenced_name| referenced_name == file_name)
+            .any(|reference| icon_reference_matches(reference, file_name, &icons_dir))
         {
             continue;
         }
