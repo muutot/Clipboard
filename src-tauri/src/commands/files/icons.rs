@@ -159,6 +159,11 @@ pub fn delete_icon_files(
     names: Vec<String>,
 ) -> Result<u64, String> {
     let icons_dir = paths.storage.join("icons");
+    let Some(publication) = database.resource_cleanup_snapshot() else {
+        // A capture is publishing a resource right now, so the reference
+        // snapshot below could race it; defer the user-visible delete.
+        return Ok(0);
+    };
     let referenced = database
         .list_storage_file_references()
         .map_err(|error| error.to_string())?;
@@ -192,8 +197,16 @@ pub fn delete_icon_files(
             continue;
         }
         if path.extension().is_some_and(|e| e == "png") && path.exists() {
-            std::fs::remove_file(&path).map_err(|e| e.to_string())?;
-            deleted += 1;
+            // Serialize the unlink against an in-flight publication: a new
+            // capture may have started reusing this content-addressed icon
+            // since the reference snapshot was taken.
+            match publication.remove_if_current(|| std::fs::remove_file(&path)) {
+                Some(Ok(())) => deleted += 1,
+                Some(Err(error)) => return Err(error.to_string()),
+                // Publication started after the snapshot; stop instead of
+                // deleting from obsolete references.
+                None => break,
+            }
         }
     }
     Ok(deleted)
