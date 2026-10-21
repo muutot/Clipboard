@@ -67,12 +67,6 @@ impl LocalApiServer {
         }
     }
 
-    pub fn with_limits(mut self, page_size_limit: u32, search_page_size_limit: u32) -> Self {
-        self.page_size_limit = page_size_limit;
-        self.search_page_size_limit = search_page_size_limit;
-        self
-    }
-
     pub fn with_database(port: u16, database: Arc<Database>) -> Self {
         let mut server = Self::new(port);
         server.database = Some(database);
