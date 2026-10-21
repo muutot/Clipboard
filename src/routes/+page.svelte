@@ -925,7 +925,14 @@
 
     const unsubTagsChanged = listen<TagsChangedPayload>("tags-changed", (event) => {
       const { renamed, deleted } = event.payload;
-      if (!renamed && !deleted) return;
+      // A color-only change carries an empty payload: the tag registry color
+      // changed, so the chips must repaint even though no record was renamed
+      // or deleted. The payload shape cannot express that difference, so the
+      // empty payload is treated as "colors changed".
+      if (!renamed && !deleted) {
+        void refreshTagColors();
+        return;
+      }
       // Compute one patch per loaded record — the store is the only place a
       // record lives, so enumerating it cannot miss the spare search cache or
       // the detail pane the way a hand-rolled per-copy loop once did.
