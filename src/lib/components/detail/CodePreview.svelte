@@ -4,11 +4,30 @@
     language?: string | null;
   }
 
+  import { FILE_PREVIEW_LIMIT } from "$lib/utils/content/file-preview";
+
   let { content, language = null }: Props = $props();
 
-  const detectedLang = $derived(language ?? detectLanguage(content));
+  // The tokenizer and the per-line spans have no other bound: without a cap,
+  // opening the detail panel on a multi-hundred-KB code item tokenizes and
+  // renders every byte at once. Cap at the same limit as file previews and
+  // reuse the shared truncation note.
+  const preview = $derived.by(() => {
+    if (content.length <= FILE_PREVIEW_LIMIT) {
+      return { text: content, truncated: false };
+    }
+    // Cut back to the last line boundary inside the limit so the rendered
+    // block does not end on a half-token line.
+    const cut = content.lastIndexOf("\n", FILE_PREVIEW_LIMIT);
+    return {
+      text: cut > 0 ? content.slice(0, cut) : content.slice(0, FILE_PREVIEW_LIMIT),
+      truncated: true,
+    };
+  });
 
-  const tokenizedLines = $derived(tokenize(content, detectedLang));
+  const detectedLang = $derived(language ?? detectLanguage(preview.text));
+
+  const tokenizedLines = $derived(tokenize(preview.text, detectedLang));
 
   function detectLanguage(text: string): string {
     const patterns: { name: string; re: RegExp; weight: number }[] = [
@@ -367,6 +386,15 @@
     font-size: 10px;
     text-transform: uppercase;
     letter-spacing: 0.05em;
+  }
+
+  .code-truncated {
+    display: block;
+    max-width: 100%;
+    padding: 4px 10px 8px;
+    color: var(--text-muted);
+    font-size: 10px;
+    text-align: center;
   }
 
   .code-content {
