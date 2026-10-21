@@ -32,7 +32,11 @@ through debounce, query and two animation frames after accepted results. They re
 mean/P95/P99 for the latest 1,000 completed visible text searches, with durations only
 in memory. Empty queries, stale/hidden results, errors and disposal do not add samples.
 This approximation includes the intentional 300 ms debounce, unlike backend query
-latency. General native WebView interaction latency remains unmeasured; the
+latency. The measurement starts when the search effect observes a changed query, so
+type-to-search, suggestion/history picks, inline suggestions and saved searches are
+covered as well; an earlier version started it from the search box `input` event, which
+is delivered after the effect, and therefore never produced a sample. General native
+WebView interaction latency remains unmeasured; the
 hidden-window resident-memory probe is recorded below.
 
 File export and capture improvements are additionally covered by behavioral tests:

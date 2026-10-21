@@ -136,9 +136,13 @@ Main-route controllers receive live settings/query/filter getters and a shared I
 
 ## Search interaction diagnostics
 
-`controllers/search.svelte.ts` starts `utils/search/search-paint-latency.ts` from the header input
-callback. Only accepted first-page text searches report after Svelte tick plus two animation
-frames; stale, hidden, disposed and over-60-second observations are discarded. This is an
+`controllers/search.svelte.ts` starts `utils/search/search-paint-latency.ts` when the search
+effect sees a changed query, not from the header input callback: the query state update and the
+effect run are delivered before the search box's `input` event, so a handler-started interaction
+would never belong to the search it measures. Every query change is therefore measured, including
+type-to-search, suggestion/history picks, inline suggestions and saved searches. Only accepted
+first-page text searches report after Svelte tick plus two animation frames; stale, hidden,
+disposed and over-60-second observations are discarded. This is an
 approximate rendered-frame boundary, not an OS compositor measurement. `storage.ts` invokes
 `record_search_interaction_latency(durationMs)`; `PerformanceSnapshot.searchInputLatency`
 keeps the latest 1,000 durations in memory, separate from backend `searchLatency`. No query

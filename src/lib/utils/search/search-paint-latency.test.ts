@@ -24,28 +24,34 @@ it("includes debounce and rendering, drops stale/hidden work and cancels on disp
     callbacks.forEach((callback) => callback(time));
   };
   const tracker = createSearchPaintTracker(report, clock);
-  tracker.input();
-  const interaction = tracker.take();
+  const interaction = tracker.input();
   time = 320;
   tracker.painted(interaction, () => true);
   nextFrame();
   expect(report).not.toHaveBeenCalled();
   nextFrame();
   expect(report).toHaveBeenCalledWith(352);
-  tracker.input();
-  const stale = tracker.take();
+  // A newer interaction makes the previous one stale: it is dropped without
+  // scheduling a frame.
+  const stale = tracker.input();
   tracker.input();
   tracker.painted(stale, () => true);
   expect(frames.size).toBe(0);
-  const fresh = tracker.take();
+  const fresh = tracker.input();
   tracker.painted(fresh, () => true);
   nextFrame();
   visible = false;
   nextFrame();
   expect(report).toHaveBeenCalledTimes(1);
   visible = true;
-  tracker.input();
-  tracker.painted(tracker.take(), () => true);
+  // A superseded request never reports.
+  const superseded = tracker.input();
+  tracker.painted(superseded, () => false);
+  nextFrame();
+  nextFrame();
+  expect(report).toHaveBeenCalledTimes(1);
+  const pending = tracker.input();
+  tracker.painted(pending, () => true);
   tracker.dispose();
   expect(frames.size).toBe(0);
 });

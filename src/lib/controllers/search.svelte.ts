@@ -1,5 +1,8 @@
 import { onDestroy, untrack, tick } from "svelte";
-import { createSearchPaintTracker } from "$lib/utils/search/search-paint-latency";
+import {
+  createSearchPaintTracker,
+  type SearchInteraction,
+} from "$lib/utils/search/search-paint-latency";
 import { recordSearchInteractionLatency } from "$lib/services/storage";
 import { searchClipboardHistory } from "$lib/services/clipboard";
 import { isTauriRuntime } from "$lib/services/runtime";
@@ -26,7 +29,15 @@ export interface SearchDependencies {
 }
 /** Owns debouncing, request generations and search paging without duplicating records. */
 export function createSearchController(deps: SearchDependencies) {
+  // The interaction is started by the search effect, not by a DOM input
+  // handler: the query state update and this effect run before the search
+  // box's `input` event is delivered, so a handler-started interaction would
+  // never belong to the search it is supposed to measure.
+  let activeInteraction: SearchInteraction | null = null;
   const paintTracker = createSearchPaintTracker((ms) => {
+    // One sample per interaction: a re-run of the same query (history
+    // invalidation) must not report the same measurement twice.
+    activeInteraction = null;
     void recordSearchInteractionLatency(ms).catch(() => {});
   });
   let indexedQuery = $state("");
@@ -49,6 +60,9 @@ export function createSearchController(deps: SearchDependencies) {
 
   let pendingSearchHistoryQuery = "";
 
+  // The query the current measurement belongs to.
+  let measuredQuery = "";
+
   // --- Effects ---
 
   // Only an actual page-size or sort-rule change should restart the search.
@@ -70,7 +84,14 @@ export function createSearchController(deps: SearchDependencies) {
 
   $effect(() => {
     const requestedQuery = deps.query.trim();
-    const interaction = paintTracker.take();
+    // A changed query starts a new measurement. Re-runs for the same query
+    // (history invalidation, settings change) keep the pending interaction so
+    // the restarted search reports the same user-visible latency once.
+    if (requestedQuery !== measuredQuery) {
+      measuredQuery = requestedQuery;
+      activeInteraction = paintTracker.input();
+    }
+    const interaction = activeInteraction;
     const requestedFilter = deps.filter();
     void searchSettingsKey; // dependency: narrow key, not the whole store
     const requestedMaxResults = untrack(() => deps.settings.searchPageSizeLimit);
@@ -138,9 +159,9 @@ export function createSearchController(deps: SearchDependencies) {
           searchOffset = page.items.length;
           searchHasMore = searchOffset < Math.min(page.totalCount, requestedMaxResults);
           updateSearchCache(page.items);
-          void tick().then(() =>
-            paintTracker.painted(interaction, () => requestId === searchRequestId),
-          );
+          void tick().then(() => {
+            paintTracker.painted(interaction, () => requestId === searchRequestId);
+          });
           deps.status = page.truncated
             ? deps.translate("app.searchTruncated", {
                 shown: page.items.length,
@@ -225,7 +246,6 @@ export function createSearchController(deps: SearchDependencies) {
     searchLoadRequestId++;
   });
   return {
-    recordInput: () => paintTracker.input(),
     invalidateSearchResults,
     loadSearchPage,
     updateSearchCache,

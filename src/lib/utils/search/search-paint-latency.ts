@@ -1,6 +1,9 @@
 export interface SearchInteraction {
   generation: number;
   startedAt: number;
+  /** Set once the interaction produced a sample, so a repeated search of the
+   * same query cannot report the same measurement twice. */
+  reported?: boolean;
 }
 interface Clock {
   now(): number;
@@ -20,39 +23,46 @@ export function createSearchPaintTracker(
   clock: Clock = browserClock,
 ) {
   let generation = 0;
-  let pending: SearchInteraction | null = null;
   let frame = 0;
   const cancel = () => {
     if (frame) clock.cancel(frame);
     frame = 0;
   };
   return {
-    input() {
+    /**
+     * Starts a new interaction and returns it. The caller owns the returned
+     * interaction until the matching search paints: starting it here (rather
+     * than from a DOM input handler) keeps the measurement attached to the
+     * query that actually produced the result, whatever changed the query.
+     */
+    input(): SearchInteraction {
       cancel();
-      pending = { generation: ++generation, startedAt: clock.now() };
-    },
-    take() {
-      const interaction = pending;
-      pending = null;
-      return interaction;
+      return { generation: ++generation, startedAt: clock.now() };
     },
     painted(interaction: SearchInteraction | null, current: () => boolean) {
-      if (!interaction || interaction.generation !== generation || !clock.visible()) return;
+      if (!interaction) return;
+      if (interaction.reported) return;
+      if (interaction.generation !== generation) return;
+      if (!clock.visible()) return;
       cancel();
       frame = clock.frame(() => {
         frame = clock.frame(() => {
           frame = 0;
-          if (interaction.generation !== generation || !current() || !clock.visible()) return;
+          if (interaction.reported) return;
+          if (interaction.generation !== generation) return;
+          if (!current()) return;
+          if (!clock.visible()) return;
           const elapsed = clock.now() - interaction.startedAt;
-          if (Number.isFinite(elapsed) && elapsed >= 0 && elapsed <= 60_000)
+          if (Number.isFinite(elapsed) && elapsed >= 0 && elapsed <= 60_000) {
+            interaction.reported = true;
             report(Math.round(elapsed));
+          }
         });
       });
     },
     dispose() {
       cancel();
       generation++;
-      pending = null;
     },
   };
 }
