@@ -14,12 +14,14 @@
     "core:window:allow-set-size",
     "core:window:allow-set-always-on-top",
     "core:window:allow-set-decorations",
+    "core:window:allow-set-background-color",
     "core:window:allow-outer-position",
     "core:window:allow-outer-size",
     "core:window:allow-scale-factor",
     "core:window:allow-current-monitor",
     "core:window:allow-start-dragging",
     "core:webview:allow-create-webview-window",
+    "core:webview:allow-set-webview-background-color",
     "dialog:default",
     "dialog:allow-save"
   ]
