@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import { SvelteSet } from "svelte/reactivity";
   import { getCurrentWindow, type Window } from "@tauri-apps/api/window";
+  import { getCurrentWebview } from "@tauri-apps/api/webview";
   import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
   import { PhysicalPosition } from "@tauri-apps/api/dpi";
   import { showToast } from "$lib/services/toast";
@@ -21,6 +22,7 @@
   import { getDisplayTitle } from "$lib/utils/content/display-text";
   import { generalSettings } from "$lib/services/settings";
   import { applyGeneralSettingsToDocument } from "$lib/services/settings-bootstrap";
+  import { resolveThemeColors } from "$lib/utils/settings/theme";
   import { showMainWindow } from "$lib/services/window-control";
   import type {
     ClipboardItem,
@@ -198,6 +200,22 @@
     const reload = () => {
       if (!disposed) void load();
     };
+    // The panel has no editable surfaces, selection modes, or other Escape
+    // consumers, so Escape simply hides it. Hide (not close): the surface
+    // survives and the next toggle re-shows instantly, mirroring the
+    // backend's hide-based toggle. The main window's Escape path differs
+    // because it must yield to bulk selection and tag filters; this panel
+    // has none.
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      void resolveFloatWindow().then((win) => {
+        if (disposed || !win) return;
+        void win.hide().catch((error) => {
+          console.error("Unable to hide the float panel", error);
+        });
+      });
+    };
+    window.addEventListener("keydown", onKeyDown);
     let unlistenAdded: (() => void) | undefined;
     let unlistenItemsChanged: (() => void) | undefined;
     let unlistenHistoryInvalidated: (() => void) | undefined;
@@ -265,6 +283,7 @@
       disposed = true;
       loadRequestId += 1;
       endHeaderDrag();
+      window.removeEventListener("keydown", onKeyDown);
       unlistenAdded?.();
       unlistenItemsChanged?.();
       unlistenHistoryInvalidated?.();
@@ -322,6 +341,16 @@
   async function revealFloatPanel(isAlive: () => boolean): Promise<void> {
     const win = await resolveFloatWindow();
     if (!win || !isAlive()) return;
+    const webview = getCurrentWebview();
+    // The panel is opaque, so seed the window brush and the webview default
+    // surface with the theme color: whatever the native surface shows before the
+    // first composited frame is the panel color instead of black or white (the
+    // same reason the settings window passes `backgroundColor` at creation).
+    const backdrop = resolveThemeColors($generalSettings.themeColors).bg;
+    await Promise.allSettled([
+      getCurrentWindow().setBackgroundColor(backdrop),
+      webview.setBackgroundColor(backdrop),
+    ]);
     try {
       await win.show();
     } catch (error) {

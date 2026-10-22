@@ -2,50 +2,64 @@
 
 use std::sync::Mutex;
 
-use tauri::{AppHandle, Manager, Runtime};
+use tauri::{AppHandle, Manager, Runtime, WebviewWindow};
 
 use crate::config::ConfigStore;
 use crate::platform::windows::hotkey::HotkeyManager;
 
-/// Hides the main window and asks WebView2 to release its active page
-/// resources. The suspension is best-effort; hiding still succeeds if the
-/// native webview cannot suspend.
-pub fn hide_main_window<R: Runtime>(window: &tauri::WebviewWindow<R>) -> tauri::Result<()> {
-    #[cfg(not(target_os = "windows"))]
-    window.hide()?;
-    #[cfg(target_os = "windows")]
-    {
-        crate::platform::windows::webview_memory::begin_hide();
-        if let Err(error) = window.hide() {
-            crate::platform::windows::webview_memory::cancel_hide();
-            return Err(error);
-        }
-        crate::platform::windows::webview_memory::suspend_main_webview(window);
-    }
-    Ok(())
+/// Hides the main window.
+///
+/// The webview keeps its composition surface while hidden, so restoring shows
+/// the last painted frame immediately. WebView2 cannot render for a hidden
+/// window (`requestAnimationFrame` stalls), which is why hiding must not also
+/// suspend the webview: a `TrySuspend`/`Resume` cycle re-creates the surface
+/// and made the content blink to the backdrop right after the window appeared.
+pub fn hide_main_window<R: Runtime>(window: &WebviewWindow<R>) -> tauri::Result<()> {
+    window.hide()
 }
 
-/// Resumes the webview before showing, then restores and focuses the main
-/// window. Every native show path must use this instead of calling
-/// `Window::show` directly.
-pub fn restore_main_window<R: Runtime>(window: &tauri::WebviewWindow<R>) -> tauri::Result<()> {
-    #[cfg(target_os = "windows")]
-    crate::platform::windows::webview_memory::resume_main_webview(window);
+/// Restores and focuses the main window. Every native show path must use this
+/// instead of calling `Window::show` directly.
+pub fn restore_main_window<R: Runtime>(window: &WebviewWindow<R>) -> tauri::Result<()> {
     window.show()?;
-    window.unminimize()?;
+    // `ShowWindow(SW_RESTORE)` on an already restored window repaints it again
+    // right after it became visible, which can blink the fresh content.
+    if window.is_minimized().unwrap_or(false) {
+        window.unminimize()?;
+    }
     window.set_focus()?;
     Ok(())
 }
 
-/// Safety net for frontend or OS-initiated show paths that bypass
-/// [`restore_main_window`].
-pub fn main_window_focused<R: Runtime>(window: &tauri::WebviewWindow<R>) {
+/// Excludes the WebView2 container from the parent window's erase. Tao paints
+/// the whole client rectangle with the window background on `WM_ERASEBKGND`
+/// and does not set `WS_CLIPCHILDREN`, so without this a show or repaint can
+/// cover the webview with the backdrop for one frame.
+pub fn enable_child_clipping<R: Runtime>(window: &WebviewWindow<R>) -> Result<(), String> {
     #[cfg(target_os = "windows")]
-    crate::platform::windows::webview_memory::resume_main_webview(window);
-    // Only the Windows webview-suspension path consumes the handle; other
-    // platforms take the hook purely to keep the call sites uniform.
+    {
+        extern "system" {
+            fn GetWindowLongW(hwnd: isize, index: i32) -> i32;
+            fn SetWindowLongW(hwnd: isize, index: i32, new_long: i32) -> i32;
+        }
+        const GWL_STYLE: i32 = -16;
+        const WS_CLIPCHILDREN: i32 = 0x0200_0000;
+
+        let hwnd = window.hwnd().map_err(|error| error.to_string())?.0 as isize;
+        if hwnd == 0 {
+            return Err("window handle is unavailable".to_owned());
+        }
+        unsafe {
+            let style = GetWindowLongW(hwnd, GWL_STYLE);
+            SetWindowLongW(hwnd, GWL_STYLE, style | WS_CLIPCHILDREN);
+        }
+        Ok(())
+    }
     #[cfg(not(target_os = "windows"))]
-    let _ = window;
+    {
+        let _ = window;
+        Ok(())
+    }
 }
 
 pub fn show_main_window<R: Runtime>(app: &AppHandle<R>) {

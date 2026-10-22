@@ -66,8 +66,8 @@ use platform::hotkey_common::{
 };
 use platform::windows::hotkey::HotkeyManager;
 use platform::{
-    hide_main_window, main_window_focused, show_main_window, sync_autostart, ClipboardMonitor,
-    SingleInstanceError, SingleInstanceGuard, SystemTray,
+    hide_main_window, show_main_window, sync_autostart, ClipboardMonitor, SingleInstanceError,
+    SingleInstanceGuard, SystemTray,
 };
 use privacy::PrivacyManager;
 use search::{SearchIndex, SearchSyncWorker, SearchSynchronizer};
@@ -687,7 +687,48 @@ pub fn run() {
                 .window_opacity_affects_text
                 .then(|| config.general_settings().window_transparency);
             let startup_window_effect = config.general_settings().window_effect.clone();
+            // The main window is built below (tauri.conf.json sets `create: false`)
+            // so its transparency can follow the saved backdrop. A transparent
+            // window leaves WebView2 compositing an unthemed surface: with a GDI
+            // erase brush it flashed black, without one it flashed white. An opaque
+            // backdrop gets a real opaque window instead — the same shape as the
+            // settings window, which never flashes.
+            let general = config.general_settings();
+            let main_backdrop_opaque = general.window_effect == "off"
+                && !general.window_opacity_affects_text
+                && general.window_transparency >= 100;
+            // Clone before the store moves into the managed state. The color has
+            // to be applied while the webview is created: WebView2 only drops its
+            // initial white surface when the default background is set together
+            // with the controller, which is why the settings window (creation-time
+            // `backgroundColor`) never flashes and a later `setBackgroundColor`
+            // call from the page still does.
+            let main_backdrop = general.theme_background().to_owned();
             app.manage(Mutex::new(config));
+            if let Some(window_config) = app
+                .config()
+                .app
+                .windows
+                .iter()
+                .find(|window| window.label == "main")
+                .cloned()
+            {
+                let mut builder =
+                    tauri::WebviewWindowBuilder::from_config(app.handle(), &window_config)?;
+                if main_backdrop_opaque {
+                    builder = builder.transparent(false);
+                    if let Ok(color) = main_backdrop.parse::<tauri::window::Color>() {
+                        builder = builder.background_color(color);
+                    }
+                }
+                let main_window = builder.build()?;
+                // Tao erases the whole client rectangle with the window
+                // background on show; without clipping the webview out of that
+                // erase, the content blinks behind the backdrop for a frame.
+                if let Err(error) = crate::platform::enable_child_clipping(&main_window) {
+                    crate::log_warn!("[window] failed to exclude the webview from window erasing: {error}");
+                }
+            }
             app.manage(paths);
             app.manage(database);
             app.manage(Mutex::new(item_operations::ExternalChangeWorker::start(app.handle().clone())?));
@@ -739,38 +780,31 @@ pub fn run() {
             // Populate the tray "recent" submenu once the database is managed.
             crate::platform::refresh_tray_recent_menu(app.handle());
 
+            // Destroy the float panel's WebView after it has been hidden for a
+            // while, releasing its renderer process; the next toggle rebuilds it.
+            commands::float::start_float_idle_reaper(app.handle().clone());
+
             if let Some(window) = app.get_webview_window("main") {
                 let app_handle = app.handle().clone();
                 let window_to_hide = window.clone();
                 window.on_window_event(move |event| {
-                    match event {
-                        tauri::WindowEvent::CloseRequested { api, .. } => {
-                            let close_to_tray = match app_handle
-                                .state::<Mutex<ConfigStore>>()
-                                .lock()
-                            {
-                                Ok(config) => config.close_to_tray(),
-                                Err(_) => {
-                                    crate::log_error!(
-                                        "[tray] configuration lock is poisoned; allowing window close"
-                                    );
-                                    false
-                                }
-                            };
+                    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                        let close_to_tray = match app_handle.state::<Mutex<ConfigStore>>().lock() {
+                            Ok(config) => config.close_to_tray(),
+                            Err(_) => {
+                                crate::log_error!(
+                                    "[tray] configuration lock is poisoned; allowing window close"
+                                );
+                                false
+                            }
+                        };
 
-                            if close_to_tray {
-                                api.prevent_close();
-                                if let Err(error) = hide_main_window(&window_to_hide) {
-                                    crate::log_error!(
-                                        "[tray] failed to hide the main window: {error}"
-                                    );
-                                }
+                        if close_to_tray {
+                            api.prevent_close();
+                            if let Err(error) = hide_main_window(&window_to_hide) {
+                                crate::log_error!("[tray] failed to hide the main window: {error}");
                             }
                         }
-                        tauri::WindowEvent::Focused(true) => {
-                            main_window_focused(&window_to_hide);
-                        }
-                        _ => {}
                     }
                 });
             }

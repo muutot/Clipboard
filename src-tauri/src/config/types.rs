@@ -168,6 +168,25 @@ impl Default for GeneralConfig {
     }
 }
 
+impl GeneralConfig {
+    /// Saved window backdrop (`themeColors.bg`) for the native window surface.
+    ///
+    /// `themeColors` lives in the flattened extra map because the frontend owns
+    /// the palette; the fallback mirrors the preset backgrounds so a first launch
+    /// (or an old config file) still gets a themed surface instead of white.
+    pub fn theme_background(&self) -> &str {
+        self.extra
+            .get("themeColors")
+            .and_then(|colors| colors.get("bg"))
+            .and_then(|bg| bg.as_str())
+            .unwrap_or(if self.theme == "light" {
+                "#f5f5f5"
+            } else {
+                "#1b1b1b"
+            })
+    }
+}
+
 /// How the Tantivy search index follows clipboard record changes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SearchIndexSyncMode {
