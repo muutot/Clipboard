@@ -955,7 +955,7 @@
 
     // Registering the listeners above must precede the initial loads: a copy
     // landing between the page-1 query and listener registration would
-    // otherwise be dropped until the next invalidation. `Promise.allSettled`
+    // otherwise be dropped until the next invalidation. Promise.allSettled
     // ensures that a listener registration that rejects (e.g. a temporary
     // Tauri bridge hiccup) still lets the initial loads run instead of
     // leaving the main window empty forever.
