@@ -357,7 +357,7 @@
     flex-shrink: 0;
     border-radius: var(--settings-icon-radius);
     color: var(--text-muted);
-    background: var(--hover-bg);
+    background: transparent;
   }
 
   .storage-kind-delete-copy {

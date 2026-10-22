@@ -410,7 +410,11 @@
   </aside>
 
   <div id="settings-content" class="settings-content" bind:this={settingsContent}>
-    <section class="settings-section-header" aria-labelledby="settings-title">
+    <section
+      class="settings-section-header"
+      aria-labelledby="settings-title"
+      data-tauri-drag-region={standalone ? "deep" : undefined}
+    >
       <div class="settings-section-heading-row">
         <div id="settings-title" class="settings-breadcrumb">{settingsBreadcrumb}</div>
         <div class="settings-section-actions">
@@ -549,6 +553,7 @@
     --settings-close-size: 28px;
     --settings-close-radius: 7px;
     --settings-close-font-size: 19px;
+    --input-bg: transparent;
     display: grid;
     grid-template-columns: 168px minmax(0, 1fr);
     width: min(728px, 100%);
@@ -594,7 +599,7 @@
     flex: 0 0 auto;
     border: 1px solid var(--border-color);
     color: var(--text-secondary);
-    background: var(--hover-bg);
+    background: transparent;
     width: 32px;
     height: 32px;
     border-radius: 9px;
@@ -628,7 +633,7 @@
     border: 1px solid transparent;
     border-radius: var(--settings-control-radius);
     color: var(--text-muted);
-    background: var(--input-bg);
+    background: transparent;
     font: inherit;
     font-size: var(--settings-control-size);
     text-align: left;

@@ -626,7 +626,7 @@
     border: 1px solid var(--border-color);
     border-radius: var(--settings-control-radius);
     color: var(--text-secondary);
-    background: var(--hover-bg);
+    background: transparent;
     font: inherit;
     font-size: var(--settings-control-size);
     cursor: pointer;

@@ -239,7 +239,7 @@
 
   .update-dialog-btn--secondary {
     color: var(--text-secondary);
-    background: var(--hover-bg);
+    background: transparent;
   }
 
   .update-dialog-btn--secondary:hover {

@@ -509,7 +509,7 @@
     border-radius: var(--settings-control-radius, 6px);
     padding: 4px 7px;
     color: var(--text-secondary);
-    background: var(--hover-bg);
+    background: transparent;
     font: inherit;
     font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
   }
@@ -574,7 +574,7 @@
     border: 1px solid var(--border-color);
     border-radius: var(--settings-icon-radius, 7px);
     color: var(--text-primary);
-    background: var(--hover-bg);
+    background: transparent;
     font-size: var(--settings-note-size, var(--font-size-tiny, 10px));
     font-weight: 700;
   }

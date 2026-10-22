@@ -169,7 +169,7 @@
     flex: 0 0 auto;
     border: 1px solid var(--border-color);
     color: var(--text-secondary);
-    background: var(--hover-bg);
+    background: transparent;
     width: 32px;
     height: 32px;
     border-radius: 9px;

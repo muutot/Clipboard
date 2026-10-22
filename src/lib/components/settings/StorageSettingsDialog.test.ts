@@ -35,6 +35,38 @@ async function waitFor<T>(find: () => T | null, timeoutMs = 2000): Promise<T> {
   }
 }
 
+describe("StorageSettingsDialog standalone window", () => {
+  it("makes the content header a deep drag region only in the standalone window", async () => {
+    const mountDialog = (standalone: boolean) => {
+      const target = document.createElement("div");
+      document.body.append(target);
+      const app = mount(StorageSettingsDialog, {
+        target,
+        props: { open: true, onclose: () => {}, standalone },
+      });
+      cleanups.push(async () => {
+        await unmount(app);
+        target.remove();
+      });
+      return target;
+    };
+
+    const standaloneTarget = mountDialog(true);
+    await settle();
+    expect(
+      standaloneTarget
+        .querySelector(".settings-section-header")
+        ?.getAttribute("data-tauri-drag-region"),
+    ).toBe("deep");
+
+    const modalTarget = mountDialog(false);
+    await settle();
+    expect(
+      modalTarget.querySelector(".settings-section-header")?.hasAttribute("data-tauri-drag-region"),
+    ).toBe(false);
+  });
+});
+
 describe("StorageSettingsDialog settings search", () => {
   it("opens the card font sub-tab for a title-font search result", async () => {
     vi.stubGlobal("scrollIntoView", () => {});

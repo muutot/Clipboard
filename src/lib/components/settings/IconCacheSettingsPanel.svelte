@@ -462,7 +462,7 @@
     border: 1px solid var(--border-color);
     border-radius: var(--settings-control-radius);
     color: var(--text-secondary);
-    background: var(--hover-bg);
+    background: transparent;
     font: inherit;
     font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
     cursor: pointer;
@@ -560,7 +560,7 @@
     border: 1px solid var(--border-color);
     border-radius: var(--settings-control-radius, 6px);
     color: var(--text-secondary);
-    background: var(--hover-bg);
+    background: transparent;
     cursor: pointer;
   }
 
@@ -616,7 +616,7 @@
 
   .icon-replace-file-btn {
     color: var(--text-secondary);
-    background: var(--hover-bg);
+    background: transparent;
   }
 
   .icon-replace-confirm-btn {
@@ -653,7 +653,7 @@
     border: 1px solid var(--border-color);
     border-radius: var(--settings-control-radius);
     color: var(--text-secondary);
-    background: var(--hover-bg);
+    background: transparent;
     font: inherit;
     font-size: var(--settings-control-size);
     cursor: pointer;
