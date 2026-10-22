@@ -1020,8 +1020,7 @@
     justify-content: center;
     border: 1px solid var(--border-subtle);
     border-radius: 6px;
-    background: var(--input-bg);
-    box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.3);
+    background: transparent;
   }
 
   .clip-card .image-preview {
@@ -1050,7 +1049,7 @@
     border: 1px solid var(--border-color);
     border-radius: 5px;
     color: var(--text-secondary);
-    background: rgba(0, 0, 0, 0.55);
+    background: color-mix(in srgb, var(--surface-bg) 78%, transparent);
     backdrop-filter: blur(4px);
     cursor: pointer;
     pointer-events: auto;
@@ -1059,7 +1058,7 @@
 
   .image-fullscreen-btn:hover {
     color: var(--text-primary);
-    background: rgba(0, 0, 0, 0.75);
+    background: color-mix(in srgb, var(--surface-bg) 94%, transparent);
   }
 
   .clip-card .image-placeholder {

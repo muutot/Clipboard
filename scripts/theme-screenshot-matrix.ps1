@@ -67,7 +67,7 @@ $darkColors = @{
   warningColor = '#e2c05d'; scrollbarColor = '#858585'
 }
 $lightColors = @{
-  bg = '#f5f5f5'; settingsBg = '#ebebeb'; accent = '#1a6ae8'; textPrimary = '#1a1a1a'
+  bg = '#f5f5f5'; settingsBg = '#f7f8fa'; accent = '#1a6ae8'; textPrimary = '#1a1a1a'
   textMuted = '#666666'; border = '#cccccc'; cardBg = '#ffffff'; surfaceBg = '#ffffff'
   statusBarBg = '#e8e8e8'; hoverBg = '#e0e0e0'; inputBg = '#f0f0f0'; textSecondary = '#444444'
   textFaint = '#999999'; placeholderColor = '#aaaaaa'; borderSubtle = '#dddddd'

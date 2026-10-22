@@ -1,8 +1,11 @@
 <script lang="ts">
   import { getCurrentWindow } from "@tauri-apps/api/window";
+  import { onMount } from "svelte";
+  import { get } from "svelte/store";
   import StorageSettingsDialog from "$lib/components/settings/StorageSettingsDialog.svelte";
   import { generalSettings } from "$lib/services/settings";
   import { applyGeneralSettingsToDocument } from "$lib/services/settings-bootstrap";
+  import { isTauriRuntime } from "$lib/services/runtime";
 
   let s = $state($generalSettings);
   $effect(() => {
@@ -11,6 +14,20 @@
       applyGeneralSettingsToDocument(v);
     });
     return unsub;
+  });
+
+  onMount(() => {
+    if (!isTauriRuntime()) return;
+    let revealed = false;
+    const win = getCurrentWindow();
+    const reveal = async () => {
+      if (revealed) return;
+      revealed = true;
+      applyGeneralSettingsToDocument(get(generalSettings));
+      await win.show();
+      await win.setFocus();
+    };
+    void generalSettings.initialize().finally(() => void reveal());
   });
 
   async function handleClose() {

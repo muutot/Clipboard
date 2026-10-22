@@ -81,10 +81,6 @@ wayland-client = "0.31"
 wayland-protocols = { version = "0.32", features = ["client", "staging"] }
 wayland-protocols-wlr = { version = "0.3", features = ["client"] }
 
-[target.'cfg(target_os = "windows")'.dependencies]
-webview2-com = "0.39"
-windows-core = "0.62"
-
 [target.'cfg(not(target_os = "windows"))'.dependencies]
 global-hotkey = "0.8"
 

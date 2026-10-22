@@ -360,7 +360,7 @@ impl ConfigStore {
     }
 
     pub fn det_score_threshold(&self) -> f32 {
-        self.config.ocr.det_score_threshold
+        self.config.ocr.det_score_threshold.clamp(0.0, 1.0)
     }
 
     pub fn ppocr_model_variant(&self) -> &str {
@@ -375,6 +375,12 @@ impl ConfigStore {
         box_threshold: f32,
         unclip_ratio: f32,
     ) -> Result<(), StorageError> {
+        // OCR thresholds feed the ONNX engine directly; an out-of-range value
+        // would silently disable detection or assert inside the runtime, so
+        // clamp them on write, matching the frontend sliders and the getters.
+        let score_threshold = score_threshold.clamp(0.0, 1.0);
+        let box_threshold = box_threshold.clamp(0.0, 1.0);
+        let unclip_ratio = unclip_ratio.clamp(0.0, 10.0);
         let previous = self.config.ocr.clone();
         self.config.ocr.engine = engine;
         self.config.ocr.ppocr_model_variant = ppocr_model_variant;
@@ -434,11 +440,11 @@ impl ConfigStore {
     }
 
     pub fn det_box_threshold(&self) -> f32 {
-        self.config.ocr.det_box_threshold
+        self.config.ocr.det_box_threshold.clamp(0.0, 1.0)
     }
 
     pub fn det_unclip_ratio(&self) -> f32 {
-        self.config.ocr.det_unclip_ratio
+        self.config.ocr.det_unclip_ratio.clamp(0.0, 10.0)
     }
 
     pub fn image_storage_path(&self) -> Option<&Path> {

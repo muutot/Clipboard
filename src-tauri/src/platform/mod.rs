@@ -53,8 +53,8 @@ pub use platform_info::{
 };
 pub use single_instance::{SingleInstanceError, SingleInstanceGuard};
 pub use ui::{
-    apply_window_effect, apply_window_transparency, disk_space, hide_main_window,
-    main_window_focused, refresh_tray_recent_menu, restore_main_window, show_main_window,
+    apply_window_effect, apply_window_transparency, disk_space, enable_child_clipping,
+    hide_main_window, refresh_tray_recent_menu, restore_main_window, show_main_window,
     window_transparency_alpha, DiskSpace, SystemTray, WindowManager,
 };
 pub use windows::ClipboardMonitor;

@@ -1,19 +1,33 @@
 <script lang="ts">
   import { get } from "svelte/store";
+  import { invoke } from "@tauri-apps/api/core";
+  import { getCurrentWindow } from "@tauri-apps/api/window";
   import "../app.css";
   import "$lib/styles/settings-shared.css";
   import { generalSettings } from "$lib/services/settings";
   import { applyGeneralSettingsToDocument } from "$lib/services/settings-bootstrap";
+  import { isTauriRuntime } from "$lib/services/runtime";
   import { applyCustomCss, isCustomCssRecoveryShortcut } from "$lib/utils/settings/custom-css";
+  import AppContextMenu from "$lib/components/common/AppContextMenu.svelte";
   import { onMount } from "svelte";
 
   let { children } = $props();
 
-  if (typeof document !== "undefined") {
-    applyGeneralSettingsToDocument(get(generalSettings));
-  }
-
   onMount(() => {
+    const settings = get(generalSettings);
+    // Apply here instead of at module scope: module init runs before the load
+    // gate resolves, so it would paint (and cache) the dark defaults first.
+    applyGeneralSettingsToDocument(settings);
+
+    // The main window is created hidden (tauri.conf.json). Showing it from the
+    // page (after `load()` hydrated the settings and Svelte rendered) keeps the
+    // first visible frame on the configured theme instead of the startup
+    // defaults.
+    if (isTauriRuntime() && getCurrentWindow().label === "main") {
+      void invoke("show_main_window_command").catch((error) =>
+        console.error("Unable to show the main window", error),
+      );
+    }
     const unsubscribe = generalSettings.subscribe((settings) =>
       applyCustomCss(settings.customCss, settings.customCssEnabled),
     );
@@ -35,3 +49,5 @@
 </script>
 
 {@render children()}
+
+<AppContextMenu />

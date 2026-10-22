@@ -54,6 +54,8 @@ feedback overlay when needed
 
 The breadcrumb and description use `--settings-description-size`; secondary section labels and card headings use `--settings-heading-size`. Do not add a second page title inside a child when the parent owns the header.
 
+The standalone settings window is undecorated, so its content header is also a window drag surface: `.settings-section-header` gets `data-tauri-drag-region="deep"` (blank space, breadcrumb, and description drag the window; Tauri's drag script still skips clickable children such as the secondary tabs, close button, and tag search). Apply it only when `standalone` is true, because the embedded modal shares this component and must not drag the main window from its header. The sidebar keeps its bare `data-tauri-drag-region`, which only responds to direct clicks on the aside.
+
 The keyboard configuration card ("独立快捷键配置") is not a shell-level element; it renders inside `KeyboardSettingsPanel.svelte` as the first card of the Global tab (with `data-settings-search-id="keyboard.config-file"`), keeping the parent hierarchy above authoritative.
 
 ## Child panel contract

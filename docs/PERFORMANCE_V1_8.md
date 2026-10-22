@@ -72,6 +72,14 @@ After suspension, launching the same debug executable was handled by the
 single-instance guard and restored the main window. Native screenshots after the first
 and second wake showed the complete 73-record list, images and thumbnails rather than a
 blank webview. Escape hiding and close-to-tray hiding both exercised the same lifecycle.
+
+The suspension path was later removed. WebView2 does not render while its host window is
+hidden, so the resumed surface always repainted after the window had already appeared —
+visible as a one-frame content flash in the light theme that no "wait for a painted frame
+before showing" handshake can cover. Hiding now only calls `Window::hide()` and restoring
+shows the last painted surface; the hidden footprint therefore returns to the visible-state
+figures above.
+
 These are single observations from one Windows machine, not statistical P50/P95 values,
 and they do not claim the same result for release, macOS or Linux builds. The record
 count was not varied in this probe because the dominant footprint is the WebView2
