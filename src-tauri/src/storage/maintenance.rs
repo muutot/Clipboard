@@ -9,7 +9,7 @@ impl Database {
         let _resource_publication = self.begin_resource_write();
         self.with_connection(|connection| {
             let affected = connection.execute(
-                "UPDATE clipboard_items SET preview_path = ?2 WHERE id = ?1",
+                "UPDATE clipboard_items SET preview_path = ?2 WHERE id = ?1 AND deleted = 0",
                 rusqlite::params![item_id, preview_path],
             )?;
             Ok(affected > 0)
