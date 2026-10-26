@@ -1,5 +1,7 @@
 //! Display/file rename commands and their path-rewriting helpers.
 
+use rusqlite::params;
+
 use super::*;
 
 #[tauri::command]
@@ -123,6 +125,23 @@ pub(super) fn rename_item_record(
             updated.metadata_json.as_deref(),
             true,
         )?);
+        // User-initiated renames bypass the content-dedup upsert title guard so a
+        // second rename of the same item is not silently discarded. Persist with
+        // a direct UPDATE by id instead of save_item; customTitle stays true so
+        // future re-captures still cannot overwrite the user title.
+        let metadata = updated.metadata_json.clone();
+        database
+            .with_connection(|connection| {
+                connection.execute(
+                    "UPDATE clipboard_items
+                 SET title = ?2, metadata_json = COALESCE(?3, metadata_json)
+                 WHERE id = ?1 AND deleted = 0 AND kind IN ('text', 'link')",
+                    params![updated.id, updated.title, metadata],
+                )?;
+                Ok(())
+            })
+            .map_err(|e| e.to_string())?;
+        return Ok(updated);
     }
     database.save_item(&updated).map_err(|e| e.to_string())?;
     Ok(updated)
