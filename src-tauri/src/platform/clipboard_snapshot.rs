@@ -14,7 +14,9 @@ pub struct ClipboardSnapshot {
 impl ClipboardSnapshot {
     fn read(platform: &dyn PlatformClipboard, limit: usize) -> Self {
         Self {
-            text: platform.read_clipboard_text(),
+            text: platform
+                .read_clipboard_text()
+                .filter(|s| !s.trim().is_empty() && s.len() <= limit),
             html: platform
                 .read_clipboard_html()
                 .filter(|s| !s.trim().is_empty() && s.len() <= limit),
