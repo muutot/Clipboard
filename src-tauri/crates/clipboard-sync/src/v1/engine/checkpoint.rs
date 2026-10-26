@@ -367,7 +367,13 @@ pub(super) fn maybe_compact(
                 Ok(_) | Err(_) => return Ok(()),
             }
         }
-        validate_compaction_vector(&current.head.vector, &vector)?;
+        // A peer that failed to pull must not disable checkpoint publication for
+        // the whole namespace: the checkpoint is the only recovery artifact for
+        // pruned history. A missing or regressed peer cursor means we skip
+        // compaction this round and retry later instead of failing hard.
+        if validate_compaction_vector(&current.head.vector, &vector).is_err() {
+            return Ok(());
+        }
         if current.head.vector == vector {
             finalize_checkpoint_publication(
                 store,
@@ -497,7 +503,8 @@ fn checkpoint_pointer_is_durable(
     let observed = decode_checkpoint_head(&downloaded.bytes, session_key)?;
     validate_checkpoint_head(&observed)?;
     if observed.generation > expected.generation {
-        validate_compaction_vector(&expected.vector, &observed.vector)?;
+        // A lost CAS race: somebody else won. Not durable yet, retry later.
+        let _ = validate_compaction_vector(&expected.vector, &observed.vector);
         return Ok(false);
     }
     Err("checkpoint pointer changed unexpectedly after a successful conditional write".to_string())
