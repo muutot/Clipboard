@@ -48,9 +48,11 @@ pub fn prepare_mutation_resources(
                 );
                 if let Some(json) = item.text_content.as_deref() {
                     if let Ok(local_paths) = serde_json::from_str::<Vec<String>>(json) {
+                        // 保持列表长度与原始本地路径一致，对不可重写的条目保留
+                        // 空字符串占位，避免资源序号被重编号导致本地文件列表损坏。
                         let portable_paths = local_paths
                             .iter()
-                            .filter_map(|local_path| {
+                            .map(|local_path| {
                                 rewrite_outgoing_path(
                                     Some(local_path),
                                     &roots.files,
@@ -61,6 +63,7 @@ pub fn prepare_mutation_resources(
                                     &mut skipped_resources,
                                     session_key,
                                 )
+                                .unwrap_or_default()
                             })
                             .collect::<Vec<_>>();
                         item.text_content =
@@ -150,9 +153,14 @@ pub fn materialize_mutation_resources(
                 )?;
                 if let Some(json) = item.text_content.as_deref() {
                     if let Ok(portable_paths) = serde_json::from_str::<Vec<String>>(json) {
+                        // 保持列表长度与可移植路径一致，空占位符保持为空，
+                        // 避免资源序号错位导致本地文件列表被错误覆盖或重复。
                         let local_paths = portable_paths
                             .iter()
                             .map(|portable_path| {
+                                if portable_path.is_empty() {
+                                    return Ok(String::new());
+                                }
                                 rewrite_incoming_path(
                                     store,
                                     Some(portable_path),
