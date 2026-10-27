@@ -909,7 +909,35 @@ pub(crate) fn perform_namespace_rotation(
     // device: its config still points at a prefix that now answers "rotated".
     // Leftover old objects after an interrupted deletion are bounded garbage;
     // an unsyncable device is not.
-    commit_local_config()?;
+    //
+    // The commit is also the one step a later run cannot redo — the tombstone
+    // refuses every retry — so transient failures are retried here and a
+    // persistent failure surfaces manual recovery guidance instead of leaving
+    // the next run to die on a bare rotated-prefix refusal.
+    let mut commit_error = String::new();
+    for attempt in 0..3u32 {
+        cancellation.check()?;
+        match commit_local_config() {
+            Ok(()) => {
+                commit_error.clear();
+                break;
+            }
+            Err(error) => {
+                commit_error = error;
+                if attempt + 1 < 3 {
+                    std::thread::sleep(std::time::Duration::from_millis(250));
+                }
+            }
+        }
+    }
+    if !commit_error.is_empty() {
+        return Err(format!(
+            "rotation published the new namespace but the local configuration still points at \
+             the old prefix: {commit_error}. Re-enter the new prefix {:?} and its password in \
+             the sync settings to restore sync",
+            new_settings.remote_path
+        ));
+    }
     cancellation.check()?;
     let mut deleted_objects = 0u64;
     for object in old_store.list("", None)? {
@@ -1007,9 +1035,10 @@ fn run_namespace_rotation(app: &tauri::AppHandle, new_password: String) -> Resul
                 // Invoked right after the tombstone is durable: the old prefix
                 // now answers "rotated" to every run, so the local
                 // configuration must move before the old namespace disappears.
-                // A failure here leaves the old prefix configured and the
-                // rotation retryable (the tombstone is create-only, so a
-                // later attempt reports "another device already rotated").
+                // A failure here cannot be fixed by re-running the rotation
+                // (the tombstone refuses it); perform_namespace_rotation
+                // retries this commit and, if it still fails, returns an error
+                // with manual recovery guidance.
                 let mut guard = lock_state(&config, "configuration lock is poisoned")?;
                 let previous = guard.sync_config();
                 let sync = SyncConfig {
@@ -2343,6 +2372,86 @@ mod tests {
         assert!(new_keys
             .iter()
             .any(|key| key.starts_with("v1/resources/image/")));
+
+        drop(database);
+        fs::remove_dir_all(paths.project).unwrap();
+    }
+
+    /// A local configuration commit that keeps failing after the tombstone is
+    /// durable cannot be fixed by re-running the rotation — the tombstone
+    /// refuses every later attempt. Transient failures must be retried in
+    /// place, and a persistent failure must surface manual recovery guidance.
+    #[test]
+    fn rotation_retries_the_local_commit_and_reports_recovery_on_persistent_failure() {
+        let settings = SyncSettings::from_sync_config(&configured_sync()).unwrap();
+        let new_password = "commit-retry-password";
+        let new_settings = settings.with_rotated_scope(
+            "clipboard-rotated-commit-retry".to_string(),
+            Some(new_password.to_string()),
+        );
+        let token = clipboard_sync::cancellation::CancellationToken::default();
+
+        // A transient failure is retried and the rotation completes.
+        let paths = temporary_paths("rotate-commit-retry");
+        let database = Database::open(&paths.database).unwrap();
+        database.initialize_sync().unwrap();
+        let old_store = RotationStore::default();
+        let new_store = RotationStore::default();
+        let mut attempts = 0u32;
+        perform_namespace_rotation(
+            &old_store,
+            &new_store,
+            &database,
+            &paths,
+            &settings,
+            &new_settings,
+            Some(new_password),
+            &token,
+            &mut || {
+                attempts += 1;
+                if attempts == 1 {
+                    Err("transient commit failure".to_string())
+                } else {
+                    Ok(())
+                }
+            },
+            &mut |_| {},
+        )
+        .unwrap();
+        assert_eq!(attempts, 2, "a transient failure must be retried");
+        drop(database);
+        fs::remove_dir_all(paths.project).unwrap();
+
+        // A persistent failure exhausts the retry budget and the error tells
+        // the user how to restore sync instead of leaving a bare refusal.
+        let paths = temporary_paths("rotate-commit-retry-persistent");
+        let database = Database::open(&paths.database).unwrap();
+        database.initialize_sync().unwrap();
+        let old_store = RotationStore::default();
+        let new_store = RotationStore::default();
+        let mut attempts = 0u32;
+        let error = perform_namespace_rotation(
+            &old_store,
+            &new_store,
+            &database,
+            &paths,
+            &settings,
+            &new_settings,
+            Some(new_password),
+            &token,
+            &mut || {
+                attempts += 1;
+                Err("injected commit failure".to_string())
+            },
+            &mut |_| {},
+        )
+        .unwrap_err();
+        assert!(
+            attempts == 3,
+            "a persistent failure must exhaust the retry budget (error: {error})"
+        );
+        assert!(error.contains("injected commit failure"), "{error}");
+        assert!(error.contains("sync settings"), "{error}");
 
         drop(database);
         fs::remove_dir_all(paths.project).unwrap();
