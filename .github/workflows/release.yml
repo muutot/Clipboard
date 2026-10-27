@@ -20,6 +20,9 @@ jobs:
   resolve:
     name: Resolve release commit
     runs-on: ubuntu-latest
+    # Tag validation is a couple of git/node calls; the cap only exists so a
+    # hung step fails the job instead of stalling the run for the 6 h default.
+    timeout-minutes: 10
     outputs:
       release_tag: ${{ steps.identity.outputs.release_tag }}
       release_sha: ${{ steps.identity.outputs.release_sha }}
@@ -40,6 +43,9 @@ jobs:
     name: Verify
     needs: resolve
     runs-on: ubuntu-latest
+    # `npm run verify` plus the fat-LTO probe build; same rationale as the CI
+    # caps: a hung step must fail the job, not stall the run for hours.
+    timeout-minutes: 90
     env:
       RELEASE_TAG: ${{ needs.resolve.outputs.release_tag }}
       RELEASE_SHA: ${{ needs.resolve.outputs.release_sha }}
@@ -103,6 +109,9 @@ jobs:
     name: Build (${{ matrix.platform }})
     needs: [resolve, verify]
     runs-on: ${{ matrix.runner }}
+    # The extreme LTO build is the longest step of the release; the cap exists
+    # so a hung toolchain fails the job instead of stalling it for hours.
+    timeout-minutes: 120
     permissions:
       contents: write
     env:
@@ -340,6 +349,9 @@ jobs:
 
   publish:
     name: Publish release
+    # Release creation plus asset upload/GitCode sync; a hung request must
+    # fail the job instead of stalling the run for the 6 h default.
+    timeout-minutes: 20
     needs: [resolve, build]
     if: success()
     runs-on: ubuntu-latest
