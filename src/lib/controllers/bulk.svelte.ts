@@ -67,23 +67,37 @@ export function createBulkController(deps: BulkDependencies) {
 
   // Bulk paste: deliver every selected item to the previous application in one
   // go, selection order preserved. No per-item queue state is exposed.
+  let pasting = false;
   async function bulkPasteAll() {
+    // A second click while a paste run is in flight would interleave two
+    // sequences at the paste target; ignore it until the current run ends.
+    if (pasting) return;
     const items = deps.selectedLoadedItems;
     if (items.length === 0) return;
-    let succeeded = 0;
-    for (const item of items) {
-      try {
-        await pasteClipboardItem(item);
-        succeeded++;
-      } catch (error) {
-        console.error("Bulk paste failed", error);
+    pasting = true;
+    try {
+      const failedIds: string[] = [];
+      let succeeded = 0;
+      for (const item of items) {
+        try {
+          await pasteClipboardItem(item);
+          succeeded++;
+        } catch (error) {
+          console.error("Bulk paste failed", error);
+          failedIds.push(item.id);
+        }
       }
-    }
-    selectedIds = new Set();
-    if (succeeded > 0) {
-      showToast(deps.translate("toast.bulkPasteSuccess", { count: succeeded }), "success");
-    } else {
-      showToast(deps.translate("toast.pasteFailed"), "error");
+      // Failed rows stay selected so they can be retried without re-picking;
+      // a silent all-clear would hide exactly which rows never pasted.
+      if (failedIds.length > 0) {
+        selectedIds = new Set([...selectedIds].filter((id) => failedIds.includes(id)));
+        showToast(deps.translate("toast.pasteFailed"), "error");
+      } else {
+        selectedIds = new Set();
+        showToast(deps.translate("toast.bulkPasteSuccess", { count: succeeded }), "success");
+      }
+    } finally {
+      pasting = false;
     }
   }
 

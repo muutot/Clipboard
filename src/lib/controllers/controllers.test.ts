@@ -3,6 +3,7 @@ import { beforeEach, afterEach, expect, it, vi } from "vitest";
 import Probe, { type ProbeState } from "./controllers.probe.svelte";
 import { createListenerScope } from "./window-lifecycle";
 import * as service from "$lib/services/clipboard";
+import { showToast } from "$lib/services/toast";
 import { appendItems } from "$lib/utils/store/item-store";
 import type { ClipboardItem } from "$lib/types/clipboard";
 vi.mock("$lib/services/runtime", async (original) => ({
@@ -144,6 +145,37 @@ it("does nothing when there is nothing to paste", async () => {
   out.bulk!.selectedIds = new Set();
   await out.bulk!.bulkPasteAll();
   expect(service.pasteClipboardItem).not.toHaveBeenCalled();
+});
+it("keeps failed rows selected and reports the failure on a partial bulk paste", async () => {
+  out.store!.current = appendItems(
+    out.store!.current,
+    [item("a"), item("b"), item("c")],
+    "history",
+  );
+  out.bulk!.selectedIds = new Set(["a", "b", "c"]);
+  vi.mocked(service.pasteClipboardItem).mockImplementationOnce(async () => {
+    throw new Error("paste denied");
+  });
+  await out.bulk!.bulkPasteAll();
+  expect(vi.mocked(service.pasteClipboardItem).mock.calls.map((c) => c[0].id)).toEqual([
+    "a",
+    "b",
+    "c",
+  ]);
+  expect([...out.bulk!.selectedIds]).toEqual(["a"]);
+  expect(showToast).toHaveBeenCalledWith(expect.anything(), "error");
+});
+it("ignores a bulk paste request while another run is still in flight", async () => {
+  out.store!.current = appendItems(out.store!.current, [item("a"), item("b")], "history");
+  out.bulk!.selectedIds = new Set(["a", "b"]);
+  const gate = deferred<void>();
+  vi.mocked(service.pasteClipboardItem).mockImplementationOnce(() => gate.promise);
+  const first = out.bulk!.bulkPasteAll();
+  const second = out.bulk!.bulkPasteAll();
+  gate.resolve();
+  await Promise.all([first, second]);
+  await settle();
+  expect(vi.mocked(service.pasteClipboardItem).mock.calls.map((c) => c[0].id)).toEqual(["a", "b"]);
 });
 it("disposes late native listener registrations exactly once", async () => {
   const scope = createListenerScope(),
