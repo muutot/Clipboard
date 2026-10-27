@@ -130,17 +130,24 @@ pub(super) fn rename_item_record(
         // a direct UPDATE by id instead of save_item; customTitle stays true so
         // future re-captures still cannot overwrite the user title.
         let metadata = updated.metadata_json.clone();
-        database
+        let rows = database
             .with_connection(|connection| {
-                connection.execute(
-                    "UPDATE clipboard_items
+                connection
+                    .execute(
+                        "UPDATE clipboard_items
                  SET title = ?2, metadata_json = COALESCE(?3, metadata_json)
                  WHERE id = ?1 AND deleted = 0 AND kind IN ('text', 'link')",
-                    params![updated.id, updated.title, metadata],
-                )?;
-                Ok(())
+                        params![updated.id, updated.title, metadata],
+                    )
+                    .map_err(crate::storage::StorageError::from)
             })
             .map_err(|e| e.to_string())?;
+        // The row can disappear between the earlier read and this UPDATE when
+        // another window deletes it concurrently; report that instead of a
+        // silent fake success.
+        if rows == 0 {
+            return Err("item not found".to_string());
+        }
         return Ok(updated);
     }
     database.save_item(&updated).map_err(|e| e.to_string())?;
