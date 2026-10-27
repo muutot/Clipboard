@@ -251,7 +251,7 @@ let currentVersion = getVersion();
 let tagVersion = `v${currentVersion}`;
 // The commit step below stages every `git diff --name-only` path, so edits to
 // files outside the release set would ship unreviewed. Refuse on those before
-// any mutation rather than after. The six release files themselves are the
+// any mutation rather than after. The seven release files themselves are the
 // expected output of Pass 1 (bump + changelog) and the curated RELEASE.md, so
 // they are allow-listed — a blanket dirty-tree refusal would make the
 // documented two-pass flow impossible to complete.

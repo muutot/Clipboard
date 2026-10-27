@@ -35,19 +35,19 @@ tree and can publish broken artifacts.
    (`git log -1 --pretty=%s <tag>^{}`).
 4. Push the branch first, the tag last.
 
-## 🚨 HARD RULE — the release commit contains only the six release files
+## 🚨 HARD RULE — the release commit contains only the seven release files
 
-The release commit must contain **exactly** the six release files and nothing else:
-`package.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`,
-`CHANGELOG.md`, `RELEASE.md`. Never fold a code fix, test, script, or skill change into it —
-**not even when re-running a failed release**. Enforced twice:
+The release commit must contain **exactly** the seven release files and nothing else:
+`package.json`, `package-lock.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`,
+`src-tauri/Cargo.lock`, `CHANGELOG.md`, `RELEASE.md`. Never fold a code fix, test, script, or
+skill change into it — **not even when re-running a failed release**. Enforced twice:
 
-1. **Locally** — `release.mjs` refuses to run while any file outside the six is dirty or
+1. **Locally** — `release.mjs` refuses to run while any file outside the seven is dirty or
    staged. **Always create the release commit through the script.** Hand-rolling
    `git reset --soft` + `git add` + `git commit` bypasses this guard, which is exactly how
    mixed release commits happen.
 2. **Remotely** — `scripts/validate-release-version.mjs` (release.yml Resolve job) fails the
-   build when the tagged commit touches any file outside the six.
+   build when the tagged commit touches any file outside the seven.
 
 ### Post-push CI failure recovery
 
