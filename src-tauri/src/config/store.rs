@@ -465,7 +465,12 @@ impl ConfigStore {
     }
 
     pub fn max_screenshot_size_bytes(&self) -> u64 {
-        self.config.storage.max_screenshot_size_bytes
+        // save_screenshot treats 0 as unlimited, so a hand-edited or restored
+        // config must not bypass the clamp (mirrors max_file_copy_size_bytes).
+        self.config
+            .storage
+            .max_screenshot_size_bytes
+            .clamp(MIN_SCREENSHOT_SIZE_BYTES, MAX_SCREENSHOT_SIZE_BYTES)
     }
 
     pub fn retention_days(&self) -> u32 {

@@ -254,6 +254,13 @@ pub const MAX_FILE_COPY_SIZE_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 /// The capture worker treats 0 as unlimited, so the floor must stay above 0.
 pub const MIN_FILE_COPY_SIZE_BYTES: u64 = 1;
 
+/// Captured screenshots above this size are rejected. Shares the file-copy
+/// ceiling because the screenshot saver treats 0 the same unlimited way.
+pub const MAX_SCREENSHOT_SIZE_BYTES: u64 = MAX_FILE_COPY_SIZE_BYTES;
+
+/// The screenshot saver treats 0 as unlimited, so the floor must stay above 0.
+pub const MIN_SCREENSHOT_SIZE_BYTES: u64 = 1;
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct StorageConfig {

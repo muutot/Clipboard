@@ -815,7 +815,8 @@ fn loaded_out_of_range_limits_are_clamped_before_use() {
                 "recycleBinDays": 9999
             },
             "storage": {
-                "maxFileCopySizeBytes": 0
+                "maxFileCopySizeBytes": 0,
+                "maxScreenshotSizeBytes": 0
             }
         }"#,
     )
@@ -826,6 +827,7 @@ fn loaded_out_of_range_limits_are_clamped_before_use() {
     assert_eq!(store.retention_days(), 1);
     assert_eq!(store.recycle_bin_days(), 365);
     assert_eq!(store.max_file_copy_size_bytes(), 1);
+    assert_eq!(store.max_screenshot_size_bytes(), 1);
 
     fs::remove_dir_all(project).unwrap();
 }
