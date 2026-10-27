@@ -796,3 +796,56 @@ pub(super) fn garbage_collect_covered_history(
     }
     Ok(deleted)
 }
+
+#[cfg(test)]
+mod compaction_vector_tests {
+    use super::*;
+
+    fn cursor(device_id: &str, epoch: &str, sequence: u64) -> DeviceCursor {
+        DeviceCursor {
+            device_id: device_id.to_string(),
+            epoch: epoch.to_string(),
+            sequence,
+            last_segment_key: None,
+        }
+    }
+
+    #[test]
+    fn accepts_a_candidate_that_keeps_every_device_and_advances() {
+        let current = vec![cursor("a", "e", 5), cursor("b", "e", 3)];
+        let candidate = vec![cursor("a", "e", 7), cursor("b", "e", 3)];
+        assert!(validate_compaction_vector(&current, &candidate).is_ok());
+    }
+
+    #[test]
+    fn accepts_a_candidate_that_introduces_a_new_device() {
+        let current = vec![cursor("a", "e", 5)];
+        let candidate = vec![cursor("a", "e", 7), cursor("newcomer", "e", 1)];
+        assert!(validate_compaction_vector(&current, &candidate).is_ok());
+    }
+
+    #[test]
+    fn rejects_a_candidate_that_drops_a_known_device() {
+        let current = vec![cursor("a", "e", 5), cursor("b", "e", 3)];
+        let candidate = vec![cursor("a", "e", 7)];
+        let error = validate_compaction_vector(&current, &candidate).unwrap_err();
+        assert!(error.contains("dropped known device b"), "{error}");
+    }
+
+    #[test]
+    fn rejects_a_candidate_that_regresses_a_device_sequence() {
+        // A regressed cursor would publish a checkpoint that hides history a
+        // peer still needs, so compaction must skip the round instead.
+        let current = vec![cursor("a", "e", 5)];
+        let candidate = vec![cursor("a", "e", 4)];
+        let error = validate_compaction_vector(&current, &candidate).unwrap_err();
+        assert!(error.contains("regresses device a"), "{error}");
+    }
+
+    #[test]
+    fn a_new_epoch_may_reset_the_sequence() {
+        let current = vec![cursor("a", "old", 5)];
+        let candidate = vec![cursor("a", "new", 0)];
+        assert!(validate_compaction_vector(&current, &candidate).is_ok());
+    }
+}

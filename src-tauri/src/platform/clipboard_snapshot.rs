@@ -131,4 +131,40 @@ mod tests {
             assert_eq!(clipboard.reads.get(), if native { 3 } else { 6 });
         }
     }
+
+    struct Oversized;
+
+    impl PlatformClipboard for Oversized {
+        fn read_clipboard_sequence(&self) -> Option<u32> {
+            Some(1)
+        }
+        fn read_clipboard_text(&self) -> Option<String> {
+            Some("x".repeat(200))
+        }
+        fn read_clipboard_html(&self) -> Option<String> {
+            Some("y".repeat(200))
+        }
+        fn read_clipboard_image(&self) -> Option<(ClipboardImageData, u32, u32)> {
+            None
+        }
+        fn read_clipboard_file_paths(&self) -> Vec<String> {
+            vec![]
+        }
+        fn get_foreground_app(&self) -> ForegroundApp {
+            ForegroundApp::empty()
+        }
+        fn write_clipboard_text_with_self_trigger(&self, _: &str) -> Result<(), String> {
+            Ok(())
+        }
+        fn extract_app_icon(&self, _: &Path, _: &str, _: &str) -> Option<String> {
+            None
+        }
+    }
+
+    #[test]
+    fn snapshot_drops_string_formats_above_the_length_limit() {
+        let snapshot = read_consistent_snapshot(&Oversized, 100).unwrap();
+        assert_eq!(snapshot.text, None);
+        assert_eq!(snapshot.html, None);
+    }
 }
