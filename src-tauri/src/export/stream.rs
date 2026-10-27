@@ -1,4 +1,4 @@
-﻿use super::{clipboard_kind_name, escape_csv, ExportFormat, ExportOptions, CSV_TEXT_ENCODING};
+use super::{clipboard_kind_name, escape_csv, ExportFormat, ExportOptions, CSV_TEXT_ENCODING};
 use crate::{
     domain::ClipboardItem,
     storage::{Database, StorageError},
