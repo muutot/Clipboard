@@ -14,6 +14,7 @@ use super::helpers::{
     apply_capture_auto_tags, foreground_app_name, load_emit_item, normalize_platform_image_to_png,
     should_skip_self_triggered_hash, should_skip_self_triggered_text,
 };
+use super::web_source;
 use crate::content;
 use crate::content::self_trigger::SelfTriggerGuard;
 use crate::content::{FileStore, ThumbnailQueue, RESOURCE_METADATA_SCHEMA_VERSION};
@@ -157,7 +158,7 @@ pub(crate) fn run_capture_loop(
                     rtf,
                     image: image_data,
                     files: file_paths,
-                    source_url: _,
+                    source_url,
                 } = snapshot;
 
                 if capture_state.should_skip(source_app.as_deref(), text.as_deref()) {
@@ -529,7 +530,11 @@ pub(crate) fn run_capture_loop(
                     created_at_ms: now_ms,
                     last_used_at_ms: Some(now_ms),
                     is_favorite: false,
-                    metadata_json: None,
+                    metadata_json: web_source::web_source_metadata(
+                        &app_info.exe_path,
+                        &app_info.window_title,
+                        source_url.as_deref(),
+                    ),
                 };
 
                 if stop_flag.load(Ordering::SeqCst) {

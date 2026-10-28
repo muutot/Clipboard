@@ -215,6 +215,7 @@ mod files;
 mod helpers;
 #[cfg(test)]
 mod tests;
+mod web_source;
 mod worker;
 
 // ---------------------------------------------------------------------------
