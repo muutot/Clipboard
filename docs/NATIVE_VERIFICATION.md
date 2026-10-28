@@ -57,7 +57,7 @@ process cannot reproduce the formatted write.
 1. Set a CF_HTML payload containing a unique fragment (`<b>marker-<guid></b>`).
 2. Wait for the capture worker, then read the record:
    `select html_content from clipboard_items where html_content is not null`
-   via `python -c "import sqlite3, ..."` against the isolated `history.sqlite`.
+   via `python -c "import sqlite3, ..."` against the isolated `clipboard.sqlite3`.
 3. Assert the stored fragment equals the marker.
 4. In the GUI, use the card's **format paste** action (not the plain copy) and
    paste into a rich-text target (WordPad/Word); the bold marker must survive.

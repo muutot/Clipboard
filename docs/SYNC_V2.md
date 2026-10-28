@@ -1,8 +1,9 @@
 # Sync v2: scoping
 
-Status: scoping only. Nothing in this document is implemented, scheduled or version-committed.
-Each item below must leave this file and become an independently verifiable unit with its own
-commits and evidence.
+Status: partially implemented. V2-2 (real S3 CI matrix) is done, and the V2-1 engine flow plus
+frontend rotation UI shipped in v1.8.1; what remains is the V2-1 rustfs failure-injection smoke
+and the V2-3 integration evidence run. Each item must still leave this file as an independently
+verifiable unit with its own commits and evidence.
 
 Sibling document: [`SYNC_V1.md`](SYNC_V1.md) defines the only supported sync protocol, and it
 stays supported. A `v2/` wire namespace with no v1 reader is a separate decision that needs its
@@ -53,7 +54,8 @@ Progress (2026-10-15): D1/D2 decided, D3/D4 recommended. Engine level landed:
   mid-publish, after the pointer, mid-delete, mid-repoint) is still owed; the destructive
   cancellation semantics follow the v1.8 long-task model.
 
-Remaining: the rustfs failure-injection smoke and the frontend flow.
+Remaining: the rustfs failure-injection smoke (the frontend flow has shipped — see
+["After the decisions"](#after-the-decisions)).
 
 User-visible goal: replace the sync password (or toggle the encryption mode) of an already
 initialized scope without losing remote history or stranding other devices.
@@ -64,16 +66,16 @@ v1 objects, clear scope-local sync state (heads, cursors, checkpoint baseline, c
 binding), and republish the complete local state under the new key as a fresh bootstrap.
 
 The design questions are worked out with options and trade-offs in
-[V2-1 design decisions](#v2-1-design-decisions-2026-10-14-drafted-pending-decision) below.
+[V2-1 design decisions](#v2-1-design-decisions-2026-10-14-decided) below.
 
-## V2-1 design decisions (2026-10-14, drafted, pending decision)
+## V2-1 design decisions (2026-10-14, decided)
 
-| #   | Decision                                                                                     | Status                                       |
-| --- | -------------------------------------------------------------------------------------------- | -------------------------------------------- |
-| D1  | Stage a new remote prefix, then delete the old namespace (option A)                          | Implied by D2; pending explicit confirmation |
-| D2  | Pointer warning, then delete the old namespace immediately; peers hard-fail until re-pointed | **Decided 2026-10-14**                       |
-| D3  | One flow covers plaintext ↔ encrypted toggling                                               | Recommended, pending objection               |
-| D4  | Preview + progress + cancellation, no hard size cap                                          | Recommended, pending objection               |
+| #   | Decision                                                                                     | Status                           |
+| --- | -------------------------------------------------------------------------------------------- | -------------------------------- |
+| D1  | Stage a new remote prefix, then delete the old namespace (option A)                          | **Decided 2026-10-14: option A** |
+| D2  | Pointer warning, then delete the old namespace immediately; peers hard-fail until re-pointed | **Decided 2026-10-14**           |
+| D3  | One flow covers plaintext ↔ encrypted toggling                                               | **Adopted**                      |
+| D4  | Preview + progress + cancellation, no hard size cap                                          | **Adopted**                      |
 
 ### Constraints proven from the current tree
 
@@ -116,7 +118,7 @@ The design questions are worked out with options and trade-offs in
   (the engine owns `v1/` as a fixed root); fold into the separate `v2/` namespace question,
   do not build it here.
 
-**Decision (implied by D2, pending explicit confirmation): A.** B's window is a real
+**Decision (2026-10-14): A.** B's window is a real
 backup-safety regression; A's extra costs are one-time and collectible. The decided D2
 protocol needs the old namespace alive as the pointer's home, which only A provides.
 
@@ -266,9 +268,10 @@ and run it once" if full automation is not justified.
 
 1. V2-2 (CI matrix) first — independent of the protocol and unblocks real-server evidence for
    everything after it. **Done** (see V2-2).
-2. V2-1 engine level plus rustfs smoke. D1/D2 are decided and D3/D4 stand unless objected to,
-   so this unit is unblocked; build the rotation flow, then the peer pointer check.
+2. V2-1 engine level plus rustfs smoke. **The rotation flow and the peer pointer check are
+   done** (see "After the decisions"); the rustfs failure-injection smoke remains.
 3. V2-1 frontend: dedicated destructive flow with progress, cancellation and confirmation.
+   **Done**.
 4. V2-3 as a scheduled evidence run.
 
 Cross-references: `TODO.md` open item C ("同步 v2"), `docs/SYNC_V1.md`, and the roadmap's Rust
