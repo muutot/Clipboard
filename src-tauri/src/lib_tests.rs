@@ -172,10 +172,12 @@ mod capture_tests {
         let named = platform::ForegroundApp {
             name: "Editor".to_owned(),
             exe_path: r"C:\Apps\editor.exe".to_owned(),
+            window_title: String::new(),
         };
         let path_only = platform::ForegroundApp {
             name: String::new(),
             exe_path: r"C:\Apps\Browser.exe".to_owned(),
+            window_title: String::new(),
         };
 
         assert_eq!(foreground_app_name(&named).as_deref(), Some("editor"));

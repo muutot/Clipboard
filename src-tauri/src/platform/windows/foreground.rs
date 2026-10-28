@@ -28,10 +28,7 @@ pub fn get_foreground_app() -> crate::platform::ForegroundApp {
     unsafe {
         let hwnd = GetForegroundWindow();
         if hwnd == 0 {
-            return crate::platform::ForegroundApp {
-                name: String::new(),
-                exe_path: String::new(),
-            };
+            return crate::platform::ForegroundApp::empty();
         }
 
         let mut title_buf = [0u16; 256];
@@ -49,6 +46,7 @@ pub fn get_foreground_app() -> crate::platform::ForegroundApp {
             return crate::platform::ForegroundApp {
                 name: title.clone(),
                 exe_path: String::new(),
+                window_title: title,
             };
         }
 
@@ -57,6 +55,7 @@ pub fn get_foreground_app() -> crate::platform::ForegroundApp {
             return crate::platform::ForegroundApp {
                 name: title.clone(),
                 exe_path: String::new(),
+                window_title: title,
             };
         }
 
@@ -75,12 +74,14 @@ pub fn get_foreground_app() -> crate::platform::ForegroundApp {
             return crate::platform::ForegroundApp {
                 name,
                 exe_path: full_path,
+                window_title: title,
             };
         }
 
         crate::platform::ForegroundApp {
-            name: title,
+            name: title.clone(),
             exe_path: String::new(),
+            window_title: title,
         }
     }
 }

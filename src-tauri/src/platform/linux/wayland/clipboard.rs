@@ -162,7 +162,11 @@ pub fn get_foreground_app() -> crate::platform::ForegroundApp {
         None => (String::new(), String::new()),
     };
 
-    crate::platform::ForegroundApp { name, exe_path }
+    crate::platform::ForegroundApp {
+        name,
+        exe_path,
+        window_title: String::new(),
+    }
 }
 
 #[cfg(not(target_os = "linux"))]

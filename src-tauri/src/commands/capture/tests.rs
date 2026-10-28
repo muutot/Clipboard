@@ -25,6 +25,7 @@ fn foreground_app_name_prefers_exe_leaf_stem() {
     let app = ForegroundApp {
         name: "Window Title".to_owned(),
         exe_path: r"C:\Tools\MyApp\editor.exe".to_owned(),
+        window_title: String::new(),
     };
     assert_eq!(foreground_app_name(&app).as_deref(), Some("editor"));
 
@@ -32,6 +33,7 @@ fn foreground_app_name_prefers_exe_leaf_stem() {
     let unix_like = ForegroundApp {
         name: "ignored".to_owned(),
         exe_path: "/opt/my-app/tool".to_owned(),
+        window_title: String::new(),
     };
     assert_eq!(foreground_app_name(&unix_like).as_deref(), Some("tool"));
 }
@@ -41,12 +43,14 @@ fn foreground_app_name_falls_back_to_window_title_then_none() {
     let titled = ForegroundApp {
         name: "  Notepad  ".to_owned(),
         exe_path: String::new(),
+        window_title: String::new(),
     };
     assert_eq!(foreground_app_name(&titled).as_deref(), Some("Notepad"));
 
     let blank = ForegroundApp {
         name: "   ".to_owned(),
         exe_path: " ".to_owned(),
+        window_title: String::new(),
     };
     assert_eq!(foreground_app_name(&blank), None);
 }

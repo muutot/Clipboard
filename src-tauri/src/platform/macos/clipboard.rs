@@ -181,7 +181,11 @@ pub fn get_foreground_app() -> crate::platform::ForegroundApp {
     let name = objc::running_app_name(app).unwrap_or_default();
     let exe_path = objc::running_app_exe_path(app).unwrap_or_default();
     unsafe { objc::objc_autoreleasePoolPop(pool) };
-    crate::platform::ForegroundApp { name, exe_path }
+    crate::platform::ForegroundApp {
+        name,
+        exe_path,
+        window_title: String::new(),
+    }
 }
 
 #[cfg(not(target_os = "macos"))]

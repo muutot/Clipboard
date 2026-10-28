@@ -248,6 +248,9 @@ pub fn get_platform_info() -> PlatformInfo {
 pub struct ForegroundApp {
     pub name: String,
     pub exe_path: String,
+    /// Raw foreground window title. Only Windows fills this today; other
+    /// platforms keep it empty and degrade to app-name-only attribution.
+    pub window_title: String,
 }
 
 impl ForegroundApp {
@@ -255,6 +258,7 @@ impl ForegroundApp {
         Self {
             name: String::new(),
             exe_path: String::new(),
+            window_title: String::new(),
         }
     }
 }
