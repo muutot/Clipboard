@@ -11,6 +11,7 @@ export const SETTINGS_SECTIONS = [
   "custom_css",
   "icons",
   "capture",
+  "capture_source",
   "capture_privacy",
   "capture_icons",
   "storage_paths",

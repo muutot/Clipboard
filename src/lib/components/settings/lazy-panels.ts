@@ -106,6 +106,11 @@ export function createLazyPanelRegistry(host: LazyPanelHost): LazyPanelRegistry 
       props: () => ({ iconsDir: host.status?.iconsDir, onclose: host.onclose, showHeader: false }),
     },
     {
+      sections: ["capture_source"],
+      load: () => import("$lib/components/settings/SourceMappingSettingsPanel.svelte"),
+      props: () => ({ onclose: host.onclose, showHeader: false, onfeedback: host.showFeedback }),
+    },
+    {
       sections: ["capture_privacy"],
       load: () => import("$lib/components/settings/SensitiveContentSettingsPanel.svelte"),
       props: () => ({ onclose: host.onclose, showHeader: false }),

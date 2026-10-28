@@ -1182,6 +1182,19 @@ const zhCN: LocaleDefinition = {
     autoTagInvalid: "第 {index} 条规则无效：{error}",
     autoTagDelete: "删除规则",
   },
+  sourceMapping: {
+    tabLabel: "网页来源",
+    title: "网页来源映射",
+    description:
+      "将浏览器页面标题与域名映射为简短的显示名称，用于卡片与详情。规则由你自己配置，无系统内置。",
+    domainPlaceholder: "域名，例如 github.com",
+    keywordPlaceholder: "标题关键词（可选）",
+    namePlaceholder: "显示名称",
+    addRule: "添加规则",
+    saveRules: "保存规则",
+    saved: "来源映射规则已保存",
+    deleteRule: "删除规则",
+  },
   floatClick: {
     title: "悬浮面板点击",
     description: "悬浮面板条目的鼠标点击行为；除无操作外每个操作只能使用一次",

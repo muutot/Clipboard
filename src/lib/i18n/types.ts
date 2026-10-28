@@ -1141,6 +1141,18 @@ export interface LocaleDefinition {
     autoTagInvalid: string;
     autoTagDelete: string;
   };
+  sourceMapping: {
+    tabLabel: string;
+    title: string;
+    description: string;
+    domainPlaceholder: string;
+    keywordPlaceholder: string;
+    namePlaceholder: string;
+    addRule: string;
+    saveRules: string;
+    saved: string;
+    deleteRule: string;
+  };
   floatClick: {
     title: string;
     description: string;

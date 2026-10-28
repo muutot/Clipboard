@@ -102,6 +102,15 @@ const SECTION_SEARCH_TEXT: Record<SettingsSection, readonly SettingsSearchText[]
     "正则",
     "仅本地",
   ],
+  capture_source: [
+    i18n("capture.title"),
+    i18n("sourceMapping.tabLabel"),
+    i18n("sourceMapping.title"),
+    "来源",
+    "网页",
+    "域名",
+    "web source",
+  ],
   capture_icons: [
     i18n("capture.title"),
     i18n("capture.settings"),
@@ -903,6 +912,14 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
     i18n("floatClick.middleClick"),
     i18n("floatClick.middleClickDesc"),
     ["中键", "悬浮", "float", "middle click"],
+  ),
+
+  entry(
+    "capture.sourceMapping",
+    { section: "capture_source" },
+    i18n("sourceMapping.title"),
+    i18n("sourceMapping.description"),
+    ["来源", "网页", "域名", "标题", "web", "source", "domain"],
   ),
 
   entry(

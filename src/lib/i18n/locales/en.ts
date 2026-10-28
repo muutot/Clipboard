@@ -1231,6 +1231,19 @@ const en: LocaleDefinition = {
     autoTagInvalid: "Rule {index} is invalid: {error}",
     autoTagDelete: "Delete rule",
   },
+  sourceMapping: {
+    tabLabel: "Web source",
+    title: "Web source mapping",
+    description:
+      "Map browser page titles and domains to short display names shown on cards and details. Rules are your own; nothing is built in.",
+    domainPlaceholder: "Domain, e.g. github.com",
+    keywordPlaceholder: "Title keyword (optional)",
+    namePlaceholder: "Display name",
+    addRule: "Add rule",
+    saveRules: "Save rules",
+    saved: "Source mapping rules saved",
+    deleteRule: "Delete rule",
+  },
   floatClick: {
     title: "Float panel clicks",
     description:

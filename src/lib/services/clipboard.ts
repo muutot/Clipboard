@@ -391,6 +391,26 @@ export async function setAutoTagRules(rules: AutoTagRule[]): Promise<AutoTagRule
   );
 }
 
+export interface SourceMappingRule {
+  domain: string;
+  titleKeyword: string;
+  name: string;
+}
+
+export async function getSourceMappingRules(): Promise<SourceMappingRule[] | null> {
+  return invokeTauri<SourceMappingRule[]>("get_source_mapping_rules");
+}
+
+export async function setSourceMappingRules(
+  rules: SourceMappingRule[],
+): Promise<SourceMappingRule[] | null> {
+  return invokeTauriRequired<SourceMappingRule[]>(
+    "set_source_mapping_rules",
+    { rules },
+    "Source mapping rules are only available in the desktop app",
+  );
+}
+
 export async function listSourceApplications(): Promise<string[] | null> {
   return invokeTauri<string[]>("list_source_applications");
 }
