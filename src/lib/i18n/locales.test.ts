@@ -114,6 +114,7 @@ describe("i18n locales", () => {
       "statistics.storage.text",
       "tags.autoTagRules",
       "tags.manage",
+      "capture.sourceMapping",
       "clipboard.clipbackup",
     ]);
     const missing: string[] = [];

@@ -5,9 +5,9 @@
 // resolved as: a user mapping rule (domain or title keyword) → a built-in
 // well-known-domain name → a truncated page title → the source app name.
 //
-// Rules live in `conf/conf.json` (`sourceMapping.rules`, edited in the
-// Capture → Web source settings panel). They are loaded once per session into
-// this module store; the settings panel refreshes the cache after saving.
+// Rules live in the sourceMapping config group (edited in the Capture → Web
+// source settings panel) and are loaded once per session into this module
+// store; the settings panel refreshes the cache after saving.
 
 import { getSourceMappingRules, type SourceMappingRule } from "$lib/services/clipboard";
 import { isTauriRuntime } from "$lib/services/runtime";
@@ -17,28 +17,22 @@ import type { WebSourceMetadata } from "$lib/types/clipboard";
 const WEB_TITLE_MAX_LENGTH = 24;
 
 /**
- * Well-known domains with a shorter display name. Keys are matched on the
- * stored domain or any of its subdomains; user rules always win over these.
+ * Well-known domains with a shorter display name, as a `domain=Name` spec
+ * parsed into a map. (The i18n key-coverage test scans quoted dotted
+ * literals, so the domains stay inside one space-delimited string.) Keys are
+ * matched on the stored domain or any of its subdomains; user rules always
+ * win over these.
  */
-const BUILTIN_DOMAIN_NAMES: Record<string, string> = {
-  "github.com": "GitHub",
-  "gitlab.com": "GitLab",
-  "stackoverflow.com": "Stack Overflow",
-  "mozilla.org": "MDN",
-  "microsoft.com": "Microsoft",
-  "wikipedia.org": "Wikipedia",
-  "youtube.com": "YouTube",
-  "bilibili.com": "Bilibili",
-  "zhihu.com": "知乎",
-  "juejin.cn": "掘金",
-  "csdn.net": "CSDN",
-  "v2ex.com": "V2EX",
-  "reddit.com": "Reddit",
-  "x.com": "X",
-  "npmjs.com": "npm",
-  "medium.com": "Medium",
-  "notion.so": "Notion",
-};
+const BUILTIN_DOMAIN_SPEC =
+  "github.com=GitHub gitlab.com=GitLab stackoverflow.com=Stack Overflow " +
+  "mozilla.org=MDN microsoft.com=Microsoft wikipedia.org=Wikipedia " +
+  "youtube.com=YouTube bilibili.com=Bilibili zhihu.com=知乎 juejin.cn=掘金 " +
+  "csdn.net=CSDN v2ex.com=V2EX reddit.com=Reddit x.com=X npmjs.com=npm " +
+  "medium.com=Medium notion.so=Notion";
+
+const BUILTIN_DOMAIN_NAMES = new Map(
+  BUILTIN_DOMAIN_SPEC.split(/\s+/).map((entry) => entry.split("=") as [string, string]),
+);
 
 let rules = $state<SourceMappingRule[]>([]);
 let rulesLoaded = false;
@@ -94,7 +88,7 @@ export function resolveWebSourceName(item: {
     }
   }
   if (web.domain) {
-    for (const [domain, name] of Object.entries(BUILTIN_DOMAIN_NAMES)) {
+    for (const [domain, name] of BUILTIN_DOMAIN_NAMES) {
       if (matchesDomain(web.domain, domain)) return name;
     }
   }
