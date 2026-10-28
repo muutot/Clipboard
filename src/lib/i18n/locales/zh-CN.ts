@@ -765,6 +765,8 @@ const zhCN: LocaleDefinition = {
     details: "详细",
     ocr: "OCR",
     sourceApp: "来源",
+    webTitle: "网页标题",
+    webUrl: "网页地址",
     contentType: "类型",
     tags: "标签",
     addTag: "添加标签",

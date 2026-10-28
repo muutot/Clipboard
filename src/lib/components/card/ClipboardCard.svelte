@@ -13,6 +13,7 @@
   import { isTauriRuntime } from "$lib/services/runtime";
   import { writeClipboardText } from "$lib/services/clipboard";
   import { SOURCE_TONE_COLORS } from "$lib/services/clipboard/mapping";
+  import { resolveWebSourceName } from "$lib/services/source-mapping.svelte";
   import { getDisplayRemainingLines, getDisplayTitle } from "$lib/utils/content/display-text";
   import { trimTrailingBlankLines } from "$lib/utils/layout/virtual-scroll";
   import { assetUrl as baseAssetUrl } from "$lib/utils/content/format";
@@ -273,6 +274,8 @@
     trimTrailingBlankLines(item.textContent) || trimTrailingBlankLines(item.title),
   );
   const primaryFirstLine = $derived(getDisplayTitle(primaryPreviewText));
+  // Browser copies show a mapped page name; the raw app stays in the tooltip.
+  const sourceDisplayName = $derived(resolveWebSourceName(item));
   const primaryRestLines = $derived(getDisplayRemainingLines(primaryPreviewText));
   const secondaryPreviewText = $derived(
     trimTrailingBlankLines(item.textContent) || trimTrailingBlankLines(item.preview),
@@ -718,7 +721,7 @@
             <span class="source-dot" style:color={SOURCE_TONE_COLORS[item.sourceTone]}></span>
           {/if}
         </span>
-        <span class="source-name">{item.sourceApp}</span>
+        <span class="source-name" title={item.sourceApp}>{sourceDisplayName}</span>
         <span>{item.sizeLabel}</span>
         <span>{formatRelativeTime(item.createdAt, now)}</span>
         {#if item.kind === "file"}<span class="file-count">{item.preview}</span>{/if}

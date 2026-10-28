@@ -13,6 +13,7 @@ import type {
   PersistedClipboardItem,
   ResourceFileMetadata,
   ResourceMetadata,
+  WebSourceMetadata,
 } from "$lib/types/clipboard";
 
 const locales = { "zh-CN": zhCN, en };
@@ -73,7 +74,18 @@ export function toClipboardItem(record: PersistedClipboardItem): ClipboardItem {
     iconPath: record.iconPath,
     metadataJson: record.metadataJson,
     tags: parseTags(record.metadataJson),
+    webSource: parseWebSource(record.metadataJson),
   };
+}
+
+function parseWebSource(metadataJson: string | null | undefined): WebSourceMetadata | undefined {
+  const web = parseMetadataObject(metadataJson).web;
+  if (!isObject(web)) return undefined;
+  const title = optionalString(web.title);
+  const url = optionalString(web.url);
+  const domain = optionalString(web.domain)?.toLocaleLowerCase();
+  if (!title && !url && !domain) return undefined;
+  return { title, url, domain };
 }
 
 function parseTags(metadataJson: string | null | undefined): string[] {

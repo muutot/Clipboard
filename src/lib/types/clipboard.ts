@@ -113,6 +113,15 @@ export interface ClipboardItem {
   iconPath?: string | null;
   metadataJson?: string | null;
   tags?: string[];
+  /** Web-page attribution written by the capture worker for browser copies. */
+  webSource?: WebSourceMetadata;
+}
+
+/** The `web` blob of the backend `metadata_json` (schema version 2). */
+export interface WebSourceMetadata {
+  title?: string;
+  url?: string;
+  domain?: string;
 }
 
 /** OCR coordinates are pixels in the original image, even when a thumbnail is displayed. */

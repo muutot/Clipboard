@@ -4,6 +4,7 @@
   import type { ClipboardItem, IconName } from "$lib/types/clipboard";
   import { messages, resolvePath } from "$lib/i18n";
   import { writeClipboardText } from "$lib/services/clipboard";
+  import { resolveWebSourceName } from "$lib/services/source-mapping.svelte";
   import {
     extractEmails,
     extractUrls,
@@ -128,8 +129,20 @@
   <dl class="detail-list">
     <div class="detail-row">
       <dt><AppIcon name="info" size={14} /> {_t("detail.sourceApp")}</dt>
-      <dd>{item.sourceApp}</dd>
+      <dd title={item.sourceApp}>{resolveWebSourceName(item)}</dd>
     </div>
+    {#if item.webSource?.title}
+      <div class="detail-row">
+        <dt><AppIcon name="text" size={14} /> {_t("detail.webTitle")}</dt>
+        <dd>{item.webSource.title}</dd>
+      </div>
+    {/if}
+    {#if item.webSource?.url}
+      <div class="detail-row">
+        <dt><AppIcon name="link" size={14} /> {_t("detail.webUrl")}</dt>
+        <dd><code>{item.webSource.url}</code></dd>
+      </div>
+    {/if}
     <div class="detail-row">
       <dt><AppIcon name="file" size={14} /> {_t("detail.contentType")}</dt>
       <dd>{kindLabel}</dd>

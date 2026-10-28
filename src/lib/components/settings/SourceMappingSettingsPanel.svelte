@@ -7,6 +7,7 @@
     setSourceMappingRules,
     type SourceMappingRule,
   } from "$lib/services/clipboard";
+  import { refreshSourceMappingRules } from "$lib/services/source-mapping.svelte";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);
@@ -57,6 +58,8 @@
       }));
       const saved = await setSourceMappingRules(snapshot);
       rules = saved ?? rules;
+      // Keep the card/detail resolver in sync without an app restart.
+      if (saved) refreshSourceMappingRules(saved);
       onfeedback(_t("sourceMapping.saved"), true);
     } catch (error) {
       onfeedback(error instanceof Error ? error.message : String(error), false);

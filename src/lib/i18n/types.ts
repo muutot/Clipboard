@@ -728,6 +728,8 @@ export interface LocaleDefinition {
     details: string;
     ocr: string;
     sourceApp: string;
+    webTitle: string;
+    webUrl: string;
     contentType: string;
     tags: string;
     addTag: string;

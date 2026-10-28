@@ -76,6 +76,16 @@ Do not silently return `null` from a new wrapper unless the caller can distingui
 
 ## Background operation monitors
 
+`source-mapping.svelte.ts` is the module store behind web-source display names.
+It loads `sourceMapping.rules` once per session (`get_source_mapping_rules`;
+the Web-source settings panel pushes saved rules back via
+`refreshSourceMappingRules` so cards update without a restart) and exposes
+`resolveWebSourceName(item)`: first matching user rule (domain suffix match or
+title-keyword substring), then a built-in well-known-domain name, then the
+page title truncated to 24 characters, then the raw source app. Browser
+captures carry the `web` metadata blob (`{title,url,domain}`, schema version 2)
+parsed into `ClipboardItem.webSource` by `clipboard/mapping.ts`.
+
 `background-operations.svelte.ts` creates a mounted monitor for one backend slot
 (`tags`, `backup`, `sync`). It polls `get_background_operation` every 500 ms after the
 previous poll settles, discards stale responses, and clears timers on teardown.

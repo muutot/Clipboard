@@ -795,6 +795,8 @@ const en: LocaleDefinition = {
     details: "Details",
     ocr: "OCR",
     sourceApp: "Source App",
+    webTitle: "Page Title",
+    webUrl: "Page URL",
     contentType: "Content Type",
     tags: "Tags",
     addTag: "Add tag",
