@@ -111,9 +111,15 @@ jobs:
     timeout-minutes: 120
     permissions:
       contents: write
+      # The SignPath signing action downloads the workflow artifact that
+      # carries the unsigned installer (see the signing steps below).
+      actions: read
     env:
       RELEASE_TAG: ${{ needs.resolve.outputs.release_tag }}
       RELEASE_SHA: ${{ needs.resolve.outputs.release_sha }}
+      # Gate for the optional SignPath signing steps: unset while SignPath
+      # Foundation onboarding is pending, so releases stay unsigned and green.
+      SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
       CARGO_PROFILE_RELEASE_LTO: "true"
       CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "1"
       CARGO_PROFILE_RELEASE_OPT_LEVEL: "3"
@@ -238,6 +244,58 @@ jobs:
           releaseDraft: true
           prerelease: ${{ contains(env.RELEASE_TAG, '-') }}
           args: ${{ matrix.target != '' && format('--target {0}', matrix.target) || '' }}
+
+      # Authenticode-sign the NSIS installer through SignPath Foundation (free
+      # code signing for open source). Gated on SIGNPATH_API_TOKEN so the flow
+      # stays a no-op until onboarding completes. The signing request blocks
+      # until a maintainer approves it in the SignPath console — that human
+      # approval is part of the Foundation's per-release policy. The signed
+      # file replaces the draft asset BEFORE checksums run, so checksums-
+      # windows-x64.txt matches what users actually download.
+      - name: Upload unsigned installer for signing
+        id: signable_installer
+        if: runner.os == 'Windows' && env.SIGNPATH_API_TOKEN != ''
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: unsigned-windows-installer
+          if-no-files-found: error
+          path: src-tauri/target/*/release/bundle/nsis/*-setup.exe
+
+      - name: Sign installer via SignPath
+        id: signpath
+        if: runner.os == 'Windows' && env.SIGNPATH_API_TOKEN != ''
+        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3.0
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: clipboard
+          signing-policy-slug: release-signing
+          github-artifact-id: ${{ steps.signable_installer.outputs.artifact-id }}
+          output-artifact-directory: signed-installer
+          skip-decompress: true
+          wait-for-completion-timeout-in-seconds: "3600"
+
+      - name: Verify and publish signed installer
+        if: runner.os == 'Windows' && env.SIGNPATH_API_TOKEN != ''
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ needs.resolve.outputs.release_tag }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $installer = @(Get-ChildItem 'src-tauri/target/*/release/bundle/nsis/*-setup.exe' -File)
+          if ($installer.Count -ne 1) { throw "expected exactly one installer, found $($installer.Count)" }
+          $signed = @(Get-ChildItem 'signed-installer' -File)
+          if ($signed.Count -ne 1) { throw "SignPath returned $($signed.Count) files, expected 1" }
+          $signature = Get-AuthenticodeSignature $signed[0].FullName
+          if ($signature.Status -ne 'Valid') {
+            throw "signed installer signature is $($signature.Status)"
+          }
+          Move-Item $signed[0].FullName $installer[0].FullName -Force
+          gh release upload "$env:RELEASE_TAG" "$($installer[0].FullName)" --clobber --repo "$env:GITHUB_REPOSITORY"
+          Write-Output "Published signed installer $($installer[0].Name)"
+          Write-Output "SignPath request: ${{ steps.signpath.outputs.signing-request-web-url }}"
+          Write-Output "Publisher: $($signature.SignerCertificate.Subject)"
 
       # The bundler's linuxdeploy/appimagetool toolchain (all moving targets:
       # tauri-apps binary-releases + the plugin's "continuous" tag) leaves
