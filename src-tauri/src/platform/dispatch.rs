@@ -50,6 +50,13 @@ pub trait PlatformClipboard {
         None
     }
 
+    /// Reads the originating page URL recorded by Chromium browsers in the
+    /// CF_HTML header of a rich-text clipboard copy. Windows-only today;
+    /// other platforms return `None`.
+    fn read_clipboard_source_url(&self) -> Option<String> {
+        None
+    }
+
     /// Reads the optional RTF payload used for paste-by-format.
     /// Windows: registered `Rich Text Format`; macOS: `public.rtf` NSData; Linux: `text/rtf`.
     fn read_clipboard_rtf(&self) -> Option<String> {

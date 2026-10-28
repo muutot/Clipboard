@@ -2,7 +2,7 @@
 
 use super::*;
 
-use html::parse_cf_html;
+use html::{parse_cf_html, parse_cf_html_source_url};
 #[cfg(target_os = "windows")]
 use read_text::format_id_to_name;
 #[cfg(target_os = "windows")]
@@ -173,6 +173,36 @@ fn cf_html_rejects_missing_or_empty_content() {
     assert_eq!(parse_cf_html(b"not a cf-html payload"), None);
     let empty = b"Version:0.9\r\nStartHTML:0000000000\r\nEndHTML:0000000000";
     assert_eq!(parse_cf_html(empty), None);
+}
+
+#[test]
+fn cf_html_extracts_the_source_url_header_line() {
+    let payload =
+        cf_html_payload_with_source_url("<b>bold</b>", Some("https://example.com/page?q=1"));
+    assert_eq!(
+        parse_cf_html_source_url(&payload).as_deref(),
+        Some("https://example.com/page?q=1")
+    );
+    // The fragment itself still parses from the same payload.
+    assert_eq!(parse_cf_html(&payload).as_deref(), Some("<b>bold</b>"));
+}
+
+#[test]
+fn cf_html_source_url_scan_is_bounded_to_the_header_region() {
+    // A copied page that itself mentions "SourceURL:" inside its markup must
+    // not shadow the real header: only the header region is scanned.
+    let payload = cf_html_payload("SourceURL:https://evil.example/page");
+    assert_eq!(parse_cf_html_source_url(&payload), None);
+}
+
+#[test]
+fn cf_html_source_url_is_absent_without_the_header_line() {
+    assert_eq!(
+        parse_cf_html_source_url(&cf_html_payload("<b>bold</b>")),
+        None
+    );
+    assert_eq!(parse_cf_html_source_url(b""), None);
+    assert_eq!(parse_cf_html_source_url(b"not a cf-html payload"), None);
 }
 
 #[cfg(target_os = "windows")]
@@ -621,19 +651,33 @@ fn real_clipboard_round_trips_cover_native_write_and_read_paths() {
 /// Builds a CF_HTML payload with accurate byte offsets. Header widths are
 /// fixed-width (10 digits), so header length is independent of the values.
 fn cf_html_payload(fragment: &str) -> Vec<u8> {
+    cf_html_payload_with_source_url(fragment, None)
+}
+
+fn cf_html_payload_with_source_url(fragment: &str, source_url: Option<&str>) -> Vec<u8> {
     let body =
         format!("<html><body><!--StartFragment-->{fragment}<!--EndFragment--></body></html>");
     let fragment_start = body.find("<!--StartFragment-->").unwrap() + "<!--StartFragment-->".len();
     let fragment_end = body.find("<!--EndFragment-->").unwrap();
-    write_cf_html_offsets(body, fragment_start, fragment_end)
+    write_cf_html_offsets(body, fragment_start, fragment_end, source_url)
 }
 
 fn cf_html_payload_without_fragment(body: &str) -> Vec<u8> {
-    write_cf_html_offsets(body.to_owned(), 0, 0)
+    write_cf_html_offsets(body.to_owned(), 0, 0, None)
 }
 
-fn write_cf_html_offsets(body: String, fragment_start: usize, fragment_end: usize) -> Vec<u8> {
-    let header = "Version:0.9\r\nStartHTML:0000000000\r\nEndHTML:0000000000\r\nStartFragment:0000000000\r\nEndFragment:0000000000\r\n";
+fn write_cf_html_offsets(
+    body: String,
+    fragment_start: usize,
+    fragment_end: usize,
+    source_url: Option<&str>,
+) -> Vec<u8> {
+    let source_url_line = source_url
+        .map(|url| format!("SourceURL:{url}\r\n"))
+        .unwrap_or_default();
+    let header = format!(
+        "Version:0.9\r\n{source_url_line}StartHTML:0000000000\r\nEndHTML:0000000000\r\nStartFragment:0000000000\r\nEndFragment:0000000000\r\n"
+    );
     let mut out = header.as_bytes().to_vec();
     let header_len = out.len();
     out.extend_from_slice(body.as_bytes());

@@ -9,6 +9,9 @@ pub struct ClipboardSnapshot {
     pub rtf: Option<String>,
     pub image: Option<(ClipboardImageData, u32, u32)>,
     pub files: Vec<String>,
+    /// Originating page URL from the CF_HTML `SourceURL:` header
+    /// (Windows/Chromium only; `None` elsewhere).
+    pub source_url: Option<String>,
 }
 
 impl ClipboardSnapshot {
@@ -25,6 +28,9 @@ impl ClipboardSnapshot {
                 .filter(|s| !s.trim().is_empty() && s.len() <= limit),
             image: platform.read_clipboard_image(),
             files: platform.read_clipboard_file_paths(),
+            source_url: platform
+                .read_clipboard_source_url()
+                .filter(|s| !s.trim().is_empty() && s.len() <= limit),
         }
     }
 }

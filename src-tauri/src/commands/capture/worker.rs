@@ -157,6 +157,7 @@ pub(crate) fn run_capture_loop(
                     rtf,
                     image: image_data,
                     files: file_paths,
+                    source_url: _,
                 } = snapshot;
 
                 if capture_state.should_skip(source_app.as_deref(), text.as_deref()) {

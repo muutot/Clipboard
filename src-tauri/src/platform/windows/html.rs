@@ -26,6 +26,24 @@ pub(super) fn html_format_id() -> Option<u32> {
     })
 }
 
+fn header_field_value(data: &[u8], label: &str) -> Option<usize> {
+    let needle = label.as_bytes();
+    let pos = data
+        .windows(needle.len())
+        .position(|window| window == needle)?;
+    let rest = &data[pos + needle.len()..];
+    let line_end = rest
+        .iter()
+        .position(|&byte| byte == b'\r' || byte == b'\n')
+        .unwrap_or(rest.len());
+    let value = rest[..line_end]
+        .iter()
+        .copied()
+        .skip_while(u8::is_ascii_whitespace)
+        .collect::<Vec<_>>();
+    std::str::from_utf8(&value).ok()?.trim().parse().ok()
+}
+
 /// Extracts the HTML fragment from a CF_HTML payload.
 ///
 /// CF_HTML is a text header followed by the markup; `StartFragment:` /
@@ -34,32 +52,14 @@ pub(super) fn html_format_id() -> Option<u32> {
 /// Falls back to `StartHTML:` / `EndHTML:` when the fragment offsets are
 /// missing, and rejects empty results.
 pub(super) fn parse_cf_html(data: &[u8]) -> Option<String> {
-    fn field_value(data: &[u8], label: &str) -> Option<usize> {
-        let needle = label.as_bytes();
-        let pos = data
-            .windows(needle.len())
-            .position(|window| window == needle)?;
-        let rest = &data[pos + needle.len()..];
-        let line_end = rest
-            .iter()
-            .position(|&byte| byte == b'\r' || byte == b'\n')
-            .unwrap_or(rest.len());
-        let value = rest[..line_end]
-            .iter()
-            .copied()
-            .skip_while(u8::is_ascii_whitespace)
-            .collect::<Vec<_>>();
-        std::str::from_utf8(&value).ok()?.trim().parse().ok()
-    }
-
     let (start, end) = match (
-        field_value(data, "StartFragment:"),
-        field_value(data, "EndFragment:"),
+        header_field_value(data, "StartFragment:"),
+        header_field_value(data, "EndFragment:"),
     ) {
         (Some(start), Some(end)) if end > start && end <= data.len() => (start, end),
         _ => {
-            let start = field_value(data, "StartHTML:")?;
-            let end = field_value(data, "EndHTML:")?;
+            let start = header_field_value(data, "StartHTML:")?;
+            let end = header_field_value(data, "EndHTML:")?;
             if end <= start || end > data.len() {
                 return None;
             }
@@ -76,9 +76,35 @@ pub(super) fn parse_cf_html(data: &[u8]) -> Option<String> {
     }
 }
 
-/// Reads the HTML fragment of a rich-text clipboard copy, if present.
+/// Extracts the `SourceURL:` header line from a CF_HTML payload. Chromium
+/// browsers record the originating page URL there; other browsers may omit it.
+///
+/// The scan is bounded to the header region (everything before the fragment
+/// offset), so copied markup that itself mentions "SourceURL:" cannot shadow
+/// the real header line.
+pub(super) fn parse_cf_html_source_url(data: &[u8]) -> Option<String> {
+    let bound = header_field_value(data, "StartFragment:")
+        .or_else(|| header_field_value(data, "StartHTML:"))
+        .unwrap_or(data.len());
+    let header = &data[..bound.min(data.len())];
+
+    let needle = b"SourceURL:";
+    let pos = header
+        .windows(needle.len())
+        .position(|window| window == needle)?;
+    let rest = &header[pos + needle.len()..];
+    let line_end = rest
+        .iter()
+        .position(|&byte| byte == b'\r' || byte == b'\n')
+        .unwrap_or(rest.len());
+    let url = std::str::from_utf8(&rest[..line_end]).ok()?.trim();
+    (!url.is_empty()).then(|| url.to_owned())
+}
+
+/// Reads the raw CF_HTML payload bytes, if the registered "HTML Format"
+/// clipboard data is present and within the native size ceiling.
 #[cfg(target_os = "windows")]
-pub fn read_clipboard_html() -> Option<String> {
+fn read_cf_html_raw() -> Option<Vec<u8>> {
     extern "system" {
         fn OpenClipboard(hwnd: isize) -> i32;
         fn CloseClipboard() -> i32;
@@ -121,11 +147,29 @@ pub fn read_clipboard_html() -> Option<String> {
         GlobalUnlock(handle);
         CloseClipboard();
 
-        parse_cf_html(&data)
+        Some(data)
     }
+}
+
+/// Reads the HTML fragment of a rich-text clipboard copy, if present.
+#[cfg(target_os = "windows")]
+pub fn read_clipboard_html() -> Option<String> {
+    parse_cf_html(&read_cf_html_raw()?)
+}
+
+/// Reads the originating page URL recorded by Chromium browsers in the
+/// CF_HTML header of a rich-text clipboard copy, if present.
+#[cfg(target_os = "windows")]
+pub fn read_clipboard_source_url() -> Option<String> {
+    parse_cf_html_source_url(&read_cf_html_raw()?)
 }
 
 #[cfg(not(target_os = "windows"))]
 pub fn read_clipboard_html() -> Option<String> {
+    None
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn read_clipboard_source_url() -> Option<String> {
     None
 }

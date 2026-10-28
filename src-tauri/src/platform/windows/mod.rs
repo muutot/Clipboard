@@ -26,6 +26,10 @@ impl crate::platform::PlatformClipboard for WindowsPlatform {
         read_clipboard_html()
     }
 
+    fn read_clipboard_source_url(&self) -> Option<String> {
+        read_clipboard_source_url()
+    }
+
     fn read_clipboard_rtf(&self) -> Option<String> {
         read_clipboard_rtf()
     }
@@ -151,6 +155,7 @@ pub use foreground::extract_app_icon;
 #[cfg(target_os = "windows")]
 pub use foreground::get_foreground_app;
 pub use html::read_clipboard_html;
+pub use html::read_clipboard_source_url;
 pub use monitor::{ClipboardChange, ClipboardMonitor, WindowsClipboardMonitor};
 pub use read_text::read_clipboard_text;
 pub use register::{register_global_hotkey, unregister_global_hotkey};
