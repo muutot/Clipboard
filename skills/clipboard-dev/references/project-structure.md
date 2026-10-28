@@ -1,6 +1,6 @@
 # Project Structure and Runtime Surfaces
 
-This reference is a source map, not a substitute for reading the current files. Avoid brittle line counts and module counts; update this map when ownership or entry points change.
+This reference is a source map, not a substitute for reading the current files. Avoid brittle line counts and module counts; update this map when ownership or entry points change. Short per-directory `AGENTS.md` guides exist in `src/`, `src-tauri/`, and `docs/`; they are condensed pointers to the relevant references, and this reference stays the full map.
 
 ## Runtime surfaces
 
