@@ -43,8 +43,8 @@ jobs:
     name: Verify
     needs: resolve
     runs-on: ubuntu-latest
-    # `npm run verify` plus the fat-LTO probe build; same rationale as the CI
-    # caps: a hung step must fail the job, not stall the run for hours.
+    # Same rationale as the CI caps: a hung step must fail the job, not stall
+    # the run for hours.
     timeout-minutes: 90
     env:
       RELEASE_TAG: ${{ needs.resolve.outputs.release_tag }}
@@ -74,9 +74,8 @@ jobs:
           # which already covers RUSTFLAGS and the CARGO_PROFILE_* knobs this
           # workflow sets; the `env-cache-key` input we used to pass does not
           # exist and was silently ignored.
-          # The extreme release build (fat LTO, codegen-units=1) can push target/
-          # past GitHub's 10GB cache-entry limit. cache-on-failure keeps the job
-          # green even if the cache upload is refused; the build still succeeds.
+          # Keep the cache even when a check or test fails so a follow-up run
+          # does not start from a cold dependency graph.
           cache-on-failure: true
 
       # See the CI note on `ort-sys`: its cached build script output points at
@@ -98,16 +97,14 @@ jobs:
       - name: Verify
         run: npm run verify
 
-      - name: Verify extreme release build
-        env:
-          CARGO_PROFILE_RELEASE_LTO: "true"
-          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "1"
-          CARGO_PROFILE_RELEASE_OPT_LEVEL: "3"
-        run: cargo build --profile release --manifest-path src-tauri/Cargo.toml
-
   build:
     name: Build (${{ matrix.platform }})
-    needs: [resolve, verify]
+    # Runs in parallel with verify, not after it: the fat-LTO build dominates
+    # the release wall clock, so gate only publish on verify success instead of
+    # making every build leg wait ~45 minutes of verification first. An
+    # unverified build costs runner minutes; an unverified *publish* would ship
+    # a broken release, and publish below still needs verify.
+    needs: [resolve]
     runs-on: ${{ matrix.runner }}
     # The extreme LTO build is the longest step of the release; the cap exists
     # so a hung toolchain fails the job instead of stalling it for hours.
@@ -352,7 +349,10 @@ jobs:
     # Release creation plus asset upload/GitCode sync; a hung request must
     # fail the job instead of stalling the run for the 6 h default.
     timeout-minutes: 20
-    needs: [resolve, build]
+    # verify is needed here even though build no longer depends on it: build
+    # and verify run in parallel, so without this a verify failure would not
+    # stop the draft release from being published.
+    needs: [resolve, verify, build]
     if: success()
     runs-on: ubuntu-latest
     permissions:
