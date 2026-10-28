@@ -191,6 +191,25 @@ pub fn set_auto_tag_rules(
     Ok(persisted)
 }
 
+#[tauri::command]
+pub fn get_source_mapping_rules(
+    config: tauri::State<'_, Mutex<ConfigStore>>,
+) -> Result<Vec<crate::config::SourceMappingRule>, String> {
+    Ok(lock_state(&config, "configuration lock is poisoned")?
+        .source_mapping_rules()
+        .to_vec())
+}
+
+#[tauri::command]
+pub fn set_source_mapping_rules(
+    config: tauri::State<'_, Mutex<ConfigStore>>,
+    rules: Vec<crate::config::SourceMappingRule>,
+) -> Result<Vec<crate::config::SourceMappingRule>, String> {
+    lock_state(&config, "configuration lock is poisoned")?
+        .set_source_mapping_rules(rules)
+        .map_err(|error| error.to_string())
+}
+
 fn compiled_preview_rules(
     rules: &[crate::config::AutoTagRule],
 ) -> Result<Vec<crate::tags::CompiledAutoTagRule>, String> {

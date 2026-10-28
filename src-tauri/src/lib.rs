@@ -899,6 +899,8 @@ pub fn run() {
             preview_auto_tag_history,
             apply_auto_tag_history,
             set_auto_tag_rules,
+            get_source_mapping_rules,
+            set_source_mapping_rules,
             check_for_update,
             get_release,
             export_clipboard_items,

@@ -331,6 +331,41 @@ impl ConfigStore {
         Ok(normalized)
     }
 
+    pub fn source_mapping_rules(&self) -> &[SourceMappingRule] {
+        &self.config.source_mapping.rules
+    }
+
+    /// Maximum source-mapping rules kept; bounds config growth and lookup cost.
+    pub const MAX_SOURCE_MAPPING_RULES: usize = 100;
+
+    /// Persists source-mapping rules after trimming, dropping blank/duplicate
+    /// entries (first occurrence wins), and enforcing length caps.
+    pub fn set_source_mapping_rules(
+        &mut self,
+        rules: Vec<SourceMappingRule>,
+    ) -> Result<Vec<SourceMappingRule>, StorageError> {
+        let mut normalized: Vec<SourceMappingRule> = Vec::new();
+        for rule in rules {
+            if normalized.len() >= Self::MAX_SOURCE_MAPPING_RULES {
+                break;
+            }
+            let rule = rule.normalized();
+            if (rule.domain.is_empty() && rule.title_keyword.is_empty())
+                || rule.name.is_empty()
+                || normalized.contains(&rule)
+            {
+                continue;
+            }
+            normalized.push(rule);
+        }
+
+        let stored = normalized.clone();
+        self.mutate_and_save(move |config| {
+            config.source_mapping.rules = stored;
+        })?;
+        Ok(normalized)
+    }
+
     pub fn schedule_auto_export(&self) -> Option<&str> {
         self.config.export.schedule_auto_export.as_deref()
     }

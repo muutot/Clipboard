@@ -593,6 +593,46 @@ fn persists_auto_tag_rules_with_normalization() {
 }
 
 #[test]
+fn persists_source_mapping_rules_with_normalization() {
+    use super::types::SourceMappingRule;
+
+    let project = temporary_test_directory("source-mapping-rules");
+    let mut store = ConfigStore::load(&project).unwrap();
+    assert!(store.source_mapping_rules().is_empty());
+
+    let rule = |domain: &str, keyword: &str, name: &str| SourceMappingRule {
+        domain: domain.to_owned(),
+        title_keyword: keyword.to_owned(),
+        name: name.to_owned(),
+    };
+    let stored = store
+        .set_source_mapping_rules(vec![
+            rule("  GitHub.com  ", "  Pull Request ", "  GitHub PRs "),
+            rule("", "", "no-matcher"),
+            rule("github.com", "Pull Request", "GitHub PRs"),
+            rule("", "RFC", "RFC Docs"),
+            rule("example.com", "", "   "),
+        ])
+        .unwrap();
+
+    // Trimming, domain lowercasing, blank dropping and deduplication apply;
+    // order is kept.
+    assert_eq!(stored.len(), 2);
+    assert_eq!(stored[0].domain, "github.com");
+    assert_eq!(stored[0].title_keyword, "Pull Request");
+    assert_eq!(stored[0].name, "GitHub PRs");
+    assert_eq!(stored[1].name, "RFC Docs");
+
+    let saved: Value = serde_json::from_slice(&fs::read(store.path()).unwrap()).unwrap();
+    assert_eq!(
+        saved["sourceMapping"]["rules"].as_array().map(Vec::len),
+        Some(2)
+    );
+    assert_eq!(saved["sourceMapping"]["rules"][0]["name"], "GitHub PRs");
+    fs::remove_dir_all(project).unwrap();
+}
+
+#[test]
 fn legacy_config_with_removed_telemetry_flag_still_loads() {
     let project = temporary_test_directory("privacy-legacy");
     let config_directory = project.join("conf");

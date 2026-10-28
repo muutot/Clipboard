@@ -21,6 +21,7 @@ pub struct AppConfig {
     pub ocr: OcrConfig,
     pub sync: SyncConfig,
     pub tags: TagsConfig,
+    pub source_mapping: SourceMappingConfig,
     #[serde(flatten)]
     extra: BTreeMap<String, Value>,
 }
@@ -396,6 +397,41 @@ impl AutoTagRule {
 #[serde(default, rename_all = "camelCase")]
 pub struct TagsConfig {
     pub auto_tag_rules: Vec<AutoTagRule>,
+}
+
+/// One user-configured web-source mapping rule: a browser capture whose web
+/// metadata matches `domain` or `title_keyword` displays `name` instead of
+/// the raw page title.
+#[derive(Debug, Clone, Default, PartialEq, Deserialize, Serialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct SourceMappingRule {
+    pub domain: String,
+    pub title_keyword: String,
+    pub name: String,
+}
+
+impl SourceMappingRule {
+    pub fn normalized(&self) -> Self {
+        fn bounded(value: &str, limit: usize) -> String {
+            value
+                .chars()
+                .take(limit)
+                .collect::<String>()
+                .trim()
+                .to_owned()
+        }
+        Self {
+            domain: bounded(&self.domain, 253).to_ascii_lowercase(),
+            title_keyword: bounded(&self.title_keyword, 100),
+            name: bounded(&self.name, 64),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct SourceMappingConfig {
+    pub rules: Vec<SourceMappingRule>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
