@@ -3,7 +3,7 @@
 use super::*;
 
 pub fn import_from_json(json: &str, database: &Database) -> Result<ImportSummary, String> {
-    let _resource_publication = database.begin_resource_write();
+    let _resource_publication = database.begin_resource_write().map_err(|e| e.to_string())?;
     let items: Vec<ClipboardItem> =
         serde_json::from_str(json).map_err(|e| format!("invalid JSON: {e}"))?;
 

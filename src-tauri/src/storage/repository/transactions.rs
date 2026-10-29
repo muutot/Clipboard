@@ -34,7 +34,7 @@ impl Database {
         &self,
         entries: &[ClipboardItem],
     ) -> Result<TransactionalSaveSummary, StorageError> {
-        let _resource_publication = self.begin_resource_write();
+        let _resource_publication = self.begin_resource_write()?;
         self.restore_items_transactional_with_progress(entries, |_, _| Ok(()))
     }
     pub fn restore_items_transactional_with_progress(

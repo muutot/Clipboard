@@ -149,7 +149,7 @@ mod tests {
         let writer = Database::open(&paths.database).unwrap();
         let orphan = paths.files.join("pending.txt");
         std::fs::write(&orphan, b"fixture").unwrap();
-        let guard = writer.begin_resource_write();
+        let guard = writer.begin_resource_write().unwrap();
         let result = cleanup_orphan_storage_files(&database, &paths).unwrap();
         assert_eq!(result.removed_files, 0);
         assert!(orphan.exists());
@@ -182,7 +182,7 @@ mod tests {
             )
             .unwrap();
         let result = cleanup_orphans_after_snapshot(&database, &paths, ORPHAN_FILE_GRACE, || {
-            let _publication = writer.begin_resource_write();
+            let _publication = writer.begin_resource_write().unwrap();
             let reused = FileStore::save_file(&source, &paths.files, 0).unwrap();
             assert_eq!(stored.storage_path, reused.storage_path);
             writer
@@ -234,6 +234,179 @@ mod tests {
                 .expect("cleanup must run");
         assert_eq!(total, 0, "an empty library deletes nothing");
         let _ = std::fs::remove_dir_all(&paths.project);
+    }
+
+    #[test]
+    #[ignore = "subprocess fixture invoked by the interprocess resource test"]
+    fn resource_publication_child_fixture() {
+        use crate::content::FileStore;
+        use crate::domain::{ClipboardItem, ClipboardKind};
+        let project = PathBuf::from(
+            std::env::var_os("CLIPBOARD_RESOURCE_TEST_PROJECT").expect("fixture project"),
+        );
+        assert_eq!(
+            project.parent().unwrap().canonicalize().unwrap(),
+            std::env::temp_dir().canonicalize().unwrap()
+        );
+        assert_eq!(
+            std::fs::read(project.join("publication-test.marker")).unwrap(),
+            b"temporary resource-publication fixture"
+        );
+        let paths = StoragePaths::initialize(project).unwrap();
+        let database = Database::open(&paths.database).unwrap();
+        let _publication = database.begin_resource_write().unwrap();
+        if std::env::var_os("CLIPBOARD_RESOURCE_TEST_HOLD").is_some() {
+            std::fs::write(paths.project.join("writer-ready"), b"ready").unwrap();
+            // The parent kills only this fixture to verify OS lock release on
+            // abrupt exit. A bounded wait also prevents a stranded child.
+            std::thread::sleep(Duration::from_secs(15));
+            return;
+        }
+        let stored =
+            FileStore::save_file(&paths.project.join("fixture.txt"), &paths.files, 0).unwrap();
+        database
+            .save_item(&ClipboardItem {
+                id: "other-process".into(),
+                kind: ClipboardKind::File,
+                title: "fixture".into(),
+                text_content: None,
+                html_content: None,
+                rtf_content: None,
+                resource_path: Some(stored.storage_path),
+                preview_path: None,
+                content_hash: stored.content_hash,
+                source_app: None,
+                size_bytes: 7,
+                created_at_ms: 1,
+                last_used_at_ms: None,
+                is_favorite: false,
+                icon_path: None,
+                metadata_json: None,
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn cleanup_preserves_a_resource_published_by_another_process_after_the_snapshot() {
+        use crate::content::FileStore;
+        let paths = policy_paths();
+        let database = Database::open(&paths.database).unwrap();
+        std::fs::write(
+            paths.project.join("publication-test.marker"),
+            b"temporary resource-publication fixture",
+        )
+        .unwrap();
+        let source = paths.project.join("fixture.txt");
+        std::fs::write(&source, b"fixture").unwrap();
+        let stored = FileStore::save_file(&source, &paths.files, 0).unwrap();
+        std::fs::File::options()
+            .write(true)
+            .open(&stored.storage_path)
+            .unwrap()
+            .set_times(
+                std::fs::FileTimes::new()
+                    .set_modified(std::time::UNIX_EPOCH + Duration::from_secs(3600)),
+            )
+            .unwrap();
+        let result = cleanup_orphans_after_snapshot(&database, &paths, ORPHAN_FILE_GRACE, || {
+            let mut child = PublicationChild::start(&paths, false);
+            let deadline = std::time::Instant::now() + Duration::from_secs(10);
+            loop {
+                if let Some(status) = child.0.try_wait().unwrap() {
+                    assert!(status.success());
+                    break;
+                }
+                if std::time::Instant::now() >= deadline {
+                    panic!("resource fixture timed out");
+                }
+                std::thread::sleep(Duration::from_millis(10));
+            }
+        })
+        .unwrap();
+        assert!(database.get_item("other-process").unwrap().is_some());
+        assert!(
+            Path::new(&stored.storage_path).is_file(),
+            "another process's newly referenced resource must survive"
+        );
+        assert_eq!(result.removed_files, 0);
+        drop(database);
+        std::fs::remove_dir_all(paths.project).unwrap();
+    }
+
+    struct PublicationChild(std::process::Child);
+
+    impl PublicationChild {
+        fn start(paths: &StoragePaths, hold: bool) -> Self {
+            let mut command = std::process::Command::new(std::env::current_exe().unwrap());
+            command
+                .args([
+                    "--exact",
+                    "commands::cleanup::tests::resource_publication_child_fixture",
+                    "--ignored",
+                    "--nocapture",
+                ])
+                .env("CLIPBOARD_RESOURCE_TEST_PROJECT", &paths.project)
+                .env_remove("CLIPBOARD_RESOURCE_TEST_HOLD");
+            if hold {
+                command.env("CLIPBOARD_RESOURCE_TEST_HOLD", "1");
+            }
+            #[cfg(target_os = "windows")]
+            {
+                use std::os::windows::process::CommandExt;
+                command.creation_flags(0x08000000);
+            }
+            Self(command.spawn().unwrap())
+        }
+    }
+
+    impl Drop for PublicationChild {
+        fn drop(&mut self) {
+            let _ = self.0.kill();
+            let _ = self.0.wait();
+        }
+    }
+
+    #[test]
+    fn cleanup_defers_another_process_writer_and_resumes_after_its_abrupt_exit() {
+        let paths = policy_paths();
+        let database = Database::open(&paths.database).unwrap();
+        std::fs::write(
+            paths.project.join("publication-test.marker"),
+            b"temporary resource-publication fixture",
+        )
+        .unwrap();
+        let orphan = paths.files.join("orphan.txt");
+        std::fs::write(&orphan, b"fixture").unwrap();
+        let mut child = PublicationChild::start(&paths, true);
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        while !paths.project.join("writer-ready").exists() {
+            assert!(
+                child.0.try_wait().unwrap().is_none(),
+                "writer exited before readiness"
+            );
+            assert!(
+                std::time::Instant::now() < deadline,
+                "writer fixture timed out"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert_eq!(
+            cleanup_orphan_storage_files(&database, &paths)
+                .unwrap()
+                .removed_files,
+            0
+        );
+        assert!(orphan.is_file());
+        drop(child); // A killed process does not run ResourceWriteGuard::drop.
+        assert_eq!(
+            cleanup_orphan_storage_files(&database, &paths)
+                .unwrap()
+                .removed_files,
+            1
+        );
+        assert!(!orphan.exists());
+        drop(database);
+        std::fs::remove_dir_all(paths.project).unwrap();
     }
 }
 

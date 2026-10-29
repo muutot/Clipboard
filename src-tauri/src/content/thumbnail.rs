@@ -142,7 +142,13 @@ impl ThumbnailWorker {
     pub fn start(preview_dir: PathBuf, database: Arc<Database>) -> Result<Self, String> {
         let generator = ThumbnailGenerator::new();
         Self::start_with_process(move |item_id, image_path| {
-            let _resource_publication = database.begin_resource_write();
+            let _resource_publication = match database.begin_resource_write() {
+                Ok(guard) => guard,
+                Err(error) => {
+                    crate::log_error!("[thumbnail] resource coordination failed: {error}");
+                    return;
+                }
+            };
             match generator.generate(&image_path, &preview_dir) {
                 Ok(info) => {
                     let preview_path = &info.preview_path;

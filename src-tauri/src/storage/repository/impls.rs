@@ -42,7 +42,7 @@ impl ClipboardRepository for Database {
             item.html_content.as_deref(),
             item.rtf_content.as_deref(),
         )?;
-        let _resource_publication = self.begin_resource_write();
+        let _resource_publication = self.begin_resource_write()?;
         let size_bytes =
             i64::try_from(item.size_bytes).map_err(|_| StorageError::ValueOutOfRange {
                 field: "size_bytes",

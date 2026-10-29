@@ -130,7 +130,21 @@ pub(crate) fn run_capture_loop(
                     continue;
                 }
 
-                let _resource_publication = database.begin_resource_write();
+                let _resource_publication = match database.begin_resource_write() {
+                    Ok(guard) => guard,
+                    Err(error) => {
+                        if handle_capture_save_failure(
+                            &mut consecutive_errors,
+                            &stop_receiver,
+                            &stop_flag,
+                            "resource publication",
+                            error,
+                        ) {
+                            break;
+                        }
+                        continue;
+                    }
+                };
 
                 // Extract and cache app icon
                 let icon_dir = storage_path.join("icons");

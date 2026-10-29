@@ -37,9 +37,17 @@ impl TemporaryDatabaseSnapshot {
 
 impl Drop for TemporaryDatabaseSnapshot {
     fn drop(&mut self) {
-        let _ = fs::remove_file(&self.path);
-        let _ = fs::remove_file(format!("{}-wal", self.path.display()));
-        let _ = fs::remove_file(format!("{}-shm", self.path.display()));
+        for suffix in [
+            "",
+            "-wal",
+            "-shm",
+            ".resource-writers.lock",
+            ".resource-generation",
+        ] {
+            let mut path = self.path.as_os_str().to_os_string();
+            path.push(suffix);
+            let _ = fs::remove_file(Path::new(&path));
+        }
     }
 }
 
@@ -324,6 +332,23 @@ impl SyncRepository for Database {
 mod tests {
     use super::*;
     use std::time::SystemTime;
+
+    #[test]
+    fn temporary_snapshot_removes_its_resource_coordination_files() {
+        let directory = std::env::temp_dir().join(format!(
+            "clipboard-snapshot-sidecars-{}",
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir(&directory).unwrap();
+        let database = Database::open_in_memory().unwrap();
+        let snapshot = TemporaryDatabaseSnapshot::create(&database, &directory).unwrap();
+        let snapshot_database = Database::open(&snapshot.path).unwrap();
+        assert!(fs::read_dir(&directory).unwrap().count() >= 3);
+        drop(snapshot_database);
+        drop(snapshot);
+        assert_eq!(fs::read_dir(&directory).unwrap().count(), 0);
+        fs::remove_dir(directory).unwrap();
+    }
 
     #[test]
     fn removes_only_stale_sync_snapshots() {

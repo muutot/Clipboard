@@ -69,8 +69,10 @@ impl Database {
 
     /// Hold from before reading/reusing a managed resource until its DB reference
     /// is committed (or the operation fails). Nested/parallel writers are allowed.
-    pub(crate) fn begin_resource_write(&self) -> super::resource_publication::ResourceWriteGuard {
-        self.resource_publication.begin_write()
+    pub(crate) fn begin_resource_write(
+        &self,
+    ) -> Result<super::resource_publication::ResourceWriteGuard, StorageError> {
+        self.resource_publication.begin_write().map_err(Into::into)
     }
 
     pub(crate) fn resource_cleanup_snapshot(

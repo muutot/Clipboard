@@ -6,7 +6,7 @@ impl Database {
         item_id: &str,
         preview_path: &str,
     ) -> Result<bool, StorageError> {
-        let _resource_publication = self.begin_resource_write();
+        let _resource_publication = self.begin_resource_write()?;
         self.with_connection(|connection| {
             let affected = connection.execute(
                 "UPDATE clipboard_items SET preview_path = ?2 WHERE id = ?1 AND deleted = 0",
@@ -72,6 +72,38 @@ mod tests {
             is_favorite: false,
             metadata_json: None,
         }
+    }
+
+    #[test]
+    fn invalid_resource_coordination_prevents_row_and_preview_publication() {
+        let root = std::env::temp_dir().join(format!(
+            "clipboard-publication-rejection-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir(&root).unwrap();
+        let path = root.join("history.sqlite3");
+        let database = Database::open(&path).unwrap();
+        let original = item();
+        database.save_item(&original).unwrap();
+        std::fs::write(root.join("history.sqlite3.resource-generation"), b"bad").unwrap();
+        assert!(database
+            .set_preview_path(&original.id, "new-preview.jpg")
+            .is_err());
+        assert_eq!(
+            database
+                .get_item(&original.id)
+                .unwrap()
+                .unwrap()
+                .preview_path,
+            None
+        );
+        let mut new_item = original;
+        new_item.id = "rejected".into();
+        new_item.content_hash = "rejected-hash".into();
+        assert!(database.save_item(&new_item).is_err());
+        assert!(database.get_item(&new_item.id).unwrap().is_none());
+        drop(database);
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

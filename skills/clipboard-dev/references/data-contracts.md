@@ -352,6 +352,19 @@ Event payloads also use camelCase where Rust structs are serialized. Register li
 
 ## Resource metadata contract
 
+Resource publication for a file database coordinates Clipboard processes through
+`<canonical database path>.resource-writers.lock` and `.resource-generation`.
+`Database::begin_resource_write` returns a fallible guard held before resource
+lookup/reuse until the row commits. Writers share the first file's OS lock and
+increment an eight-byte little-endian counter under a separate exclusive lock.
+Cleanup snapshots and rechecks the counter under a short exclusive writer lock
+before unlinking; no lock spans a directory scan. An active writer, changed
+counter or coordination error defers deletion. Failed guard acquisition must
+propagate before resource effects; workers log/skip and capture uses its failure
+backoff. These siblings are coordination state, not portable-backup resources;
+temporary sync database snapshots remove them along with SQLite sidecars.
+Memory databases use only the existing local generation protocol.
+
 `content/resource_metadata.rs` and frontend `ResourceMetadata`/`ResourceFileMetadata` carry schema version, MIME/extension, size, storage/original paths, hashes, image dimensions, and per-file entries.
 
 - Treat metadata JSON as untrusted/optional at the frontend boundary.
