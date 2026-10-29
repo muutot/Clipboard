@@ -1017,6 +1017,7 @@
       detailRequestId += 1;
       pendingDetail = null;
       fullscreenRequestId += 1;
+      editRequestId += 1;
       document.fonts?.removeEventListener("loadingdone", invalidateFonts);
       windowLifecycle.dispose();
       window.clearInterval(clock);
@@ -1549,8 +1550,11 @@
 
   let editingId = $state<string | null>(null);
   let editDraft = $state<{ content: string; title: string } | null>(null);
+  let editRequestId = 0;
 
-  function endEdit() {
+  function endEdit(expectedRequest = editRequestId) {
+    if (expectedRequest !== editRequestId) return;
+    editRequestId += 1;
     editingId = null;
     editDraft = null;
   }
@@ -1563,15 +1567,17 @@
   async function startEdit(id: string) {
     const item = findLoadedItem(id);
     if (!item) return;
+    const requestId = ++editRequestId;
     try {
       const hydrated = await ensureItemHydrated(item);
-      if (hydrated.contentLoaded === false) return;
+      if (requestId !== editRequestId || hydrated.contentLoaded === false) return;
       editingId = id;
       editDraft = {
         content: hydrated.textContent || hydrated.title,
         title: hydrated.title,
       };
     } catch (error) {
+      if (requestId !== editRequestId) return;
       console.error("Unable to load clipboard editor", error);
       showToast(_t("toast.saveFailed"), "error");
     }
@@ -1580,6 +1586,7 @@
   async function saveEdit(id: string, content: string): Promise<boolean> {
     const item = findLoadedItem(id);
     if (!item) return false;
+    const editorRequest = editRequestId;
 
     const { isMedia, isText, newTitle, newTextContent, newPreview, newSizeBytes, newSizeLabel } =
       deriveTextEditPatch(item, content);
@@ -1607,7 +1614,7 @@
           imageMeta: mapped.imageMeta,
           searchableText: mapped.searchableText,
         }));
-        endEdit();
+        endEdit(editorRequest);
         showToast(_t("toast.editSaved"), "success");
         return true;
       } catch (e) {
@@ -1642,7 +1649,7 @@
       sizeLabel: newSizeLabel,
       ...(item.customTitle ? {} : { title: newTitle }),
     }));
-    endEdit();
+    endEdit(editorRequest);
     showToast(_t("toast.editSaved"), "success");
     return true;
   }

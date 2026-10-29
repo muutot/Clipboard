@@ -26,6 +26,10 @@ Key contracts:
   cards can never both edit and the uncommitted draft survives the card unmounting (filter change, virtual
   scroll) instead of being discarded with the component. Saving, cancelling, save-as-new, and Escape all
   clear the route draft together.
+- Async editor entry has a request generation: a late hydration cannot replace
+  a newer editor/draft or reopen one after cancel/unmount. Save completion closes
+  only the editor generation it started with, retaining a newer draft while still
+  applying the successful saved record's own update.
 - `onheightchange` plus `heightMeasurementKey` feed virtual scrolling. Re-measure whenever visible content, card layout metrics, action/meta visibility, title state, or line limits can alter height.
 - Resource previews use `convertFileSrc`; source app icons are resolved from the managed `iconsDir` store using the icon key, not an arbitrary full path.
 - Card action order and context-menu behavior must stay aligned. Reuse the same callback path rather than creating a second implementation. Exception: while the card is in inline-edit mode and the editor has a text selection, the context-menu `copy` writes that selection to the clipboard (`writeClipboardText` + toast) instead of emitting `oncopy(item.id)`; with no selection it still emits `oncopy`.
