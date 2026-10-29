@@ -36,6 +36,12 @@ SvelteKit runs as a static SPA: `src/routes/+layout.ts` disables SSR and awaits 
 
 Read `components.md` and `services.md` for ownership and change gates inside those directories.
 
+`src/lib/utils/store/item-mutations.ts` owns ordered optimistic metadata edits
+(favorite, title and tags) shared by main-route and bulk favorite actions. It
+projects touched fields through `item-store-view.svelte.ts`'s reconciliation hook,
+retaining the existing single record map and four id views. Accepted backend
+records come from the route's events and history/search controllers.
+
 ## Backend ownership
 
 | Path                     | Ownership                                                                                                                                                                          |

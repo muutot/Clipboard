@@ -4,7 +4,7 @@
   import { createBulkController } from "$lib/controllers/bulk.svelte";
   import { createSearchController } from "$lib/controllers/search.svelte";
   import { createHistoryController } from "$lib/controllers/history.svelte";
-  import { flushSync, onMount, tick, untrack } from "svelte";
+  import { flushSync, onDestroy, onMount, tick, untrack } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import BulkBar from "$lib/components/layout/BulkBar.svelte";
   import StatusBar from "$lib/components/layout/StatusBar.svelte";
@@ -84,6 +84,7 @@
     type AffectedItemSnapshot,
   } from "$lib/utils/store/item-store";
   import { createItemStoreView } from "$lib/utils/store/item-store-view.svelte";
+  import { createItemMutations } from "$lib/utils/store/item-mutations";
   import { applyItemsChangedEvent, sortRecentHistory } from "$lib/utils/store/item-changes";
   import { isEditableKeyboardTarget } from "$lib/utils/keyboard/keyboard";
   import {
@@ -136,9 +137,13 @@
   // keeps the plain Map out of Svelte's deep proxy, and every mutation replaces
   // the whole store, so the projections recompute from a fresh map in one pass.
   // See `utils/store/item-store-view.svelte.ts` and `docs/PITFALLS.md`.
+  let metadataMutations: ReturnType<typeof createItemMutations> | undefined;
   const itemStore = createItemStoreView(
     createItemStore(isTauriRuntime() ? [] : demoClipboardItems.map((item) => ({ ...item }))),
+    (previous, next) => metadataMutations?.observe(previous, next) ?? next,
   );
+  metadataMutations = createItemMutations(() => itemStore);
+  onDestroy(() => metadataMutations?.destroy());
   const items = $derived(itemStore.history);
 
   function updateItem(
@@ -236,6 +241,7 @@
   }
 
   const history = createHistoryController({
+    acceptRecords: (records) => metadataMutations!.acceptRecords(records),
     itemStore,
     get settings() {
       return $generalSettings;
@@ -265,6 +271,7 @@
   let indexedItems = $derived(itemStore.indexed);
 
   const search = createSearchController({
+    acceptRecords: (records) => metadataMutations!.acceptRecords(records),
     itemStore,
     get settings() {
       return $generalSettings;
@@ -365,6 +372,7 @@
 
   const bulk = createBulkController({
     itemStore,
+    metadataMutations,
     get settings() {
       return $generalSettings;
     },
@@ -821,6 +829,7 @@
 
     const unlisten = listen<PersistedClipboardItem>("clipboard-item-added", (event) => {
       const newItem = toClipboardItem(event.payload);
+      metadataMutations!.acceptRecords([newItem]);
       if (pendingDetail?.id === newItem.id) pendingDetail.item = newItem;
       // Re-copying an existing entry is de-duplicated on (kind, content_hash)
       // and keeps the same row id with a refreshed last_used_at_ms (the
@@ -881,6 +890,7 @@
         // harmless: the payload is the stored row, so it equals the optimistic
         // state this window already shows.
         const payload = event.payload;
+        metadataMutations!.acceptRecords((payload.items ?? []).map(toClipboardItem));
         invalidatePendingDetail([...(payload.deletedIds ?? []), ...(payload.removedIds ?? [])]);
         const pendingUpdate = payload.items?.find((record) => record.id === pendingDetail?.id);
         if (pendingDetail && pendingUpdate) pendingDetail.item = toClipboardItem(pendingUpdate);
@@ -976,8 +986,9 @@
       if (pendingDetail) pendingDetail.item = transform(pendingDetail.item);
       const patches = new Map<string, Partial<ClipboardItem>>();
       for (const entry of itemStore.current.byId.values()) {
-        const rewritten = transform(entry);
-        if (rewritten !== entry) patches.set(entry.id, { tags: rewritten.tags });
+        const confirmed = metadataMutations!.confirmedItem(entry);
+        const rewritten = transform(confirmed);
+        if (rewritten !== confirmed) patches.set(entry.id, { tags: rewritten.tags });
       }
       itemStore.current = applyItemPatches(itemStore.current, patches);
       if (renamed) {
@@ -1315,11 +1326,9 @@
     if (!original) return;
 
     const nextFavorite = !original.favorite;
-    updateItem(id, () => ({ favorite: nextFavorite }));
-
-    void persistFavorite(id, nextFavorite)
-      .then((updated) => {
-        if (updated === false) throw new Error("record not found");
+    void metadataMutations!
+      .run(new Map([[id, { favorite: nextFavorite }]]), () => persistFavorite(id, nextFavorite))
+      .then(() => {
         showToast(
           nextFavorite ? _t("toast.favoriteSuccess") : _t("toast.unfavoriteSuccess"),
           "success",
@@ -1327,7 +1336,6 @@
       })
       .catch((error) => {
         console.error("Unable to update favorite", error);
-        revertItem(id, { favorite: original.favorite });
         statusMessage = _t("app.favoriteFailed");
         showToast(_t("app.favoriteFailed"), "error");
       });
@@ -1678,14 +1686,14 @@
   function renameTitle(id: string, title: string) {
     const item = findLoadedItem(id);
     if (!item) return;
-    const previousTitle = item.title;
-    const previousCustomTitle = item.customTitle;
-    updateItem(id, () => ({ title, customTitle: true }));
-    invoke("rename_item", { id, newName: title }).catch((err) => {
-      console.error("Rename item failed:", err);
-      revertItem(id, { title: previousTitle, customTitle: previousCustomTitle });
-      showToast(_t("toast.saveFailed"), "error");
-    });
+    metadataMutations!
+      .run(new Map([[id, { title, customTitle: true }]]), () =>
+        invoke("rename_item", { id, newName: title }),
+      )
+      .catch((err) => {
+        console.error("Rename item failed:", err);
+        showToast(_t("toast.saveFailed"), "error");
+      });
   }
 
   function toggleTagFilter(tag: string) {
@@ -1725,17 +1733,15 @@
   async function saveTags(id: string, tags: string[]) {
     const item = findLoadedItem(id);
     if (!item) return;
-    const previousTags = item.tags ?? [];
     const deduped = [...new Set(tags.map((t) => t.trim()).filter(Boolean))];
     // The store holds one record, so every view that displays the row shows the
     // new tags in the same pass.
-    updateItem(id, () => ({ tags: deduped }));
     try {
-      const ok = await persistTags(id, deduped);
-      if (ok === false) throw new Error("record not found");
+      await metadataMutations!.run(new Map([[id, { tags: deduped }]]), () =>
+        persistTags(id, deduped),
+      );
     } catch (error) {
       console.error("Unable to save tags", error);
-      revertItem(id, { tags: previousTags });
       showToast(_t("toast.saveFailed"), "error");
       return;
     }

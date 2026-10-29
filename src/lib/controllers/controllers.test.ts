@@ -261,6 +261,54 @@ it("retains selections added while a bulk favorite is saving", async () => {
   expect(service.persistBatchFavorite).toHaveBeenLastCalledWith(["initial"], true);
 });
 
+it("returns to the confirmed favorite after successive bulk saves fail", async () => {
+  const first = deferred<boolean>();
+  const second = deferred<boolean>();
+  vi.mocked(service.persistBatchFavorite)
+    .mockReturnValueOnce(first.promise)
+    .mockReturnValueOnce(second.promise);
+  out.bulk!.selectedIds = new Set(["initial"]);
+  out.bulk!.bulkFavorite();
+  await settle();
+  out.bulk!.bulkFavorite();
+  expect(out.store!.current.byId.get("initial")!.favorite).toBe(false);
+  await settle();
+  expect(service.persistBatchFavorite).toHaveBeenCalledTimes(1);
+  first.reject(new Error("first failed"));
+  await settle();
+  expect(service.persistBatchFavorite).toHaveBeenCalledTimes(2);
+  second.resolve(false);
+  await settle();
+  expect(out.store!.current.byId.get("initial")!.favorite).toBe(false);
+});
+
+it.each(["history", "search"] as const)(
+  "accepts same-valued canonical metadata from a %s page before an old save fails",
+  async (source) => {
+    const gate = deferred<boolean>();
+    vi.mocked(service.persistBatchFavorite).mockReturnValueOnce(gate.promise);
+    out.bulk!.selectedIds = new Set(["initial"]);
+    out.bulk!.bulkFavorite();
+    await settle();
+    const confirmed = { ...item("initial"), favorite: true };
+    if (source === "history") {
+      vi.mocked(service.loadClipboardHistory).mockResolvedValueOnce([confirmed]);
+      await out.history!.loadActiveHistoryPage();
+    } else {
+      vi.mocked(service.searchClipboardHistory).mockResolvedValueOnce({
+        items: [confirmed],
+        totalCount: 1,
+        truncated: false,
+      });
+      out.setQuery!("body");
+      await settle(350);
+    }
+    gate.resolve(false);
+    await settle();
+    expect(out.store!.current.byId.get("initial")!.favorite).toBe(true);
+  },
+);
+
 it("keeps a later restore and its paging suppression when an earlier bulk delete succeeds", async () => {
   const gate = deferred<boolean>();
   vi.mocked(service.persistBatchDelete).mockReturnValueOnce(gate.promise);

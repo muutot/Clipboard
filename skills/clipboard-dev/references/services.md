@@ -76,6 +76,20 @@ current selection. A different row selected while IPC is pending remains selecte
 undelivered paste rows remain only if the user still has them selected. The mounted
 controller tests cover successful/copied/failed paste and delayed favorite saves.
 
+`utils/store/item-mutations.ts` coordinates main-route favorite/title/tag writes
+and batch favorite. It retains only touched confirmed metadata fields and pending
+edits, projecting them into the same `ItemStore`; there is no second record map.
+Per-row promise dependencies serialize overlapping writes, including batches;
+disjoint rows remain concurrent. A rejection or false result removes only its edit.
+Full canonical records acknowledge same-valued fields and supersede already sent
+edits, while unsent local intents remain visible. Partial updates confirm only
+changed tracked fields, so OCR/usage patches cannot confirm a failed favorite.
+History/search call `acceptRecords` only for accepted pages; record events do so
+before folding. Tag rename/delete transforms use confirmed tags, rather than a
+pending draft. Unloaded records are not reinserted; teardown invalidates reply
+projection and prevents queued IPC from starting. Membership/removal rollback
+continues to use the separately scoped snapshot helpers.
+
 Bulk-delete completion restores only the failed transactions' captured records
 and detail slot. Successful rows retain their optimistic/canonical state and any
 later restore or reload; completion must not repeat deletion/removal or reset the

@@ -1,5 +1,6 @@
 import type { ClipboardItem, GeneralSettings } from "$lib/types/clipboard";
 import type { ItemStoreView } from "$lib/utils/store/item-store-view.svelte";
+import type { createItemMutations } from "$lib/utils/store/item-mutations";
 import type { createHistoryController } from "./history.svelte";
 import {
   applyItemPatches,
@@ -22,6 +23,7 @@ import { showToast } from "$lib/services/toast";
 import { planBulkCopy, planBulkDelete } from "$lib/utils/store/bulk-actions";
 export interface BulkDependencies {
   itemStore: ItemStoreView;
+  metadataMutations: ReturnType<typeof createItemMutations>;
   readonly settings: GeneralSettings;
   readonly selectedLoadedItems: ClipboardItem[];
   readonly allSelectedFavorites: boolean;
@@ -115,12 +117,9 @@ export function createBulkController(deps: BulkDependencies) {
 
     const patch = new Map<string, Partial<ClipboardItem>>();
     for (const id of ids) patch.set(id, { favorite: !unfavorite });
-    const snapshot = deps.captureAffected(idSet, { patches: patch, restoreRemoved: false });
-    deps.itemStore.current = applyItemPatches(deps.itemStore.current, patch);
-
-    void persistBatchFavorite(ids, !unfavorite)
-      .then((updated) => {
-        if (updated === false) throw new Error("batch favorite failed");
+    void deps.metadataMutations
+      .run(patch, () => persistBatchFavorite(ids, !unfavorite))
+      .then(() => {
         showToast(
           unfavorite
             ? deps.translate("toast.bulkUnfavoriteSuccess", { count: ids.length })
@@ -131,7 +130,6 @@ export function createBulkController(deps: BulkDependencies) {
       })
       .catch((error) => {
         console.error("Bulk favorite failed", error);
-        deps.rollbackAffected(snapshot);
         deps.statusMessage = deps.translate("app.favoriteFailed");
         showToast(deps.translate("app.favoriteFailed"), "error");
       });

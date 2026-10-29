@@ -27,7 +27,10 @@ export interface ItemStoreView {
   readonly detail: ClipboardItem | null;
 }
 
-export function createItemStoreView(initial: ItemStore): ItemStoreView {
+export function createItemStoreView(
+  initial: ItemStore,
+  reconcile?: (previous: ItemStore, next: ItemStore) => ItemStore,
+): ItemStoreView {
   let store = $state.raw(initial);
   const history = $derived(getItems(store, "history"));
   const indexed = $derived(getIndexedItems(store));
@@ -37,7 +40,7 @@ export function createItemStoreView(initial: ItemStore): ItemStoreView {
       return store;
     },
     set current(next: ItemStore) {
-      store = next;
+      store = reconcile?.(store, next) ?? next;
     },
     // Getters, not copied values: `{ history }` would freeze the derived's
     // value at return time and every later read would be stale.

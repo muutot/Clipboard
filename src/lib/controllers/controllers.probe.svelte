@@ -13,7 +13,8 @@
 </script>
 
 <script lang="ts">
-  import { untrack } from "svelte";
+  import { untrack, onDestroy } from "svelte";
+  import { createItemMutations } from "$lib/utils/store/item-mutations";
   import {
     createItemStore,
     captureAffectedItems,
@@ -22,7 +23,15 @@
   import { DEFAULT_GENERAL_SETTINGS } from "$lib/services/settings";
   import type { ClipboardItem } from "$lib/types/clipboard";
   let { out, initial = [] }: { out: ProbeState; initial?: ClipboardItem[] } = $props();
-  const store = untrack(() => createItemStoreView(createItemStore(initial)));
+  let mutations: ReturnType<typeof createItemMutations> | undefined;
+  const store = untrack(() =>
+    createItemStoreView(
+      createItemStore(initial),
+      (before, next) => mutations?.observe(before, next) ?? next,
+    ),
+  );
+  mutations = createItemMutations(() => store);
+  onDestroy(() => mutations?.destroy());
   let query = $state("");
   const settings = {
     ...DEFAULT_GENERAL_SETTINGS,
@@ -33,6 +42,7 @@
     settings,
     filter: () => ({}),
     onError: () => {},
+    acceptRecords: (records) => mutations!.acceptRecords(records),
   });
   const search = createSearchController({
     itemStore: store,
@@ -46,9 +56,11 @@
     translate: (key) => key,
     flushSettings: async () => {},
     rememberSearchTerm: () => {},
+    acceptRecords: (records) => mutations!.acceptRecords(records),
   });
   const bulk = createBulkController({
     itemStore: store,
+    metadataMutations: mutations,
     settings,
     history,
     // Mirror the route: selection order (insertion-ordered set) drives the

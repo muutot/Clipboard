@@ -54,6 +54,189 @@ function buttonByLabel(root: ParentNode, scope: string, label: string): HTMLButt
   return button;
 }
 
+describe("main window optimistic favorite rollback", () => {
+  it.each(["title", "tags"] as const)(
+    "returns to confirmed %s after consecutive save failures",
+    async (field) => {
+      vi.stubGlobal(
+        "ResizeObserver",
+        class {
+          observe() {}
+          unobserve() {}
+          disconnect() {}
+        },
+      );
+      const target = document.createElement("div");
+      document.body.append(target);
+      const app = mount(MainPage, { target });
+      cleanups.push(async () => {
+        await unmount(app);
+        target.remove();
+      });
+      flushSync();
+      const record = {
+        id: `failed-${field}`,
+        kind: "text",
+        title: "CONFIRMED TITLE",
+        textContent: "body",
+        contentHash: `failed-${field}`,
+        sourceApp: "test",
+        sizeBytes: 4,
+        createdAtMs: 1,
+        lastUsedAtMs: 1,
+        isFavorite: false,
+        metadataJson: JSON.stringify({ tags: ["confirmed-tag"] }),
+      } as PersistedClipboardItem;
+      bridge.listeners.get("clipboard-item-added")?.({ payload: record });
+      flushSync();
+      // Open a full browser fixture first, then enable only metadata IPC.
+      target
+        .querySelector<HTMLElement>(`[data-id="${record.id}"]`)!
+        .dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true }));
+      await settle();
+      expect(target.querySelector(".detail-panel")).not.toBeNull();
+      const failures: ((reason: Error) => void)[] = [];
+      const first = new Promise<boolean>((_, reject) => failures.push(reject));
+      const second = new Promise<boolean>((_, reject) => failures.push(reject));
+      void first.catch(() => {});
+      void second.catch(() => {});
+      const command = field === "title" ? "rename_item" : "set_clipboard_item_tags";
+      let calls = 0;
+      Object.defineProperty(window, "__TAURI_INTERNALS__", { configurable: true, value: {} });
+      bridge.invoke.mockImplementation((name: string) => {
+        if (name === command) return calls++ === 0 ? first : second;
+        return new Promise(() => {});
+      });
+      if (field === "tags") {
+        buttonByLabel(target, ".detail-tabs button", t("detail.tags")).click();
+        flushSync();
+      }
+      const save = async (value: string) => {
+        if (field === "title") {
+          target
+            .querySelector<HTMLElement>(".header-title")!
+            .dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+          flushSync();
+          const input = target.querySelector<HTMLInputElement>(".header-title-input")!;
+          input.value = value;
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+          input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+        } else {
+          const input = target.querySelector<HTMLInputElement>(".tags-tab input")!;
+          input.value = value;
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+          flushSync();
+          input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+        }
+        await settle();
+      };
+      await save("first-draft");
+      await save("second-draft");
+      failures[0](new Error("first failed"));
+      await settle();
+      failures[1](new Error("second failed"));
+      await settle();
+      if (field === "title") {
+        expect(target.querySelector(".header-title")?.textContent).toBe("CONFIRMED TITLE");
+      } else {
+        expect(target.querySelector(".tags-list")?.textContent).toContain("confirmed-tag");
+        expect(target.querySelector(".tags-list")?.textContent).not.toContain("first-draft");
+        expect(target.querySelector(".tags-list")?.textContent).not.toContain("second-draft");
+      }
+    },
+  );
+
+  it.each(["first-then-second", "second-then-first"])(
+    "restores the confirmed favorite after both requests fail (%s)",
+    async (order) => {
+      vi.stubGlobal(
+        "ResizeObserver",
+        class {
+          observe() {}
+          unobserve() {}
+          disconnect() {}
+        },
+      );
+      const target = document.createElement("div");
+      document.body.append(target);
+      const app = mount(MainPage, { target });
+      cleanups.push(async () => {
+        await unmount(app);
+        target.remove();
+      });
+      flushSync();
+      const record = {
+        id: "failed-favorites",
+        kind: "text",
+        title: "failed-favorites",
+        textContent: "body",
+        contentHash: "favorite-body",
+        sourceApp: "test",
+        sizeBytes: 4,
+        createdAtMs: 1,
+        lastUsedAtMs: 1,
+        isFavorite: false,
+      } as PersistedClipboardItem;
+      bridge.listeners.get("clipboard-item-added")?.({ payload: record });
+      flushSync();
+      Object.defineProperty(window, "__TAURI_INTERNALS__", { configurable: true, value: {} });
+      let failFirst!: (reason: Error) => void;
+      let failSecond!: (reason: Error) => void;
+      const first = new Promise<boolean>((_, reject) => (failFirst = reject));
+      const second = new Promise<boolean>((_, reject) => (failSecond = reject));
+      // A queued request may not have reached IPC when its prepared mock
+      // failure settles. Keep that mock promise handled until it is consumed.
+      void first.catch(() => {});
+      void second.catch(() => {});
+      // Keep revalidation reads pending; this test exercises the actual route,
+      // services and IPC rejection handling without a native backend.
+      let favoriteCalls = 0;
+      bridge.invoke.mockImplementation((command: string) => {
+        if (command === "set_clipboard_item_favorite")
+          return favoriteCalls++ === 0 ? first : second;
+        return new Promise(() => {});
+      });
+      const toggle = (currentlyFavorite: boolean) => {
+        target
+          .querySelector<HTMLElement>(`[data-id="${record.id}"]`)!
+          .dispatchEvent(
+            new MouseEvent("contextmenu", { bubbles: true, clientX: 12, clientY: 12 }),
+          );
+        flushSync();
+        buttonByLabel(
+          target,
+          ".context-menu button",
+          t(currentlyFavorite ? "card.unfavorite" : "card.favorite"),
+        ).click();
+        flushSync();
+      };
+      toggle(false);
+      await settle();
+      toggle(true);
+      await settle();
+      if (order === "first-then-second") {
+        failFirst(new Error("synthetic first failure"));
+        await settle();
+        failSecond(new Error("synthetic second failure"));
+      } else {
+        failSecond(new Error("synthetic second failure"));
+        await settle();
+        failFirst(new Error("synthetic first failure"));
+      }
+      await settle();
+      target
+        .querySelector<HTMLElement>(`[data-id="${record.id}"]`)!
+        .dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 12, clientY: 12 }));
+      flushSync();
+      expect(
+        [...target.querySelectorAll<HTMLButtonElement>(".context-menu button")].some(
+          (button) => button.textContent?.trim() === t("card.favorite"),
+        ),
+      ).toBe(true);
+    },
+  );
+});
+
 describe("main window inline editing", () => {
   it.each(["text", "image", "file"] as const)(
     "does not overwrite a later %s edit event when an earlier save returns",

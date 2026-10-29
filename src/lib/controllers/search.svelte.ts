@@ -26,6 +26,7 @@ export interface SearchDependencies {
   translate(key: string, params?: Record<string, string | number>): string;
   flushSettings(): Promise<void>;
   rememberSearchTerm(query: string): void;
+  acceptRecords?(records: readonly ClipboardItem[]): void;
 }
 /** Owns debouncing, request generations and search paging without duplicating records. */
 export function createSearchController(deps: SearchDependencies) {
@@ -154,6 +155,7 @@ export function createSearchController(deps: SearchDependencies) {
             return;
           // A first page replaces the previous query's results outright; an
           // empty page is still a displayed search, so the view stays on.
+          deps.acceptRecords?.(page.items);
           deps.itemStore.current = replaceViewItems(deps.itemStore.current, page.items, "indexed");
           indexedQuery = requestedQuery;
           searchOffset = page.items.length;
@@ -223,6 +225,7 @@ export function createSearchController(deps: SearchDependencies) {
 
       // OFFSET pagination can replay a row after an out-of-band insertion;
       // drop ids already loaded so the keyed each never sees a duplicate key.
+      deps.acceptRecords?.(page.items);
       const knownIds = new Set(deps.itemStore.current.indexedIds ?? []);
       deps.itemStore.current = appendItems(
         deps.itemStore.current,

@@ -5,6 +5,7 @@ import type {
   HistoryCursorPayload,
   HistoryFilterArgs,
   GeneralSettings,
+  ClipboardItem,
 } from "$lib/types/clipboard";
 import type { ItemStoreView } from "$lib/utils/store/item-store-view.svelte";
 import {
@@ -19,6 +20,7 @@ export interface HistoryDependencies {
   readonly settings: GeneralSettings;
   filter(): HistoryFilterArgs;
   onError(key: string): void;
+  acceptRecords?(records: readonly ClipboardItem[]): void;
 }
 /** Owns pagination/cancellation state; records remain exclusively in the supplied item store. */
 export function createHistoryController(deps: HistoryDependencies) {
@@ -134,6 +136,8 @@ export function createHistoryController(deps: HistoryDependencies) {
         return;
       }
 
+      deps.acceptRecords?.(page);
+
       if (isFirstPage) {
         const deletedItems = deps.itemStore.history.filter((item) => item.deleted);
         const storedIds = new Set(page.map((item) => item.id));
@@ -204,6 +208,8 @@ export function createHistoryController(deps: HistoryDependencies) {
         deletedHistoryHasMore = false;
         return;
       }
+
+      deps.acceptRecords?.(page.filter((item) => !deletedHistorySuppressedIds.has(item.id)));
 
       deps.itemStore.current = mergeDeletedHistoryPage(
         deps.itemStore.current,
