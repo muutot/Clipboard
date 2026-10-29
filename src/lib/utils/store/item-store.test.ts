@@ -304,7 +304,9 @@ describe("captureAffectedItems / restoreAffectedItems", () => {
   it("rolls back only the affected ids and keeps records that arrived meanwhile", () => {
     // The persist call is async, so a capture can land while it is in flight.
     const before = appendItems(shared(), [item("c")], "history");
-    const snapshot = captureAffectedItems(before, new Set(["a", "b"]));
+    const snapshot = captureAffectedItems(before, new Set(["a", "b"]), new Set(), {
+      patches: new Map([["a", { favorite: true }]]),
+    });
 
     // Mutation removes "b" and flips "a"; meanwhile a new capture arrives.
     const during = applyItemPatches(
@@ -325,6 +327,88 @@ describe("captureAffectedItems / restoreAffectedItems", () => {
     // user can currently see is reordered behind their back.
     expect(getItems(next, "history").map((i) => i.id)).toEqual(["a", "b", "c", "new"]);
     expect(findLoadedItem(next, "a")?.favorite).toBe(false);
+  });
+
+  it("restores only the optimistic write set and preserves later changes to the same id", () => {
+    const before = shared();
+    const patch = new Map([["a", { favorite: true }]]);
+    const snapshot = captureAffectedItems(before, new Set(["a"]), new Set(), {
+      patches: patch,
+      restoreRemoved: false,
+    });
+    const during = applyItemPatches(
+      applyItemPatches(before, patch),
+      new Map([
+        [
+          "a",
+          {
+            title: "later title",
+            textContent: "later body",
+            tags: ["later"],
+            lastUsedAtMs: 99,
+          },
+        ],
+      ]),
+    );
+    const next = restoreAffectedItems(during, snapshot);
+    assertConsistent(next);
+    expect(findLoadedItem(next, "a")).toMatchObject({
+      favorite: false,
+      title: "later title",
+      textContent: "later body",
+      tags: ["later"],
+      lastUsedAtMs: 99,
+    });
+  });
+
+  it("preserves a newer write to the same field", () => {
+    const before = createItemStore([item("a", { title: "old" })]);
+    const snapshot = captureAffectedItems(before, new Set(["a"]), new Set(), {
+      patches: new Map([["a", { title: "pending" }]]),
+      restoreRemoved: false,
+    });
+    const during = applyItemPatches(before, new Map([["a", { title: "newer saved title" }]]));
+    expect(findLoadedItem(restoreAffectedItems(during, snapshot), "a")?.title).toBe(
+      "newer saved title",
+    );
+  });
+
+  it("retains a recaptured record when undoing an earlier removal", () => {
+    const before = createItemStore([item("a")]);
+    const snapshot = captureAffectedItems(before, new Set(["a"]));
+    const during = appendItems(
+      removeItems(before, new Set(["a"])),
+      [item("a", { title: "recaptured" })],
+      "history",
+    );
+    const next = restoreAffectedItems(during, snapshot);
+    assertConsistent(next);
+    expect(findLoadedItem(next, "a")?.title).toBe("recaptured");
+  });
+
+  it("restores removed rows in a mixed batch without resurrecting its field-only rows", () => {
+    const before = createItemStore([item("a"), item("b")]);
+    const snapshot = captureAffectedItems(before, new Set(["a", "b"]), new Set(), {
+      patches: new Map([["a", { deleted: true }]]),
+    });
+    // The batch only flags a; its removal belongs to a later successful delete.
+    const during = removeItems(before, new Set(["a", "b"]));
+    const next = restoreAffectedItems(during, snapshot);
+    assertConsistent(next);
+    expect(next.historyIds).toEqual(["b"]);
+    expect(next.byId.has("a")).toBe(false);
+  });
+
+  it("restores deletion flags without replacing a concurrent edit", () => {
+    const before = createItemStore([item("a", { deleted: true })]);
+    const snapshot = captureAffectedItems(before, new Set(["a"]), new Set(), {
+      patches: new Map([["a", { deleted: false }]]),
+      restoreRemoved: false,
+    });
+    const during = applyItemPatches(before, new Map([["a", { deleted: false, title: "edited" }]]));
+    const next = restoreAffectedItems(during, snapshot);
+    assertConsistent(next);
+    expect(findLoadedItem(next, "a")).toMatchObject({ deleted: true, title: "edited" });
   });
 
   it("restores each view's own recorded position", () => {

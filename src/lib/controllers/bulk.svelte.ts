@@ -5,6 +5,7 @@ import {
   applyItemPatches,
   removeItems,
   restoreAffectedItems,
+  type AffectedItemOptions,
   type AffectedItemSnapshot,
 } from "$lib/utils/store/item-store";
 import {
@@ -25,7 +26,7 @@ export interface BulkDependencies {
   readonly selectedLoadedItems: ClipboardItem[];
   readonly allSelectedFavorites: boolean;
   history: ReturnType<typeof createHistoryController>;
-  captureAffected(ids: ReadonlySet<string>): AffectedItemSnapshot;
+  captureAffected(ids: ReadonlySet<string>, options?: AffectedItemOptions): AffectedItemSnapshot;
   rollbackAffected(snapshot: AffectedItemSnapshot): void;
   statusMessage: string;
   translate(key: string, params?: Record<string, string | number>): string;
@@ -106,12 +107,9 @@ export function createBulkController(deps: BulkDependencies) {
     const unfavorite = deps.allSelectedFavorites;
     const idSet = new Set(ids);
 
-    // Snapshot before the optimistic patch: a whole-map restore would clobber
-    // the pre-existing favorite flags of a mixed selection, while this funnel
-    // restores only the affected rows captured at this moment.
-    const snapshot = deps.captureAffected(idSet);
     const patch = new Map<string, Partial<ClipboardItem>>();
     for (const id of ids) patch.set(id, { favorite: !unfavorite });
+    const snapshot = deps.captureAffected(idSet, { patches: patch, restoreRemoved: false });
     deps.itemStore.current = applyItemPatches(deps.itemStore.current, patch);
 
     void persistBatchFavorite(ids, !unfavorite)
@@ -138,12 +136,12 @@ export function createBulkController(deps: BulkDependencies) {
     if (ids.length === 0) return;
 
     const idSet = new Set(ids);
-    const snapshot = deps.captureAffected(idSet);
-    for (const id of ids) deps.history.addSuppressedId(id);
-    deps.itemStore.current = applyItemPatches(
-      deps.itemStore.current,
-      new Map(ids.map((id) => [id, { deleted: false }])),
+    const patch = new Map<string, Partial<ClipboardItem>>(
+      ids.map((id) => [id, { deleted: false }]),
     );
+    const snapshot = deps.captureAffected(idSet, { patches: patch, restoreRemoved: false });
+    for (const id of ids) deps.history.addSuppressedId(id);
+    deps.itemStore.current = applyItemPatches(deps.itemStore.current, patch);
     selectedIds = new Set([...selectedIds].filter((id) => !idSet.has(id)));
 
     void persistBatchRestore(ids)
@@ -196,7 +194,10 @@ export function createBulkController(deps: BulkDependencies) {
     const operationIds = new Set([...softIds, ...permanentIds, ...hardIds]);
     if (operationIds.size === 0) return;
 
-    const snapshot = deps.captureAffected(operationIds);
+    const softPatches = new Map<string, Partial<ClipboardItem>>(
+      softIds.map((id) => [id, { deleted: true }]),
+    );
+    const snapshot = deps.captureAffected(operationIds, { patches: softPatches });
 
     for (const id of softIds) deps.history.deletedHistorySuppressedIds.delete(id);
     for (const id of permanentIds) deps.history.addSuppressedId(id);
@@ -205,10 +206,7 @@ export function createBulkController(deps: BulkDependencies) {
     // Removed rows leave every view at once; soft rows are flagged in place, so
     // the open detail pane follows along without a write of its own.
     deps.itemStore.current = removeItems(deps.itemStore.current, removedOptimistic);
-    deps.itemStore.current = applyItemPatches(
-      deps.itemStore.current,
-      new Map(softIds.map((id) => [id, { deleted: true }])),
-    );
+    deps.itemStore.current = applyItemPatches(deps.itemStore.current, softPatches);
     selectedIds = new Set();
 
     const operations: {

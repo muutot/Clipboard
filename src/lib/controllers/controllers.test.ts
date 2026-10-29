@@ -4,7 +4,7 @@ import Probe, { type ProbeState } from "./controllers.probe.svelte";
 import { createListenerScope } from "./window-lifecycle";
 import * as service from "$lib/services/clipboard";
 import { showToast } from "$lib/services/toast";
-import { appendItems } from "$lib/utils/store/item-store";
+import { appendItems, applyItemPatches, removeItems } from "$lib/utils/store/item-store";
 import type { ClipboardItem } from "$lib/types/clipboard";
 vi.mock("$lib/services/runtime", async (original) => ({
   ...(await original<typeof import("$lib/services/runtime")>()),
@@ -125,6 +125,53 @@ it("rolls back a failed bulk favorite without losing a concurrent capture", asyn
   expect(out.store!.current.byId.get("initial")!.favorite).toBe(false);
   expect(out.store!.current.byId.has("arrived")).toBe(true);
 });
+it("keeps a later successful edit when an earlier bulk favorite fails", async () => {
+  const result = deferred<boolean>();
+  vi.mocked(service.persistBatchFavorite).mockReturnValueOnce(result.promise);
+  out.bulk!.selectedIds = new Set(["initial"]);
+  out.bulk!.bulkFavorite();
+  // The same item-store patch used by saveEdit after its persistence succeeds.
+  out.store!.current = applyItemPatches(
+    out.store!.current,
+    new Map([
+      [
+        "initial",
+        {
+          title: "saved title",
+          textContent: "saved body",
+          preview: "saved preview",
+          tags: ["later"],
+          metadataJson: '{"customTitle":true}',
+          lastUsedAtMs: 42,
+        },
+      ],
+    ]),
+  );
+  result.resolve(false);
+  await settle();
+  expect(out.store!.current.byId.get("initial")).toMatchObject({
+    favorite: false,
+    title: "saved title",
+    textContent: "saved body",
+    preview: "saved preview",
+    tags: ["later"],
+    metadataJson: '{"customTitle":true}',
+    lastUsedAtMs: 42,
+  });
+});
+
+it("does not resurrect a row deleted while a favorite request was pending", async () => {
+  const result = deferred<boolean>();
+  vi.mocked(service.persistBatchFavorite).mockReturnValueOnce(result.promise);
+  out.bulk!.selectedIds = new Set(["initial"]);
+  out.bulk!.bulkFavorite();
+  out.store!.current = removeItems(out.store!.current, new Set(["initial"]));
+  result.reject(new Error("save failed"));
+  await settle();
+  expect(out.store!.current.byId.has("initial")).toBe(false);
+  expect(out.store!.current.historyIds).toEqual([]);
+});
+
 it("pastes the whole multi-selection at once, selection order preserved", async () => {
   out.store!.current = appendItems(
     out.store!.current,

@@ -322,9 +322,18 @@ export function closeSearchResults(store: ItemStore): ItemStore {
   return { ...store, byId, indexedIds: null };
 }
 
+export interface AffectedItemOptions {
+  /** The actual optimistic writes, separate from removal of a record. */
+  readonly patches?: ReadonlyMap<string, Partial<ClipboardItem>>;
+  /** False for field-only mutations, which must not undo a later deletion. */
+  readonly restoreRemoved?: boolean;
+}
+
 export interface AffectedItemSnapshot {
   /** Previous version of each affected id, taken from the record map. */
   readonly previous: ReadonlyMap<string, ClipboardItem>;
+  readonly patches: ReadonlyMap<string, Partial<ClipboardItem>>;
+  readonly restoreRemoved: boolean;
   /** Index each affected id occupied per view, so a rollback restores order. */
   readonly positions: ReadonlyMap<string, ReadonlyMap<ItemView, number>>;
   /** The detail id before the mutation, when it was one of the affected ids. */
@@ -347,6 +356,7 @@ export function captureAffectedItems(
   store: ItemStore,
   ids: ReadonlySet<string>,
   selectedIds: ReadonlySet<string> = new Set(),
+  options: AffectedItemOptions = {},
 ): AffectedItemSnapshot {
   const previous = new Map<string, ClipboardItem>();
   const positions = new Map<string, Map<ItemView, number>>();
@@ -372,8 +382,14 @@ export function captureAffectedItems(
     if (selectedIds.has(id)) selected.add(id);
   }
 
+  const patches = new Map<string, Partial<ClipboardItem>>();
+  for (const [id, patch] of options.patches ?? []) {
+    if (previous.has(id)) patches.set(id, { ...patch });
+  }
   return {
     previous,
+    patches,
+    restoreRemoved: options.restoreRemoved ?? true,
     positions,
     detailId:
       store.detailId !== null && ids.has(store.detailId) && previous.has(store.detailId)
@@ -385,7 +401,7 @@ export function captureAffectedItems(
 
 /**
  * Puts the captured ids back, leaving all other ids alone. An id still loaded
- * is patched in place; one the mutation removed is re-inserted at the index it
+ * has only this mutation's fields restored; one the mutation removed is re-inserted at the index it
  * held in each view, so recency order survives. Records that arrived during the
  * async window are neither patched nor reordered.
  */
@@ -403,9 +419,21 @@ export function restoreAffectedItems(store: ItemStore, snapshot: AffectedItemSna
   for (const [id, before] of snapshot.previous) {
     const current = byId.get(id);
     if (current) {
-      byId.set(id, { ...current, ...before });
+      const written = snapshot.patches.get(id);
+      if (written) {
+        const fields = Object.fromEntries(
+          Object.entries(written)
+            .filter(
+              ([field, expected]) =>
+                field !== "id" && Object.is(current[field as keyof ClipboardItem], expected),
+            )
+            .map(([field]) => [field, before[field as keyof ClipboardItem]]),
+        );
+        byId.set(id, { ...current, ...fields });
+      }
       continue;
     }
+    if (!snapshot.restoreRemoved || snapshot.patches.has(id)) continue;
     byId.set(id, before);
     missing.set(id, snapshot.positions.get(id));
   }

@@ -182,6 +182,8 @@ Search index freshness still depends on SQLite outbox synchronization. When addi
 5. reset pagination/request IDs when the result set behind an offset changed;
 6. add tests for stale results and skipped/duplicated pages.
 
+Rollback snapshots record the operation's actual `patches` plus `restoreRemoved`. Existing records restore only fields written by that operation that still match its optimistic value; unrelated later edits and recaptures are preserved. Favorite/restore operations set `restoreRemoved: false`, so a later deletion cannot be undone by their failure. Removal operations retain complete record/position snapshots for missing rows. Bulk delete records only its soft-delete field patches while retaining recovery of its removed hard/permanent rows. The main route forwards these options and only reselects still-loaded records.
+
 ## Verification checklist
 
 - Backend cache hit for a smaller/equal maximum.

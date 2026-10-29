@@ -61,7 +61,8 @@
     get allSelectedFavorites() {
       return store.history.filter((i) => bulk.selectedIds.has(i.id)).every((i) => i.favorite);
     },
-    captureAffected: (ids) => captureAffectedItems(store.current, ids, bulk.selectedIds),
+    captureAffected: (ids, options) =>
+      captureAffectedItems(store.current, ids, bulk.selectedIds, options),
     rollbackAffected: (snapshot) => {
       store.current = restoreAffectedItems(store.current, snapshot);
     },

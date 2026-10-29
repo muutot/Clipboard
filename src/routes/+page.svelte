@@ -80,6 +80,7 @@
     restoreAffectedItems,
     rewriteItemTags,
     setDetailItem,
+    type AffectedItemOptions,
     type AffectedItemSnapshot,
   } from "$lib/utils/store/item-store";
   import { createItemStoreView } from "$lib/utils/store/item-store-view.svelte";
@@ -157,8 +158,11 @@
   /// Records just the ids a bulk mutation is about to change, so its rollback
   /// cannot discard a capture, search, or favorite toggle that landed while the
   /// persist call was in flight.
-  function captureAffected(ids: ReadonlySet<string>): AffectedItemSnapshot {
-    return captureAffectedItems(itemStore.current, ids, bulk.selectedIds);
+  function captureAffected(
+    ids: ReadonlySet<string>,
+    options: AffectedItemOptions = {},
+  ): AffectedItemSnapshot {
+    return captureAffectedItems(itemStore.current, ids, bulk.selectedIds, options);
   }
 
   /// Undoes a failed bulk mutation: restores only the captured ids and
@@ -166,8 +170,9 @@
   /// during the window alone.
   function rollbackAffected(snapshot: AffectedItemSnapshot) {
     itemStore.current = restoreAffectedItems(itemStore.current, snapshot);
-    if (snapshot.selected.size > 0) {
-      bulk.selectedIds = new Set([...bulk.selectedIds, ...snapshot.selected]);
+    const selected = [...snapshot.selected].filter((id) => itemStore.current.byId.has(id));
+    if (selected.length > 0) {
+      bulk.selectedIds = new Set([...bulk.selectedIds, ...selected]);
     }
   }
 
