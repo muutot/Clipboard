@@ -39,6 +39,18 @@ function color() {
 }
 const actions = { rename_tag: rename, delete_tag: remove, set_tag_color: color };
 
+function render() {
+  app = mount(TagManagementSettingsPanel, {
+    target: host,
+    props: { onclose: vi.fn(), showHeader: false },
+  });
+  flushSync();
+}
+function changed() {
+  vi.mocked(listen).mock.calls.at(-1)![1]({ event: "tags-changed", id: 1, payload: {} });
+  flushSync();
+}
+
 beforeEach(async () => {
   vi.resetAllMocks();
   locale.set("en");
@@ -51,11 +63,7 @@ beforeEach(async () => {
   });
   host = document.createElement("div");
   document.body.append(host);
-  app = mount(TagManagementSettingsPanel, {
-    target: host,
-    props: { onclose: vi.fn(), showHeader: false },
-  });
-  flushSync();
+  render();
   await settle();
 });
 afterEach(async () => {
@@ -126,4 +134,36 @@ it("does not schedule late failure feedback after the panel is destroyed", async
   await settle();
   expect(timer).not.toHaveBeenCalled();
   expect(emit).not.toHaveBeenCalled();
+});
+
+it.each([
+  ["initial", "null"],
+  ["initial", "rejection"],
+  ["refresh", "null"],
+  ["refresh", "rejection"],
+] as const)("offers retry after a failed %s tag list (%s)", async (phase, failure) => {
+  if (phase === "initial") {
+    await unmount(app!);
+    app = null;
+  }
+  if (failure === "null") vi.mocked(invoke).mockResolvedValueOnce(null);
+  else vi.mocked(invoke).mockRejectedValueOnce(new Error("synthetic list read failure"));
+  if (phase === "initial") render();
+  else changed();
+  await settle();
+  expect(host.querySelector(".settings-state")?.textContent).toContain("Could not load tags.");
+  expect(host.querySelector(".empty-state")).toBeNull();
+  expect(host.querySelector(".tag-name-input")).toBeNull();
+  host.querySelector<HTMLButtonElement>(".settings-state button")!.click();
+  await settle();
+  expect(host.querySelector(".settings-state")).toBeNull();
+  expect(host.querySelector<HTMLInputElement>(".tag-name-input")?.value).toBe("alpha");
+});
+
+it("distinguishes a successfully loaded empty tag list from a failed read", async () => {
+  vi.mocked(invoke).mockResolvedValueOnce([]);
+  changed();
+  await settle();
+  expect(host.querySelector(".empty-state")).not.toBeNull();
+  expect(host.querySelector(".settings-state button")).toBeNull();
 });

@@ -49,6 +49,7 @@
 
   let tags = $state<TagInfo[]>([]);
   let loading = $state(true);
+  let loadFailed = $state(false);
   let feedback = $state<{ message: string; kind: "success" | "error" } | null>(null);
   let confirmDelete = $state<Record<string, boolean>>({});
   let feedbackTimer: ReturnType<typeof setTimeout> | undefined;
@@ -90,10 +91,22 @@
   });
 
   async function load() {
+    if (disposed) return;
     loading = true;
-    const result = await listAllTags();
-    tags = (result ?? []).sort((a, b) => a.name.localeCompare(b.name));
-    loading = false;
+    loadFailed = false;
+    try {
+      const result = await listAllTags();
+      if (disposed) return;
+      if (result === null) {
+        loadFailed = true;
+        return;
+      }
+      tags = [...result].sort((a, b) => a.name.localeCompare(b.name));
+    } catch {
+      if (!disposed) loadFailed = true;
+    } finally {
+      if (!disposed) loading = false;
+    }
   }
 
   function notify(message: string, kind: "success" | "error" = "success") {
@@ -239,6 +252,11 @@
 <div class="settings-scroll">
   {#if loading}
     <p class="auto-save-note">{_t("status.searching")}</p>
+  {:else if loadFailed}
+    <div class="settings-state" role="status">
+      <p>{_t("tags.loadFailed")}</p>
+      <button class="settings-action-btn" onclick={load}>{_t("storage.retryLoad")}</button>
+    </div>
   {:else if tags.length === 0}
     <section class="setting-card empty-state">
       <p class="auto-save-note">{_t("tags.empty")}</p>

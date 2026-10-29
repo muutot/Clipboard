@@ -1115,6 +1115,7 @@ export interface LocaleDefinition {
   };
   tags: {
     title: string;
+    loadFailed: string;
     description: string;
     searchPlaceholder: string;
     empty: string;

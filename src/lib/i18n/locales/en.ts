@@ -1204,6 +1204,7 @@ const en: LocaleDefinition = {
   },
   tags: {
     title: "Tags",
+    loadFailed: "Could not load tags. Retry to manage them.",
     description:
       "Manage every tag across your clipboard items: rename, delete, or recolor in bulk.",
     searchPlaceholder: "Search tags",

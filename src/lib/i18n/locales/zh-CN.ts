@@ -1157,6 +1157,7 @@ const zhCN: LocaleDefinition = {
   },
   tags: {
     title: "标签",
+    loadFailed: "无法读取标签，请重试后管理标签。",
     description: "管理所有剪贴板条目标签，可批量重命名、删除或设置颜色。",
     searchPlaceholder: "搜索标签",
     empty: "还没有标签。在任意条目卡片上添加标签后，会在此处显示。",
