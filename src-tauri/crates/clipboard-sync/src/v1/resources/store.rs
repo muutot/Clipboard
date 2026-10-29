@@ -42,7 +42,9 @@ pub fn fingerprint_resource(
 }
 
 /// Avoids uploading an already-present content-addressed object. The HEAD +
-/// create-only PUT pair minimizes traffic while remaining safe under races.
+/// create-only PUT pair minimizes traffic under concurrent uploads. The v1
+/// collector retains bodies so a reused old object remains available until
+/// the referring snapshot or segment has been published.
 pub fn ensure_resource_uploaded(
     store: &impl ObjectStore,
     resource: &ResourceDescriptor,

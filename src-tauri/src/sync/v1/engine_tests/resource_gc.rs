@@ -1,4 +1,5 @@
 use super::*;
+use std::sync::Arc;
 
 fn setup_image(label: &str) -> (MemoryStore, StoragePaths, Database, String) {
     let store = MemoryStore::default();
@@ -82,17 +83,16 @@ fn compact(
 }
 
 #[test]
-fn reference_scan_removes_only_unreferenced_old_resources() {
+fn reference_scan_retains_old_resources_that_a_peer_may_reuse() {
     let (store, paths, database, resource_key) = setup_image("resource-gc-scan");
     let orphan = insert_orphan(&store);
     stamp_orphan_past_grace(&store, &orphan);
     store.deleted.lock().unwrap().clear();
 
-    let result = compact(&store, &database, &paths, ResourceGcMode::ReferenceScan);
-    assert!(result.deleted_remote_objects >= 1);
-    assert!(store.deleted.lock().unwrap().contains(&orphan));
+    compact(&store, &database, &paths, ResourceGcMode::ReferenceScan);
+    assert!(!store.deleted.lock().unwrap().contains(&orphan));
     let objects = store.objects.lock().unwrap();
-    assert!(!objects.contains_key(&orphan));
+    assert!(objects.contains_key(&orphan));
     assert!(objects.contains_key(&resource_key));
 
     drop(objects);
@@ -122,12 +122,11 @@ fn manifest_mode_uses_the_checkpoint_manifest_without_reading_the_pack() {
     store.deleted.lock().unwrap().clear();
     store.gets.lock().unwrap().clear();
 
-    let result = compact(&store, &database, &paths, ResourceGcMode::Manifest);
+    compact(&store, &database, &paths, ResourceGcMode::Manifest);
 
-    assert!(result.deleted_remote_objects >= 1);
-    assert!(store.deleted.lock().unwrap().contains(&orphan));
+    assert!(!store.deleted.lock().unwrap().contains(&orphan));
     let objects = store.objects.lock().unwrap();
-    assert!(!objects.contains_key(&orphan));
+    assert!(objects.contains_key(&orphan));
     assert!(objects.contains_key(&resource_key));
     assert!(objects
         .keys()
@@ -142,7 +141,7 @@ fn manifest_mode_uses_the_checkpoint_manifest_without_reading_the_pack() {
 }
 
 #[test]
-fn fresh_resources_are_retained_by_the_grace_window() {
+fn fresh_resources_are_retained_without_relying_on_timestamps() {
     let (store, paths, database, resource_key) = setup_image("resource-gc-grace");
     let orphan = insert_orphan(&store);
     *store.list_modified_ms.lock().unwrap() = Some(chrono::Utc::now().timestamp_millis());
@@ -186,15 +185,78 @@ fn manifest_mode_falls_back_to_reference_scan_when_sidecars_are_missing() {
     stamp_orphan_past_grace(&store, &orphan);
     store.deleted.lock().unwrap().clear();
 
-    let result = compact(&store, &database, &paths, ResourceGcMode::Manifest);
+    compact(&store, &database, &paths, ResourceGcMode::Manifest);
 
-    assert!(result.deleted_remote_objects >= 1);
-    assert!(store.deleted.lock().unwrap().contains(&orphan));
+    assert!(!store.deleted.lock().unwrap().contains(&orphan));
     let objects = store.objects.lock().unwrap();
-    assert!(!objects.contains_key(&orphan));
+    assert!(objects.contains_key(&orphan));
     assert!(objects.contains_key(&resource_key));
 
     drop(objects);
     drop(database);
     fs::remove_dir_all(paths.project).unwrap();
+}
+
+#[test]
+fn concurrent_publication_keeps_a_reused_old_resource_downloadable() {
+    for mode in [ResourceGcMode::ReferenceScan, ResourceGcMode::Manifest] {
+        let (store, paths, database, _) = setup_image("resource-gc-reuse");
+        let store = Arc::new(store);
+        let bytes = b"old resource reused by a new peer";
+        let resource_key = resource_object_key(
+            ResourceCategory::Image,
+            &hex::encode(Sha256::digest(bytes)),
+            "png",
+        )
+        .unwrap();
+        store
+            .put(&resource_key, bytes.to_vec(), PutCondition::IfAbsent)
+            .unwrap();
+        stamp_orphan_past_grace(&store, &resource_key);
+
+        let peer_paths = Arc::new(temp_paths("resource-gc-reuse-peer"));
+        let peer_database = Arc::new(Database::open(&peer_paths.database).unwrap());
+        let peer_image = peer_paths.images.join("reused.png");
+        fs::write(&peer_image, bytes).unwrap();
+        peer_database
+            .save_item(&image_item("peer-reused-image", &peer_image))
+            .unwrap();
+        let publishing_store = Arc::clone(&store);
+        let publishing_paths = Arc::clone(&peer_paths);
+        let publishing_database = Arc::clone(&peer_database);
+        *store.after_list.lock().unwrap() = Some((
+            "v1/segments/".to_owned(),
+            Box::new(move || {
+                sync_database(
+                    publishing_store.as_ref(),
+                    publishing_database.as_ref(),
+                    publishing_paths.as_ref(),
+                    REMOTE_SCOPE,
+                    None,
+                    options(),
+                )
+                .unwrap();
+            }),
+        ));
+
+        // Publish after the last pack listing in the reference scan, using
+        // HEAD to reuse the old object instead of refreshing its timestamp.
+        compact(store.as_ref(), &database, &paths, mode);
+        assert!(store.after_list.lock().unwrap().is_none());
+        let downloaded = clipboard_sync::v1::resources::materialize_resource(
+            store.as_ref(),
+            &resource_key,
+            &paths.storage.join("resource-gc-download"),
+            1024,
+            None,
+        )
+        .unwrap();
+        assert_eq!(fs::read(downloaded.path).unwrap(), bytes);
+        assert!(!store.deleted.lock().unwrap().contains(&resource_key));
+
+        drop(peer_database);
+        fs::remove_dir_all(&peer_paths.project).unwrap();
+        drop(database);
+        fs::remove_dir_all(paths.project).unwrap();
+    }
 }

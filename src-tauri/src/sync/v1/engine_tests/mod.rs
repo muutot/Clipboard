@@ -29,6 +29,8 @@ mod namespace;
 mod orphan;
 mod resource_gc;
 
+type AfterListHook = (String, Box<dyn FnOnce() + Send>);
+
 #[derive(Default)]
 struct MemoryStore {
     objects: Mutex<BTreeMap<String, Vec<u8>>>,
@@ -44,13 +46,14 @@ struct MemoryStore {
     puts: Mutex<Vec<String>>,
     cancel_after_key_fragment:
         Mutex<Option<(String, clipboard_sync::cancellation::CancellationToken)>>,
+    after_list: Mutex<Option<AfterListHook>>,
 }
 
 impl ObjectStore for MemoryStore {
     fn list(&self, prefix: &str, start_after: Option<&str>) -> Result<Vec<ObjectInfo>, String> {
         self.lists.lock().unwrap().push(prefix.to_string());
         let include_etags = !*self.list_without_etags.lock().unwrap();
-        Ok(self
+        let entries: Vec<_> = self
             .objects
             .lock()
             .unwrap()
@@ -69,7 +72,22 @@ impl ObjectStore for MemoryStore {
                     .or(*self.list_modified_ms.lock().unwrap()),
                 etag: include_etags.then(|| format!("\"{}\"", hex::encode(Sha256::digest(bytes)))),
             })
-            .collect())
+            .collect();
+        let hook = {
+            let mut hook = self.after_list.lock().unwrap();
+            if hook
+                .as_ref()
+                .is_some_and(|(expected, _)| expected == prefix)
+            {
+                hook.take()
+            } else {
+                None
+            }
+        };
+        if let Some((_, hook)) = hook {
+            hook();
+        }
+        Ok(entries)
     }
 
     fn get(&self, key: &str) -> Result<Option<DownloadedObject>, String> {

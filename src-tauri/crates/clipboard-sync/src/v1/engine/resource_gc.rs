@@ -7,9 +7,11 @@
 //! - `Manifest` trusts a small per-checkpoint reference manifest and falls
 //!   back to the reference scan when that manifest is absent or invalid.
 //!
-//! Both modes scan snapshots and segments, which may cover state newer than
-//! the checkpoint, and retain recently uploaded objects so a peer's in-flight
-//! segment cannot lose its resource between upload and checkpoint compaction.
+//! Both modes scan snapshots and segments, which may cover newer state.
+//! v1 retains resource bodies: no publication lease fences a content-addressed
+//! object's HEAD reuse against deletion after the reference scan. An upload
+//! grace window cannot protect a newly published reference to an old object.
+//! Only obsolete reference sidecars can be collected safely here.
 use std::collections::BTreeSet;
 
 use serde::{Deserialize, Serialize};
@@ -20,7 +22,6 @@ use crate::v1::parse_resource_key;
 const RESOURCE_MANIFEST_PREFIX: &str = "v1/resource-refs/";
 const RESOURCE_MANIFEST_VERSION: u8 = 1;
 const MAX_RESOURCE_MANIFEST_BYTES: usize = 16 * 1024 * 1024;
-const RESOURCE_GC_GRACE_MS: i64 = 7 * 24 * 60 * 60 * 1000;
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -178,53 +179,23 @@ pub(super) fn garbage_collect_resources(
         add_mutation_resource_keys(&mut keep, &segment.mutations)?;
     }
 
-    let now_ms = current_time_ms();
+    // A peer can reuse any existing resource immediately after this scan.
+    // Neither another scan nor LastModified makes an unconditional DELETE
+    // atomic with that peer's HEAD and subsequent head publication. Keep all
+    // bodies until a protocol with publication/deletion fencing is available.
     let mut deleted = 0u64;
-    let mut listed: Vec<(String, i64)> = Vec::new();
-    for info in store.list("v1/resources/", None)? {
-        cancellation::check()?;
-        if parse_resource_key(&info.key).is_err() {
-            continue;
-        }
-        if let Some(modified_ms) = info.modified_ms {
-            listed.push((info.key, modified_ms));
-        }
-    }
-    // Anchor the grace cutoff to the store's own clock: the newest timestamp
-    // the store reported in this sweep, falling back to the local clock when
-    // the store reports none. Comparing store stamps against the local clock
-    // directly would let a fast local clock (relative to the object store)
-    // condemn freshly uploaded resources as past the grace window; anchoring
-    // the window in store time keeps every in-flight upload protected and
-    // only slides the cutoff back while a store stays idle.
-    let newest_stored_ms = listed.iter().map(|(_, modified)| *modified).max();
-    let oldest_eligible = newest_stored_ms
-        .unwrap_or(now_ms)
-        .saturating_sub(RESOURCE_GC_GRACE_MS);
-    for (key, modified_ms) in listed {
-        if keep.contains(&key) || modified_ms > oldest_eligible {
-            continue;
-        }
-        cancellation::check()?;
-        store.delete(&key)?;
-        deleted = checked_add(deleted, 1, "deleted remote object count")?;
-    }
-
     for info in store.list(RESOURCE_MANIFEST_PREFIX, None)? {
         cancellation::check()?;
         let Some((generation, sha256)) = parse_resource_manifest_key(&info.key) else {
             continue;
         };
-        if checkpoints.contains(&(generation, sha256)) {
+        if checkpoints.contains(&(generation, sha256)) || generation >= head.generation {
             continue;
         }
         store.delete(&info.key)?;
         deleted = checked_add(deleted, 1, "deleted remote object count")?;
     }
 
-    // `head` is intentionally part of the signature: GC must only run after
-    // the checkpoint pointer was read back and verified as durable.
-    let _ = head;
     Ok(deleted)
 }
 

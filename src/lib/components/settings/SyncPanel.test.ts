@@ -91,12 +91,12 @@ function render(tab: "cloud" | "advanced" | "s3" = "s3") {
   flushSync();
 }
 
-it("persists the remote resource cleanup mode", async () => {
+it("persists the resource reference mode and explains that bodies are retained", async () => {
   render("advanced");
   await settle();
 
   const trigger = target.querySelector<HTMLButtonElement>(
-    `button[aria-label='Remote Resource Cleanup']`,
+    `button[aria-label='Remote Resource References']`,
   )!;
   trigger.click();
   flushSync();
@@ -109,6 +109,7 @@ it("persists the remote resource cleanup mode", async () => {
   expect(bridge.setConfig).toHaveBeenCalledWith(
     expect.objectContaining({ resourceGcMode: "manifest" }),
   );
+  expect(target.textContent).toContain("unused resource files are kept");
 });
 
 it("blocks the form until the stored configuration arrives", async () => {

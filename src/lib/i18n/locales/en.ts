@@ -259,7 +259,9 @@ const en: LocaleDefinition = {
     syncAutoSyncEnable: "Enable Auto Sync",
     syncAutoInterval: "Sync Interval",
     syncSegmentMaxEntries: "Max Entries per Segment",
-    syncResourceGc: "Remote Resource Cleanup",
+    syncResourceGc: "Remote Resource References",
+    syncResourceGcNote:
+      "Resources are retained to protect concurrent sync. These modes check references and clean old manifests; unused resource files are kept.",
     syncResourceGcOff: "Off",
     syncResourceGcReferenceScan: "Reference scan (thorough)",
     syncResourceGcManifest: "Manifest (faster)",

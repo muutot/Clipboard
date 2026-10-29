@@ -249,7 +249,9 @@ const zhCN: LocaleDefinition = {
     syncAutoSyncEnable: "启用自动同步",
     syncAutoInterval: "同步间隔",
     syncSegmentMaxEntries: "每个增量段最大条目数",
-    syncResourceGc: "远端资源清理",
+    syncResourceGc: "远端资源引用检查",
+    syncResourceGcNote:
+      "为保护并发同步，保留资源正文。这些模式检查引用并清理旧清单，暂不删除无引用的资源文件。",
     syncResourceGcOff: "关闭",
     syncResourceGcReferenceScan: "引用扫描（更彻底）",
     syncResourceGcManifest: "清单模式（更快）",

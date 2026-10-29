@@ -416,6 +416,8 @@
       }}
     />
 
+    <p class="settings-platform-note">{_t("storage.syncResourceGcNote")}</p>
+
     <NumberEntry
       config={{
         type: "number",

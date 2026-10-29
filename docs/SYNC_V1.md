@@ -316,11 +316,13 @@ A compactor:
    immediately previous checkpoint vector; keys under a covered segment prefix that do not parse
    as canonical segments (a directory marker, or a partial or foreign upload) are skipped rather
    than aborting the pass, so one stray object cannot block compaction;
-7. if enabled, runs resource GC: `referenceScan` decodes every surviving checkpoint, snapshot and
+7. if enabled, checks resource references: `referenceScan` decodes every surviving checkpoint, snapshot and
    segment; `manifest` reads the per-checkpoint `resource-refs/` sidecars and falls back to a pack
-   decode when a sidecar is missing or invalid. Both modes delete only canonical resource keys
-   outside the union that are older than a seven-day in-flight grace window, and retain objects
-   whose listing omits `LastModified`;
+   decode when a sidecar is missing or invalid. Both modes retain **all resource bodies**, including
+   old unreferenced objects, and only prune sidecars for absent checkpoints below the verified
+   head generation. v1 has no lease/fence coordinating a peer's HEAD reuse and later publication
+   with DELETE; object age and a second reference scan cannot close that race. Safe body
+   reclamation requires a protocol change. Settings state this limitation;
 8. retains the current and immediately previous checkpoints and atomically records the new local
    baseline only after cleanup completes.
 
