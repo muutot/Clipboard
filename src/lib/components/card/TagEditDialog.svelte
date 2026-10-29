@@ -87,12 +87,19 @@
 
   function saveColor(target: string) {
     return enqueueEdit(async () => {
-      const ok = await setTagColor(currentName, target);
-      if (ok) {
+      try {
+        const ok = await setTagColor(currentName, target);
+        if (!ok) {
+          if (!disposed) showToast(_t("toast.saveFailed"), "error");
+          return;
+        }
         emitTagsChanged({});
         if (disposed) return;
         currentColor = target;
         showToast(target ? _t("tags.colorSaved") : _t("tags.saved"), "success");
+      } catch (error) {
+        console.error("Tag color save failed:", error);
+        if (!disposed) showToast(_t("toast.saveFailed"), "error");
       }
     });
   }

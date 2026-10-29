@@ -212,3 +212,38 @@ it("finishes an earlier color write before renaming its registry key", async () 
   expect(renameTag).toHaveBeenCalledWith("alpha", "beta");
   expect(input().value).toBe("beta");
 });
+
+it.each(["rejected", "false", "null"])(
+  "reports a %s color save and keeps the current swatch available for retry",
+  async (result) => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    if (result === "rejected")
+      vi.mocked(setTagColor).mockRejectedValueOnce(new Error("synthetic color failure"));
+    else vi.mocked(setTagColor).mockResolvedValueOnce(result === "false" ? false : null);
+    color();
+    await settle();
+    expect(showToast).toHaveBeenCalledExactlyOnceWith("Save failed", "error");
+    expect(emit).not.toHaveBeenCalled();
+    expect(host.querySelector(".tag-swatch-option.active")).toBeNull();
+    color();
+    await settle();
+    expect(setTagColor).toHaveBeenCalledTimes(2);
+    expect(emit).toHaveBeenCalledExactlyOnceWith("tags-changed", {});
+    expect(host.querySelector(".tag-swatch-option.active")?.getAttribute("aria-label")).toBe(
+      "#e5484d",
+    );
+  },
+);
+
+it("handles a late rejected color save without feedback to a closed dialog", async () => {
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  const gate = deferred<boolean>();
+  vi.mocked(setTagColor).mockReturnValueOnce(gate.promise);
+  color();
+  await settle();
+  await destroy();
+  gate.reject(new Error("synthetic closed color failure"));
+  await settle();
+  expect(showToast).not.toHaveBeenCalled();
+  expect(emit).not.toHaveBeenCalled();
+});

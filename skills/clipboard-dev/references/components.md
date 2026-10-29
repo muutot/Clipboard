@@ -163,6 +163,9 @@ dialog cancels queued work and pending read-only conflict checks, while already
 sent successful mutations still broadcast to other windows without late UI feedback.
 A zero affected-record count remains a valid registry-color rename. Mounted
 `TagEditDialog.test.ts` verifies these cases with synthetic IPC and events.
+Rejected, false and null color-save results retain the confirmed swatch and show
+the localized save-failed toast while mounted. They emit no success event and
+leave the queue available for retry; late failures after closure have no UI feedback.
 
 ### `ImageFullscreenOverlay.svelte`
 
