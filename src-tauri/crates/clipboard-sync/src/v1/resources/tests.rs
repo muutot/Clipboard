@@ -360,6 +360,39 @@ fn encrypted_empty_resource_round_trips_without_phantom_chunks() {
 }
 
 #[test]
+fn encrypted_large_size_claims_fail_before_plaintext_creation() {
+    let root = temporary_directory("large-claim");
+    let cache = root.join("cache");
+    let key = SessionKey::derive("password", "large-claim").unwrap();
+    let object_key = resource_object_key(
+        ResourceCategory::File,
+        &hex::encode(Sha256::digest(b"claimed body")),
+        "bin",
+    )
+    .unwrap();
+    let store = MemoryStore::default();
+    let two_gib = 2 * 1024 * 1024 * 1024;
+    for size in [1024 * 1024 * 1024 + 1, two_gib] {
+        // A valid large-size header without its body must be rejected before
+        // creating plaintext staging or allocating the claimed body size.
+        store
+            .objects
+            .borrow_mut()
+            .insert(object_key.clone(), resource_header(size).unwrap().to_vec());
+        let error =
+            materialize_resource(&store, &object_key, &cache, two_gib, Some(&key)).unwrap_err();
+        assert!(error.contains("size does not match its header"), "{error}");
+        assert_eq!(fs::read_dir(&cache).unwrap().count(), 0);
+        let error =
+            materialize_resource(&store, &object_key, &cache, 1024 * 1024 * 1024, Some(&key))
+                .unwrap_err();
+        assert!(error.contains("exceeds the"), "{error}");
+        assert_eq!(fs::read_dir(&cache).unwrap().count(), 0);
+    }
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn materialization_reuses_valid_cache_and_repairs_corruption() {
     let root = temporary_directory("download");
     let cache = root.join("cache");

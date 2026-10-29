@@ -176,7 +176,7 @@ pub(super) fn header(kind: ObjectKind, flags: u8, uncompressed_size: u64) -> [u8
 }
 
 pub(crate) fn resource_header(plaintext_size: u64) -> Result<[u8; HEADER_LEN], String> {
-    if plaintext_size > MAX_UNCOMPRESSED_BYTES {
+    if plaintext_size > MAX_RESOURCE_PLAINTEXT_BYTES {
         return Err("sync v1 resource exceeds the plaintext size limit".to_string());
     }
     Ok(header(ObjectKind::Resource, FLAG_ENCRYPTED, plaintext_size))
@@ -201,7 +201,7 @@ pub(crate) fn validate_resource_header(data: &[u8]) -> Result<u64, String> {
             .try_into()
             .map_err(|_| "sync v1 resource header is truncated".to_string())?,
     );
-    if plaintext_size > MAX_UNCOMPRESSED_BYTES {
+    if plaintext_size > MAX_RESOURCE_PLAINTEXT_BYTES {
         return Err("sync v1 resource exceeds the plaintext size limit".to_string());
     }
     Ok(plaintext_size)

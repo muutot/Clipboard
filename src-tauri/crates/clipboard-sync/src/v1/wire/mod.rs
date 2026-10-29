@@ -50,6 +50,9 @@ const PACK_CHUNK_SINGLE_RECORD_MAX_UNCOMPRESSED_BYTES: usize = MAX_UNCOMPRESSED_
 
 pub(crate) const RESOURCE_HEADER_LEN: usize = HEADER_LEN;
 pub(crate) const RESOURCE_AUTH_TAG_LEN: usize = AUTH_TAG_LEN;
+// Binary resources stream in fixed chunks instead of being decoded as one
+// bincode/zstd value. Keep their cap aligned with the desktop's 2 GiB limit.
+const MAX_RESOURCE_PLAINTEXT_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 
 mod crypto;
 mod packs;

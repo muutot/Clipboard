@@ -135,6 +135,15 @@ UT interleaves two production materializers and holds a real staging read handle
 without delete sharing to verify failure preservation; existing resource UTs
 cover normal cache reuse, corruption repair and encrypted downloads.
 
+Encrypted binary resource headers accept up to 2 GiB of plaintext, matching the
+desktop's configurable resource cap. This limit is separate from the 1 GiB
+metadata/bincode/decompression bound: resource encryption/decryption uses fixed
+1 MiB chunks and validates stored size before allocating a chunk. Above-limit
+claims still fail. Header bytes, key derivation and chunk encryption stay the same;
+all receiving clients must be upgraded before using encrypted resources above
+1 GiB, because older readers reject that size. Boundary UTs avoid allocating a
+multi-gigabyte body; actual large-file transfer remains a separate runtime check.
+
 Desktop sync resolves `clipboard_sync::v1::namespace` before engine work. New
 identities exclude S3 credentials; existing v1 scopes are authenticated and bound
 without rewriting data. A conditional, read-back-verified `v1/namespace.json`

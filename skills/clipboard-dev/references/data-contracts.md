@@ -409,6 +409,14 @@ Event payloads also use camelCase where Rust structs are serialized. Register li
 
 ## Resource metadata contract
 
+Sync binary resource headers use a 2 GiB plaintext-size ceiling, independent of
+the 1 GiB metadata decoding bound. Desktop limits remain 1 KiB–2 GiB; the caller's
+configured bound and encrypted stored-size validation still apply before
+decryption. Wire fields and encryption are unchanged, but receiving clients with
+the earlier 1 GiB resource-header validator need upgrading before larger
+encrypted resources are published. Header boundary UTs do not prove a complete
+multi-gigabyte S3 transfer.
+
 Resource publication for a file database coordinates Clipboard processes through
 `<canonical database path>.resource-writers.lock` and `.resource-generation`.
 `Database::begin_resource_write` returns a fallible guard held before resource

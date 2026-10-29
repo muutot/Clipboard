@@ -101,6 +101,28 @@ fn decoder_rejects_kind_mismatch_and_oversized_claims() {
 }
 
 #[test]
+fn encrypted_resource_headers_accept_the_configured_two_gib_limit() {
+    // Resource bodies stream in 1 MiB chunks, independently of the 1 GiB
+    // bincode/decompression bound. The desktop accepts resource limits up to
+    // 2 GiB and passes the fingerprint's full size to this header writer.
+    let two_gib = 2 * 1024 * 1024 * 1024;
+    for size in [
+        0,
+        MAX_UNCOMPRESSED_BYTES,
+        MAX_UNCOMPRESSED_BYTES + 1,
+        two_gib,
+    ] {
+        let encoded = resource_header(size).expect("configured resource size must be encodable");
+        assert_eq!(validate_resource_header(&encoded).unwrap(), size);
+    }
+    for size in [two_gib + 1, u64::MAX] {
+        assert!(resource_header(size).is_err());
+        let forged = header(ObjectKind::Resource, FLAG_ENCRYPTED, size);
+        assert!(validate_resource_header(&forged).is_err());
+    }
+}
+
+#[test]
 fn encrypted_objects_require_a_key_without_plaintext_fallback() {
     let key = SessionKey::derive("password", "remote-a").unwrap();
     let encoded = encode_segment(&sample_segment(), Some(&key)).unwrap();

@@ -167,6 +167,14 @@ the local cache. Wrong passwords, truncation, header/size disagreement and modif
 failures with no plaintext fallback. Reported resource traffic counts actual stored ciphertext
 bytes, including header and tags.
 
+The resource plaintext-size ceiling is 2 GiB, matching the maximum configurable
+image/file limit; metadata packs retain their separate 1 GiB decoded-size ceiling.
+Resources are processed in fixed chunks, and the declared plaintext size must
+match the encrypted file size before decryption starts. Upgrade every receiving
+client before publishing encrypted resources larger than 1 GiB: earlier clients
+mistakenly applied the metadata ceiling to resource headers and reject them.
+The header layout, key derivation and encrypted chunk format are unchanged.
+
 Changing, adding or removing the password of an already initialized remote scope is not an in-place
 operation. The existing namespace remains bound to its original encryption mode/key. The current
 settings surface intentionally rejects such a change before publication; a future dedicated,
