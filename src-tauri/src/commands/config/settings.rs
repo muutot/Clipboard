@@ -47,22 +47,8 @@ pub fn set_general_settings(
     if worker.as_ref().is_some_and(|worker| !worker.is_running()) {
         *worker = None;
     }
-    // Decide the search mode from the incoming settings when present, falling
-    // back to the current configuration for a patch. The mode is only a
-    // performance hint; correctness of the persisted value is unaffected.
-    let background = settings
-        .clone()
-        .unwrap_or_else(|| {
-            let config = lock_state(&config, "configuration lock is poisoned").unwrap();
-            config.general_settings().clone()
-        })
-        .search_index_sync_mode
-        .parse::<SearchIndexSyncMode>()
-        == Ok(SearchIndexSyncMode::Background);
-    let (saved, max_text_capture_bytes) = transition_search_worker(
-        &mut worker,
-        background,
-        || {
+    let (saved, max_text_capture_bytes) =
+        apply_general_settings_with_worker(&mut worker, config.inner(), settings, patch, || {
             let database = Database::open(&app.state::<StoragePaths>().database)
                 .map_err(|error| error.to_string())?;
             let index = app.state::<Arc<SearchIndex>>().inner().clone();
@@ -79,23 +65,7 @@ pub fn set_general_settings(
                 }),
             )
             .map_err(|error| error.to_string())
-        },
-        || {
-            let mut config = lock_state(&config, "configuration lock is poisoned")?;
-            let settings = resolve_general_settings(
-                config.general_settings(),
-                settings.clone(),
-                patch.clone(),
-            )?;
-            config
-                .set_general_settings(settings)
-                .map_err(|error| error.to_string())?;
-            Ok((
-                config.general_settings().clone(),
-                config.max_text_capture_bytes(),
-            ))
-        },
-    )?;
+        })?;
     capture.set_max_text_capture_bytes(max_text_capture_bytes);
     crate::logging::set_level(crate::logging::LogLevel::from_str_lossy(&saved.log_level));
     if let Err(error) = app.emit("general-settings-changed", &saved) {
@@ -290,9 +260,167 @@ fn transition_search_worker<W, T>(
     Ok(saved)
 }
 
+fn apply_general_settings_with_worker<W>(
+    current: &mut Option<W>,
+    config: &Mutex<ConfigStore>,
+    settings: Option<GeneralConfig>,
+    patch: Option<serde_json::Value>,
+    start: impl FnOnce() -> Result<W, String>,
+) -> Result<(GeneralConfig, u64), String> {
+    let background = {
+        let config = lock_state(&config, "configuration lock is poisoned")?;
+        resolve_general_settings(config.general_settings(), settings.clone(), patch.clone())?
+            .search_index_sync_mode
+            .parse::<SearchIndexSyncMode>()
+            == Ok(SearchIndexSyncMode::Background)
+    };
+    transition_search_worker(current, background, start, || {
+        let mut config = lock_state(&config, "configuration lock is poisoned")?;
+        // Resolve again after preparation to preserve unrelated settings that
+        // changed while opening the worker's database/index connection.
+        let settings = resolve_general_settings(config.general_settings(), settings, patch)?;
+        config
+            .set_general_settings(settings)
+            .map_err(|error| error.to_string())?;
+        Ok((
+            config.general_settings().clone(),
+            config.max_text_capture_bytes(),
+        ))
+    })
+}
+
 #[cfg(test)]
 mod search_mode_tests {
-    use super::transition_search_worker;
+    use super::{apply_general_settings_with_worker, transition_search_worker};
+    use crate::config::ConfigStore;
+    use serde_json::json;
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc, Mutex,
+    };
+
+    struct TestWorker(Arc<AtomicUsize>);
+    impl Drop for TestWorker {
+        fn drop(&mut self) {
+            self.0.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+    fn fixture() -> (std::path::PathBuf, Mutex<ConfigStore>) {
+        let root =
+            std::env::temp_dir().join(format!("clipboard-search-mode-{}", uuid::Uuid::new_v4()));
+        let config = Mutex::new(ConfigStore::load(&root).unwrap());
+        (root, config)
+    }
+
+    #[test]
+    fn patches_start_and_stop_the_worker_using_the_merged_target_mode() {
+        let (root, config) = fixture();
+        let dropped = Arc::new(AtomicUsize::new(0));
+        let mut worker = None;
+        let (saved, _) = apply_general_settings_with_worker(
+            &mut worker,
+            &config,
+            None,
+            Some(json!({"searchIndexSyncMode": "background"})),
+            || {
+                // Preparing a worker must not hold the global config lock,
+                // and this unrelated edit must survive the later patch save.
+                let mut config = config.try_lock().unwrap();
+                let mut settings = config.general_settings().clone();
+                settings.theme = "light".into();
+                config.set_general_settings(settings).unwrap();
+                Ok(TestWorker(dropped.clone()))
+            },
+        )
+        .unwrap();
+        assert!(worker.is_some());
+        assert_eq!(saved.search_index_sync_mode, "background");
+        assert_eq!(saved.theme, "light");
+        apply_general_settings_with_worker(
+            &mut worker,
+            &config,
+            None,
+            Some(json!({"language": "en"})),
+            || -> Result<TestWorker, String> { panic!("unrelated patch must reuse the worker") },
+        )
+        .unwrap();
+        assert!(worker.is_some());
+        let (saved, _) = apply_general_settings_with_worker(
+            &mut worker,
+            &config,
+            None,
+            Some(json!({"searchIndexSyncMode": "lazy"})),
+            || -> Result<TestWorker, String> { panic!("lazy must not start a worker") },
+        )
+        .unwrap();
+        assert!(worker.is_none());
+        assert_eq!(saved.search_index_sync_mode, "lazy");
+        assert_eq!(dropped.load(Ordering::SeqCst), 1);
+        assert_eq!(
+            ConfigStore::load(&root).unwrap().search_index_sync_mode(),
+            crate::config::SearchIndexSyncMode::Lazy
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn patch_spawn_and_save_failures_keep_the_previous_runtime_and_disk_mode() {
+        let (root, config) = fixture();
+        let dropped = Arc::new(AtomicUsize::new(0));
+        let mut worker = None::<TestWorker>;
+        let patch = || Some(json!({"searchIndexSyncMode": "background"}));
+        assert!(
+            apply_general_settings_with_worker(&mut worker, &config, None, patch(), || Err(
+                "spawn".into()
+            ))
+            .is_err()
+        );
+        assert!(worker.is_none());
+        assert_eq!(
+            config.lock().unwrap().search_index_sync_mode(),
+            crate::config::SearchIndexSyncMode::Lazy
+        );
+        std::fs::rename(root.join("conf"), root.join("saved-conf")).unwrap();
+        assert!(
+            apply_general_settings_with_worker(&mut worker, &config, None, patch(), || Ok(
+                TestWorker(dropped.clone())
+            ))
+            .is_err()
+        );
+        assert!(worker.is_none());
+        assert_eq!(
+            dropped.load(Ordering::SeqCst),
+            1,
+            "failed save must drop the prepared worker"
+        );
+        std::fs::rename(root.join("saved-conf"), root.join("conf")).unwrap();
+        apply_general_settings_with_worker(&mut worker, &config, None, patch(), || {
+            Ok(TestWorker(dropped.clone()))
+        })
+        .unwrap();
+        std::fs::rename(root.join("conf"), root.join("saved-conf")).unwrap();
+        assert!(apply_general_settings_with_worker(
+            &mut worker,
+            &config,
+            None,
+            Some(json!({"searchIndexSyncMode": "lazy"})),
+            || panic!()
+        )
+        .is_err());
+        assert!(worker.is_some());
+        assert_eq!(dropped.load(Ordering::SeqCst), 1);
+        assert_eq!(
+            config.lock().unwrap().search_index_sync_mode(),
+            crate::config::SearchIndexSyncMode::Background
+        );
+        std::fs::rename(root.join("saved-conf"), root.join("conf")).unwrap();
+        assert_eq!(
+            ConfigStore::load(&root).unwrap().search_index_sync_mode(),
+            crate::config::SearchIndexSyncMode::Background
+        );
+        drop(worker);
+        std::fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn live_mode_switches_reuse_and_stop_the_worker() {

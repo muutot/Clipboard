@@ -109,6 +109,8 @@ Any new index mutation path must invalidate `cached_ids`. Add a regression test 
 
 First-page searches flush pending settings before invoking the backend; stale requests are checked again after that await. Normalization clamps stored `display.searchPageSize` to `searchPageSizeLimit`, so the slider, persisted value and requests agree.
 
+Live search-worker transitions derive their mode from the merged target of a full setting or patch (`apply_general_settings_with_worker`), including `searchIndexSyncMode` in a frontend patch. The patch resolves again at persistence after worker preparation, preserving unrelated updates made during preparation. Real config fixtures cover both mode directions, unrelated patches, preparation without the config lock, and spawn/save rollback including disposal of a prepared worker.
+
 ## Frontend search request lifecycle
 
 The main route debounces a first-page indexed search by 300 ms.
