@@ -38,6 +38,7 @@ struct MemoryStore {
     drop_checkpoint_after_success: Mutex<bool>,
     list_without_etags: Mutex<bool>,
     get_without_etags: Mutex<bool>,
+    head_with_etags: Mutex<bool>,
     list_modified_ms: Mutex<Option<i64>>,
     modified_ms_overrides: Mutex<BTreeMap<String, i64>>,
     deleted: Mutex<Vec<String>>,
@@ -47,6 +48,7 @@ struct MemoryStore {
     cancel_after_key_fragment:
         Mutex<Option<(String, clipboard_sync::cancellation::CancellationToken)>>,
     after_list: Mutex<Option<AfterListHook>>,
+    after_get: Mutex<Option<AfterListHook>>,
     after_put: Mutex<Option<AfterListHook>>,
 }
 
@@ -94,19 +96,33 @@ impl ObjectStore for MemoryStore {
     fn get(&self, key: &str) -> Result<Option<DownloadedObject>, String> {
         self.gets.lock().unwrap().push(key.to_string());
         let etagless = key == CHECKPOINT_HEAD_KEY && *self.get_without_etags.lock().unwrap();
-        Ok(self
-            .objects
-            .lock()
-            .unwrap()
-            .get(key)
-            .cloned()
-            .map(|bytes| DownloadedObject {
-                etag: (!etagless).then(|| format!("\"{}\"", hex::encode(Sha256::digest(&bytes)))),
-                bytes,
-            }))
+        let downloaded =
+            self.objects
+                .lock()
+                .unwrap()
+                .get(key)
+                .cloned()
+                .map(|bytes| DownloadedObject {
+                    etag: (!etagless)
+                        .then(|| format!("\"{}\"", hex::encode(Sha256::digest(&bytes)))),
+                    bytes,
+                });
+        let hook = {
+            let mut hook = self.after_get.lock().unwrap();
+            if hook.as_ref().is_some_and(|(expected, _)| expected == key) {
+                hook.take()
+            } else {
+                None
+            }
+        };
+        if let Some((_, hook)) = hook {
+            hook();
+        }
+        Ok(downloaded)
     }
 
     fn head(&self, key: &str) -> Result<Option<ObjectMetadata>, String> {
+        let include_etags = *self.head_with_etags.lock().unwrap();
         Ok(self
             .objects
             .lock()
@@ -114,7 +130,7 @@ impl ObjectStore for MemoryStore {
             .get(key)
             .map(|bytes| ObjectMetadata {
                 size_bytes: Some(bytes.len() as u64),
-                etag: None,
+                etag: include_etags.then(|| format!("\"{}\"", hex::encode(Sha256::digest(bytes)))),
             }))
     }
 

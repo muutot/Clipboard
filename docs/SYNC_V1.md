@@ -331,9 +331,10 @@ devices contribute sequence advance. A newly observed device contributes the lar
 bootstrap snapshot record count and published sequence; an empty device therefore joins and
 bootstraps from the retained checkpoint without immediately re-uploading the complete materialized
 state. Missing trustworthy head/snapshot accounting remains conservative and triggers compaction.
-A run with any failed peer does not compact because its materialized view is not known to cover
-every discoverable head. The compactor also skips publication while local outbox state is not fully
-represented by the published local sequence.
+A run with a failed peer can publish a checkpoint of its known state, but defers
+deleting covered history so lagging peers retain their recovery path. The compactor
+also skips publication while local outbox state is not fully represented by the
+published local sequence.
 
 A compactor:
 
@@ -371,6 +372,14 @@ before GC/local-baseline recording, a later run with the same vector revalidates
 finishes cleanup. A segment crossing a checkpoint boundary is retained. Tombstones are never
 discarded merely because the corresponding live row is absent; dropping them would allow an offline
 device to resurrect deleted records.
+
+When GET omits the pointer ETag, compaction recovers it with HEAD and a second GET
+that must match the original pointer bytes. It then still uses `If-Match`; a later
+concurrent winner makes the write fail without collection. If both GET and HEAD
+omit ETags, or the verification GET observes different bytes, the run defers
+compaction and GC while normal record publication and pull continue. An initial
+checkpoint still uses create-only publication. Read-back after an unconditional
+replacement cannot protect a newer generation from being overwritten.
 
 ## Obsolete-state deletion boundary
 

@@ -346,6 +346,16 @@ pub(super) fn maybe_compact(
         return Ok(());
     }
     let existing = read_checkpoint_head(store, session_key, result)?;
+    let condition = match existing.as_ref() {
+        None => PutCondition::IfAbsent,
+        Some(current) => match current.etag.as_ref() {
+            Some(etag) => PutCondition::IfMatch(etag.clone()),
+            // Read-back after an unconditional PUT cannot detect a successful
+            // newer pointer that this request overwrote. Keep normal sync
+            // working, but defer compaction when CAS cannot be established.
+            None => return Ok(()),
+        },
+    };
 
     if let Some(current) = existing.as_ref() {
         let current_is_locally_verified = database
@@ -440,17 +450,6 @@ pub(super) fn maybe_compact(
     let encoded_head = crate::v1::encode_checkpoint_head(&head, session_key)?;
     let encoded_head_size = encoded_head.stored_size_bytes();
     let expected_head_bytes = encoded_head.bytes;
-    let condition = existing.as_ref().map_or(PutCondition::IfAbsent, |current| {
-        // Stores that omit ETags (some S3-compatible gateways) cannot serve a
-        // compare-and-swap: fall back to an unconditional put instead of
-        // failing every compaction. The pointer is re-downloaded and verified
-        // right after (checkpoint_pointer_is_durable), so a clobbered write is
-        // detected rather than silently trusted.
-        current
-            .etag
-            .clone()
-            .map_or(PutCondition::Unconditional, PutCondition::IfMatch)
-    });
     match store.put(CHECKPOINT_HEAD_KEY, expected_head_bytes.clone(), condition)? {
         PutOutcome::PreconditionFailed => return Ok(()),
         PutOutcome::Stored { .. } => {
@@ -621,9 +620,9 @@ pub(super) fn prune_unreferenced_checkpoints(
 
 struct StoredCheckpointHead {
     head: CheckpointHead,
-    /// `None` when the store does not report ETags (some S3-compatible
-    /// gateways). Compaction then degrades to an unconditional put instead of
-    /// failing; see the put condition in `maybe_compact`.
+    /// GET identity, or a HEAD identity verified by rereading the same bytes.
+    /// If neither is available, compaction is deferred without replacing or
+    /// collecting the existing checkpoint.
     etag: Option<String>,
 }
 
@@ -641,13 +640,48 @@ fn read_checkpoint_head(
         downloaded.bytes.len() as u64,
         "downloaded byte count",
     )?;
-    // An absent ETag must not fail the run: several S3-compatible stores omit
-    // the header. Compaction degrades to an unconditional put (see
-    // maybe_compact) and re-verifies the pointer afterwards.
-    let etag = downloaded.etag;
     let head = decode_checkpoint_head(&downloaded.bytes, session_key)?;
     validate_checkpoint_head(&head)?;
+    let etag = match downloaded.etag.filter(|etag| !etag.is_empty()) {
+        Some(etag) => Some(etag),
+        None => checkpoint_etag_from_head(store, &downloaded.bytes, result)?,
+    };
     Ok(Some(StoredCheckpointHead { head, etag }))
+}
+
+fn checkpoint_etag_from_head(
+    store: &impl ObjectStore,
+    expected_bytes: &[u8],
+    result: &mut SyncEngineResult,
+) -> Result<Option<String>, String> {
+    cancellation::check()?;
+    let Some(etag) = store
+        .head(CHECKPOINT_HEAD_KEY)?
+        .and_then(|metadata| metadata.etag)
+        .filter(|etag| !etag.is_empty())
+    else {
+        return Ok(None);
+    };
+    // HEAD may observe a newer pointer than the initial GET. Pair its ETag
+    // with the original bytes only if a subsequent GET still matches them;
+    // otherwise let a fresh run build a candidate from the new checkpoint.
+    let Some(confirmed) = store.get(CHECKPOINT_HEAD_KEY)? else {
+        return Ok(None);
+    };
+    result.bytes_downloaded = checked_add(
+        result.bytes_downloaded,
+        confirmed.bytes.len() as u64,
+        "downloaded byte count",
+    )?;
+    if confirmed.bytes != expected_bytes {
+        return Ok(None);
+    }
+    Ok(Some(
+        confirmed
+            .etag
+            .filter(|etag| !etag.is_empty())
+            .unwrap_or(etag),
+    ))
 }
 
 fn frozen_checkpoint_vector(

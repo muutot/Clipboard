@@ -3,6 +3,202 @@
 use super::*;
 
 #[test]
+fn etagless_get_cannot_regress_a_newer_compaction_or_publish_a_pruned_pack() {
+    use std::sync::Arc;
+
+    let store = Arc::new(MemoryStore::default());
+    let slow_paths = temp_paths("etagless-slow");
+    let fast_paths = Arc::new(temp_paths("etagless-fast"));
+    let fresh_paths = temp_paths("etagless-fresh");
+    let slow = Database::open(&slow_paths.database).unwrap();
+    let fast = Arc::new(Database::open(&fast_paths.database).unwrap());
+    slow.save_item(&text_item("slow-initial", "slow initial"))
+        .unwrap();
+    fast.save_item(&text_item("fast-initial", "fast initial"))
+        .unwrap();
+    sync_database(
+        store.as_ref(),
+        &slow,
+        &slow_paths,
+        REMOTE_SCOPE,
+        None,
+        options(),
+    )
+    .unwrap();
+    sync_database(
+        store.as_ref(),
+        &fast,
+        &fast_paths,
+        REMOTE_SCOPE,
+        None,
+        options(),
+    )
+    .unwrap();
+    slow.save_item(&text_item("slow-new", "slow new")).unwrap();
+    sync_database(
+        store.as_ref(),
+        &slow,
+        &slow_paths,
+        REMOTE_SCOPE,
+        None,
+        options(),
+    )
+    .unwrap();
+    slow.with_connection(|connection| {
+        connection.execute(
+            "DELETE FROM sync_checkpoint_cursors WHERE remote_scope = ?1",
+            [REMOTE_SCOPE],
+        )?;
+        Ok(())
+    })
+    .unwrap();
+    *store.get_without_etags.lock().unwrap() = true;
+    // Gateways may omit ETag on GET while preserving it on HEAD. The
+    // metadata must be associated with the same bytes before using its CAS.
+    *store.head_with_etags.lock().unwrap() = true;
+
+    let winning_pointer = Arc::new(Mutex::new(None));
+    let hook_store = store.clone();
+    let hook_fast = fast.clone();
+    let hook_paths = fast_paths.clone();
+    let hook_winner = winning_pointer.clone();
+    *store.after_put.lock().unwrap() = Some((
+        "v1/checkpoints/".to_string(),
+        Box::new(move || {
+            // The slow compactor has validated generation 1 and uploaded its
+            // generation-2 candidate. The other real database now compacts twice,
+            // reaching generation 3 and pruning the slow, losing generation-2 pack.
+            hook_fast
+                .save_item(&text_item("fast-new", "fast new"))
+                .unwrap();
+            hook_fast
+                .with_connection(|connection| {
+                    connection.execute(
+                        "DELETE FROM sync_checkpoint_cursors WHERE remote_scope = ?1",
+                        [REMOTE_SCOPE],
+                    )?;
+                    Ok(())
+                })
+                .unwrap();
+            sync_database(
+                hook_store.as_ref(),
+                &hook_fast,
+                &hook_paths,
+                REMOTE_SCOPE,
+                None,
+                options(),
+            )
+            .unwrap();
+            hook_fast
+                .save_item(&text_item("fast-next", "fast next"))
+                .unwrap();
+            sync_database(
+                hook_store.as_ref(),
+                &hook_fast,
+                &hook_paths,
+                REMOTE_SCOPE,
+                None,
+                options(),
+            )
+            .unwrap();
+            hook_fast
+                .with_connection(|connection| {
+                    connection.execute(
+                        "DELETE FROM sync_checkpoint_cursors WHERE remote_scope = ?1",
+                        [REMOTE_SCOPE],
+                    )?;
+                    Ok(())
+                })
+                .unwrap();
+            let state = hook_fast
+                .get_or_create_sync_remote_state(REMOTE_SCOPE)
+                .unwrap();
+            maybe_compact(
+                hook_store.as_ref(),
+                &hook_fast,
+                &hook_paths,
+                REMOTE_SCOPE,
+                &hook_fast.get_sync_device_id().unwrap(),
+                &state,
+                None,
+                options().resource_limits,
+                ResourceGcMode::Off,
+                &mut SyncEngineResult::default(),
+            )
+            .unwrap();
+            let bytes = hook_store.objects.lock().unwrap()[CHECKPOINT_HEAD_KEY].clone();
+            assert_eq!(decode_checkpoint_head(&bytes, None).unwrap().generation, 3);
+            *hook_winner.lock().unwrap() = Some(bytes);
+            hook_store.deleted.lock().unwrap().clear();
+        }),
+    ));
+    let state = slow.get_or_create_sync_remote_state(REMOTE_SCOPE).unwrap();
+    let mut result = SyncEngineResult::default();
+    maybe_compact(
+        store.as_ref(),
+        &slow,
+        &slow_paths,
+        REMOTE_SCOPE,
+        &slow.get_sync_device_id().unwrap(),
+        &state,
+        None,
+        options().resource_limits,
+        ResourceGcMode::Off,
+        &mut result,
+    )
+    .unwrap();
+
+    let winning_pointer = winning_pointer
+        .lock()
+        .unwrap()
+        .take()
+        .expect("the independent compactor ran");
+    let actual_pointer = store.objects.lock().unwrap()[CHECKPOINT_HEAD_KEY].clone();
+    let fresh = Database::open(&fresh_paths.database).unwrap();
+    let recovered = sync_database(
+        store.as_ref(),
+        &fresh,
+        &fresh_paths,
+        REMOTE_SCOPE,
+        None,
+        options(),
+    );
+    assert!(
+        recovered.is_ok(),
+        "a fresh peer must bootstrap from the retained checkpoint: {recovered:?}"
+    );
+    assert_eq!(
+        decode_checkpoint_head(&actual_pointer, None)
+            .unwrap()
+            .generation,
+        3,
+        "the late compactor cannot regress a successful generation"
+    );
+    assert_eq!(actual_pointer, winning_pointer);
+    assert_eq!(result.deleted_remote_objects, 0);
+    assert!(store.deleted.lock().unwrap().is_empty());
+    for id in [
+        "slow-initial",
+        "fast-initial",
+        "slow-new",
+        "fast-new",
+        "fast-next",
+    ] {
+        assert!(
+            fresh.get_item(id).unwrap().is_some(),
+            "fresh peer must recover {id}"
+        );
+    }
+    drop(fresh);
+    drop(fast);
+    drop(slow);
+    drop(store);
+    for paths in [&slow_paths, fast_paths.as_ref(), &fresh_paths] {
+        fs::remove_dir_all(&paths.project).unwrap();
+    }
+}
+
+#[test]
 fn checkpoint_cas_loser_never_garbage_collects_history() {
     let store = MemoryStore::default();
     let paths = temp_paths("checkpoint-cas-loser");
@@ -85,9 +281,9 @@ fn compaction_survives_stores_that_omit_etags() {
             Ok(())
         })
         .unwrap();
-    // Some S3-compatible stores omit ETag headers on GET responses; compaction
-    // must degrade to an unconditional put instead of failing the whole run.
+    // Recover GET's missing ETag through HEAD and verify its byte identity.
     *store.get_without_etags.lock().unwrap() = true;
+    *store.head_with_etags.lock().unwrap() = true;
 
     let mut result = SyncEngineResult::default();
     maybe_compact(
@@ -168,6 +364,171 @@ fn checkpoint_pointer_must_be_readable_before_garbage_collection() {
         Some(previous_checkpoint)
     );
 
+    drop(database);
+    fs::remove_dir_all(paths.project).unwrap();
+}
+
+#[test]
+fn compaction_without_any_etag_preserves_the_pointer_and_normal_sync() {
+    let store = MemoryStore::default();
+    let paths = temp_paths("no-cas-metadata");
+    let database = Database::open(&paths.database).unwrap();
+    database
+        .save_item(&text_item("initial", "initial"))
+        .unwrap();
+    sync_database(&store, &database, &paths, REMOTE_SCOPE, None, options()).unwrap();
+    let previous_pointer = store.objects.lock().unwrap()[CHECKPOINT_HEAD_KEY].clone();
+    let previous_state = database.get_sync_checkpoint_state(REMOTE_SCOPE).unwrap();
+    *store.get_without_etags.lock().unwrap() = true;
+    *store.head_with_etags.lock().unwrap() = false;
+    database
+        .with_connection(|connection| {
+            connection.execute(
+                "DELETE FROM sync_checkpoint_cursors WHERE remote_scope = ?1",
+                [REMOTE_SCOPE],
+            )?;
+            Ok(())
+        })
+        .unwrap();
+    database.save_item(&text_item("later", "later")).unwrap();
+    store.deleted.lock().unwrap().clear();
+    store.puts.lock().unwrap().clear();
+    let synced = sync_database(&store, &database, &paths, REMOTE_SCOPE, None, options()).unwrap();
+    assert_eq!(synced.uploaded_entries, 1);
+    assert_eq!(database.count_sync_outbox().unwrap(), 0);
+    assert_eq!(
+        store.objects.lock().unwrap()[CHECKPOINT_HEAD_KEY],
+        previous_pointer
+    );
+    assert_eq!(
+        database.get_sync_checkpoint_state(REMOTE_SCOPE).unwrap(),
+        previous_state
+    );
+    assert!(store.deleted.lock().unwrap().is_empty());
+    assert!(!store
+        .puts
+        .lock()
+        .unwrap()
+        .iter()
+        .any(|key| key == CHECKPOINT_HEAD_KEY || key.starts_with("v1/checkpoints/")));
+    drop(database);
+    fs::remove_dir_all(paths.project).unwrap();
+}
+
+#[test]
+fn head_etag_is_not_paired_with_an_older_get_body() {
+    use std::sync::Arc;
+
+    let store = Arc::new(MemoryStore::default());
+    let paths = temp_paths("head-etag-byte-pair");
+    let database = Database::open(&paths.database).unwrap();
+    database
+        .save_item(&text_item("initial", "initial"))
+        .unwrap();
+    sync_database(
+        store.as_ref(),
+        &database,
+        &paths,
+        REMOTE_SCOPE,
+        None,
+        options(),
+    )
+    .unwrap();
+    database.save_item(&text_item("later", "later")).unwrap();
+    sync_database(
+        store.as_ref(),
+        &database,
+        &paths,
+        REMOTE_SCOPE,
+        None,
+        options(),
+    )
+    .unwrap();
+    let old_head =
+        decode_checkpoint_head(&store.objects.lock().unwrap()[CHECKPOINT_HEAD_KEY], None).unwrap();
+    let mut vector = old_head.vector.clone();
+    let peer = "11111111-1111-4111-8111-111111111111";
+    vector.push(DeviceCursor {
+        device_id: peer.to_owned(),
+        epoch: "22222222-2222-4222-8222-222222222222".to_owned(),
+        sequence: 0,
+        last_segment_key: None,
+    });
+    vector.sort_by(|left, right| left.device_id.cmp(&right.device_id));
+    let checkpoint = CheckpointFixture {
+        generation: old_head.generation + 1,
+        vector,
+        mutations: MutationBatch {
+            upserts: vec![replicated_text("new-peer", "new peer", 100, peer)],
+            tombstones: vec![],
+        },
+    };
+    let reference = insert_checkpoint(store.as_ref(), &checkpoint);
+    let new_head = CheckpointHead {
+        generation: checkpoint.generation,
+        checkpoint: reference,
+        vector: checkpoint.vector,
+        previous_checkpoint: Some(old_head.checkpoint),
+        updated_at_ms: 1,
+    };
+    let new_pointer = encode_checkpoint_head(&new_head, None).unwrap().bytes;
+    let hook_store = store.clone();
+    let hook_pointer = new_pointer.clone();
+    *store.get_without_etags.lock().unwrap() = true;
+    *store.head_with_etags.lock().unwrap() = true;
+    // GET captured the old bytes, then a concurrent pointer write finishes.
+    // HEAD returns the new ETag: it must never authorize the old candidate.
+    *store.after_get.lock().unwrap() = Some((
+        CHECKPOINT_HEAD_KEY.to_owned(),
+        Box::new(move || {
+            hook_store
+                .objects
+                .lock()
+                .unwrap()
+                .insert(CHECKPOINT_HEAD_KEY.to_owned(), hook_pointer);
+        }),
+    ));
+    database
+        .with_connection(|connection| {
+            connection.execute(
+                "DELETE FROM sync_checkpoint_cursors WHERE remote_scope = ?1",
+                [REMOTE_SCOPE],
+            )?;
+            Ok(())
+        })
+        .unwrap();
+    let previous_state = database.get_sync_checkpoint_state(REMOTE_SCOPE).unwrap();
+    let state = database
+        .get_or_create_sync_remote_state(REMOTE_SCOPE)
+        .unwrap();
+    store.puts.lock().unwrap().clear();
+    store.deleted.lock().unwrap().clear();
+    let mut result = SyncEngineResult::default();
+    maybe_compact(
+        store.as_ref(),
+        &database,
+        &paths,
+        REMOTE_SCOPE,
+        &database.get_sync_device_id().unwrap(),
+        &state,
+        None,
+        options().resource_limits,
+        ResourceGcMode::Off,
+        &mut result,
+    )
+    .unwrap();
+    assert_eq!(
+        store.objects.lock().unwrap()[CHECKPOINT_HEAD_KEY],
+        new_pointer
+    );
+    assert_eq!(result.bytes_uploaded, 0);
+    assert!(store.puts.lock().unwrap().is_empty());
+    assert!(store.deleted.lock().unwrap().is_empty());
+    assert_eq!(
+        database.get_sync_checkpoint_state(REMOTE_SCOPE).unwrap(),
+        previous_state
+    );
+    drop(store);
     drop(database);
     fs::remove_dir_all(paths.project).unwrap();
 }

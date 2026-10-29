@@ -68,6 +68,15 @@ busy wait is not preempted. The temporary plan is removed on success/failure.
 
 ## Synchronization
 
+Checkpoint pointer replacement always uses create-only or ETag CAS. If GET
+omits its ETag, the compactor reads HEAD and then requires a subsequent GET to
+match the original pointer bytes before pairing that HEAD identity with its
+candidate. A changed pointer or absent ETag defers compaction and its GC without
+failing ordinary metadata sync. Unconditional replacement is unsafe: a delayed
+request can overwrite a newer generation and point at its already-pruned losing
+pack. Independent-Database UTs interleave two real compactions with a delayed
+candidate and verify the winning generation plus fresh-device bootstrap.
+
 Synchronization is split between the Tauri-independent `src-tauri/crates/clipboard-sync/` crate
 and the desktop integration in `src-tauri/src/sync/`:
 
