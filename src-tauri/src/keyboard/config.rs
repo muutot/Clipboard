@@ -72,11 +72,10 @@ impl KeyboardConfigStore {
             match Self::load_and_validate(&path) {
                 Ok(parsed) => parsed,
                 Err(error) => {
-                    // Mirror `ConfigStore::load`: a corrupt or schema-invalid
-                    // file must never make the app unlaunchable. Quarantine it
-                    // and continue from the bundled defaults instead of
-                    // propagating the error into the Tauri setup hook.
-                    Self::quarantine_corrupt(&config_directory, &path, &error);
+                    // Preserve the damaged generation before using defaults,
+                    // matching `ConfigStore::load`. A failed quarantine must
+                    // keep the original and surface the recovery failure.
+                    Self::quarantine_corrupt(&config_directory, &path, &error)?;
                     (KeyboardConfig::default(), false)
                 }
             }
@@ -99,25 +98,22 @@ impl KeyboardConfigStore {
         Ok((config, merged_defaults))
     }
 
-    fn quarantine_corrupt(config_directory: &Path, path: &Path, error: &StorageError) {
-        let stamp = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|elapsed| elapsed.as_secs())
-            .unwrap_or(0);
-        let quarantined =
-            config_directory.join(format!("{KEYBOARD_CONFIG_FILE_NAME}.corrupt-{stamp}"));
+    fn quarantine_corrupt(
+        config_directory: &Path,
+        path: &Path,
+        error: &StorageError,
+    ) -> Result<(), StorageError> {
+        let quarantined = config_directory.join(format!(
+            "{KEYBOARD_CONFIG_FILE_NAME}.corrupt-{}",
+            uuid::Uuid::new_v4()
+        ));
+        fs::rename(path, &quarantined)?;
         crate::log_error!(
             "[keyboard] {} is unreadable ({error}); quarantining it as {} and starting with defaults",
             path.display(),
             quarantined.display()
         );
-        if fs::rename(path, &quarantined).is_err() {
-            // Mirror `ConfigStore::load`: a locked or undeletable rename must
-            // not leave the corrupt file in place — `KeyboardConfigStore::load`
-            // only rewrites when the path is gone, so a failed rename alone
-            // would re-read the same bytes on every launch forever.
-            let _ = fs::remove_file(path);
-        }
+        Ok(())
     }
 
     pub fn path(&self) -> &Path {
@@ -535,6 +531,67 @@ mod tests {
         assert_eq!(store.config().shortcuts["toggleWindow"], vec!["Alt+C"]);
         assert_eq!(quarantine_count(&config_directory), 1);
         fs::remove_dir_all(project).unwrap();
+    }
+
+    #[test]
+    fn quarantines_every_corrupt_generation_without_overwriting_recovery_files() {
+        let project = temporary_directory("corrupt-generations");
+        let config_directory = project.join("conf");
+        fs::create_dir_all(&config_directory).unwrap();
+        let originals = [
+            b"{ damaged one".to_vec(),
+            b"{ damaged two".to_vec(),
+            b"{ damaged three".to_vec(),
+        ];
+        for original in &originals {
+            fs::write(config_directory.join("keyboard.json"), original).unwrap();
+            KeyboardConfigStore::load(&project).unwrap();
+        }
+        let mut recovered = fs::read_dir(&config_directory)
+            .unwrap()
+            .map(Result::unwrap)
+            .filter(|entry| {
+                entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with("keyboard.json.corrupt-")
+            })
+            .map(|entry| fs::read(entry.path()).unwrap())
+            .collect::<Vec<_>>();
+        let mut expected = originals.to_vec();
+        recovered.sort();
+        expected.sort();
+        fs::remove_dir_all(project).unwrap();
+        assert_eq!(recovered, expected);
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn rejects_defaults_when_corrupt_config_cannot_be_quarantined() {
+        use std::os::windows::fs::OpenOptionsExt;
+
+        let project = temporary_directory("corrupt-locked");
+        let config_directory = project.join("conf");
+        fs::create_dir_all(&config_directory).unwrap();
+        let path = config_directory.join("keyboard.json");
+        let original = b"{ damaged but recoverable";
+        fs::write(&path, original).unwrap();
+        // Share reads only: parsing remains possible, but Windows denies both
+        // rename and deletion while this isolated fixture is held open.
+        let held = fs::OpenOptions::new()
+            .read(true)
+            .share_mode(1)
+            .open(&path)
+            .unwrap();
+        let result = KeyboardConfigStore::load(&project);
+        let retained = fs::read(&path).unwrap();
+        drop(held);
+        fs::remove_dir_all(project).unwrap();
+        assert!(
+            result.is_err(),
+            "unquarantined input must not report defaults loaded"
+        );
+        assert_eq!(retained, original);
     }
 
     #[test]
