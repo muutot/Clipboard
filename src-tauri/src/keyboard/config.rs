@@ -154,8 +154,7 @@ impl KeyboardConfigStore {
         let mut updated = self.config.clone();
         updated.shortcuts.insert(action, normalized.clone());
         normalize_and_validate(&mut updated)?;
-        self.config = updated;
-        self.save()?;
+        self.replace_and_save(updated)?;
         Ok(normalized)
     }
 
@@ -167,14 +166,19 @@ impl KeyboardConfigStore {
         let mut updated = self.config.clone();
         updated.shortcuts.insert(action.to_owned(), Vec::new());
         normalize_and_validate(&mut updated)?;
-        self.config = updated;
-        self.save()?;
-        Ok(())
+        self.replace_and_save(updated)
     }
 
     pub fn reset_to_defaults(&mut self) -> Result<(), StorageError> {
-        self.config = KeyboardConfig::default();
-        self.save()?;
+        self.replace_and_save(KeyboardConfig::default())
+    }
+
+    fn replace_and_save(&mut self, updated: KeyboardConfig) -> Result<(), StorageError> {
+        let previous = std::mem::replace(&mut self.config, updated);
+        if let Err(error) = self.save() {
+            self.config = previous;
+            return Err(error);
+        }
         Ok(())
     }
 

@@ -105,6 +105,12 @@ Window-only (main window focused):
 
 ## High-availability constraints
 
+- `KeyboardConfigStore` restores the previous complete config when binding
+  save/delete/reset fails. `KeyboardManager` rebuilds its matcher only after
+  persistence succeeds, so rejected edits cannot leak into reads or a later
+  unrelated save. The manager regressions use real isolated config files and
+  a failed atomic replacement, then verify a later save and reopened matcher.
+
 - One shared message loop for all global actions; `stop()` before every
   rebuild tears down the previous message window so re-registration never
   leaks hotkeys. Startup and refresh both go through a single plan apply
@@ -209,8 +215,8 @@ Window-only (main window focused):
 src/lib/utils/keyboard/shortcut-bindings.test.ts
 src/lib/utils/keyboard/keyboard-actions.test.ts` — registry/defaults parity,
   binding resolution, decision table.
-- `npm run check` for registry/panel/route changes; `npm run lint:rust`
-  and `cargo fmt` for backend changes.
+- During remediation use only the related UT groups above; follow the maintenance
+  workflow for per-commit formatting and one final full verification after all fixes.
 
 ## Change checklist
 

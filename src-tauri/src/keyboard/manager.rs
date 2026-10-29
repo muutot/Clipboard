@@ -69,6 +69,7 @@ mod tests {
 
     use super::KeyboardManager;
     use crate::keyboard::Modifier;
+    use crate::storage::StorageError;
 
     #[test]
     fn saved_bindings_replace_the_active_runtime_matcher() {
@@ -97,6 +98,70 @@ mod tests {
             &["toggleWindow"]
         );
         fs::remove_dir_all(project).unwrap();
+    }
+
+    fn verify_failed_mutation(
+        mutate: impl FnOnce(&mut KeyboardManager) -> Result<(), StorageError>,
+    ) {
+        let project = temporary_directory();
+        let mut manager = KeyboardManager::load(&project).unwrap();
+        manager
+            .set_action_shortcuts("toggleWindow".into(), vec!["Ctrl+Space".into()])
+            .unwrap();
+        let before = manager.config();
+        let path = manager.path();
+        let original_file = project.join("keyboard-before-failure.json");
+        fs::rename(&path, &original_file).unwrap();
+        fs::create_dir(&path).unwrap();
+
+        let result = mutate(&mut manager);
+        let after_failure = manager.config();
+        let matched_after_failure = manager.match_chord([Modifier::Control], "Space").to_vec();
+
+        fs::remove_dir(&path).unwrap();
+        fs::rename(&original_file, &path).unwrap();
+        let disk_after_failure = KeyboardManager::load(&project).unwrap().config();
+        // A later, unrelated window binding must not accidentally commit the
+        // global edit that the failed operation reported as rejected.
+        manager
+            .set_action_shortcuts("focusSearch".into(), vec!["Ctrl+F12".into()])
+            .unwrap();
+        let reopened = KeyboardManager::load(&project).unwrap();
+        let after_later_save = reopened.config();
+        let matched_after_later_save = reopened.match_chord([Modifier::Control], "Space").to_vec();
+        drop(reopened);
+        drop(manager);
+        fs::remove_dir_all(project).unwrap();
+
+        assert!(result.is_err());
+        assert_eq!(after_failure.shortcuts, before.shortcuts);
+        assert_eq!(disk_after_failure.shortcuts, before.shortcuts);
+        assert_eq!(matched_after_failure, vec!["toggleWindow"]);
+        assert_eq!(
+            after_later_save.shortcuts["toggleWindow"],
+            before.shortcuts["toggleWindow"]
+        );
+        assert_eq!(matched_after_later_save, vec!["toggleWindow"]);
+        assert_eq!(after_later_save.shortcuts["focusSearch"], vec!["Ctrl+F12"]);
+    }
+
+    #[test]
+    fn failed_binding_save_keeps_config_matcher_and_later_saves_consistent() {
+        verify_failed_mutation(|manager| {
+            manager
+                .set_action_shortcuts("toggleWindow".into(), vec!["Ctrl+F11".into()])
+                .map(|_| ())
+        });
+    }
+
+    #[test]
+    fn failed_binding_delete_keeps_config_matcher_and_later_saves_consistent() {
+        verify_failed_mutation(|manager| manager.delete_action("toggleWindow".into()));
+    }
+
+    #[test]
+    fn failed_binding_reset_keeps_config_matcher_and_later_saves_consistent() {
+        verify_failed_mutation(KeyboardManager::reset_to_defaults);
     }
 
     fn temporary_directory() -> std::path::PathBuf {
