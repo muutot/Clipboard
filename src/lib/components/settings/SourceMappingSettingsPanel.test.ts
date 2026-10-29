@@ -3,8 +3,13 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import Panel from "./SourceMappingSettingsPanel.svelte";
 import { locale } from "$lib/i18n";
 import * as service from "$lib/services/clipboard";
+import {
+  destroySourceMappingRules,
+  resolveWebSourceName,
+} from "$lib/services/source-mapping.svelte";
 
 vi.mock("$lib/services/runtime", () => ({ isTauriRuntime: () => true }));
+vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}) }));
 vi.mock("$lib/services/clipboard", () => ({
   getSourceMappingRules: vi.fn(),
   setSourceMappingRules: vi.fn(),
@@ -35,6 +40,7 @@ beforeEach(async () => {
 });
 afterEach(async () => {
   await unmount(component);
+  destroySourceMappingRules();
   target.remove();
   vi.clearAllMocks();
 });
@@ -46,22 +52,35 @@ it("hydrates saved rules and saves trimmed snapshots with success feedback", asy
   input.dispatchEvent(new Event("input", { bubbles: true }));
   await settle();
   button("Save rules").click();
-  await settle();
+  await vi.waitFor(() => expect(feedback).toHaveBeenCalledWith("Source mapping rules saved", true));
   expect(service.setSourceMappingRules).toHaveBeenCalledWith([
     { domain: "example.com", titleKeyword: "Pull Request", name: "GitHub PRs" },
   ]);
-  expect(feedback).toHaveBeenCalledWith("Source mapping rules saved", true);
 });
 it("removes rules and reports save failures through feedback", async () => {
   target.querySelector<HTMLButtonElement>(".mapping-remove")!.click();
   await settle();
   button("Save rules").click();
-  await settle();
+  await vi.waitFor(() => expect(feedback).toHaveBeenCalledWith("Source mapping rules saved", true));
   expect(service.setSourceMappingRules).toHaveBeenCalledWith([]);
   vi.mocked(service.setSourceMappingRules).mockRejectedValueOnce(new Error("disk unavailable"));
   button("Add rule").click();
   await settle();
   button("Save rules").click();
+  await vi.waitFor(() => expect(feedback).toHaveBeenCalledWith("disk unavailable", false));
+});
+
+it("refreshes names from the backend when an older save response arrives late", async () => {
+  let finishSave!: (rules: service.SourceMappingRule[]) => void;
+  const saved = new Promise<service.SourceMappingRule[]>((resolve) => (finishSave = resolve));
+  vi.mocked(service.setSourceMappingRules).mockReturnValueOnce(saved);
+  button("Save rules").click();
   await settle();
-  expect(feedback).toHaveBeenCalledWith("disk unavailable", false);
+  const latest = { ...rule, name: "Latest rules from another window" };
+  vi.mocked(service.getSourceMappingRules).mockResolvedValue([latest]);
+  finishSave([rule]);
+  await vi.waitFor(() => expect(feedback).toHaveBeenCalledWith("Source mapping rules saved", true));
+  expect(resolveWebSourceName({ sourceApp: "Chrome", webSource: { domain: "github.com" } })).toBe(
+    latest.name,
+  );
 });

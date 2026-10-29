@@ -1,5 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { refreshSourceMappingRules, resolveWebSourceName } from "./source-mapping.svelte";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { getSourceMappingRules } from "$lib/services/clipboard";
+import { createSourceMappingStore, type SourceMappingStore } from "./source-mapping.svelte";
 import type { WebSourceMetadata } from "$lib/types/clipboard";
 
 vi.mock("$lib/services/clipboard", () => ({
@@ -11,24 +12,33 @@ const item = (webSource?: WebSourceMetadata, sourceApp = "Google Chrome") => ({
   webSource,
 });
 
+let store: SourceMappingStore;
+const resolveWebSourceName = (capture: Parameters<SourceMappingStore["resolveWebSourceName"]>[0]) =>
+  store.resolveWebSourceName(capture);
 beforeEach(() => {
-  refreshSourceMappingRules([]);
+  store = createSourceMappingStore();
+  vi.mocked(getSourceMappingRules).mockResolvedValue([]);
 });
+afterEach(() => store.destroy());
 
 describe("resolveWebSourceName", () => {
-  it("prefers the first matching user rule over built-ins", () => {
-    refreshSourceMappingRules([
+  it("prefers the first matching user rule over built-ins", async () => {
+    vi.mocked(getSourceMappingRules).mockResolvedValue([
       { domain: "", titleKeyword: "Rust", name: "Rust pages" },
       { domain: "github.com", titleKeyword: "", name: "GH" },
     ]);
+    await store.refresh();
     expect(resolveWebSourceName(item({ title: "Rust repo", domain: "github.com" }))).toBe(
       "Rust pages",
     );
     expect(resolveWebSourceName(item({ title: "Issue", domain: "github.com" }))).toBe("GH");
   });
 
-  it("matches rule domains on the stored domain or its subdomains", () => {
-    refreshSourceMappingRules([{ domain: "example.com", titleKeyword: "", name: "Example" }]);
+  it("matches rule domains on the stored domain or its subdomains", async () => {
+    vi.mocked(getSourceMappingRules).mockResolvedValue([
+      { domain: "example.com", titleKeyword: "", name: "Example" },
+    ]);
+    await store.refresh();
     expect(resolveWebSourceName(item({ title: "T", domain: "example.com" }))).toBe("Example");
     expect(resolveWebSourceName(item({ title: "T", domain: "docs.example.com" }))).toBe("Example");
     expect(resolveWebSourceName(item({ title: "T", domain: "notexample.com" }))).not.toBe(

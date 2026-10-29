@@ -77,9 +77,19 @@ Do not silently return `null` from a new wrapper unless the caller can distingui
 ## Background operation monitors
 
 `source-mapping.svelte.ts` is the module store behind web-source display names.
-It loads `sourceMapping.rules` once per session (`get_source_mapping_rules`;
-the Web-source settings panel pushes saved rules back via
-`refreshSourceMappingRules` so cards update without a restart) and exposes
+The root `+layout.ts` awaits `ensureSourceMappingRules` before first render;
+`+layout.svelte` calls `destroySourceMappingRules` on teardown. Each window
+registers `source-mapping-rules-changed` before reading `sourceMapping.rules`
+through `get_source_mapping_rules`. The event carries only an invalidation;
+`refreshSourceMappingRules()` also re-reads the backend after a panel save,
+so a late save response cannot roll the shared cache back. Reads coalesce,
+and a notification during a read discards that snapshot and requests a fresh
+one before awaiting callers settle. Failed loads/listener registrations can
+be retried; a new registration rehydrates changes missed while disconnected.
+Destroy invalidates in-flight reads and releases even a late registration.
+`createSourceMappingStore` supplies independent caches for lifecycle tests;
+the mounted `source-mapping.probe.svelte` verifies derived-name reactivity.
+The service exposes
 `resolveWebSourceName(item)`: first matching user rule (domain suffix match or
 title-keyword substring), then a built-in well-known-domain name, then the
 page title truncated to 24 characters, then the raw source app. Browser
@@ -122,6 +132,7 @@ Events currently crossing windows/runtime include:
 - `clipboard-item-added`
 - `clipboard-history-invalidated`
 - `general-settings-changed`
+- `source-mapping-rules-changed`
 - `settings-font-changed`
 - `tray-open-settings`
 - `onboarding-replay-requested`

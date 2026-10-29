@@ -125,6 +125,15 @@ materialization uses the cached binding and retains legacy lookup before upgrade
 
 `ConfigStore` loads and saves `<project>/conf/conf.json`. Preserve the responsibility boundary: changing the data directory must not move `conf/`. An unparsable configuration is moved to a unique `conf.json.corrupt-<uuid>` before defaults are loaded. If quarantine fails, loading returns an error and preserves the original; it must never delete the only recovery copy or claim defaults were saved. Successful quarantine writes fresh defaults. Every setter that does not manage extra state persists through `mutate_and_save`, which snapshots the config and restores it when the write fails, so a failed save cannot leave the running app on an unpersisted value; `set_general_settings`, `set_ocr_settings`, and `set_sync_config` keep their own snapshot/restore because they also touch `general_settings_present` or encrypt secrets.
 
+Source mapping is a separate config group: `set_source_mapping_rules` takes an
+injected `AppHandle` and emits `source-mapping-rules-changed` with a null payload
+after normalized rules are durably saved and the config lock is released. Failed
+saves retain the previous rules and emit nothing; emit failures are logged without
+reversing a successful save. The event invalidates every window's cache, which
+re-reads `get_source_mapping_rules` instead of applying an event or save-response
+snapshot. Root-layout initialization subscribes before hydration and teardown
+discards pending reads/releases listeners, including late registrations.
+
 ### General settings
 
 `customCssEnabled: boolean` and `customCss: string` default to false/empty and are typed
@@ -279,6 +288,7 @@ a successfully committed operation can win a late cancellation race.
 | `clipboard-items-changed`       | item-level mutators (favorite, tags, inline text edit, file rename, soft delete, restore, permanent delete, and the batch forms) | main route and float panel fold the change into their own item stores                                                                  |
 | `clipboard-history-invalidated` | destructive storage-kind operation; file import (`import_from_file`); v1 remote apply (`sync_now`)                               | main route removes IDs and resets affected pagination/search state; settings window refreshes storage stats                            |
 | `general-settings-changed`      | authoritative config save                                                                                                        | settings stores in other WebviewWindows                                                                                                |
+| `source-mapping-rules-changed`  | successful `set_source_mapping_rules` persistence (null payload)                                                                 | source-mapping caches in every window re-read the latest rules                                                                         |
 | `settings-font-changed`         | font panel                                                                                                                       | main route live font/display synchronization                                                                                           |
 | `tags-changed`                  | tag management panel, or main-window `TagEditDialog` (rename/delete/color)                                                       | main route refreshes tag colors and rewrites item tags/filter; settings tag panel refreshes its list (skipping self-originated events) |
 | `tray-open-settings`            | tray backend                                                                                                                     | main route opens settings                                                                                                              |

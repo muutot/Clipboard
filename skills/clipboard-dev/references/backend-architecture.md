@@ -238,6 +238,13 @@ a missing rescale misaligns those overlays on downscaled OCR inputs.
 
 ## Capture, content, and self-trigger suppression
 
+`commands/config/misc.rs::set_source_mapping_rules` broadcasts a null
+`source-mapping-rules-changed` invalidation only after a successful config save,
+with the mutex released. Receivers read the current rules rather than trusting
+a delayed config snapshot. The shared save helper tests disk/memory ordering
+and the no-notification rollback path; native multi-WebView delivery remains a
+separate runtime check.
+
 The content-dedup upsert in `storage/repository/helpers.rs::insert_item_row` treats text/link `web` metadata as one value owned by the latest capture: it removes the old blob before merging incoming metadata, or clears it when none arrives. This prevents non-browser recaptures and pages without SourceURL from inheriting an old URL/domain while retaining user tags, custom titles and unrelated root metadata. The saved record and derived tag mirror commit together; image/file metadata retains its existing merge policy.
 
 Currency quick actions retain the complete digit/separator sequence from the
@@ -383,7 +390,7 @@ Local filesystem calls and a single SQLite busy wait remain non-preemptible.
 - keep business logic in focused modules and `lib.rs` as the boundary;
 - return explicit errors through Tauri and avoid partial cross-resource updates;
 - add focused Rust tests for repository, schema, hash, cache, worker, and path invariants;
-- run `cargo fmt`, focused tests, full Rust tests, and Clippy;
+- follow the maintenance workflow: focused UTs per fix, then the full verification gate after all fixes;
 - update this reference and `data-contracts.md` when runtime ownership or cross-layer contracts change.
 
 ### Portable backups and file staging

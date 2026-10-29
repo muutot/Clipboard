@@ -194,12 +194,29 @@ pub fn get_source_mapping_rules(
 
 #[tauri::command]
 pub fn set_source_mapping_rules(
+    app: tauri::AppHandle,
     config: tauri::State<'_, Mutex<ConfigStore>>,
     rules: Vec<crate::config::SourceMappingRule>,
 ) -> Result<Vec<crate::config::SourceMappingRule>, String> {
-    lock_state(&config, "configuration lock is poisoned")?
+    save_source_mapping_rules(config.inner(), rules, || {
+        if let Err(error) = app.emit("source-mapping-rules-changed", ()) {
+            crate::log_error!("[config] failed to emit source mapping rules change: {error}");
+        }
+    })
+}
+
+fn save_source_mapping_rules(
+    config: &Mutex<ConfigStore>,
+    rules: Vec<crate::config::SourceMappingRule>,
+    notify: impl FnOnce(),
+) -> Result<Vec<crate::config::SourceMappingRule>, String> {
+    let saved = lock_state(&config, "configuration lock is poisoned")?
         .set_source_mapping_rules(rules)
-        .map_err(|error| error.to_string())
+        .map_err(|error| error.to_string())?;
+    // A notification is an invalidation signal, not a possibly stale config
+    // snapshot. Release the config lock before listeners re-read the latest rules.
+    notify();
+    Ok(saved)
 }
 
 fn compiled_preview_rules(
@@ -461,8 +478,8 @@ pub fn set_clipboard_ignored_apps(
 
 #[cfg(test)]
 mod tests {
-    use super::{apply_ignored_applications, preview_auto_tag_rules};
-    use crate::config::{AutoTagRule, ConfigStore};
+    use super::{apply_ignored_applications, preview_auto_tag_rules, save_source_mapping_rules};
+    use crate::config::{AutoTagRule, ConfigStore, SourceMappingRule};
     use crate::domain::ClipboardKind;
     use crate::platform::ClipboardMonitor;
     use crate::privacy::PrivacyManager;
@@ -494,6 +511,65 @@ mod tests {
             source_app: source_app.to_owned(),
             kind,
         }
+    }
+
+    #[test]
+    fn source_mapping_notifies_only_after_normalized_rules_are_persisted() {
+        let (root, config) = config_fixture("source-mapping-save");
+        let expected = vec![SourceMappingRule {
+            domain: "example.com".into(),
+            title_keyword: "Topic".into(),
+            name: "Example".into(),
+        }];
+        let mut notified = false;
+        let saved = save_source_mapping_rules(
+            &config,
+            vec![SourceMappingRule {
+                domain: " Example.COM ".into(),
+                title_keyword: " Topic ".into(),
+                name: " Example ".into(),
+            }],
+            || {
+                notified = true;
+                // Both reads would expose a premature notification; taking
+                // the mutex here also proves it is released before notifying.
+                assert_eq!(config.lock().unwrap().source_mapping_rules(), expected);
+                assert_eq!(
+                    ConfigStore::load(&root).unwrap().source_mapping_rules(),
+                    expected
+                );
+            },
+        )
+        .unwrap();
+        assert!(notified);
+        assert_eq!(saved, expected);
+        drop(config);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn source_mapping_save_failure_keeps_rules_and_does_not_notify() {
+        let (root, config) = config_fixture("source-mapping-failure");
+        let original = vec![SourceMappingRule {
+            domain: "example.com".into(),
+            title_keyword: String::new(),
+            name: "Original".into(),
+        }];
+        config
+            .lock()
+            .unwrap()
+            .set_source_mapping_rules(original.clone())
+            .unwrap();
+        let path = config.lock().unwrap().path().to_owned();
+        fs::remove_file(&path).unwrap();
+        fs::create_dir(&path).unwrap();
+        let mut notified = false;
+        let result = save_source_mapping_rules(&config, Vec::new(), || notified = true);
+        assert!(result.is_err());
+        assert!(!notified);
+        assert_eq!(config.lock().unwrap().source_mapping_rules(), original);
+        drop(config);
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

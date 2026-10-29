@@ -58,8 +58,9 @@
       }));
       const saved = await setSourceMappingRules(snapshot);
       rules = saved ?? rules;
-      // Keep the card/detail resolver in sync without an app restart.
-      if (saved) refreshSourceMappingRules(saved);
+      // Another window may have saved newer rules while this response was in
+      // flight. Refresh from the backend rather than publishing this snapshot.
+      await refreshSourceMappingRules();
       onfeedback(_t("sourceMapping.saved"), true);
     } catch (error) {
       onfeedback(error instanceof Error ? error.message : String(error), false);

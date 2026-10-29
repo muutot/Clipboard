@@ -5,13 +5,16 @@
   import "../app.css";
   import "$lib/styles/settings-shared.css";
   import { generalSettings } from "$lib/services/settings";
+  import { destroySourceMappingRules } from "$lib/services/source-mapping.svelte";
   import { applyGeneralSettingsToDocument } from "$lib/services/settings-bootstrap";
   import { isTauriRuntime } from "$lib/services/runtime";
   import { applyCustomCss, isCustomCssRecoveryShortcut } from "$lib/utils/settings/custom-css";
   import AppContextMenu from "$lib/components/common/AppContextMenu.svelte";
-  import { onMount } from "svelte";
+  import { onDestroy, onMount } from "svelte";
 
   let { children } = $props();
+
+  onDestroy(destroySourceMappingRules);
 
   onMount(() => {
     const settings = get(generalSettings);

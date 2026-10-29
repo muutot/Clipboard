@@ -6,9 +6,10 @@
 // well-known-domain name → a truncated page title → the source app name.
 //
 // Rules live in the sourceMapping config group (edited in the Capture → Web
-// source settings panel) and are loaded once per session into this module
-// store; the settings panel refreshes the cache after saving.
+// source settings panel). Every window subscribes before loading them, then
+// re-reads the persisted rules after a save notification.
 
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getSourceMappingRules, type SourceMappingRule } from "$lib/services/clipboard";
 import { isTauriRuntime } from "$lib/services/runtime";
 import type { WebSourceMetadata } from "$lib/types/clipboard";
@@ -34,28 +35,6 @@ const BUILTIN_DOMAIN_NAMES = new Map(
   BUILTIN_DOMAIN_SPEC.split(/\s+/).map((entry) => entry.split("=") as [string, string]),
 );
 
-let rules = $state<SourceMappingRule[]>([]);
-let rulesLoaded = false;
-
-if (isTauriRuntime()) void ensureSourceMappingRules();
-
-/** Loads the persisted rules once; later calls are no-ops. */
-export async function ensureSourceMappingRules(): Promise<void> {
-  if (rulesLoaded) return;
-  rulesLoaded = true;
-  try {
-    rules = (await getSourceMappingRules()) ?? [];
-  } catch (error) {
-    console.error("Unable to load source mapping rules", error);
-  }
-}
-
-/** Replaces the cached rules; used after the settings panel saves. */
-export function refreshSourceMappingRules(value: SourceMappingRule[]): void {
-  rules = value;
-  rulesLoaded = true;
-}
-
 function matchesDomain(domain: string, pattern: string): boolean {
   const normalized = pattern.trim().toLocaleLowerCase();
   return domain === normalized || domain.endsWith(`.${normalized}`);
@@ -68,14 +47,13 @@ function truncateTitle(title: string): string {
   return `${chars.slice(0, WEB_TITLE_MAX_LENGTH).join("")}…`;
 }
 
-/**
- * Short display name for a capture: the first matching user rule, else a
- * built-in domain name, else the truncated page title, else the source app.
- */
-export function resolveWebSourceName(item: {
+interface WebSourceItem {
   sourceApp: string;
   webSource?: WebSourceMetadata;
-}): string {
+}
+
+/** Resolves the first user rule, built-in name, page title, or source app. */
+function resolveName(item: WebSourceItem, rules: SourceMappingRule[]): string {
   const web = item.webSource;
   if (!web) return item.sourceApp;
 
@@ -95,3 +73,126 @@ export function resolveWebSourceName(item: {
   if (web.title) return truncateTitle(web.title);
   return item.sourceApp;
 }
+
+/** One window's reactive cache, with a listener and reads owned by its lifecycle. */
+export function createSourceMappingStore() {
+  let rules = $state.raw<SourceMappingRule[]>([]);
+  let loaded = false;
+  let lifecycle = 0;
+  let refreshRequested = false;
+  let unlisten: UnlistenFn | undefined;
+  let pendingListen: Promise<void> | undefined;
+  let pendingRead: Promise<void> | undefined;
+
+  function reload(): Promise<void> {
+    loaded = false;
+    refreshRequested = true;
+    if (pendingRead) return pendingRead;
+    const currentLifecycle = lifecycle;
+    pendingRead = Promise.resolve().then(async () => {
+      try {
+        while (currentLifecycle === lifecycle && refreshRequested) {
+          refreshRequested = false;
+          try {
+            const saved = await getSourceMappingRules();
+            if (currentLifecycle !== lifecycle) return;
+            // A notification during this read invalidates its snapshot. Read
+            // again before publishing, and let every awaiting caller settle on it.
+            if (!refreshRequested) {
+              rules = (saved ?? []).map((rule) => ({ ...rule }));
+              loaded = true;
+            }
+          } catch (error) {
+            if (currentLifecycle !== lifecycle) return;
+            if (!refreshRequested) throw error;
+          }
+        }
+      } finally {
+        if (currentLifecycle === lifecycle) pendingRead = undefined;
+      }
+    });
+    return pendingRead;
+  }
+
+  function ensureListener(): Promise<void> {
+    if (!isTauriRuntime() || unlisten) return Promise.resolve();
+    if (pendingListen) return pendingListen;
+    const currentLifecycle = lifecycle;
+    pendingListen = listen<null>("source-mapping-rules-changed", () => {
+      if (currentLifecycle !== lifecycle) return;
+      void reload().catch((error) =>
+        console.error("Unable to refresh source mapping rules", error),
+      );
+    })
+      .then((release) => {
+        if (currentLifecycle !== lifecycle) release();
+        else {
+          unlisten = release;
+          // Changes may have been missed while registration was unavailable.
+          loaded = false;
+        }
+      })
+      .finally(() => {
+        if (currentLifecycle === lifecycle) pendingListen = undefined;
+      });
+    return pendingListen;
+  }
+
+  async function prepareListener(): Promise<void> {
+    const currentLifecycle = lifecycle;
+    try {
+      await ensureListener();
+    } catch (error) {
+      if (currentLifecycle === lifecycle) {
+        console.error("Unable to listen for source mapping changes", error);
+      }
+    }
+  }
+
+  async function initialize(): Promise<void> {
+    const currentLifecycle = lifecycle;
+    await prepareListener();
+    if (currentLifecycle !== lifecycle || loaded) return;
+    try {
+      await (pendingRead ?? reload());
+    } catch (error) {
+      if (currentLifecycle === lifecycle) {
+        console.error("Unable to load source mapping rules", error);
+      }
+    }
+  }
+
+  async function refresh(): Promise<void> {
+    const currentLifecycle = lifecycle;
+    await prepareListener();
+    if (currentLifecycle === lifecycle) await reload();
+  }
+
+  function destroy(): void {
+    lifecycle += 1;
+    unlisten?.();
+    unlisten = undefined;
+    pendingListen = undefined;
+    pendingRead = undefined;
+    refreshRequested = false;
+    loaded = false;
+    rules = [];
+  }
+
+  return {
+    initialize,
+    refresh,
+    destroy,
+    resolveWebSourceName: (item: WebSourceItem) => resolveName(item, rules),
+  };
+}
+
+export type SourceMappingStore = ReturnType<typeof createSourceMappingStore>;
+const sourceMapping = createSourceMappingStore();
+
+/** Subscribes before hydration; failed reads or registrations can be retried. */
+export const ensureSourceMappingRules = sourceMapping.initialize;
+/** Re-reads authoritative rules; save responses never replace the shared cache. */
+export const refreshSourceMappingRules = sourceMapping.refresh;
+export const destroySourceMappingRules = sourceMapping.destroy;
+export const resolveWebSourceName = sourceMapping.resolveWebSourceName;
