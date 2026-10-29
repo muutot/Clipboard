@@ -167,6 +167,13 @@ Portable backup wrappers in storage.ts: createResourceBackup(path), previewResou
 
 Main-route controllers receive live settings/query/filter getters and a shared ItemStoreView. Search flushes settings before the first request and owns debounce/request generations. History owns keyset/recycle-bin pagination and suppressed IDs. Bulk operations use the existing affected-item rollback helpers. window-lifecycle owns native listeners and the settings subscription, while window-bounds retains geometry debounce/restore logic.
 
+The main route reconciles delayed detail hydration with the current store record,
+merging only body fields with a matching returned content hash and preserving later
+metadata or an already loaded body. Float-only pending requests track item/tag/capture
+updates and delete invalidations separately until entering the detail view. Late
+materialization may replace the whole row only if the original immutable store
+object is still current; stale completion is discarded and can be retried.
+
 ## Search interaction diagnostics
 
 `controllers/search.svelte.ts` starts `utils/search/search-paint-latency.ts` when the search

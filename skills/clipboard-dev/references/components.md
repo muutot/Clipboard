@@ -45,6 +45,17 @@ Float deletion follows `generalSettings.useRecycleBin`: soft delete while enable
 
 The `detail` click action shows the main window and sends `clipboard-open-detail` with the view record. The main route reuses its detail/materialization path even when that record is absent from its current history filter; opening details must never overwrite the clipboard. `src/routes/main-detail.test.ts` mounts the real main route and verifies that a float-only record opens without being added to history.
 
+Pending detail hydration keeps a request-scoped snapshot for float-only records;
+capture/item/tag events update it, and delete/invalidation events cancel it even
+before it enters the item store. Known rows are reconciled against their latest
+store value: hydration adds body fields only when the returned hash matches and
+preserves newer metadata/full content. A removed row cannot be reinserted by a
+late response. Closing, switching requests and unmounting invalidate completion.
+Media materialization replaces a record only while its original immutable store
+object remains current; an intervening edit/deletion discards the response and
+leaves the current row available for retry. Mounted tests exercise delayed text
+and media responses with edits, favorites, deletion and float-only events.
+
 ### `CardActions.svelte`
 
 The card's hover-revealed action row plus the quick-copy shortcut badge. Props: `item`, `index`, `quickCopyBadgeAlwaysVisible`, `contentActions` (the deduped quick actions), `dateViewIso` (for the date popover's `aria-expanded`), `canEdit`, `canRestore`, and `onquickaction`/`onrunaction`/`onsaveas` callbacks. It owns the `.actions`/`.actions button`/`.shortcut` base styles; `ClipboardCard` keeps the reveal/visibility rules (`.clip-card:hover :global(.actions)` etc.) and the narrow-width `:global(.actions) { display: none }` because they key off card state. The action-id union lives in `types/clipboard.ts` (`CARD_ACTION_IDS`/`CardActionId`) so the row and the card's context-menu handler stay in sync. The quick-copy badge prints the built-in `Ctrl+1`-`Ctrl+9` default chords (the literal Control key on every platform) instead of the macOS Cmd glyph; it is a static label and does not follow a rebind of `quickCopy<N>`.

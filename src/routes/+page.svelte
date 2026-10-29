@@ -188,16 +188,20 @@
   async function ensureItemMaterialized(item: ClipboardItem): Promise<ClipboardItem> {
     item = await ensureItemHydrated(item);
     if (item.kind !== "image" && item.kind !== "file") return item;
-    return replaceMaterializedItem(await materializeClipboardItem(item));
+    const expected = findLoadedItem(item.id);
+    const materialized = await materializeClipboardItem(item);
+    // Materialization returns a whole record. A later edit/deletion must win
+    // instead of being replaced by that older database read.
+    if (!expected || findLoadedItem(item.id) !== expected)
+      throw new Error("Clipboard record changed while loading");
+    return replaceMaterializedItem(materialized);
   }
 
-  async function ensureItemHydrated(item: ClipboardItem): Promise<ClipboardItem> {
-    if (item.contentLoaded !== false) return item;
-    const full = await hydrateClipboardItem(item);
-    const current = findLoadedItem(item.id);
-    if (!current || current.contentHash !== item.contentHash)
+  function mergeHydratedItem(current: ClipboardItem, full: ClipboardItem): ClipboardItem {
+    if (current.contentLoaded !== false) return current;
+    if (current.contentHash !== full.contentHash)
       throw new Error("Clipboard record changed while loading");
-    const updated = {
+    return {
       ...current,
       textContent: full.textContent,
       htmlContent: full.htmlContent,
@@ -207,7 +211,15 @@
       searchableText: full.searchableText,
       sizeLabel: full.sizeLabel,
     };
-    return replaceMaterializedItem(updated);
+  }
+
+  async function ensureItemHydrated(item: ClipboardItem): Promise<ClipboardItem> {
+    if (item.contentLoaded !== false) return item;
+    const full = await hydrateClipboardItem(item);
+    const current = findLoadedItem(item.id);
+    if (!current || current.contentHash !== item.contentHash)
+      throw new Error("Clipboard record changed while loading");
+    return replaceMaterializedItem(mergeHydratedItem(current, full));
   }
 
   function prepareItemMaterialization(id: string) {
@@ -330,6 +342,14 @@
   // Guards the async materialization in `openDetail`: a late result must not
   // reopen a panel the user already closed or replaced with another item.
   let detailRequestId = 0;
+  let pendingDetail: { id: string; item: ClipboardItem } | null = null;
+
+  function invalidatePendingDetail(ids: readonly string[]) {
+    if (pendingDetail && ids.includes(pendingDetail.id)) {
+      detailRequestId += 1;
+      pendingDetail = null;
+    }
+  }
   // Same guard for `handleImageFullscreen`: a slow download must not replace a
   // newer fullscreen image or reopen a closed viewer.
   let fullscreenRequestId = 0;
@@ -796,6 +816,7 @@
 
     const unlisten = listen<PersistedClipboardItem>("clipboard-item-added", (event) => {
       const newItem = toClipboardItem(event.payload);
+      if (pendingDetail?.id === newItem.id) pendingDetail.item = newItem;
       // Re-copying an existing entry is de-duplicated on (kind, content_hash)
       // and keeps the same row id with a refreshed last_used_at_ms (the
       // original created_at_ms stays frozen), but list order follows view
@@ -821,6 +842,7 @@
     const unlistenHistoryInvalidated = listen<ClipboardHistoryInvalidation>(
       "clipboard-history-invalidated",
       (event) => {
+        invalidatePendingDetail(event.payload.deletedIds);
         const removedIds = new Set(event.payload.deletedIds);
         // An external mutation can invalidate records whose IDs we do not know.
         itemStore.current = clearView(itemStore.current, "cache");
@@ -854,6 +876,9 @@
         // harmless: the payload is the stored row, so it equals the optimistic
         // state this window already shows.
         const payload = event.payload;
+        invalidatePendingDetail([...(payload.deletedIds ?? []), ...(payload.removedIds ?? [])]);
+        const pendingUpdate = payload.items?.find((record) => record.id === pendingDetail?.id);
+        if (pendingDetail && pendingUpdate) pendingDetail.item = toClipboardItem(pendingUpdate);
         if (
           payload.items?.length ||
           payload.deletedIds?.length ||
@@ -943,6 +968,7 @@
       // the detail pane the way a hand-rolled per-copy loop once did.
       const transform = (entry: ClipboardItem) =>
         renamed ? rewriteItemTags(entry, renamed.old, renamed.new) : removeItemTag(entry, deleted!);
+      if (pendingDetail) pendingDetail.item = transform(pendingDetail.item);
       const patches = new Map<string, Partial<ClipboardItem>>();
       for (const entry of itemStore.current.byId.values()) {
         const rewritten = transform(entry);
@@ -988,6 +1014,9 @@
     });
 
     return () => {
+      detailRequestId += 1;
+      pendingDetail = null;
+      fullscreenRequestId += 1;
       document.fonts?.removeEventListener("loadingdone", invalidateFonts);
       windowLifecycle.dispose();
       window.clearInterval(clock);
@@ -1430,29 +1459,42 @@
   async function openDetail(id: string, requestedItem?: ClipboardItem) {
     // Another window may show an item outside this window's current filter
     // or loaded pages. It belongs to the detail view, not the history list.
-    let item = findLoadedItem(id) ?? requestedItem;
+    const loaded = findLoadedItem(id);
+    let item = loaded ?? requestedItem;
     if (!item) return;
     const requestId = ++detailRequestId;
-    if (item.contentLoaded === false) {
-      try {
-        item = await hydrateClipboardItem(item);
-      } catch (error) {
-        console.error("Unable to load clipboard detail", error);
-        showToast(_t("toast.copyFailed"), "error");
-        return;
+    const pending = { id, item };
+    pendingDetail = pending;
+    try {
+      if (item.contentLoaded === false) {
+        const full = await hydrateClipboardItem(item);
+        if (requestId !== detailRequestId) return;
+        const current = findLoadedItem(id);
+        // A known row that left every view must not be resurrected by an old
+        // read. Float-only requests keep their latest event snapshot separately.
+        if (loaded && !current) return;
+        const latest = current ?? pending.item;
+        if (!item.deleted && latest.deleted) return;
+        item = mergeHydratedItem(latest, full);
       }
       if (requestId !== detailRequestId) return;
-    }
-    itemStore.current = setDetailItem(itemStore.current, item);
-    if (item.kind === "image" || item.kind === "file") {
-      try {
-        const materialized = await ensureItemMaterialized(item);
-        if (requestId === detailRequestId && detailItem?.id === id) {
-          itemStore.current = setDetailItem(itemStore.current, materialized);
+      itemStore.current = setDetailItem(itemStore.current, item);
+      if (item.kind === "image" || item.kind === "file") {
+        try {
+          const materialized = await ensureItemMaterialized(item);
+          if (requestId === detailRequestId && detailItem?.id === id) {
+            itemStore.current = setDetailItem(itemStore.current, materialized);
+          }
+        } catch (error) {
+          console.error("Unable to materialize clipboard item for detail", error);
         }
-      } catch (error) {
-        console.error("Unable to materialize clipboard item for detail", error);
       }
+    } catch (error) {
+      if (requestId !== detailRequestId) return;
+      console.error("Unable to load clipboard detail", error);
+      showToast(_t("toast.copyFailed"), "error");
+    } finally {
+      if (pendingDetail === pending) pendingDetail = null;
     }
   }
 
@@ -1495,6 +1537,7 @@
 
   function closeDetail() {
     detailRequestId += 1;
+    pendingDetail = null;
     itemStore.current = setDetailItem(itemStore.current, null);
     void tick().then(() => {
       const el = document.querySelector(`[data-id="${selectedId}"]`);
