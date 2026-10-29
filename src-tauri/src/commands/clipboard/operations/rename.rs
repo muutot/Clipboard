@@ -33,6 +33,22 @@ pub(super) fn rename_item_record(
     id: String,
     new_name: String,
 ) -> Result<ClipboardItem, String> {
+    rename_item_record_with_move(database, paths, id, new_name, |from, to| {
+        std::fs::rename(from, to)
+    })
+}
+
+fn rename_item_record_with_move(
+    database: &Database,
+    paths: &StoragePaths,
+    id: String,
+    new_name: String,
+    move_file: impl FnOnce(&std::path::Path, &std::path::Path) -> std::io::Result<()>,
+) -> Result<ClipboardItem, String> {
+    // The maintenance mutex is local to one instance. Keep publication active
+    // through the DB-first move and any rollback so other instances cannot
+    // delete the temporarily unreferenced old path after save_item returns.
+    let _publication = database.begin_resource_write().map_err(|e| e.to_string())?;
     let items = database
         .get_items_by_ids(std::slice::from_ref(&id))
         .map_err(|e| e.to_string())?;
@@ -107,7 +123,7 @@ pub(super) fn rename_item_record(
                     // `resource_path`, so those copies must move with the file.
                     rewrite_stored_resource_paths(&mut updated, &old_path_string, &new_path_string);
                     database.save_item(&updated).map_err(|e| e.to_string())?;
-                    if let Err(e) = std::fs::rename(old, &new_path) {
+                    if let Err(e) = move_file(old, &new_path) {
                         database.save_item(&rollback).map_err(|rollback_error| {
                             format!(
                                 "rename failed ({e}) and the database rollback also failed ({rollback_error})"
@@ -152,6 +168,105 @@ pub(super) fn rename_item_record(
     }
     database.save_item(&updated).map_err(|e| e.to_string())?;
     Ok(updated)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rename_preserves_the_old_file_until_move_or_rollback_finishes() {
+        for fail_move in [false, true] {
+            let root = std::env::temp_dir()
+                .join(format!("clipboard-rename-cleanup-{}", uuid::Uuid::new_v4()));
+            let paths = StoragePaths::initialize(root.clone()).unwrap();
+            let database = Database::open(&paths.database).unwrap();
+            // An independent Clipboard instance has its own maintenance mutex.
+            // Its cleanup still uses this database and the real orphan scanner.
+            let cleaner = Database::open(&paths.database).unwrap();
+            let old = paths.files.join("old.txt");
+            std::fs::write(&old, b"fixture").unwrap();
+            std::fs::File::options()
+                .write(true)
+                .open(&old)
+                .unwrap()
+                .set_modified(std::time::UNIX_EPOCH + std::time::Duration::from_secs(3600))
+                .unwrap();
+            let item = ClipboardItem {
+                id: "renamed".into(),
+                kind: ClipboardKind::File,
+                title: "old".into(),
+                text_content: None,
+                html_content: None,
+                rtf_content: None,
+                resource_path: Some(old.display().to_string()),
+                preview_path: None,
+                content_hash: "fixture".into(),
+                source_app: None,
+                size_bytes: 7,
+                created_at_ms: 1,
+                last_used_at_ms: None,
+                is_favorite: false,
+                icon_path: None,
+                metadata_json: None,
+            };
+            database.save_item(&item).unwrap();
+            let result = rename_item_record_with_move(
+                &database,
+                &paths,
+                item.id.clone(),
+                "new".into(),
+                |from, to| {
+                    assert_eq!(
+                        cleaner
+                            .get_item(&item.id)
+                            .unwrap()
+                            .unwrap()
+                            .resource_path
+                            .as_deref(),
+                        to.to_str()
+                    );
+                    let cleanup =
+                        crate::commands::cleanup::cleanup_orphan_storage_files_with_grace(
+                            &cleaner,
+                            &paths,
+                            crate::commands::cleanup::ORPHAN_FILE_GRACE,
+                        )
+                        .unwrap();
+                    assert_eq!(
+                        cleanup.removed_files, 0,
+                        "cleanup must retain the file between the path commit and move"
+                    );
+                    assert!(from.is_file());
+                    if fail_move {
+                        Err(std::io::Error::other("injected move failure"))
+                    } else {
+                        std::fs::rename(from, to)
+                    }
+                },
+            );
+            let stored = database.get_item(&item.id).unwrap().unwrap();
+            if fail_move {
+                assert!(result.unwrap_err().contains("injected move failure"));
+                assert_eq!(stored.resource_path, item.resource_path);
+                assert!(old.is_file());
+            } else {
+                assert!(result.is_ok());
+                assert_eq!(
+                    stored.resource_path.as_deref(),
+                    paths.files.join("new.txt").to_str()
+                );
+                assert!(!old.exists());
+            }
+            assert_eq!(
+                std::fs::read(stored.resource_path.unwrap()).unwrap(),
+                b"fixture"
+            );
+            drop(cleaner);
+            drop(database);
+            std::fs::remove_dir_all(root).unwrap();
+        }
+    }
 }
 
 /// Pass-through originals and unclaimed roots are not ours to rename.
