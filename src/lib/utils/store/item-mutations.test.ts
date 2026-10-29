@@ -70,6 +70,78 @@ async function settle() {
 }
 
 describe("ordered optimistic item metadata", () => {
+  it.each([true, false])(
+    "keeps same-valued confirmed membership after an old reply (%s)",
+    async (ok) => {
+      const f = fixture();
+      const gate = deferred<boolean>();
+      const result = Promise.allSettled([
+        f.mutations.run(new Map([["a", { deleted: true }]]), () => gate.promise),
+      ]);
+      await settle();
+      f.mutations.acceptMembership(["a"], []);
+      f.view.current = applyItemPatches(f.view.current, new Map([["a", { deleted: true }]]));
+      gate.resolve(ok);
+      await result;
+      expect(f.row().deleted).toBe(true);
+    },
+  );
+
+  it("does not infer membership from a full content event", async () => {
+    const f = fixture();
+    const gate = deferred<boolean>();
+    const result = Promise.allSettled([
+      f.mutations.run(new Map([["a", { deleted: true }]]), () => gate.promise),
+    ]);
+    await settle();
+    f.mutations.acceptRecords([{ ...record(), title: "saved content" }]);
+    f.view.current = replaceItem(f.view.current, { ...f.row(), title: "saved content" });
+    expect(f.row().deleted).toBe(true);
+    gate.resolve(false);
+    await result;
+    expect(f.row()).toMatchObject({ deleted: false, title: "saved content" });
+  });
+
+  it.each([true, false])(
+    "accepts same-valued membership from an identified native page (%s)",
+    async (deleted) => {
+      const f = fixture();
+      f.view.current = applyItemPatches(f.view.current, new Map([["a", { deleted: !deleted }]]));
+      const gate = deferred<boolean>();
+      const result = Promise.allSettled([
+        f.mutations.run(new Map([["a", { deleted }]]), () => gate.promise),
+      ]);
+      await settle();
+      f.mutations.acceptRecords([record()], deleted);
+      f.view.current = replaceItem(f.view.current, { ...record(), deleted });
+      gate.resolve(false);
+      await result;
+      expect(f.row().deleted).toBe(deleted);
+    },
+  );
+
+  it("preserves queued restore intent over an acknowledged deletion then falls back on failure", async () => {
+    const f = fixture();
+    const deleteGate = deferred<boolean>();
+    const restoreGate = deferred<boolean>();
+    const restore = vi.fn(() => restoreGate.promise);
+    const result = Promise.allSettled([
+      f.mutations.run(new Map([["a", { deleted: true }]]), () => deleteGate.promise),
+      f.mutations.run(new Map([["a", { deleted: false }]]), restore),
+    ]);
+    await settle();
+    f.mutations.acceptMembership(["a"], []);
+    f.view.current = applyItemPatches(f.view.current, new Map([["a", { deleted: true }]]));
+    expect(f.row().deleted).toBe(false);
+    expect(restore).not.toHaveBeenCalled();
+    deleteGate.resolve(true);
+    await settle();
+    expect(restore).toHaveBeenCalledOnce();
+    restoreGate.resolve(false);
+    await result;
+    expect(f.row().deleted).toBe(true);
+  });
+
   it.each(["favorite", "tags", "title"] as const)(
     "returns to confirmed %s after consecutive failures",
     async (field) => {

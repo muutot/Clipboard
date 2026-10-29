@@ -24,13 +24,16 @@ reactive declaration (`$state.raw` plus `$derived` projections exposed through
 getters) and keeps the plain `Map` out of Svelte's deep proxy. See
 `docs/PITFALLS.md` for why the runes live in that module and not inline.
 
-The main route installs a metadata reconciliation hook from `item-mutations.ts`.
-Favorite/title/tag and batch favorite writes project pending fields into the same
+The main route installs a field reconciliation hook from `item-mutations.ts`.
+Favorite/title/tag and soft-delete/restore (single/batch) writes project pending fields into the same
 record map over their last confirmed values. Accepted native history/search pages
 call `acceptRecords` before store folding, including same-valued fields; request
 generation checks remain ahead of that callback. Canonical updates supersede sent
 edits; unsent queued intents remain visible. Partial OCR/usage patches do not
-acknowledge unchanged metadata fields.
+acknowledge unchanged metadata fields. Accepted native pages explicitly confirm
+active (false) or bin (true) membership; deleted/restored ID events confirm it
+before folding. Ordinary content DTOs never confirm the receiver-owned `deleted`
+flag, which the queue normalizes from omitted to false.
 
 Invariants every mutator preserves, asserted after each operation in
 `item-store.test.ts`:
@@ -179,7 +182,7 @@ Search results never receive direct copy/recapture promotions. Usage invalidates
 
 ## Mutation invalidation
 
-Record patches MUST go through the item store — `applyItemPatches` writes each patched record once and every view projects it, so a view cannot miss the update (the fan-out funnel this replaced existed because a hand-rolled mapping loop once left the spare cache with stale tags). `updateItem` resolves the original through `findLoadedItem` (the whole store), not the history view alone: a search result can be displayed only by the `indexed` or `cache` view, and resolving against the history view silently no-ops the action. `bulkFavorite` shares the ordered metadata queue with single-row favorite, title and tags; removing a failed edit recomputes from confirmed fields and remaining intents. `bulkRestore`, `bulkPermanentDelete`, `clearHistory`, `bulkDelete`, and the single-row permanent/hard delete paths capture the affected ids with `captureAffectedItems` and undo them with `restoreAffectedItems` (restore the operation's field writes, reinsert missing rows between surviving original IDs in each view, and re-select only the rows that were selected). Bulk-delete completion rolls back only failed transactions, including their detail slot, and never replays successful deletion over later restore events. A whole-view snapshot cannot be rolled back safely because the persist call is async: a capture, search, or favorite toggle that lands in that window is discarded by the restore, and records that arrived during it are absent from the snapshot entirely, so they vanish from the history. Destructive storage-kind operations emit `clipboard-history-invalidated`, which removes IDs from the store, bumps `searchEpoch`, and resets affected deleted-history pagination.
+Record patches MUST go through the item store — `applyItemPatches` writes each patched record once and every view projects it, so a view cannot miss the update (the fan-out funnel this replaced existed because a hand-rolled mapping loop once left the spare cache with stale tags). `updateItem` resolves the original through `findLoadedItem` (the whole store), not the history view alone: a search result can be displayed only by the `indexed` or `cache` view, and resolving against the history view silently no-ops the action. Favorite/title/tags and single/batch soft-delete/restore share the ordered field queue; removing a failed edit recomputes from confirmed fields and remaining intents. Permanent/hard deletion captures affected IDs with `captureAffectedItems` and restores failed removed rows with `restoreAffectedItems`; bulk-delete soft fields are entirely queue-owned, so completion cannot replay their rollback. Removal rollback restores positions between surviving original IDs and preserves unrelated rows and views. The remaining clearHistory helper also uses snapshots, but has no current route caller. Bulk-delete completion restores only failed removed transactions and their detail slot, never replaying successful deletion over later restore events. A whole-view snapshot cannot be rolled back safely because a capture, search, or favorite toggle during async persistence would be discarded. Destructive storage-kind operations emit `clipboard-history-invalidated`, which removes IDs from the store, bumps `searchEpoch`, and resets affected deleted-history pagination.
 
 Search index freshness still depends on SQLite outbox synchronization. When adding a mutation:
 
@@ -190,7 +193,7 @@ Search index freshness still depends on SQLite outbox synchronization. When addi
 5. reset pagination/request IDs when the result set behind an offset changed;
 6. add tests for stale results and skipped/duplicated pages.
 
-Rollback snapshots record the operation's actual `patches` plus `restoreRemoved`. Existing records restore only fields written by that operation that still match its optimistic value; unrelated later edits and recaptures are preserved. Restore operations set `restoreRemoved: false`; favorite uses the metadata queue and never reinserts missing rows. Removal operations retain complete record/position snapshots for missing rows. Bulk delete records only its soft-delete field patches while retaining recovery of its removed hard/permanent rows. The main route forwards these options and only reselects still-loaded records.
+Rollback snapshots can record actual `patches` plus `restoreRemoved`. Existing records restore only written fields that still match the optimistic value; unrelated edits and recaptures are preserved. Field actions (favorite/title/tags/soft-delete/restore) use the queue and never reinsert missing rows. Removal operations retain complete record/position snapshots for missing rows; bulk delete captures only hard/permanent IDs. The main route forwards the snapshot options and only reselects still-loaded, non-invalidated records. Failed restore reselects only still-recycled rows, and suppression remains intact while a newer active/restore intent owns the row.
 
 Each removal snapshot also keeps the original ID order per view as an anchor hint. Rollback inserts a missing run before its next surviving original ID, or after the previous one for a removed tail; with no surviving original IDs it appends after new arrivals. Original indices must not receive an additional insertion drift. Current rows keep their relative order, and each view uses its own anchors. A closed indexed view stays closed, and records with no remaining view/detail reference are pruned after restoration.
 

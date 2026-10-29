@@ -24,6 +24,7 @@ vi.mock("$lib/services/clipboard", async (original) => ({
   persistBatchFavorite: vi.fn(),
   persistBatchDelete: vi.fn(),
   persistBatchPermanentDelete: vi.fn(),
+  persistBatchRestore: vi.fn(),
   pasteClipboardItem: vi.fn(async () => "pasted" as const),
 }));
 vi.mock("$lib/services/toast", () => ({ showToast: vi.fn() }));
@@ -307,6 +308,99 @@ it.each(["bulkPermanentDelete", "bulkDelete"] as const)(
   },
 );
 
+it.each(["delete", "restore"] as const)(
+  "keeps a later same-valued bulk %s confirmation after failure",
+  async (action) => {
+    const gate = deferred<boolean>();
+    if (action === "restore") {
+      out.store!.current = applyItemPatches(
+        out.store!.current,
+        new Map([["initial", { deleted: true }]]),
+      );
+      vi.mocked(service.persistBatchRestore).mockReturnValueOnce(gate.promise);
+    } else vi.mocked(service.persistBatchDelete).mockReturnValueOnce(gate.promise);
+    out.bulk!.selectedIds = new Set(["initial"]);
+    if (action === "restore") out.bulk!.bulkRestore();
+    else out.bulk!.bulkDelete();
+    await settle();
+    out.changeMembership!(
+      action === "delete" ? ["initial"] : [],
+      action === "restore" ? ["initial"] : [],
+    );
+    gate.resolve(false);
+    await settle();
+    expect(Boolean(out.store!.current.byId.get("initial")!.deleted)).toBe(action === "delete");
+    if (action === "restore")
+      expect(out.history!.deletedHistorySuppressedIds.has("initial")).toBe(true);
+  },
+);
+
+it("restores confirmed membership after consecutive bulk delete and restore failures", async () => {
+  const deleteGate = deferred<boolean>();
+  const restoreGate = deferred<boolean>();
+  vi.mocked(service.persistBatchDelete).mockReturnValueOnce(deleteGate.promise);
+  vi.mocked(service.persistBatchRestore).mockReturnValueOnce(restoreGate.promise);
+  out.bulk!.selectedIds = new Set(["initial"]);
+  out.bulk!.bulkDelete();
+  await settle();
+  out.bulk!.selectedIds = new Set(["initial"]);
+  out.bulk!.bulkRestore();
+  await settle();
+  expect(service.persistBatchRestore).not.toHaveBeenCalled();
+  deleteGate.resolve(false);
+  await settle();
+  expect(service.persistBatchRestore).toHaveBeenCalledWith(["initial"]);
+  restoreGate.resolve(false);
+  await settle();
+  expect(Boolean(out.store!.current.byId.get("initial")!.deleted)).toBe(false);
+});
+
+it.each(["history", "search"] as const)(
+  "keeps active membership confirmed by an accepted %s page after a failed restore",
+  async (source) => {
+    const gate = deferred<boolean>();
+    vi.mocked(service.persistBatchRestore).mockReturnValueOnce(gate.promise);
+    out.store!.current = applyItemPatches(
+      out.store!.current,
+      new Map([["initial", { deleted: true }]]),
+    );
+    out.bulk!.selectedIds = new Set(["initial"]);
+    out.bulk!.bulkRestore();
+    await settle();
+    if (source === "history") {
+      vi.mocked(service.loadClipboardHistory).mockResolvedValueOnce([item("initial")]);
+      await out.history!.loadActiveHistoryPage();
+    } else {
+      vi.mocked(service.searchClipboardHistory).mockResolvedValueOnce({
+        items: [item("initial")],
+        totalCount: 1,
+        truncated: false,
+      });
+      out.setQuery!("body");
+      await settle(350);
+    }
+    gate.resolve(false);
+    await settle();
+    expect(Boolean(out.store!.current.byId.get("initial")!.deleted)).toBe(false);
+    expect(out.history!.deletedHistorySuppressedIds.has("initial")).toBe(true);
+  },
+);
+
+it("keeps bin membership confirmed by an accepted deleted page after a failed delete", async () => {
+  const gate = deferred<boolean>();
+  vi.mocked(service.persistBatchDelete).mockReturnValueOnce(gate.promise);
+  out.bulk!.selectedIds = new Set(["initial"]);
+  out.bulk!.bulkDelete();
+  await settle();
+  vi.mocked(service.loadDeletedClipboardHistory).mockResolvedValueOnce([
+    { ...item("initial"), deleted: true },
+  ]);
+  await out.history!.loadDeletedHistoryPage();
+  gate.resolve(false);
+  await settle();
+  expect(out.store!.current.byId.get("initial")!.deleted).toBe(true);
+});
+
 it.each(["history", "search"] as const)(
   "accepts same-valued canonical metadata from a %s page before an old save fails",
   async (source) => {
@@ -342,6 +436,8 @@ it("keeps a later restore and its paging suppression when an earlier bulk delete
   out.bulk!.selectedIds = new Set(["initial"]);
   out.bulk!.bulkDelete();
   expect(out.store!.current.byId.get("initial")!.deleted).toBe(true);
+  await settle();
+  expect(service.persistBatchDelete).toHaveBeenCalledWith(["initial"]);
   // Delete has committed but its IPC reply is pending. Another window restores
   // the row; a local restore also keeps stale recycle-bin pages suppressed.
   out.history!.addSuppressedId("initial");
@@ -369,6 +465,7 @@ it("rolls back only failed rows of a partial bulk delete while preserving later 
   out.store!.current = setDetailItem(out.store!.current, out.store!.current.byId.get("initial")!);
   out.bulk!.selectedIds = new Set(["initial", "bin"]);
   out.bulk!.bulkDelete();
+  await settle();
   expect(service.persistBatchDelete).toHaveBeenCalledWith(["initial"]);
   expect(service.persistBatchPermanentDelete).toHaveBeenCalledWith(["bin"]);
   expect(out.store!.current.byId.has("bin")).toBe(false);

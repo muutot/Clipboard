@@ -10,12 +10,14 @@
     bulk?: ReturnType<typeof createBulkController>;
     setQuery?: (value: string) => void;
     removeCanonical?: (ids: ReadonlySet<string>) => void;
+    changeMembership?: (deletedIds: string[], restoredIds: string[]) => void;
   }
 </script>
 
 <script lang="ts">
   import { untrack, onDestroy } from "svelte";
   import { createItemMutations } from "$lib/utils/store/item-mutations";
+  import { applyItemsChangedEvent } from "$lib/utils/store/item-changes";
   import {
     createItemStore,
     captureAffectedItems,
@@ -47,7 +49,7 @@
     settings,
     filter: () => ({}),
     onError: () => {},
-    acceptRecords: (records) => mutations!.acceptRecords(records),
+    acceptRecords: (records, deleted) => mutations!.acceptRecords(records, deleted),
   });
   const search = createSearchController({
     itemStore: store,
@@ -61,7 +63,7 @@
     translate: (key) => key,
     flushSettings: async () => {},
     rememberSearchTerm: () => {},
-    acceptRecords: (records) => mutations!.acceptRecords(records),
+    acceptRecords: (records, deleted) => mutations!.acceptRecords(records, deleted),
   });
   const bulk = createBulkController({
     itemStore: store,
@@ -96,6 +98,10 @@
       removeCanonical: (ids: ReadonlySet<string>) => {
         removalRollbacks.invalidate(ids);
         store.current = removeItems(store.current, ids);
+      },
+      changeMembership: (deletedIds: string[], restoredIds: string[]) => {
+        mutations!.acceptMembership(deletedIds, restoredIds);
+        store.current = applyItemsChangedEvent(store.current, { deletedIds, restoredIds });
       },
       setQuery: (value: string) => {
         query = value;

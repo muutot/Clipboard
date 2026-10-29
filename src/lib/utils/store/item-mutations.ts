@@ -2,17 +2,21 @@ import type { ClipboardItem } from "$lib/types/clipboard";
 import { applyItemPatches, type ItemStore } from "./item-store";
 import type { ItemStoreView } from "./item-store-view.svelte";
 
-type Field = "favorite" | "tags" | "title" | "customTitle";
+type Field = "favorite" | "tags" | "title" | "customTitle" | "deleted";
 type Value = ClipboardItem[Field];
-export type ItemMetadataPatch = Partial<Pick<ClipboardItem, Field>>;
-const FIELDS: readonly Field[] = ["favorite", "tags", "title", "customTitle"];
+export type ItemMetadataPatch = Partial<Pick<ClipboardItem, Exclude<Field, "deleted">>>;
+export type ItemMutationPatch = Partial<Pick<ClipboardItem, Field>>;
+const FIELDS: readonly Field[] = ["favorite", "tags", "title", "customTitle", "deleted"];
+function fieldValue(item: ClipboardItem | undefined, field: Field): Value {
+  return field === "deleted" ? !!item?.deleted : item?.[field];
+}
 interface PendingField {
   confirmed: Value;
   epoch: number;
   pending: Map<number, { value: Value; sent: boolean; superseded: boolean }>;
 }
 
-/** Ordered metadata writes project pending edits over the latest confirmed fields. */
+/** Ordered field writes project pending edits over the latest confirmed metadata/membership. */
 export function createItemMutations(view: () => ItemStoreView) {
   const fields = new Map<string, Map<Field, PendingField>>();
   const tails = new Map<string, Promise<void>>();
@@ -21,7 +25,7 @@ export function createItemMutations(view: () => ItemStoreView) {
   let alive = true;
 
   function project(store: ItemStore): ItemStore {
-    const patches = new Map<string, ItemMetadataPatch>();
+    const patches = new Map<string, ItemMutationPatch>();
     for (const [id, row] of fields) {
       if (!store.byId.has(id)) {
         fields.delete(id);
@@ -31,7 +35,7 @@ export function createItemMutations(view: () => ItemStoreView) {
       for (const [field, state] of row) {
         let value = state.confirmed;
         for (const edit of state.pending.values()) if (!edit.superseded) value = edit.value;
-        if (!Object.is(store.byId.get(id)![field], value)) patch[field] = value;
+        if (!Object.is(fieldValue(store.byId.get(id), field), value)) patch[field] = value;
       }
       if (Object.keys(patch).length) patches.set(id, patch);
     }
@@ -66,8 +70,8 @@ export function createItemMutations(view: () => ItemStoreView) {
         continue;
       }
       for (const [field, state] of row) {
-        if (!Object.is(previous.byId.get(id)?.[field], current[field])) {
-          confirm(state, current[field]);
+        if (!Object.is(fieldValue(previous.byId.get(id), field), fieldValue(current, field))) {
+          confirm(state, fieldValue(current, field));
         }
       }
     }
@@ -75,11 +79,29 @@ export function createItemMutations(view: () => ItemStoreView) {
   }
 
   /** Full backend records acknowledge even same-valued fields; call before folding the records. */
-  function acceptRecords(records: readonly ClipboardItem[]) {
+  function acceptRecords(records: readonly ClipboardItem[], deleted?: boolean) {
     if (!alive) return;
     for (const record of records) {
       for (const [field, state] of fields.get(record.id) ?? []) {
-        confirm(state, record[field]);
+        // Persisted content DTOs omit receiver-owned membership. Native list
+        // pages explicitly identify their active/bin query; content events do not.
+        if (field === "deleted") {
+          if (deleted !== undefined) confirm(state, deleted);
+        } else confirm(state, record[field]);
+      }
+    }
+  }
+
+  /** Membership IDs acknowledge same-valued flags without inferring them from content DTOs. */
+  function acceptMembership(deletedIds: readonly string[], restoredIds: readonly string[]) {
+    if (!alive) return;
+    for (const [ids, value] of [
+      [deletedIds, true],
+      [restoredIds, false],
+    ] as const) {
+      for (const id of ids) {
+        const state = fields.get(id)?.get("deleted");
+        if (state) confirm(state, value);
       }
     }
   }
@@ -95,7 +117,7 @@ export function createItemMutations(view: () => ItemStoreView) {
   }
 
   function run<T>(
-    patches: ReadonlyMap<string, ItemMetadataPatch>,
+    patches: ReadonlyMap<string, ItemMutationPatch>,
     persist: () => Promise<T>,
   ): Promise<T> {
     if (!alive) return Promise.reject(new Error("item view is disposed"));
@@ -108,7 +130,11 @@ export function createItemMutations(view: () => ItemStoreView) {
       const changed = new Map<Field, PendingField>();
       for (const field of FIELDS) {
         if (!Object.hasOwn(patch, field)) continue;
-        const state = row.get(field) ?? { confirmed: current[field], epoch: 0, pending: new Map() };
+        const state = row.get(field) ?? {
+          confirmed: fieldValue(current, field),
+          epoch: 0,
+          pending: new Map(),
+        };
         state.pending.set(operation, { value: patch[field], sent: false, superseded: false });
         row.set(field, state);
         changed.set(field, state);
@@ -172,6 +198,7 @@ export function createItemMutations(view: () => ItemStoreView) {
     run,
     observe,
     acceptRecords,
+    acceptMembership,
     confirmedItem,
     destroy() {
       alive = false;

@@ -17,12 +17,17 @@ Owns one list item: text/link/image/file rendering, source metadata, quick/conte
 Key contracts:
 
 - The route owns collection state and persistence decisions; the card emits controlled callbacks keyed by item ID.
-- Favorite, title and tag saves use the route's shared `item-mutations.ts` queue.
-  Pending field edits project over confirmed metadata; same-row writes (including
-  batch favorite) are ordered, while disjoint rows can save concurrently. Failure
+- Favorite, title, tag, soft-delete and restore saves use the route's shared `item-mutations.ts` queue.
+  Pending field edits project over confirmed metadata/membership; same-row writes (including
+  batch favorite/soft-delete/restore) are ordered, while disjoint rows can save concurrently. Failure
   removes its own pending edit instead of restoring an older optimistic snapshot.
   Canonical records from events and accepted list/search pages supersede sent
   edits, including same-valued fields; unsent local intents remain projected.
+  Membership is confirmed only by explicit deleted/restored IDs or the accepted
+  page's active/bin query. Content DTOs omit that receiver-owned flag. Failed
+  restores clear paging suppression and reselect only still-recycled rows;
+  failed deletes reselect only still-loaded active rows. Permanent/hard removals
+  keep their independently scoped removal snapshots.
 - During bulk selection, `HistoryList` derives each selected row's 1-based position from
   `selectionOrder(selectedIds)` and passes it as `selectIndex`; `ClipboardCard` renders that
   insertion-order position as a non-interactive paste-order badge.

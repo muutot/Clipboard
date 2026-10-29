@@ -76,19 +76,26 @@ current selection. A different row selected while IPC is pending remains selecte
 undelivered paste rows remain only if the user still has them selected. The mounted
 controller tests cover successful/copied/failed paste and delayed favorite saves.
 
-`utils/store/item-mutations.ts` coordinates main-route favorite/title/tag writes
-and batch favorite. It retains only touched confirmed metadata fields and pending
+`utils/store/item-mutations.ts` coordinates main-route favorite/title/tag and
+soft-delete/restore writes, plus batch favorite/soft-delete/restore. It retains only touched confirmed fields and pending
 edits, projecting them into the same `ItemStore`; there is no second record map.
 Per-row promise dependencies serialize overlapping writes, including batches;
 disjoint rows remain concurrent. A rejection or false result removes only its edit.
-Full canonical records acknowledge same-valued fields and supersede already sent
+Full canonical metadata records acknowledge same-valued fields and supersede already sent
 edits, while unsent local intents remain visible. Partial updates confirm only
 changed tracked fields, so OCR/usage patches cannot confirm a failed favorite.
-History/search call `acceptRecords` only for accepted pages; record events do so
-before folding. Tag rename/delete transforms use confirmed tags, rather than a
+History/search call `acceptRecords(records, deleted)` only for accepted pages,
+passing false for active/search and true for the bin query. Content events call
+it without membership, since persisted DTOs do not carry the receiver's `deleted`
+flag; capture/upsert confirms active membership. Explicit deleted/restored IDs
+use `acceptMembership` before event folding, including same-valued flags. The
+queue treats omitted `deleted` as active (false), not as a separate third state.
+Tag rename/delete transforms use confirmed tags, rather than a
 pending draft. Unloaded records are not reinserted; teardown invalidates reply
-projection and prevents queued IPC from starting. Membership/removal rollback
-continues to use the separately scoped snapshot helpers.
+projection and prevents queued IPC from starting. Failed restores clear bin
+suppression and reselect only still-deleted rows; failed deletes reselect only
+still-loaded active rows. Bulk-delete snapshots cover only removed hard/permanent
+IDs, so completion cannot repeat a soft rollback already owned by the queue.
 
 Pending removal snapshots use `item-store.ts`'s `createRemovalRollbackGuard`.
 Canonical `removedIds` and history-invalidation deletions invalidate only the
@@ -96,8 +103,8 @@ tracked affected IDs, including rows already absent after an optimistic removal.
 Rollback skips their fields, reinsertion, detail slot and old selection; failure
 also leaves their recycle-bin suppression intact. Single removal, clear and bulk
 paths release snapshots on completion, and teardown invalidates pending snapshots.
-This guard does not resolve soft-delete/restore ordering or continuous membership
-failures; those retain separate field/snapshot rollback semantics.
+Soft-delete/restore field ordering and continuous failures use the field queue;
+permanent/hard removals retain these separate snapshot semantics.
 
 Bulk-delete completion restores only the failed transactions' captured records
 and detail slot. Successful rows retain their optimistic/canonical state and any

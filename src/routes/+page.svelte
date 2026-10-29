@@ -163,10 +163,6 @@
     return true;
   }
 
-  function revertItem(id: string, fields: Partial<ClipboardItem>) {
-    itemStore.current = applyItemPatches(itemStore.current, new Map([[id, fields]]));
-  }
-
   /// Records just the ids a bulk mutation is about to change, so its rollback
   /// cannot discard a capture, search, or favorite toggle that landed while the
   /// persist call was in flight.
@@ -248,7 +244,7 @@
   }
 
   const history = createHistoryController({
-    acceptRecords: (records) => metadataMutations!.acceptRecords(records),
+    acceptRecords: (records, deleted) => metadataMutations!.acceptRecords(records, deleted),
     itemStore,
     get settings() {
       return $generalSettings;
@@ -278,7 +274,7 @@
   let indexedItems = $derived(itemStore.indexed);
 
   const search = createSearchController({
-    acceptRecords: (records) => metadataMutations!.acceptRecords(records),
+    acceptRecords: (records, deleted) => metadataMutations!.acceptRecords(records, deleted),
     itemStore,
     get settings() {
       return $generalSettings;
@@ -837,7 +833,7 @@
 
     const unlisten = listen<PersistedClipboardItem>("clipboard-item-added", (event) => {
       const newItem = toClipboardItem(event.payload);
-      metadataMutations!.acceptRecords([newItem]);
+      metadataMutations!.acceptRecords([newItem], false);
       if (pendingDetail?.id === newItem.id) pendingDetail.item = newItem;
       // Re-copying an existing entry is de-duplicated on (kind, content_hash)
       // and keeps the same row id with a refreshed last_used_at_ms (the
@@ -901,6 +897,7 @@
         const payload = event.payload;
         removalRollbacks.invalidate(new Set(payload.removedIds ?? []));
         metadataMutations!.acceptRecords((payload.items ?? []).map(toClipboardItem));
+        metadataMutations!.acceptMembership(payload.deletedIds ?? [], payload.restoredIds ?? []);
         invalidatePendingDetail([...(payload.deletedIds ?? []), ...(payload.removedIds ?? [])]);
         const pendingUpdate = payload.items?.find((record) => record.id === pendingDetail?.id);
         if (pendingDetail && pendingUpdate) pendingDetail.item = toClipboardItem(pendingUpdate);
@@ -1353,6 +1350,7 @@
 
   function deleteItem(id: string) {
     const item = findLoadedItem(id);
+    if (!item) return;
     if (item?.deleted) {
       permanentlyDeleteItem(id);
       return;
@@ -1364,22 +1362,20 @@
 
     const wasSelected = bulk.selectedIds.has(id);
     history.deletedHistorySuppressedIds.delete(id);
-    updateItem(id, () => ({ deleted: true }));
     bulk.selectedIds = new Set([...bulk.selectedIds].filter((x) => x !== id));
 
-    void persistDelete(id)
-      .then((removed) => {
-        if (removed === false) throw new Error("record not found");
+    void metadataMutations!
+      .run(new Map([[id, { deleted: true }]]), () => persistDelete(id))
+      .then(() => {
         invalidateActiveHistoryPagination();
         invalidateDeletedHistoryPagination();
         showToast(_t("toast.deleteSuccess"), "success");
       })
       .catch((error) => {
         console.error("Unable to delete clipboard item", error);
-        // Undo only this row; restoring a whole-array snapshot would discard
-        // items captured while the delete was in flight.
-        revertItem(id, { deleted: false });
-        if (wasSelected) bulk.selectedIds = new Set([...bulk.selectedIds, id]);
+        const current = findLoadedItem(id);
+        if (wasSelected && current && !current.deleted)
+          bulk.selectedIds = new Set([...bulk.selectedIds, id]);
         showToast(_t("app.deleteFailed"), "error");
       });
   }
@@ -1441,18 +1437,16 @@
     if (!target?.deleted) return;
 
     addSuppressedId(id);
-    updateItem(id, () => ({ deleted: false }));
-    void persistRestore(id)
-      .then((restored) => {
-        if (restored === false) throw new Error("record not found");
+    void metadataMutations!
+      .run(new Map([[id, { deleted: false }]]), () => persistRestore(id))
+      .then(() => {
         invalidateActiveHistoryPagination();
         invalidateDeletedHistoryPagination();
         showToast(_t("toast.resumed"), "success");
       })
       .catch((error) => {
         console.error("Unable to restore clipboard item", error);
-        history.deletedHistorySuppressedIds.delete(id);
-        revertItem(id, { deleted: true });
+        if (findLoadedItem(id)?.deleted) history.deletedHistorySuppressedIds.delete(id);
         showToast(_t("app.deleteFailed"), "error");
       });
   }

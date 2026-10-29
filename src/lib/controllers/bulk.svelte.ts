@@ -3,7 +3,6 @@ import type { ItemStoreView } from "$lib/utils/store/item-store-view.svelte";
 import type { createItemMutations } from "$lib/utils/store/item-mutations";
 import type { createHistoryController } from "./history.svelte";
 import {
-  applyItemPatches,
   removeItems,
   restoreAffectedItems,
   type AffectedItemOptions,
@@ -144,28 +143,27 @@ export function createBulkController(deps: BulkDependencies) {
     const patch = new Map<string, Partial<ClipboardItem>>(
       ids.map((id) => [id, { deleted: false }]),
     );
-    const snapshot = deps.captureAffected(idSet, { patches: patch, restoreRemoved: false });
     for (const id of ids) deps.history.addSuppressedId(id);
-    deps.itemStore.current = applyItemPatches(deps.itemStore.current, patch);
     selectedIds = new Set([...selectedIds].filter((id) => !idSet.has(id)));
 
-    void persistBatchRestore(ids)
-      .then((restored) => {
-        if (restored === false) throw new Error("batch restore failed");
+    void deps.metadataMutations
+      .run(patch, () => persistBatchRestore(ids))
+      .then(() => {
         deps.history.invalidateActiveHistoryPagination();
         deps.history.invalidateDeletedHistoryPagination();
         showToast(deps.translate("toast.restoreSuccess", { count: ids.length }), "success");
       })
       .catch((error) => {
         console.error("Bulk restore failed", error);
-        for (const id of ids)
-          if (!snapshot.invalidatedIds?.has(id))
+        for (const id of ids) {
+          if (deps.itemStore.current.byId.get(id)?.deleted) {
             deps.history.deletedHistorySuppressedIds.delete(id);
-        deps.rollbackAffected(snapshot);
+            selectedIds = new Set([...selectedIds, id]);
+          }
+        }
         deps.statusMessage = deps.translate("app.deleteFailed");
         showToast(deps.translate("app.deleteFailed"), "error");
-      })
-      .finally(() => deps.finishAffected(snapshot));
+      });
   }
 
   function bulkPermanentDelete() {
@@ -208,7 +206,7 @@ export function createBulkController(deps: BulkDependencies) {
     const softPatches = new Map<string, Partial<ClipboardItem>>(
       softIds.map((id) => [id, { deleted: true }]),
     );
-    const snapshot = deps.captureAffected(operationIds, { patches: softPatches });
+    const snapshot = deps.captureAffected(new Set([...permanentIds, ...hardIds]));
 
     for (const id of softIds) deps.history.deletedHistorySuppressedIds.delete(id);
     for (const id of permanentIds) deps.history.addSuppressedId(id);
@@ -217,7 +215,6 @@ export function createBulkController(deps: BulkDependencies) {
     // Removed rows leave every view at once; soft rows are flagged in place, so
     // the open detail pane follows along without a write of its own.
     deps.itemStore.current = removeItems(deps.itemStore.current, removedOptimistic);
-    deps.itemStore.current = applyItemPatches(deps.itemStore.current, softPatches);
     selectedIds = new Set();
 
     const operations: {
@@ -226,7 +223,11 @@ export function createBulkController(deps: BulkDependencies) {
       run: () => Promise<boolean | null>;
     }[] = [];
     if (softIds.length > 0) {
-      operations.push({ ids: softIds, mode: "soft", run: () => persistBatchDelete(softIds) });
+      operations.push({
+        ids: softIds,
+        mode: "soft",
+        run: () => deps.metadataMutations.run(softPatches, () => persistBatchDelete(softIds)),
+      });
     }
     if (permanentIds.length > 0) {
       operations.push({

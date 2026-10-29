@@ -53,6 +53,115 @@ async function settle() {
   }
 }
 
+function selectFilter(key: string) {
+  const tab = [...target.querySelectorAll<HTMLButtonElement>('.filters [role="tab"]')].find(
+    (button) => button.textContent?.trim() === t(key),
+  );
+  tab!.click();
+  flushSync();
+}
+
+function seedMembershipRow() {
+  const record = {
+    id: "membership-race",
+    kind: "text",
+    title: "Membership race",
+    textContent: "body",
+    contentHash: "membership-hash",
+    sourceApp: "test",
+    sizeBytes: 4,
+    createdAtMs: 1,
+    lastUsedAtMs: 1,
+    isFavorite: false,
+  } as PersistedClipboardItem;
+  bridge.listeners.get("clipboard-item-added")?.({ payload: record });
+  flushSync();
+  return record;
+}
+
+it.each(["delete", "restore"] as const)(
+  "keeps a newer same-valued %s confirmation when an old membership request fails",
+  async (action) => {
+    generalSettings.set({ ...savedSettings, useRecycleBin: true });
+    app = mount(MainPage, { target });
+    flushSync();
+    const record = seedMembershipRow();
+    const confirm = action === "delete" ? "deletedIds" : "restoredIds";
+    if (action === "restore") {
+      bridge.listeners.get("clipboard-items-changed")?.({ payload: { deletedIds: [record.id] } });
+      flushSync();
+      selectFilter("filter.deleted");
+    }
+    let fail!: (error: Error) => void;
+    const pending = new Promise<boolean>((_, reject) => (fail = reject));
+    const command = action === "delete" ? "soft_delete_clipboard_item" : "restore_clipboard_item";
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { configurable: true, value: {} });
+    bridge.invoke.mockImplementation((name: string) =>
+      name === command ? pending : new Promise(() => {}),
+    );
+    target
+      .querySelector<HTMLElement>(`[data-id="${record.id}"]`)!
+      .querySelector<HTMLButtonElement>(`button[aria-label="${t(`card.${action}`)}"]`)!
+      .click();
+    await settle();
+    expect(bridge.invoke).toHaveBeenCalledWith(command, { id: record.id });
+    bridge.listeners.get("clipboard-items-changed")?.({ payload: { [confirm]: [record.id] } });
+    fail(new Error("older request failed"));
+    await settle();
+    if (action === "delete") {
+      selectFilter("filter.all");
+      expect(target.querySelector(`[data-id="${record.id}"]`)).toBeNull();
+    }
+    selectFilter(action === "delete" ? "filter.deleted" : "filter.all");
+    expect(target.querySelector(`[data-id="${record.id}"]`)).not.toBeNull();
+  },
+);
+
+it.each(["delete-first", "restore-first"] as const)(
+  "restores confirmed active membership when delete and restore both fail (%s)",
+  async (order) => {
+    generalSettings.set({ ...savedSettings, useRecycleBin: true });
+    app = mount(MainPage, { target });
+    flushSync();
+    const record = seedMembershipRow();
+    let failDelete!: (error: Error) => void;
+    let failRestore!: (error: Error) => void;
+    const deletion = new Promise<boolean>((_, reject) => (failDelete = reject));
+    const restoration = new Promise<boolean>((_, reject) => (failRestore = reject));
+    void restoration.catch(() => {});
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { configurable: true, value: {} });
+    bridge.invoke.mockImplementation((name: string) =>
+      name === "soft_delete_clipboard_item"
+        ? deletion
+        : name === "restore_clipboard_item"
+          ? restoration
+          : new Promise(() => {}),
+    );
+    const click = (action: string) =>
+      target
+        .querySelector<HTMLElement>(`[data-id="${record.id}"]`)!
+        .querySelector<HTMLButtonElement>(`button[aria-label="${t(`card.${action}`)}"]`)!
+        .click();
+    click("delete");
+    await settle();
+    selectFilter("filter.deleted");
+    click("restore");
+    await settle();
+    if (order === "delete-first") {
+      failDelete(new Error("delete failed"));
+      await settle();
+      failRestore(new Error("restore failed"));
+    } else {
+      failRestore(new Error("restore failed"));
+      await settle();
+      failDelete(new Error("delete failed"));
+    }
+    await settle();
+    selectFilter("filter.all");
+    expect(target.querySelector(`[data-id="${record.id}"]`)).not.toBeNull();
+  },
+);
+
 it.each([
   ["hard", "removed"],
   ["permanent", "removed"],

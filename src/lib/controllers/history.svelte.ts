@@ -20,7 +20,7 @@ export interface HistoryDependencies {
   readonly settings: GeneralSettings;
   filter(): HistoryFilterArgs;
   onError(key: string): void;
-  acceptRecords?(records: readonly ClipboardItem[]): void;
+  acceptRecords?(records: readonly ClipboardItem[], deleted: boolean): void;
 }
 /** Owns pagination/cancellation state; records remain exclusively in the supplied item store. */
 export function createHistoryController(deps: HistoryDependencies) {
@@ -136,7 +136,7 @@ export function createHistoryController(deps: HistoryDependencies) {
         return;
       }
 
-      deps.acceptRecords?.(page);
+      deps.acceptRecords?.(page, false);
 
       if (isFirstPage) {
         const deletedItems = deps.itemStore.history.filter((item) => item.deleted);
@@ -209,7 +209,10 @@ export function createHistoryController(deps: HistoryDependencies) {
         return;
       }
 
-      deps.acceptRecords?.(page.filter((item) => !deletedHistorySuppressedIds.has(item.id)));
+      deps.acceptRecords?.(
+        page.filter((item) => !deletedHistorySuppressedIds.has(item.id)),
+        true,
+      );
 
       deps.itemStore.current = mergeDeletedHistoryPage(
         deps.itemStore.current,
