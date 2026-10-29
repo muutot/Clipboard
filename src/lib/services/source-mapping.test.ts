@@ -22,6 +22,44 @@ beforeEach(() => {
 afterEach(() => store.destroy());
 
 describe("resolveWebSourceName", () => {
+  it.each([
+    ["github.com", "GitHub"],
+    ["gitlab.com", "GitLab"],
+    ["stackoverflow.com", "Stack Overflow"],
+    ["mozilla.org", "MDN"],
+    ["microsoft.com", "Microsoft"],
+    ["wikipedia.org", "Wikipedia"],
+    ["youtube.com", "YouTube"],
+    ["bilibili.com", "Bilibili"],
+    ["zhihu.com", "知乎"],
+    ["juejin.cn", "掘金"],
+    ["csdn.net", "CSDN"],
+    ["v2ex.com", "V2EX"],
+    ["reddit.com", "Reddit"],
+    ["x.com", "X"],
+    ["npmjs.com", "npm"],
+    ["medium.com", "Medium"],
+    ["notion.so", "Notion"],
+  ])("keeps the complete built-in name for %s and its subdomains", (domain, name) => {
+    expect(resolveWebSourceName(item({ title: "Page title", domain }))).toBe(name);
+    expect(resolveWebSourceName(item({ title: "Page title", domain: `docs.${domain}` }))).toBe(
+      name,
+    );
+  });
+
+  it("lets user rules override a multi-word built-in name", async () => {
+    vi.mocked(getSourceMappingRules).mockResolvedValue([
+      { domain: "stackoverflow.com", titleKeyword: "", name: "SO answers" },
+    ]);
+    await store.refresh();
+    expect(resolveWebSourceName(item({ title: "Question", domain: "stackoverflow.com" }))).toBe(
+      "SO answers",
+    );
+    expect(
+      resolveWebSourceName(item({ title: "Question", domain: "meta.stackoverflow.com" })),
+    ).toBe("SO answers");
+  });
+
   it("prefers the first matching user rule over built-ins", async () => {
     vi.mocked(getSourceMappingRules).mockResolvedValue([
       { domain: "", titleKeyword: "Rust", name: "Rust pages" },

@@ -12,28 +12,11 @@
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getSourceMappingRules, type SourceMappingRule } from "$lib/services/clipboard";
 import { isTauriRuntime } from "$lib/services/runtime";
+import { BUILTIN_DOMAIN_NAMES } from "./source-mapping-domains";
 import type { WebSourceMetadata } from "$lib/types/clipboard";
 
 /** Cap for raw page titles shown when no rule matches. */
 const WEB_TITLE_MAX_LENGTH = 24;
-
-/**
- * Well-known domains with a shorter display name, as a `domain=Name` spec
- * parsed into a map. (The i18n key-coverage test scans quoted dotted
- * literals, so the domains stay inside one space-delimited string.) Keys are
- * matched on the stored domain or any of its subdomains; user rules always
- * win over these.
- */
-const BUILTIN_DOMAIN_SPEC =
-  "github.com=GitHub gitlab.com=GitLab stackoverflow.com=Stack Overflow " +
-  "mozilla.org=MDN microsoft.com=Microsoft wikipedia.org=Wikipedia " +
-  "youtube.com=YouTube bilibili.com=Bilibili zhihu.com=知乎 juejin.cn=掘金 " +
-  "csdn.net=CSDN v2ex.com=V2EX reddit.com=Reddit x.com=X npmjs.com=npm " +
-  "medium.com=Medium notion.so=Notion";
-
-const BUILTIN_DOMAIN_NAMES = new Map(
-  BUILTIN_DOMAIN_SPEC.split(/\s+/).map((entry) => entry.split("=") as [string, string]),
-);
 
 function matchesDomain(domain: string, pattern: string): boolean {
   const normalized = pattern.trim().toLocaleLowerCase();

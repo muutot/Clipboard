@@ -95,6 +95,11 @@ title-keyword substring), then a built-in well-known-domain name, then the
 page title truncated to 24 characters, then the raw source app. Browser
 captures carry the `web` metadata blob (`{title,url,domain}`, schema version 2)
 parsed into `ClipboardItem.webSource` by `clipboard/mapping.ts`.
+Built-in names are typed domain/name pairs in `source-mapping-domains.ts`,
+preserving multi-word brands such as `Stack Overflow`. That data-only module
+is intentionally non-localized and excluded from the dotted i18n-key scan;
+the resolver itself remains scanned. Rules keep precedence over built-ins,
+and domain suffix matching applies to both user rules and built-in names.
 
 `background-operations.svelte.ts` creates a mounted monitor for one backend slot
 (`tags`, `backup`, `sync`). It polls `get_background_operation` every 500 ms after the

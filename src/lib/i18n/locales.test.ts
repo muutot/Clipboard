@@ -41,6 +41,8 @@ function collectReferencedKeys(): Map<string, string[]> {
   for (const [file, raw] of Object.entries(SOURCE_FILES)) {
     const base = file.split("/").pop() ?? file;
     if (file.includes("/i18n/locales/") || base.includes(".test.")) continue;
+    // This data-only module contains domains and proper brand names, not keys.
+    if (file === "/src/lib/services/source-mapping-domains.ts") continue;
     const content = raw.replace(/<style[\s\S]*?<\/style>/g, "");
     for (const match of content.matchAll(LITERAL)) {
       const key = match[1];
