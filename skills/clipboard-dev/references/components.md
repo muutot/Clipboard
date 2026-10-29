@@ -112,6 +112,11 @@ DetailPanel subcomponents (split out of the 2100+ line panel):
 Key contracts:
 
 - `item` may be null and `mode` is `overlay` or `split`.
+- Detail content saves capture record ID, edit session and raw draft. Success
+  closes only that unchanged draft/session; switching records, cancel/reopen,
+  or later typing preserves the new draft. All content-edit entry/cancel paths
+  share the same session counter. The mounted probe verifies delayed saves and
+  normal completion; these guards do not change the panel's visual structure.
 - Async OCR listeners must be unregistered when the item changes, the panel closes, or the component is destroyed.
 - Keep resource metadata parsing consistent with `services/clipboard/mapping.ts` and backend `resource_metadata.rs`.
 - The detail panel tabs are Preview / Details / Tags, plus OCR only for `kind === "image"` rows (OCR is captured from clipboard images, so text/link/file rows have no meaningful OCR state and must not show the tab). The Tags tab (`DetailTagsTab`) is a second-level group of the panel, not a row inside the Details tab: one `TagChip` per row with a remove button plus an inline add input above the list that calls `onsavetags(id, tags)` (full replacement). It reads/writes `item.tags`.

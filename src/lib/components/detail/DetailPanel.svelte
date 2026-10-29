@@ -125,6 +125,22 @@
   let editing = $state(false);
   let editingTitle = $state(false);
   let editContent = $state("");
+  let editSession = 0;
+
+  function beginContentEdit() {
+    if (!item) return;
+    editSession += 1;
+    editContent =
+      item.kind === "image" || item.kind === "file"
+        ? getDisplayTitle(item.title)
+        : item.textContent || item.title;
+    editing = true;
+  }
+
+  function endContentEdit() {
+    editSession += 1;
+    editing = false;
+  }
   // Themed cut/copy/paste/select-all menu for the inline textarea editors.
   let editorContextMenu = $state<{ x: number; y: number; target: HTMLElement } | null>(null);
 
@@ -146,7 +162,7 @@
     const itemId = currentItemId;
     if (itemId !== null) {
       activeTab = "preview";
-      editing = false;
+      endContentEdit();
       // The title rename draft belongs to the previous item. Keeping it
       // open across an item switch would save the old title onto the new
       // item when the pending input commits (blur/Enter).
@@ -288,14 +304,14 @@
       event.target.closest(".detail-panel") !== null;
     if (editorTarget) {
       event.preventDefault();
-      editing = false;
+      endContentEdit();
       editingTitle = false;
       return;
     }
 
     if (editing) {
       event.preventDefault();
-      editing = false;
+      endContentEdit();
       return;
     }
 
@@ -305,8 +321,15 @@
 
   async function saveEdit() {
     if (!item || !editContent.trim()) return;
-    const saved = await onsaveedit(item.id, editContent.trim());
-    if (saved !== false) editing = false;
+    const request = { id: item.id, content: editContent, session: editSession };
+    const saved = await onsaveedit(request.id, request.content.trim());
+    if (
+      saved !== false &&
+      request.id === item?.id &&
+      request.session === editSession &&
+      request.content === editContent
+    )
+      endContentEdit();
   }
 
   function saveTitleEdit() {
@@ -321,7 +344,7 @@
   function saveAsNew() {
     if (!item || !editContent.trim()) return;
     onsaveasnew(item.id, item.title, editContent.trim());
-    editing = false;
+    endContentEdit();
   }
 </script>
 
@@ -448,7 +471,7 @@
               <DetailEditActions
                 onsave={saveEdit}
                 onsaveasnew={saveAsNew}
-                oncancel={() => (editing = false)}
+                oncancel={endContentEdit}
               />
             {:else}
               <CodePreview content={detailContent} />
@@ -465,7 +488,7 @@
               <DetailEditActions
                 onsave={saveEdit}
                 onsaveasnew={saveAsNew}
-                oncancel={() => (editing = false)}
+                oncancel={endContentEdit}
               />
             {:else}
               <MarkdownPreview content={detailContent} />
@@ -482,7 +505,7 @@
               <DetailEditActions
                 onsave={saveEdit}
                 onsaveasnew={saveAsNew}
-                oncancel={() => (editing = false)}
+                oncancel={endContentEdit}
               />
             {:else}
               <pre class="content-full">{item.textContent || item.title}</pre>
@@ -524,25 +547,13 @@
               </button>
             {/if}
             {#if !editing && (item.kind === "text" || item.kind === "link")}
-              <button
-                type="button"
-                onclick={() => {
-                  editContent = item.textContent || item.title;
-                  editing = true;
-                }}
-              >
+              <button type="button" onclick={beginContentEdit}>
                 <AppIcon name="edit" size={15} />
                 {_t("edit.edit")}
               </button>
             {/if}
             {#if !editing && (item.kind === "image" || item.kind === "file") && (!item.fileMeta || item.fileMeta.length <= 1)}
-              <button
-                type="button"
-                onclick={() => {
-                  editContent = getDisplayTitle(item.title);
-                  editing = true;
-                }}
-              >
+              <button type="button" onclick={beginContentEdit}>
                 <AppIcon name="edit" size={15} />
                 {_t("edit.editFileName")}
               </button>
