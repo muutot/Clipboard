@@ -21,6 +21,7 @@
 
   let suppressTagsChangedReload = false;
   let disposed = false;
+  let loadGeneration = 0;
 
   function emitTagsChanged(payload: TagsChangedPayload) {
     suppressTagsChangedReload = true;
@@ -86,26 +87,28 @@
     });
     return () => {
       disposed = true;
+      loadGeneration += 1;
       unlistenTagsChanged?.();
     };
   });
 
   async function load() {
     if (disposed) return;
+    const generation = ++loadGeneration;
     loading = true;
     loadFailed = false;
     try {
       const result = await listAllTags();
-      if (disposed) return;
+      if (disposed || generation !== loadGeneration) return;
       if (result === null) {
         loadFailed = true;
         return;
       }
       tags = [...result].sort((a, b) => a.name.localeCompare(b.name));
     } catch {
-      if (!disposed) loadFailed = true;
+      if (!disposed && generation === loadGeneration) loadFailed = true;
     } finally {
-      if (!disposed) loading = false;
+      if (!disposed && generation === loadGeneration) loading = false;
     }
   }
 

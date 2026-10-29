@@ -50,6 +50,15 @@ function changed() {
   vi.mocked(listen).mock.calls.at(-1)![1]({ event: "tags-changed", id: 1, payload: {} });
   flushSync();
 }
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((yes, no) => {
+    resolve = yes;
+    reject = no;
+  });
+  return { promise, resolve, reject };
+}
 
 beforeEach(async () => {
   vi.resetAllMocks();
@@ -166,4 +175,48 @@ it("distinguishes a successfully loaded empty tag list from a failed read", asyn
   await settle();
   expect(host.querySelector(".empty-state")).not.toBeNull();
   expect(host.querySelector(".settings-state button")).toBeNull();
+});
+
+it("keeps the newer tag list when an older snapshot arrives late", async () => {
+  const old = deferred<unknown>();
+  vi.mocked(invoke).mockReturnValueOnce(old.promise);
+  changed();
+  vi.mocked(invoke).mockResolvedValueOnce([{ ...alpha, name: "beta" }]);
+  changed();
+  await settle();
+  expect(host.querySelector<HTMLInputElement>(".tag-name-input")?.value).toBe("beta");
+  old.resolve([{ ...alpha }]);
+  await settle();
+  expect(host.querySelector<HTMLInputElement>(".tag-name-input")?.value).toBe("beta");
+});
+
+it.each(["null", "rejection"] as const)(
+  "ignores an older tag list failure (%s) after a newer snapshot succeeds",
+  async (failure) => {
+    const old = deferred<unknown>();
+    vi.mocked(invoke).mockReturnValueOnce(old.promise);
+    changed();
+    vi.mocked(invoke).mockResolvedValueOnce([{ ...alpha, name: "beta" }]);
+    changed();
+    await settle();
+    if (failure === "null") old.resolve(null);
+    else old.reject(new Error("synthetic outdated read failure"));
+    await settle();
+    expect(host.querySelector(".settings-state")).toBeNull();
+    expect(host.querySelector<HTMLInputElement>(".tag-name-input")?.value).toBe("beta");
+  },
+);
+
+it("keeps loading while the newest tag snapshot is still pending", async () => {
+  const old = deferred<unknown>();
+  const current = deferred<unknown>();
+  vi.mocked(invoke).mockReturnValueOnce(old.promise).mockReturnValueOnce(current.promise);
+  changed();
+  changed();
+  old.resolve([{ ...alpha }]);
+  await settle();
+  expect(host.querySelector(".tag-name-input")).toBeNull();
+  current.resolve([{ ...alpha, name: "beta" }]);
+  await settle();
+  expect(host.querySelector<HTMLInputElement>(".tag-name-input")?.value).toBe("beta");
 });
