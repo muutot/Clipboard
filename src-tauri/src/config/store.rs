@@ -12,6 +12,21 @@ use crate::storage::StorageError;
 use super::types::*;
 
 impl ConfigStore {
+    /// Read an existing policy without creating or recovering configuration.
+    /// Destructive background tasks must skip unreadable policies rather than
+    /// turn missing/corrupt user settings into permission to apply defaults.
+    pub(crate) fn load_existing(project_directory: &Path) -> Result<Self, StorageError> {
+        let path = project_directory
+            .join(CONFIG_DIRECTORY_NAME)
+            .join(CONFIG_FILE_NAME);
+        let (config, general_settings_present) = Self::parse_saved_config(&fs::read(&path)?)?;
+        Ok(Self {
+            path,
+            config,
+            general_settings_present,
+        })
+    }
+
     pub fn load(project_directory: &Path) -> Result<Self, StorageError> {
         let config_directory = project_directory.join(CONFIG_DIRECTORY_NAME);
         fs::create_dir_all(&config_directory)?;

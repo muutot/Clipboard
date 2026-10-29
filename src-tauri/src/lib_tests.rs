@@ -857,6 +857,80 @@ mod storage_cleanup_tests {
     }
 
     #[test]
+    fn scheduled_cleanup_never_replaces_invalid_or_missing_policy_with_defaults() {
+        for corrupt in [true, false] {
+            let paths = temporary_storage("unreadable-policy");
+            let database = Database::open(&paths.database).unwrap();
+            let mut config = ConfigStore::load(&paths.project).unwrap();
+            config.set_retention_days(365).unwrap();
+            let original = fs::read(config.path()).unwrap();
+            let mut item = stored_item("retain-for-a-year", ClipboardKind::Text, None, None);
+            item.created_at_ms = chrono::Utc::now().timestamp_millis() - 60 * 86_400_000;
+            database.save_item(&item).unwrap();
+            if corrupt {
+                fs::write(config.path(), b"{truncated").unwrap();
+            } else {
+                fs::remove_file(config.path()).unwrap();
+            }
+            let worker = CleanupWorker::start_with_interval(
+                paths.project.clone(),
+                Database::open(&paths.database).unwrap(),
+                paths.clone(),
+                Arc::new(Mutex::new(())),
+                Duration::from_millis(20),
+            )
+            .unwrap();
+            let deadline = std::time::Instant::now() + Duration::from_millis(250);
+            while std::time::Instant::now() < deadline {
+                if database.get_item(&item.id).unwrap().is_none() {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            worker.stop();
+            assert!(
+                database.get_item(&item.id).unwrap().is_some(),
+                "unreadable policy must not authorize deletion"
+            );
+            if corrupt {
+                assert_eq!(fs::read(config.path()).unwrap(), b"{truncated");
+                assert_eq!(
+                    fs::read_dir(config.path().parent().unwrap())
+                        .unwrap()
+                        .count(),
+                    1
+                );
+            } else {
+                assert!(
+                    !config.path().exists(),
+                    "background reader must not recreate defaults"
+                );
+            }
+            // A valid replacement lets a fresh tick enforce the explicitly saved policy.
+            fs::write(config.path(), original).unwrap();
+            config.set_retention_days(30).unwrap();
+            let worker = CleanupWorker::start_with_interval(
+                paths.project.clone(),
+                Database::open(&paths.database).unwrap(),
+                paths.clone(),
+                Arc::new(Mutex::new(())),
+                Duration::from_millis(20),
+            )
+            .unwrap();
+            let deadline = std::time::Instant::now() + Duration::from_secs(3);
+            while database.get_item(&item.id).unwrap().is_some()
+                && std::time::Instant::now() < deadline
+            {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            worker.stop();
+            assert!(database.get_item(&item.id).unwrap().is_none());
+            drop(database);
+            fs::remove_dir_all(paths.project).unwrap();
+        }
+    }
+
+    #[test]
     fn scheduled_cleanup_grace_preserves_recent_orphan_files() {
         let paths = temporary_storage("orphan-grace");
         let orphan = paths.images.join("recent.png");

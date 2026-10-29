@@ -4,6 +4,44 @@ use serde_json::{json, Value};
 
 use crate::config::ConfigStore;
 
+#[test]
+fn existing_policy_load_never_creates_missing_configuration() {
+    let project = temporary_test_directory("missing-policy");
+    assert!(ConfigStore::load_existing(&project).is_err());
+    assert!(!project.exists());
+}
+
+#[test]
+fn existing_policy_load_never_quarantines_or_replaces_invalid_configuration() {
+    let project = temporary_test_directory("invalid-policy");
+    fs::create_dir_all(project.join("conf")).unwrap();
+    let path = project.join("conf/conf.json");
+    for bytes in [
+        b"{truncated".as_slice(),
+        b"{\"history\":\"wrong type\"}".as_slice(),
+    ] {
+        fs::write(&path, bytes).unwrap();
+        assert!(ConfigStore::load_existing(&project).is_err());
+        assert_eq!(fs::read(&path).unwrap(), bytes);
+        assert_eq!(fs::read_dir(project.join("conf")).unwrap().count(), 1);
+    }
+    fs::remove_dir_all(project).unwrap();
+}
+
+#[test]
+fn existing_policy_load_reads_saved_values_without_rewriting_the_file() {
+    let project = temporary_test_directory("valid-policy");
+    let mut original = ConfigStore::load(&project).unwrap();
+    original.set_retention_days(365).unwrap();
+    original.set_max_items(20_000).unwrap();
+    let bytes = fs::read(original.path()).unwrap();
+    let loaded = ConfigStore::load_existing(&project).unwrap();
+    assert_eq!(loaded.retention_days(), 365);
+    assert_eq!(loaded.max_items(), 20_000);
+    assert_eq!(fs::read(original.path()).unwrap(), bytes);
+    fs::remove_dir_all(project).unwrap();
+}
+
 #[cfg(target_os = "windows")]
 #[test]
 fn corrupt_config_must_be_preserved_before_loading_defaults() {

@@ -199,7 +199,7 @@ impl CleanupWorker {
                     break;
                 }
 
-                match ConfigStore::load(&project_directory) {
+                match ConfigStore::load_existing(&project_directory) {
                     Ok(config) => {
                         // Hold the storage maintenance lock for the whole run:
                         // the orphan scan inside must not race a concurrent
