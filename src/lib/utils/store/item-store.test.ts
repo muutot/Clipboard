@@ -448,6 +448,61 @@ describe("captureAffectedItems / restoreAffectedItems", () => {
     expect(getItems(next, "cache").map((i) => i.id)).toEqual(["b", "a"]);
   });
 
+  it.each([
+    ["b", "c"],
+    ["b", "d"],
+    ["a", "e"],
+  ])("restores %s and %s between surviving rows in each view", (left, right) => {
+    const before = createItemStore(["a", "b", "c", "d", "e"].map((id) => item(id)));
+    const seeded = appendItems(
+      appendItems(
+        before,
+        ["e", "c", "b", "d", "a"].map((id) => item(id)),
+        "indexed",
+      ),
+      ["c", "e", "a", "b", "d"].map((id) => item(id)),
+      "cache",
+    );
+    const ids = new Set([left, right]);
+    const snapshot = captureAffectedItems(seeded, ids);
+    const next = restoreAffectedItems(removeItems(seeded, ids), snapshot);
+    assertConsistent(next);
+    expect(next.historyIds).toEqual(seeded.historyIds);
+    expect(next.indexedIds).toEqual(seeded.indexedIds);
+    expect(next.cacheIds).toEqual(seeded.cacheIds);
+  });
+
+  it("preserves a new leading capture while restoring removed middle rows", () => {
+    const before = createItemStore(["a", "b", "c", "d", "e"].map((id) => item(id)));
+    const ids = new Set(["b", "c"]);
+    const snapshot = captureAffectedItems(before, ids);
+    const during = promoteItem(removeItems(before, ids), item("new"), "history");
+    const next = restoreAffectedItems(during, snapshot);
+    assertConsistent(next);
+    expect(next.historyIds).toEqual(["new", "a", "b", "c", "d", "e"]);
+  });
+
+  it("keeps new rows ahead of a restored view whose original rows were all removed", () => {
+    const before = createItemStore([item("a"), item("b")]);
+    const ids = new Set(["a", "b"]);
+    const snapshot = captureAffectedItems(before, ids);
+    const during = promoteItem(removeItems(before, ids), item("new"), "history");
+    const next = restoreAffectedItems(during, snapshot);
+    assertConsistent(next);
+    expect(next.historyIds).toEqual(["new", "a", "b"]);
+  });
+
+  it("does not reopen a search closed while a removal was pending", () => {
+    const before = appendItems(createItemStore(), [item("a"), item("b"), item("c")], "indexed");
+    const ids = new Set(["a", "b"]);
+    const snapshot = captureAffectedItems(before, ids);
+    const during = closeSearchResults(removeItems(before, ids));
+    const next = restoreAffectedItems(during, snapshot);
+    assertConsistent(next);
+    expect(next.indexedIds).toBeNull();
+    expect(next.byId.size).toBe(0);
+  });
+
   it("captures and reclaims a record only the detail pane displayed", () => {
     const before = setDetailItem(createItemStore([item("a")]), item("solo"));
     const snapshot = captureAffectedItems(before, new Set(["solo"]));

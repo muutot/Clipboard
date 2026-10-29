@@ -336,6 +336,8 @@ export interface AffectedItemSnapshot {
   readonly restoreRemoved: boolean;
   /** Index each affected id occupied per view, so a rollback restores order. */
   readonly positions: ReadonlyMap<string, ReadonlyMap<ItemView, number>>;
+  /** Original id order is an anchor hint, never a replacement for a live view. */
+  readonly order: Readonly<Record<ItemView, readonly string[]>>;
   /** The detail id before the mutation, when it was one of the affected ids. */
   readonly detailId: string | null;
   /** The affected ids that were selected before the mutation. */
@@ -391,6 +393,11 @@ export function captureAffectedItems(
     patches,
     restoreRemoved: options.restoreRemoved ?? true,
     positions,
+    order: {
+      history: [...store.historyIds],
+      indexed: [...(store.indexedIds ?? [])],
+      cache: [...store.cacheIds],
+    },
     detailId:
       store.detailId !== null && ids.has(store.detailId) && previous.has(store.detailId)
         ? store.detailId
@@ -401,9 +408,9 @@ export function captureAffectedItems(
 
 /**
  * Puts the captured ids back, leaving all other ids alone. An id still loaded
- * has only this mutation's fields restored; one the mutation removed is re-inserted at the index it
- * held in each view, so recency order survives. Records that arrived during the
- * async window are neither patched nor reordered.
+ * has only this mutation's fields restored; removed rows return between the
+ * surviving ids in each view's original order. Records that arrived during the
+ * async window are neither patched nor reordered relative to one another.
  */
 export function restoreAffectedItems(store: ItemStore, snapshot: AffectedItemSnapshot): ItemStore {
   if (snapshot.previous.size === 0) return store;
@@ -438,23 +445,30 @@ export function restoreAffectedItems(store: ItemStore, snapshot: AffectedItemSna
     missing.set(id, snapshot.positions.get(id));
   }
 
-  // Re-insert per view in that view's own ascending recorded order. Views can
-  // order the same ids differently, so a single global pass (the old code
-  // sorted by the lowest position across all views) could re-insert two ids in
-  // an order that contradicts one view's recorded indices and shift every
-  // later insertion in that view by one slot.
+  // Original indices already include earlier removed rows. Use surviving ids
+  // as anchors instead of adding an insertion drift to those indices, which
+  // also keeps a newer leading capture ahead of the restored middle rows.
   for (const view of VIEWS) {
+    if (view === "indexed" && store.indexedIds === null) continue;
     const list = views[view];
-    const slots: { id: string; at: number }[] = [];
-    for (const [id, slot] of missing) {
-      const at = slot?.get(view);
-      if (at !== undefined) slots.push({ id, at });
+    const surviving = new Set(list);
+    let pending: string[] = [];
+    let previousAnchor: string | null = null;
+    for (const id of snapshot.order[view]) {
+      if (missing.get(id)?.has(view)) {
+        pending.push(id);
+        continue;
+      }
+      if (!surviving.has(id)) continue;
+      if (pending.length > 0) {
+        list.splice(list.indexOf(id), 0, ...pending);
+        pending = [];
+      }
+      previousAnchor = id;
     }
-    slots.sort((a, b) => a.at - b.at);
-    let drift = 0;
-    for (const { id, at } of slots) {
-      list.splice(Math.min(at + drift, list.length), 0, id);
-      drift += 1;
+    if (pending.length > 0) {
+      const at = previousAnchor === null ? list.length : list.indexOf(previousAnchor) + 1;
+      list.splice(at, 0, ...pending);
     }
   }
 
@@ -464,11 +478,13 @@ export function restoreAffectedItems(store: ItemStore, snapshot: AffectedItemSna
     store.detailId === null && snapshot.detailId !== null && byId.has(snapshot.detailId)
       ? snapshot.detailId
       : store.detailId;
+  const indexedIds = store.indexedIds === null ? null : views.indexed;
+  pruneUnreferenced(byId, views.history, indexedIds, views.cache, detailId);
 
   return {
     byId,
     historyIds: views.history,
-    indexedIds: store.indexedIds === null ? null : views.indexed,
+    indexedIds,
     cacheIds: views.cache,
     detailId,
   };
