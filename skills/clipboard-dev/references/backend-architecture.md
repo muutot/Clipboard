@@ -181,6 +181,22 @@ UTs reproduce an old head overwriting a successful newer head; native child UTs
 cover cross-process exclusion and abrupt exit. This is per-database coordination;
 independent copies with the same remote device identity are outside this guarantee.
 
+A successful data-directory migration creates an independent SQLite database and
+retains the source for older instances/recovery. After path rewriting, the target
+calls `fork_sync_identity_for_migration`: one transaction assigns a fresh device
+UUID and clears snapshot/sequence/epoch publication state for every scope, keeping
+remote preparation, sync_enabled, row versions, outbox, cursors and resource refs.
+The next target run bootstraps a complete snapshot under its own device namespace;
+the source retains its UUID. This prevents a still-running source and the migrated
+copy from treating one another's in-flight segment as an unrelated orphan and
+publishing an unreachable head. The target UUID persists across normal restarts.
+Identity/reset failure rolls back and the existing migration quarantine handles
+the failed bundle. Migration increases first-run metadata upload and leaves the old
+remote device namespace available for recovery; it never remotely deletes that peer.
+This fixes migration-created copies; arbitrary externally copied active DBs remain
+outside the per-path sync lease guarantee. UTs cover real migration/restart with
+interleaved old/new sync, record/version/outbox/resource preservation and reset failure.
+
 ## Storage paths and ownership
 
 `src-tauri/src/storage/paths/` owns resource-root resolution/validation and metadata; `databases.rs` owns bounded additive database claims.

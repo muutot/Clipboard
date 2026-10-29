@@ -140,6 +140,16 @@ success. Drop/failure/crash releases leases without unlinking the lock file.
 This contract adds no schema, config, IPC or wire fields. Different DB paths are
 independent; cloned remote device identities require separate coordination.
 
+Data migration forks the independent target's sync identity after path rewriting.
+`fork_sync_identity_for_migration` atomically assigns a fresh UUID and resets all
+scope publication snapshots/sequences/epochs to uninitialized. It keeps source
+identity, sync_enabled, existing row versions, pending outbox, peer/checkpoint
+cursors, preparation flags and canonical resource references intact. The next run
+publishes a complete target snapshot under a different device prefix; subsequent
+restarts retain that new UUID. A failed reset rolls back identity and publication
+together and fails migration. No schema/wire/IPC change is required. Migration
+causes a new metadata bootstrap and retains the old remote namespace for recovery.
+
 ## Configuration contracts
 
 `privacy.localOnly` gates every desktop S3 entry (manual/automatic sync, connection

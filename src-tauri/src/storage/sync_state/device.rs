@@ -1,8 +1,37 @@
-//! `device` sync persistence (moved verbatim from `sync_state.rs`).
+//! Sync device identity, independent migration forks and snapshot export.
 
 use super::*;
 
 impl Database {
+    /// A data migration retains the source DB for recovery and older running
+    /// instances. Its independent copy must not publish/delete under the same
+    /// device namespace. Keep all records, versions, pending changes and refs;
+    /// only fork identity and require a complete bootstrap for each scope.
+    pub(crate) fn fork_sync_identity_for_migration(&self) -> Result<String, StorageError> {
+        self.with_connection(|connection| {
+            let transaction = connection.transaction()?;
+            // Keep sync_enabled, row versions, pending outbox and remote refs.
+            // Reinitializing sync would discard unmaterialized resource identities.
+            let device_id = Uuid::new_v4().to_string();
+            transaction.execute(
+                "INSERT INTO sync_metadata (key, value) VALUES ('device_id', ?1)
+                 ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                [&device_id],
+            )?;
+            transaction.execute(
+                "UPDATE sync_publication_state
+                    SET epoch = ?1,
+                        snapshot_key = NULL, snapshot_sha256 = NULL,
+                        snapshot_size_bytes = 0, snapshot_record_count = 0,
+                        snapshot_sequence = 0, published_sequence = 0,
+                        last_segment_key = NULL, initialized = 0, updated_at_ms = ?2",
+                params![Uuid::new_v4().to_string(), current_time_ms()],
+            )?;
+            transaction.commit()?;
+            Ok(device_id)
+        })
+    }
+
     pub fn set_sync_device_id(&self, device_id: &str) -> Result<(), StorageError> {
         self.with_connection(|connection| {
             connection.execute(

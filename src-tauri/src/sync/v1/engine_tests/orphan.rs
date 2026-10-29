@@ -3,6 +3,121 @@
 use super::*;
 
 #[test]
+fn migrated_database_and_remaining_old_instance_keep_both_publications_discoverable() {
+    use std::sync::Arc;
+    let store = Arc::new(MemoryStore::default());
+    let paths = temp_paths("migration-sync-identity");
+    let peer_paths = temp_paths("migration-sync-identity-peer");
+    let migrating = Database::open(&paths.database).unwrap();
+    migrating
+        .save_item(&text_item("initial", "initial"))
+        .unwrap();
+    sync_database(&*store, &migrating, &paths, REMOTE_SCOPE, None, options()).unwrap();
+    let older_instance = Database::open(&paths.database).unwrap();
+    let original_device = older_instance.get_sync_device_id().unwrap();
+    let target_paths = StoragePaths::initialize_with_resource_directories_for_configuration(
+        paths.project.clone(),
+        Some(paths.project.join("new-data")),
+        None,
+        None,
+    )
+    .unwrap();
+    let reservation = migrating.begin_storage_migration().unwrap();
+    crate::commands::config::storage::migrate_storage_data(&paths, &target_paths, &migrating)
+        .unwrap();
+    reservation.keep_until_restart();
+    drop(migrating); // The migrating app restarts; an older instance remains alive.
+    let target = Arc::new(Database::open(&target_paths.database).unwrap());
+    let target_device = target.get_sync_device_id().unwrap();
+    assert_ne!(target_device, original_device);
+    assert_eq!(
+        older_instance.get_sync_device_id().unwrap(),
+        original_device
+    );
+    older_instance
+        .save_item(&text_item("old-instance", "old-instance"))
+        .unwrap();
+    let hook_store = store.clone();
+    let hook_target = target.clone();
+    let hook_paths = target_paths.clone();
+    *store.after_put.lock().unwrap() = Some((
+        "/segments/".into(),
+        Box::new(move || {
+            hook_target
+                .save_item(&text_item("new-instance", "new-instance"))
+                .unwrap();
+            sync_database(
+                &*hook_store,
+                &*hook_target,
+                &hook_paths,
+                REMOTE_SCOPE,
+                None,
+                options(),
+            )
+            .unwrap();
+        }),
+    ));
+    sync_database(
+        &*store,
+        &older_instance,
+        &paths,
+        REMOTE_SCOPE,
+        None,
+        options(),
+    )
+    .unwrap();
+    let old_device = older_instance.get_sync_device_id().unwrap();
+    let head = decode_device_head(
+        store
+            .objects
+            .lock()
+            .unwrap()
+            .get(&head_object_key(&old_device).unwrap())
+            .unwrap(),
+        None,
+    )
+    .unwrap();
+    let referenced_segment_exists = head
+        .last_segment_key
+        .as_ref()
+        .is_some_and(|key| store.objects.lock().unwrap().contains_key(key));
+    assert_eq!(older_instance.count_sync_outbox().unwrap(), 0);
+    assert_eq!(target.count_sync_outbox().unwrap(), 0);
+    // An idle retry must not hide the fact that the successful head references
+    // a segment another clone discarded as an unrelated orphan.
+    sync_database(
+        &*store,
+        &older_instance,
+        &paths,
+        REMOTE_SCOPE,
+        None,
+        options(),
+    )
+    .unwrap();
+    let peer = Database::open(&peer_paths.database).unwrap();
+    let pulled = sync_database(&*store, &peer, &peer_paths, REMOTE_SCOPE, None, options()).unwrap();
+    let old_present = peer.get_item("old-instance").unwrap().is_some();
+    let new_present = peer.get_item("new-instance").unwrap().is_some();
+    drop(peer);
+    drop(target);
+    let reopened = Database::open(&target_paths.database).unwrap();
+    assert_eq!(reopened.get_sync_device_id().unwrap(), target_device);
+    drop(reopened);
+    drop(older_instance);
+    fs::remove_dir_all(paths.project).unwrap();
+    fs::remove_dir_all(peer_paths.project).unwrap();
+    assert!(
+        referenced_segment_exists,
+        "the migrated clone deleted an in-flight segment still referenced by a successful head"
+    );
+    assert_eq!(pulled.failed_peers, 0);
+    assert!(
+        old_present && new_present,
+        "both independently successful publications must reach a fresh peer"
+    );
+}
+
+#[test]
 fn overlapping_database_connections_cannot_regress_the_published_head() {
     use std::sync::Arc;
     let store = Arc::new(MemoryStore::default());

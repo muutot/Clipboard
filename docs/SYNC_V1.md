@@ -77,6 +77,15 @@ check. Warm desktop runs add one small descriptor GET to the engine-only request
 counts documented below; local materialization reads the cache without that GET.
 
 - `device_id` is the persisted UUID belonging to one local database.
+- A data-directory migration creates an independent target database with a fresh
+  UUID and resets its per-scope publication state for a complete bootstrap. The
+  retained source keeps its UUID so a still-running old instance and the target
+  cannot overwrite heads or delete segments in one device namespace. Existing row
+  versions, pending outbox, cursors and canonical resource references are retained.
+  The new identity persists across target restarts; reset failure rolls back and
+  fails migration. First sync uploads new snapshot metadata and preserves the old
+  remote device namespace for recovery. Arbitrary external copies of active DBs
+  still require distinct identities or separate coordination.
 - `epoch` changes only when that device must publish a replacement bootstrap snapshot.
 - A device writes only its own head, snapshot and segment namespace.
 - Snapshot, segment and checkpoint names are content addressed and immutable.

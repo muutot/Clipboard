@@ -231,6 +231,9 @@ pub(super) fn migrate_storage_data_after_resource_copy(
                 .map_err(|e| format!("failed to open migrated database: {e}"))?;
             rewrite_database_storage_paths(&migrated_database, &storage_path_mappings(old, new))
                 .map_err(|e| format!("failed to update migrated resource paths: {e}"))?;
+            migrated_database
+                .fork_sync_identity_for_migration()
+                .map_err(|error| format!("failed to fork migrated sync identity: {error}"))?;
             Ok(())
         })?;
     }

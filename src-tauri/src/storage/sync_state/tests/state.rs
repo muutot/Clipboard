@@ -3,6 +3,119 @@
 use super::*;
 
 #[test]
+fn migration_identity_fork_preserves_records_versions_outbox_and_resource_refs() {
+    use crate::sync::v1::{ResourceCategory, SyncResourceRef};
+    let database = Database::open_in_memory().unwrap();
+    database.initialize_sync().unwrap();
+    let original_device = database.get_sync_device_id().unwrap();
+    let mut initial = item("initial", "hash-initial", "initial");
+    initial.icon_path = Some("local-icon.png".into());
+    database.save_item(&initial).unwrap();
+    let mut batch = database
+        .get_sync_outbox_batch_for_scope(REMOTE_SCOPE, 100)
+        .unwrap()
+        .unwrap();
+    let resource =
+        crate::sync::v1::resource_object_key(ResourceCategory::Icon, &"a".repeat(64), "png")
+            .unwrap();
+    batch.mutations.upserts[0].item.icon_path = Some(resource.clone());
+    let refs = BTreeMap::from([(
+        "initial".into(),
+        vec![SyncResourceRef {
+            slot: "icon".into(),
+            ordinal: 0,
+            object_key: resource,
+        }],
+    )]);
+    database
+        .record_sync_resource_refs(REMOTE_SCOPE, &batch.mutations, &refs)
+        .unwrap();
+    let state = database
+        .get_or_create_sync_remote_state(REMOTE_SCOPE)
+        .unwrap();
+    database.mark_sync_remote_prepared(REMOTE_SCOPE).unwrap();
+    database
+        .commit_sync_bootstrap_published(
+            REMOTE_SCOPE,
+            &state.epoch,
+            &ObjectRef {
+                key: snapshot_object_key(&original_device, &state.epoch, &"b".repeat(64)).unwrap(),
+                sha256: "b".repeat(64),
+                stored_size_bytes: 1,
+                record_count: 1,
+            },
+            batch.last_sequence,
+        )
+        .unwrap();
+    database
+        .save_item(&item("pending", "hash-pending", "pending"))
+        .unwrap();
+    database
+        .save_item(&item("removed", "hash-removed", "removed"))
+        .unwrap();
+    database.soft_delete("removed").unwrap();
+    let before = database
+        .export_sync_snapshot_for_scope(REMOTE_SCOPE)
+        .unwrap();
+    let pending_before = database
+        .get_sync_outbox_batch_for_scope(REMOTE_SCOPE, 100)
+        .unwrap();
+    let device = database.fork_sync_identity_for_migration().unwrap();
+    assert_ne!(device, original_device);
+    assert!(Uuid::parse_str(&device).is_ok());
+    assert_eq!(database.get_sync_device_id().unwrap(), device);
+    assert!(database.is_sync_initialized().unwrap());
+    assert!(!database.initialize_sync().unwrap());
+    assert_eq!(
+        database
+            .export_sync_snapshot_for_scope(REMOTE_SCOPE)
+            .unwrap(),
+        before
+    );
+    assert_eq!(
+        database
+            .get_sync_outbox_batch_for_scope(REMOTE_SCOPE, 100)
+            .unwrap(),
+        pending_before
+    );
+    assert_eq!(
+        database
+            .list_sync_resource_refs_for_scope(REMOTE_SCOPE)
+            .unwrap(),
+        refs
+    );
+    let forked = database
+        .get_or_create_sync_remote_state(REMOTE_SCOPE)
+        .unwrap();
+    assert_ne!(forked.epoch, state.epoch);
+    assert!(!forked.initialized);
+    assert!(forked.snapshot.is_none());
+    assert_eq!(forked.published_sequence, 0);
+    assert!(forked.remote_prepared);
+}
+
+#[test]
+fn failed_migration_identity_fork_preserves_identity_and_publication_state() {
+    let database = Database::open_in_memory().unwrap();
+    let device = database.get_sync_device_id().unwrap();
+    let state = database
+        .get_or_create_sync_remote_state(REMOTE_SCOPE)
+        .unwrap();
+    database.with_connection(|connection| {
+        connection.execute_batch("CREATE TRIGGER fixture_identity_failure BEFORE UPDATE ON sync_publication_state BEGIN SELECT RAISE(FAIL, 'fixture publication reset failure'); END")?;
+        Ok(())
+    }).unwrap();
+    assert!(database.fork_sync_identity_for_migration().is_err());
+    assert_eq!(database.get_sync_device_id().unwrap(), device);
+    assert_eq!(
+        database
+            .get_or_create_sync_remote_state(REMOTE_SCOPE)
+            .unwrap(),
+        state
+    );
+}
+
+#[test]
 fn initializing_v1_preserves_items_and_discards_pending_v1_state() {
     let database = Database::open_in_memory().unwrap();
     database
