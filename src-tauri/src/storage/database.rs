@@ -75,6 +75,15 @@ impl Database {
         self.resource_publication.begin_write().map_err(Into::into)
     }
 
+    /// Protect migration output without opening or creating its SQLite file.
+    pub(crate) fn begin_resource_write_at(
+        path: &Path,
+    ) -> Result<super::resource_publication::ResourceWriteGuard, StorageError> {
+        super::resource_publication::ResourcePublication::for_database_path(path)?
+            .begin_write()
+            .map_err(Into::into)
+    }
+
     pub(crate) fn resource_cleanup_snapshot(
         &self,
     ) -> Option<super::resource_publication::ResourceCleanupSnapshot> {

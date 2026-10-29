@@ -159,12 +159,34 @@ impl CoordinationPaths {
 
 impl ResourcePublication {
     pub(crate) fn for_database(path: Option<&str>) -> std::io::Result<Arc<Self>> {
-        static REGISTRY: OnceLock<Mutex<HashMap<PathBuf, Weak<ResourcePublication>>>> =
-            OnceLock::new();
         let Some(path) = path.filter(|path| !path.is_empty()) else {
             return Ok(Arc::default());
         };
-        let path = std::fs::canonicalize(path)?;
+        Self::for_database_path(Path::new(path))
+    }
+
+    /// Migration publishes resources before its destination SQLite file exists.
+    /// Resolve the existing parent without creating/opening a placeholder DB.
+    pub(crate) fn for_database_path(path: &Path) -> std::io::Result<Arc<Self>> {
+        static REGISTRY: OnceLock<Mutex<HashMap<PathBuf, Weak<ResourcePublication>>>> =
+            OnceLock::new();
+        let path = match std::fs::canonicalize(path) {
+            Ok(path) => path,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                let parent = path
+                    .parent()
+                    .filter(|parent| !parent.as_os_str().is_empty())
+                    .unwrap_or_else(|| Path::new("."));
+                let name = path.file_name().ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "invalid destination database path",
+                    )
+                })?;
+                std::fs::canonicalize(parent)?.join(name)
+            }
+            Err(error) => return Err(error),
+        };
         let mut registry = REGISTRY
             .get_or_init(Mutex::default)
             .lock()
@@ -258,6 +280,34 @@ mod tests {
         ));
         std::fs::create_dir(&root).unwrap();
         root
+    }
+
+    #[test]
+    fn destination_publication_precedes_database_creation_and_invalidates_old_snapshots() {
+        let root = temporary_directory();
+        let path = root.join("destination.db");
+        let destination = ResourcePublication::for_database_path(&path).unwrap();
+        assert!(
+            !path.exists(),
+            "coordination must not create a placeholder SQLite DB"
+        );
+        let before = destination.snapshot().unwrap();
+        let guard = destination.begin_write().unwrap();
+        std::fs::write(&path, b"fixture").unwrap();
+        let reopened = ResourcePublication::for_database(Some(path.to_str().unwrap())).unwrap();
+        assert!(Arc::ptr_eq(&destination, &reopened));
+        assert!(reopened.snapshot().is_none());
+        assert!(before
+            .remove_if_current(|| panic!("pre-migration snapshot must be invalidated"))
+            .is_none());
+        drop(guard);
+        assert!(before
+            .remove_if_current(|| panic!("old snapshot remains stale after commit"))
+            .is_none());
+        assert!(reopened.snapshot().is_some());
+        drop(destination);
+        drop(reopened);
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

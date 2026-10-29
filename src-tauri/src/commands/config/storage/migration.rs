@@ -174,6 +174,20 @@ pub fn migrate_storage_data(
     new: &StoragePaths,
     database: &Database,
 ) -> Result<(), String> {
+    migrate_storage_data_after_resource_copy(old, new, database, || {})
+}
+
+pub(super) fn migrate_storage_data_after_resource_copy(
+    old: &StoragePaths,
+    new: &StoragePaths,
+    database: &Database,
+    after_resource_copy: impl FnOnce(),
+) -> Result<(), String> {
+    // Source SQLite reservation cannot fence a destination cleaner. Keep the
+    // destination's publication active from before the first copy until every
+    // rewritten reference commits, even when its DB does not exist yet.
+    let _destination_publication = Database::begin_resource_write_at(&new.database)
+        .map_err(|error| format!("failed to protect migration destination: {error}"))?;
     let dirs_to_migrate: &[(PathBuf, PathBuf, &str)] = &[
         (old.images.clone(), new.images.clone(), "images"),
         (old.files.clone(), new.files.clone(), "files"),
@@ -200,6 +214,8 @@ pub fn migrate_storage_data(
         copy_dir_contents(&icons_old, &icons_new)
             .map_err(|e| format!("failed to migrate icons: {}", e))?;
     }
+
+    after_resource_copy();
 
     if old.database != new.database && old.database.exists() {
         // `VACUUM INTO` refuses an existing destination, so a failed earlier

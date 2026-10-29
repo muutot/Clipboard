@@ -175,6 +175,16 @@ Changing data directories is a migration workflow, not a path-string edit. Keep 
 
 Migration resource copies never overwrite an existing destination. `copy_migration_file` reserves each new file with `create_new`, streams and flushes it, and cleans up only that newly created file on failure. An existing byte-identical file is a valid retry; differing content fails with the destination path so a pre-existing database's resources are preserved. Comparisons use bounded buffers. `copy_dir_contents` compares canonical roots before traversal: aliases of the same root are no-ops, while ancestor/descendant roots are rejected to prevent copying the newly created destination into itself.
 
+Storage migration additionally holds `Database::begin_resource_write_at` for the
+destination before copying any image/file/preview/icon body and until the snapshot's
+rewritten references commit. The source SQLite writer reservation does not fence
+another instance's destination cleaner. Destination publication initializes its
+existing-parent path coordination without creating a placeholder SQLite database;
+later opens reuse the same coordinator and invalidate pre-copy cleanup snapshots.
+Failure releases the destination guard; success releases it after reference commit.
+UTs interleave an independent destination cleaner between copying and DB replacement,
+verify both file/icon references, and confirm ordinary orphan removal resumes.
+
 ## Search
 
 Relative-week search subtracts calendar dates before resolving local midnight; it must not subtract 24-hour durations from the current instant. `week_start_date` is tested against New York, Berlin and Lord Howe DST boundaries with the test-only `chrono-tz` dependency, without changing the host timezone.

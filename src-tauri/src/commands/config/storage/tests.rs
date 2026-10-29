@@ -5,6 +5,88 @@ use super::{
 use std::time::SystemTime;
 
 #[test]
+fn migration_retains_copied_bodies_during_destination_cleanup() {
+    use crate::domain::{ClipboardItem, ClipboardKind};
+    use crate::storage::{ClipboardRepository, Database, StoragePaths};
+
+    let root = std::env::temp_dir().join(format!(
+        "clipboard-migration-target-cleanup-{}",
+        uuid::Uuid::new_v4()
+    ));
+    let old = StoragePaths::initialize(root.join("project")).unwrap();
+    let new = StoragePaths::initialize_with_resource_directories_for_configuration(
+        old.project.clone(),
+        Some(root.join("target")),
+        None,
+        None,
+    )
+    .unwrap();
+    let source = Database::open(&old.database).unwrap();
+    let body = old.files.join("source.txt");
+    let icon = old.storage.join("icons/fixture.png");
+    std::fs::create_dir_all(icon.parent().unwrap()).unwrap();
+    std::fs::write(&body, b"source body").unwrap();
+    std::fs::write(&icon, b"source icon").unwrap();
+    source
+        .save_item(&ClipboardItem {
+            id: "source-record".into(),
+            kind: ClipboardKind::File,
+            title: "fixture".into(),
+            text_content: None,
+            html_content: None,
+            rtf_content: None,
+            resource_path: Some(body.display().to_string()),
+            preview_path: None,
+            content_hash: "source-record".into(),
+            source_app: None,
+            size_bytes: 11,
+            created_at_ms: 1,
+            last_used_at_ms: None,
+            is_favorite: false,
+            icon_path: Some(icon.display().to_string()),
+            metadata_json: None,
+        })
+        .unwrap();
+    // An independently configured destination may already have an empty DB.
+    drop(Database::open(&new.database).unwrap());
+    let _source_reservation = source.begin_storage_migration().unwrap();
+    let mut cleanup_result = None;
+    super::migration::migrate_storage_data_after_resource_copy(&old, &new, &source, || {
+        let peer = Database::open(&new.database).unwrap();
+        assert!(new.files.join("source.txt").is_file());
+        assert!(new.storage.join("icons/fixture.png").is_file());
+        cleanup_result =
+            Some(crate::commands::cleanup::cleanup_orphan_storage_files(&peer, &new).unwrap());
+        // Close before the Windows database quarantine renames its directory entry.
+    })
+    .unwrap();
+    let destination = Database::open(&new.database).unwrap();
+    let copied = destination.get_item("source-record").unwrap().unwrap();
+    let body_present = std::path::Path::new(copied.resource_path.as_ref().unwrap()).is_file();
+    let icon_present = std::path::Path::new(copied.icon_path.as_ref().unwrap()).is_file();
+    std::fs::write(new.files.join("unreferenced.txt"), b"orphan").unwrap();
+    let after_migration =
+        crate::commands::cleanup::cleanup_orphan_storage_files(&destination, &new).unwrap();
+    drop(destination);
+    drop(_source_reservation);
+    drop(source);
+    std::fs::remove_dir_all(root).unwrap();
+    assert!(
+        body_present,
+        "destination cleanup deleted a copied body before its DB reference was installed"
+    );
+    assert!(
+        icon_present,
+        "destination cleanup deleted a copied icon before its DB reference was installed"
+    );
+    assert_eq!(cleanup_result.unwrap().removed_files, 0);
+    assert_eq!(
+        after_migration.removed_files, 1,
+        "publication must release after rewritten references commit"
+    );
+}
+
+#[test]
 fn migration_shared_resource_root_preserves_other_database_references_after_restart() {
     use crate::domain::{ClipboardItem, ClipboardKind};
     use crate::storage::{ClipboardRepository, Database, ResourceRootRole, StoragePaths};
@@ -186,6 +268,16 @@ fn failed_migration_or_config_save_releases_the_writer_reservation() {
         });
         assert!(result.is_err());
         assert_eq!(saved, !fail_copy);
+        let destination = Database::open(&new.database).unwrap();
+        std::fs::write(new.files.join("after-failure.txt"), b"orphan").unwrap();
+        assert_eq!(
+            crate::commands::cleanup::cleanup_orphan_storage_files(&destination, &new)
+                .unwrap()
+                .removed_files,
+            1,
+            "a failed copy/save must release destination publication"
+        );
+        drop(destination);
         writer
             .execute(
                 "INSERT INTO sync_metadata(key, value) VALUES ('audit-after-failure', '1')",

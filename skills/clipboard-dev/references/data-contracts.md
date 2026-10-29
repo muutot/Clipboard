@@ -417,6 +417,13 @@ shared-root reclamation disabled. Fresh independent roots retain normal cleanup.
 Migration does not copy these claims or the root lock, and cleanup/rename never
 remove/rename either metadata file. No IPC/config/SQLite schema changes are required.
 
+Migration also acquires destination publication through
+`Database::begin_resource_write_at` before body copy until rewritten DB references
+commit. This uses the same destination-path writer lock/generation as later SQLite
+opens, without creating a placeholder DB. Source writer reservations alone cannot
+protect a destination cleaner. Both successful and failed copies release this guard;
+cleanup snapshots from before the publication remain invalid after it finishes.
+
 `content/resource_metadata.rs` and frontend `ResourceMetadata`/`ResourceFileMetadata` carry schema version, MIME/extension, size, storage/original paths, hashes, image dimensions, and per-file entries.
 
 - Treat metadata JSON as untrusted/optional at the frontend boundary.
