@@ -3,7 +3,7 @@
 
 use super::clipboard::managed_source_path;
 use super::icons::{app_icon_file_name, build_icon_cache, icon_reference_matches};
-use super::replace::{validate_replace_source, REPLACE_MAX_SOURCE_BYTES};
+use super::replace::{replace_icon_file_at, validate_replace_source, REPLACE_MAX_SOURCE_BYTES};
 use super::shell::{open_external_url, openable_scheme};
 
 use crate::commands::clipboard::ClipboardFilesCopyError;
@@ -42,6 +42,44 @@ const TINY_PNG: &[u8] = &[
     0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE,
     0x42, 0x60, 0x82,
 ];
+
+#[test]
+fn replacing_an_icon_with_itself_or_a_hard_link_preserves_the_image() {
+    let directory = std::env::temp_dir().join(format!(
+        "clipboard-icon-self-replace-{}",
+        uuid::Uuid::new_v4()
+    ));
+    std::fs::create_dir(&directory).unwrap();
+    let target = directory.join("icon.png");
+    std::fs::write(&target, TINY_PNG).unwrap();
+    replace_icon_file_at(&directory, "icon.png", &target).unwrap();
+    assert_eq!(std::fs::read(&target).unwrap(), TINY_PNG);
+    let alias = directory.join("alias.png");
+    std::fs::hard_link(&target, &alias).unwrap();
+    replace_icon_file_at(&directory, "icon.png", &alias).unwrap();
+    assert_eq!(std::fs::read(&target).unwrap(), TINY_PNG);
+    assert_eq!(std::fs::read(&alias).unwrap(), TINY_PNG);
+    std::fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn failed_icon_replacement_preserves_the_destination_and_removes_staging() {
+    let directory = std::env::temp_dir().join(format!(
+        "clipboard-icon-failed-replace-{}",
+        uuid::Uuid::new_v4()
+    ));
+    std::fs::create_dir(&directory).unwrap();
+    let source = directory.join("source.png");
+    std::fs::write(&source, TINY_PNG).unwrap();
+    let target = directory.join("target.png");
+    std::fs::create_dir(&target).unwrap();
+    std::fs::write(target.join("keep"), b"preserve").unwrap();
+    assert!(replace_icon_file_at(&directory, "target.png", &source).is_err());
+    assert_eq!(std::fs::read(target.join("keep")).unwrap(), b"preserve");
+    assert_eq!(std::fs::read(&source).unwrap(), TINY_PNG);
+    assert_eq!(std::fs::read_dir(&directory).unwrap().count(), 2);
+    std::fs::remove_dir_all(directory).unwrap();
+}
 
 fn replace_source_dir(label: &str) -> std::path::PathBuf {
     let dir =

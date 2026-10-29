@@ -8,16 +8,27 @@ pub fn replace_icon_file(
     name: String,
     source_path: String,
 ) -> Result<(), String> {
-    let file_name = std::path::Path::new(&name)
+    replace_icon_file_at(
+        &paths.storage.join("icons"),
+        &name,
+        std::path::Path::new(&source_path),
+    )
+}
+
+pub(super) fn replace_icon_file_at(
+    icons: &std::path::Path,
+    name: &str,
+    source: &std::path::Path,
+) -> Result<(), String> {
+    let file_name = std::path::Path::new(name)
         .file_name()
         .and_then(|n| n.to_str())
         .ok_or_else(|| "invalid icon filename".to_string())?;
-    let target = paths.storage.join("icons").join(file_name);
+    let target = icons.join(file_name);
     match target.extension().map(|e| e.to_string_lossy().to_string()) {
         Some(ext) if ext == "png" => {}
         _ => return Err("icon filename must end in .png".to_string()),
     }
-    let source = std::path::Path::new(&source_path);
     // The source arrives from the webview (either a user-picked dialog path or
     // an icons-dir path). Without validation this command is an arbitrary-file
     // copy into the asset-served icons directory: a compromised renderer could
@@ -30,7 +41,13 @@ pub fn replace_icon_file(
             return Err("icon target is a symlink; refusing to overwrite".to_string());
         }
     }
-    std::fs::copy(source, &target).map_err(|e| format!("failed to replace icon: {e}"))?;
+    // A cached icon can be selected as its own replacement (including via a
+    // hard link). Stage before replacement so we never copy onto the source
+    // inode or truncate the previous icon if copying fails partway through.
+    crate::content::file_store::store_atomically(&target, |temporary| {
+        std::fs::copy(source, temporary).map(|_| ())
+    })
+    .map_err(|e| format!("failed to replace icon: {e}"))?;
     Ok(())
 }
 
