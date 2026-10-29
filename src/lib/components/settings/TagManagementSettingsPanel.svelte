@@ -20,6 +20,7 @@
     resolvePath($messages, path, params);
 
   let suppressTagsChangedReload = false;
+  let disposed = false;
 
   function emitTagsChanged(payload: TagsChangedPayload) {
     suppressTagsChangedReload = true;
@@ -73,7 +74,6 @@
   });
 
   onMount(() => {
-    let disposed = false;
     let unlistenTagsChanged: (() => void) | undefined;
     void load();
     listen<TagsChangedPayload>("tags-changed", () => {
@@ -97,6 +97,7 @@
   }
 
   function notify(message: string, kind: "success" | "error" = "success") {
+    if (disposed) return;
     clearTimeout(feedbackTimer);
     feedback = { message, kind };
     feedbackTimer = setTimeout(() => (feedback = null), 3000);
@@ -104,12 +105,18 @@
 
   async function saveColor(tag: TagInfo, color: string) {
     colorPopover = null;
-    const ok = await setTagColor(tag.name, color);
-    if (ok) {
+    try {
+      const ok = await setTagColor(tag.name, color);
+      if (ok !== true) {
+        notify(_t("toast.saveFailed"), "error");
+        return;
+      }
       const index = tags.findIndex((t) => t.name === tag.name);
       if (index >= 0) tags[index] = { ...tags[index], color };
       notify(color ? _t("tags.colorSaved") : _t("tags.saved"));
       emitTagsChanged({});
+    } catch {
+      notify(_t("toast.saveFailed"), "error");
     }
   }
 
@@ -171,10 +178,18 @@
       load();
       return;
     }
-    await renameTag(tag.name, name);
-    notify(_t("tags.renamed"));
-    emitTagsChanged({ renamed: { old: tag.name, new: name } });
-    void load();
+    try {
+      const updated = await renameTag(tag.name, name);
+      if (updated === null) {
+        notify(_t("toast.saveFailed"), "error");
+        return;
+      }
+      notify(_t("tags.renamed"));
+      emitTagsChanged({ renamed: { old: tag.name, new: name } });
+      void load();
+    } catch {
+      notify(_t("toast.saveFailed"), "error");
+    }
   }
 
   async function commitDelete(tag: TagInfo) {
@@ -182,10 +197,18 @@
       confirmDelete = { ...confirmDelete, [tag.name]: true };
       return;
     }
-    await deleteTag(tag.name);
-    notify(_t("tags.deleted"));
-    emitTagsChanged({ deleted: tag.name });
-    void load();
+    try {
+      const updated = await deleteTag(tag.name);
+      if (updated === null) {
+        notify(_t("toast.saveFailed"), "error");
+        return;
+      }
+      notify(_t("tags.deleted"));
+      emitTagsChanged({ deleted: tag.name });
+      void load();
+    } catch {
+      notify(_t("toast.saveFailed"), "error");
+    }
   }
 </script>
 
