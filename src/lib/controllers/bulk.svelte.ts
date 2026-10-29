@@ -30,6 +30,7 @@ export interface BulkDependencies {
   history: ReturnType<typeof createHistoryController>;
   captureAffected(ids: ReadonlySet<string>, options?: AffectedItemOptions): AffectedItemSnapshot;
   rollbackAffected(snapshot: AffectedItemSnapshot): void;
+  finishAffected(snapshot: AffectedItemSnapshot): void;
   statusMessage: string;
   translate(key: string, params?: Record<string, string | number>): string;
 }
@@ -157,11 +158,14 @@ export function createBulkController(deps: BulkDependencies) {
       })
       .catch((error) => {
         console.error("Bulk restore failed", error);
-        for (const id of ids) deps.history.deletedHistorySuppressedIds.delete(id);
+        for (const id of ids)
+          if (!snapshot.invalidatedIds?.has(id))
+            deps.history.deletedHistorySuppressedIds.delete(id);
         deps.rollbackAffected(snapshot);
         deps.statusMessage = deps.translate("app.deleteFailed");
         showToast(deps.translate("app.deleteFailed"), "error");
-      });
+      })
+      .finally(() => deps.finishAffected(snapshot));
   }
 
   function bulkPermanentDelete() {
@@ -182,11 +186,14 @@ export function createBulkController(deps: BulkDependencies) {
       })
       .catch((error) => {
         console.error("Bulk permanent delete failed", error);
-        for (const id of ids) deps.history.deletedHistorySuppressedIds.delete(id);
+        for (const id of ids)
+          if (!snapshot.invalidatedIds?.has(id))
+            deps.history.deletedHistorySuppressedIds.delete(id);
         deps.rollbackAffected(snapshot);
         deps.statusMessage = deps.translate("app.deleteFailed");
         showToast(deps.translate("app.deleteFailed"), "error");
-      });
+      })
+      .finally(() => deps.finishAffected(snapshot));
   }
 
   function bulkDelete() {
@@ -249,57 +256,62 @@ export function createBulkController(deps: BulkDependencies) {
           return { ...operation, ok: false };
         }
       }),
-    ).then((outcomes) => {
-      const successfulSoft = new Set(
-        outcomes.filter((outcome) => outcome.ok && outcome.mode === "soft").flatMap((o) => o.ids),
-      );
-      const successfulPermanent = new Set(
-        outcomes
-          .filter((outcome) => outcome.ok && outcome.mode === "permanent")
-          .flatMap((o) => o.ids),
-      );
-      const successfulHard = new Set(
-        outcomes.filter((outcome) => outcome.ok && outcome.mode === "hard").flatMap((o) => o.ids),
-      );
-      const failedIds = new Set(outcomes.filter((outcome) => !outcome.ok).flatMap((o) => o.ids));
-      const removedIds = new Set([...successfulPermanent, ...successfulHard]);
-      const succeededIds = new Set([...successfulSoft, ...removedIds]);
-
-      for (const id of permanentIds) {
-        if (!successfulPermanent.has(id)) deps.history.deletedHistorySuppressedIds.delete(id);
-      }
-
-      // Success already has its optimistic transition and canonical broadcast.
-      // Reapplying it here would undo a later restore or newly loaded record.
-      // Only failed transactions own a rollback, including their detail slot.
-      const failedSnapshot: AffectedItemSnapshot = {
-        ...snapshot,
-        previous: new Map([...snapshot.previous].filter(([id]) => failedIds.has(id))),
-        patches: new Map([...snapshot.patches].filter(([id]) => failedIds.has(id))),
-        detailId:
-          snapshot.detailId !== null && failedIds.has(snapshot.detailId) ? snapshot.detailId : null,
-      };
-      deps.itemStore.current = restoreAffectedItems(deps.itemStore.current, failedSnapshot);
-      selectedIds = new Set([...selectedIds].filter((id) => !succeededIds.has(id)));
-
-      // Failed (and partially failed) batches skip the success-path
-      // invalidations, so resync from the backend explicitly.
-      if (successfulSoft.size > 0 || successfulPermanent.size > 0 || failedIds.size > 0) {
-        deps.history.invalidateDeletedHistoryPagination();
-      }
-      if (successfulSoft.size > 0 || successfulHard.size > 0 || failedIds.size > 0) {
-        deps.history.invalidateActiveHistoryPagination();
-      }
-      if (failedIds.size > 0) {
-        deps.statusMessage = deps.translate("app.deleteFailed");
-        showToast(deps.translate("app.deleteFailed"), "error");
-      } else {
-        showToast(
-          deps.translate("toast.bulkDeleteSuccess", { count: succeededIds.size }),
-          "success",
+    )
+      .then((outcomes) => {
+        const successfulSoft = new Set(
+          outcomes.filter((outcome) => outcome.ok && outcome.mode === "soft").flatMap((o) => o.ids),
         );
-      }
-    });
+        const successfulPermanent = new Set(
+          outcomes
+            .filter((outcome) => outcome.ok && outcome.mode === "permanent")
+            .flatMap((o) => o.ids),
+        );
+        const successfulHard = new Set(
+          outcomes.filter((outcome) => outcome.ok && outcome.mode === "hard").flatMap((o) => o.ids),
+        );
+        const failedIds = new Set(outcomes.filter((outcome) => !outcome.ok).flatMap((o) => o.ids));
+        const removedIds = new Set([...successfulPermanent, ...successfulHard]);
+        const succeededIds = new Set([...successfulSoft, ...removedIds]);
+
+        for (const id of permanentIds) {
+          if (!successfulPermanent.has(id) && !snapshot.invalidatedIds?.has(id))
+            deps.history.deletedHistorySuppressedIds.delete(id);
+        }
+
+        // Success already has its optimistic transition and canonical broadcast.
+        // Reapplying it here would undo a later restore or newly loaded record.
+        // Only failed transactions own a rollback, including their detail slot.
+        const failedSnapshot: AffectedItemSnapshot = {
+          ...snapshot,
+          previous: new Map([...snapshot.previous].filter(([id]) => failedIds.has(id))),
+          patches: new Map([...snapshot.patches].filter(([id]) => failedIds.has(id))),
+          detailId:
+            snapshot.detailId !== null && failedIds.has(snapshot.detailId)
+              ? snapshot.detailId
+              : null,
+        };
+        deps.itemStore.current = restoreAffectedItems(deps.itemStore.current, failedSnapshot);
+        selectedIds = new Set([...selectedIds].filter((id) => !succeededIds.has(id)));
+
+        // Failed (and partially failed) batches skip the success-path
+        // invalidations, so resync from the backend explicitly.
+        if (successfulSoft.size > 0 || successfulPermanent.size > 0 || failedIds.size > 0) {
+          deps.history.invalidateDeletedHistoryPagination();
+        }
+        if (successfulSoft.size > 0 || successfulHard.size > 0 || failedIds.size > 0) {
+          deps.history.invalidateActiveHistoryPagination();
+        }
+        if (failedIds.size > 0) {
+          deps.statusMessage = deps.translate("app.deleteFailed");
+          showToast(deps.translate("app.deleteFailed"), "error");
+        } else {
+          showToast(
+            deps.translate("toast.bulkDeleteSuccess", { count: succeededIds.size }),
+            "success",
+          );
+        }
+      })
+      .finally(() => deps.finishAffected(snapshot));
   }
   return {
     bulkCopy,

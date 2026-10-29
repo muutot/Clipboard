@@ -194,6 +194,14 @@ Rollback snapshots record the operation's actual `patches` plus `restoreRemoved`
 
 Each removal snapshot also keeps the original ID order per view as an anchor hint. Rollback inserts a missing run before its next surviving original ID, or after the previous one for a removed tail; with no surviving original IDs it appends after new arrivals. Original indices must not receive an additional insertion drift. Current rows keep their relative order, and each view uses its own anchors. A closed indexed view stays closed, and records with no remaining view/detail reference are pruned after restoration.
 
+The route tracks pending snapshots with `createRemovalRollbackGuard` and shares
+their `invalidatedIds` set with partial rollback snapshots. Canonical permanent
+removal events (`removedIds` and history-invalidation deleted IDs) supersede those
+IDs even when they already left every view. Late failure cannot reinsert, patch,
+reselect or reopen their detail slot, or clear their existing paging suppression.
+Other failed IDs still restore normally. Completion releases the tracking state;
+route teardown invalidates all still-pending rows.
+
 ## Verification checklist
 
 - Backend cache hit for a smaller/equal maximum.

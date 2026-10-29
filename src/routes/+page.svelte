@@ -82,6 +82,7 @@
     setDetailItem,
     type AffectedItemOptions,
     type AffectedItemSnapshot,
+    createRemovalRollbackGuard,
   } from "$lib/utils/store/item-store";
   import { createItemStoreView } from "$lib/utils/store/item-store-view.svelte";
   import { createItemMutations } from "$lib/utils/store/item-mutations";
@@ -144,6 +145,8 @@
   );
   metadataMutations = createItemMutations(() => itemStore);
   onDestroy(() => metadataMutations?.destroy());
+  const removalRollbacks = createRemovalRollbackGuard();
+  onDestroy(() => removalRollbacks.destroy());
   const items = $derived(itemStore.history);
 
   function updateItem(
@@ -171,7 +174,9 @@
     ids: ReadonlySet<string>,
     options: AffectedItemOptions = {},
   ): AffectedItemSnapshot {
-    return captureAffectedItems(itemStore.current, ids, bulk.selectedIds, options);
+    return removalRollbacks.track(
+      captureAffectedItems(itemStore.current, ids, bulk.selectedIds, options),
+    );
   }
 
   /// Undoes a failed bulk mutation: restores only the captured ids and
@@ -179,7 +184,9 @@
   /// during the window alone.
   function rollbackAffected(snapshot: AffectedItemSnapshot) {
     itemStore.current = restoreAffectedItems(itemStore.current, snapshot);
-    const selected = [...snapshot.selected].filter((id) => itemStore.current.byId.has(id));
+    const selected = [...snapshot.selected].filter(
+      (id) => !snapshot.invalidatedIds?.has(id) && itemStore.current.byId.has(id),
+    );
     if (selected.length > 0) {
       bulk.selectedIds = new Set([...bulk.selectedIds, ...selected]);
     }
@@ -385,6 +392,7 @@
     history,
     captureAffected,
     rollbackAffected,
+    finishAffected: (snapshot) => removalRollbacks.finish(snapshot),
     get statusMessage() {
       return statusMessage;
     },
@@ -858,6 +866,7 @@
       (event) => {
         invalidatePendingDetail(event.payload.deletedIds);
         const removedIds = new Set(event.payload.deletedIds);
+        removalRollbacks.invalidate(removedIds);
         // An external mutation can invalidate records whose IDs we do not know.
         itemStore.current = clearView(itemStore.current, "cache");
 
@@ -890,6 +899,7 @@
         // harmless: the payload is the stored row, so it equals the optimistic
         // state this window already shows.
         const payload = event.payload;
+        removalRollbacks.invalidate(new Set(payload.removedIds ?? []));
         metadataMutations!.acceptRecords((payload.items ?? []).map(toClipboardItem));
         invalidatePendingDetail([...(payload.deletedIds ?? []), ...(payload.removedIds ?? [])]);
         const pendingUpdate = payload.items?.find((record) => record.id === pendingDetail?.id);
@@ -1394,10 +1404,11 @@
       })
       .catch((error) => {
         console.error("Unable to permanently delete clipboard item", error);
-        history.deletedHistorySuppressedIds.delete(id);
+        if (!snapshot.invalidatedIds?.has(id)) history.deletedHistorySuppressedIds.delete(id);
         rollbackAffected(snapshot);
         showToast(_t("app.deleteFailed"), "error");
-      });
+      })
+      .finally(() => removalRollbacks.finish(snapshot));
   }
 
   // Direct deletion remains a separate backend path: the recycle-bin
@@ -1421,7 +1432,8 @@
         console.error("Unable to delete clipboard item", error);
         rollbackAffected(snapshot);
         showToast(_t("app.deleteFailed"), "error");
-      });
+      })
+      .finally(() => removalRollbacks.finish(snapshot));
   }
 
   function restoreItem(id: string) {
@@ -1925,7 +1937,8 @@
           console.error("Unable to clear history", error);
           rollbackAffected(snapshot);
           showToast(_t("app.deleteFailed"), "error");
-        });
+        })
+        .finally(() => removalRollbacks.finish(snapshot));
       return;
     }
 
@@ -1945,24 +1958,26 @@
           return { id, ok: false };
         }
       }),
-    ).then((outcomes) => {
-      const failedIds = new Set(outcomes.filter((outcome) => !outcome.ok).map((o) => o.id));
-      const successfulIds = new Set(
-        outcomes.filter((outcome) => outcome.ok).map((outcome) => outcome.id),
-      );
-      if (successfulIds.size > 0) invalidateActiveHistoryPagination();
-      if (failedIds.size > 0) {
-        // Only the rows this batch could not remove come back; everything that
-        // arrived during the window stays.
-        rollbackAffected(snapshot);
-        itemStore.current = removeItems(itemStore.current, successfulIds);
-        bulk.selectedIds = new Set([...bulk.selectedIds].filter((id) => !successfulIds.has(id)));
-        statusMessage = _t("app.deleteFailed");
-        showToast(_t("app.deleteFailed"), "error");
-        return;
-      }
-      showToast(_t("toast.clearHistorySuccess", { count: ids.length }), "success");
-    });
+    )
+      .then((outcomes) => {
+        const failedIds = new Set(outcomes.filter((outcome) => !outcome.ok).map((o) => o.id));
+        const successfulIds = new Set(
+          outcomes.filter((outcome) => outcome.ok).map((outcome) => outcome.id),
+        );
+        if (successfulIds.size > 0) invalidateActiveHistoryPagination();
+        if (failedIds.size > 0) {
+          // Only the rows this batch could not remove come back; everything that
+          // arrived during the window stays.
+          rollbackAffected(snapshot);
+          itemStore.current = removeItems(itemStore.current, successfulIds);
+          bulk.selectedIds = new Set([...bulk.selectedIds].filter((id) => !successfulIds.has(id)));
+          statusMessage = _t("app.deleteFailed");
+          showToast(_t("app.deleteFailed"), "error");
+          return;
+        }
+        showToast(_t("toast.clearHistorySuccess", { count: ids.length }), "success");
+      })
+      .finally(() => removalRollbacks.finish(snapshot));
   }
 
   // Carries the pressed card id so the signal is consumed as an edge by the

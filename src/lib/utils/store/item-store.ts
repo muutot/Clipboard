@@ -330,6 +330,8 @@ export interface AffectedItemOptions {
 }
 
 export interface AffectedItemSnapshot {
+  /** Canonical removals supersede these pending rollback rows, even while absent. */
+  readonly invalidatedIds?: ReadonlySet<string>;
   /** Previous version of each affected id, taken from the record map. */
   readonly previous: ReadonlyMap<string, ClipboardItem>;
   readonly patches: ReadonlyMap<string, Partial<ClipboardItem>>;
@@ -342,6 +344,32 @@ export interface AffectedItemSnapshot {
   readonly detailId: string | null;
   /** The affected ids that were selected before the mutation. */
   readonly selected: ReadonlySet<string>;
+}
+
+/** Track only pending snapshots; canonical deletions must never be undone by a late failure. */
+export function createRemovalRollbackGuard() {
+  const pending = new Map<ReadonlySet<string>, { invalidated: Set<string>; ids: string[] }>();
+  return {
+    track(snapshot: AffectedItemSnapshot): AffectedItemSnapshot {
+      const invalidated = new Set<string>();
+      pending.set(invalidated, { invalidated, ids: [...snapshot.previous.keys()] });
+      return { ...snapshot, invalidatedIds: invalidated };
+    },
+    invalidate(ids: ReadonlySet<string>) {
+      for (const state of pending.values()) {
+        for (const id of state.ids) if (ids.has(id)) state.invalidated.add(id);
+      }
+    },
+    finish(snapshot: AffectedItemSnapshot) {
+      if (snapshot.invalidatedIds) pending.delete(snapshot.invalidatedIds);
+    },
+    destroy() {
+      for (const state of pending.values()) {
+        for (const id of state.ids) state.invalidated.add(id);
+      }
+      pending.clear();
+    },
+  };
 }
 
 /**
@@ -424,6 +452,7 @@ export function restoreAffectedItems(store: ItemStore, snapshot: AffectedItemSna
   const missing = new Map<string, ReadonlyMap<ItemView, number> | undefined>();
 
   for (const [id, before] of snapshot.previous) {
+    if (snapshot.invalidatedIds?.has(id)) continue;
     const current = byId.get(id);
     if (current) {
       const written = snapshot.patches.get(id);
@@ -475,7 +504,10 @@ export function restoreAffectedItems(store: ItemStore, snapshot: AffectedItemSna
   // Only reclaim an emptied detail pane. If the user opened a different record
   // during the window, that newer choice wins.
   const detailId =
-    store.detailId === null && snapshot.detailId !== null && byId.has(snapshot.detailId)
+    store.detailId === null &&
+    snapshot.detailId !== null &&
+    !snapshot.invalidatedIds?.has(snapshot.detailId) &&
+    byId.has(snapshot.detailId)
       ? snapshot.detailId
       : store.detailId;
   const indexedIds = store.indexedIds === null ? null : views.indexed;

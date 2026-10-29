@@ -9,6 +9,7 @@
     search?: ReturnType<typeof createSearchController>;
     bulk?: ReturnType<typeof createBulkController>;
     setQuery?: (value: string) => void;
+    removeCanonical?: (ids: ReadonlySet<string>) => void;
   }
 </script>
 
@@ -19,6 +20,8 @@
     createItemStore,
     captureAffectedItems,
     restoreAffectedItems,
+    createRemovalRollbackGuard,
+    removeItems,
   } from "$lib/utils/store/item-store";
   import { DEFAULT_GENERAL_SETTINGS } from "$lib/services/settings";
   import type { ClipboardItem } from "$lib/types/clipboard";
@@ -32,6 +35,8 @@
   );
   mutations = createItemMutations(() => store);
   onDestroy(() => mutations?.destroy());
+  const removalRollbacks = createRemovalRollbackGuard();
+  onDestroy(() => removalRollbacks.destroy());
   let query = $state("");
   const settings = {
     ...DEFAULT_GENERAL_SETTINGS,
@@ -74,10 +79,11 @@
       return store.history.filter((i) => bulk.selectedIds.has(i.id)).every((i) => i.favorite);
     },
     captureAffected: (ids, options) =>
-      captureAffectedItems(store.current, ids, bulk.selectedIds, options),
+      removalRollbacks.track(captureAffectedItems(store.current, ids, bulk.selectedIds, options)),
     rollbackAffected: (snapshot) => {
       store.current = restoreAffectedItems(store.current, snapshot);
     },
+    finishAffected: (snapshot) => removalRollbacks.finish(snapshot),
     statusMessage: "",
     translate: (key) => key,
   });
@@ -87,6 +93,10 @@
       history,
       search,
       bulk,
+      removeCanonical: (ids: ReadonlySet<string>) => {
+        removalRollbacks.invalidate(ids);
+        store.current = removeItems(store.current, ids);
+      },
       setQuery: (value: string) => {
         query = value;
       },

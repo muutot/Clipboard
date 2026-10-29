@@ -90,6 +90,15 @@ pending draft. Unloaded records are not reinserted; teardown invalidates reply
 projection and prevents queued IPC from starting. Membership/removal rollback
 continues to use the separately scoped snapshot helpers.
 
+Pending removal snapshots use `item-store.ts`'s `createRemovalRollbackGuard`.
+Canonical `removedIds` and history-invalidation deletions invalidate only the
+tracked affected IDs, including rows already absent after an optimistic removal.
+Rollback skips their fields, reinsertion, detail slot and old selection; failure
+also leaves their recycle-bin suppression intact. Single removal, clear and bulk
+paths release snapshots on completion, and teardown invalidates pending snapshots.
+This guard does not resolve soft-delete/restore ordering or continuous membership
+failures; those retain separate field/snapshot rollback semantics.
+
 Bulk-delete completion restores only the failed transactions' captured records
 and detail slot. Successful rows retain their optimistic/canonical state and any
 later restore or reload; completion must not repeat deletion/removal or reset the

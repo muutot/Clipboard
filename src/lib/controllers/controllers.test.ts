@@ -282,6 +282,31 @@ it("returns to the confirmed favorite after successive bulk saves fail", async (
   expect(out.store!.current.byId.get("initial")!.favorite).toBe(false);
 });
 
+it.each(["bulkPermanentDelete", "bulkDelete"] as const)(
+  "%s does not resurrect a canonically removed row on delayed failure",
+  async (action) => {
+    const gate = deferred<boolean>();
+    vi.mocked(service.persistBatchPermanentDelete).mockReturnValueOnce(gate.promise);
+    out.store!.current = applyItemPatches(
+      out.store!.current,
+      new Map([["initial", { deleted: true }]]),
+    );
+    out.store!.current = setDetailItem(out.store!.current, out.store!.current.byId.get("initial")!);
+    out.bulk!.selectedIds = new Set(["initial"]);
+    out.bulk![action]();
+    expect(out.store!.current.byId.has("initial")).toBe(false);
+    out.removeCanonical!(new Set(["initial"]));
+    out.store!.current = appendItems(out.store!.current, [item("captured")], "history");
+    out.bulk!.selectedIds = new Set(["captured"]);
+    gate.resolve(false);
+    await settle();
+    expect(out.store!.current.historyIds).toEqual(["captured"]);
+    expect(out.store!.current.detailId).toBeNull();
+    expect(out.history!.deletedHistorySuppressedIds.has("initial")).toBe(true);
+    expect([...out.bulk!.selectedIds]).toEqual(["captured"]);
+  },
+);
+
 it.each(["history", "search"] as const)(
   "accepts same-valued canonical metadata from a %s page before an old save fails",
   async (source) => {

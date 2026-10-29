@@ -7,6 +7,7 @@ import {
   clearView,
   closeSearchResults,
   createItemStore,
+  createRemovalRollbackGuard,
   findLoadedItem,
   getDetailItem,
   getIndexedItems,
@@ -25,6 +26,78 @@ import {
   trimLoadedHistory,
   type ItemStore,
 } from "./item-store";
+
+describe("pending removal rollback ownership", () => {
+  it("restores only failed rows that were not canonically removed", () => {
+    const guard = createRemovalRollbackGuard();
+    const before = setDetailItem(createItemStore([item("a"), item("b")]), item("a"));
+    const snapshot = guard.track(captureAffectedItems(before, new Set(["a", "b"])));
+    let during = removeItems(before, new Set(["a", "b"]));
+    during = appendItems(during, [item("new")], "history");
+    guard.invalidate(new Set(["a", "unrelated"]));
+    const after = restoreAffectedItems(during, snapshot);
+    expect(after.historyIds).toEqual(["new", "b"]);
+    expect(after.byId.has("a")).toBe(false);
+    expect(after.detailId).toBeNull();
+    guard.finish(snapshot);
+  });
+
+  it("does not reopen an old detail slot if that ID was reloaded after removal", () => {
+    const guard = createRemovalRollbackGuard();
+    const before = setDetailItem(createItemStore([item("a")]), item("a"));
+    const snapshot = guard.track(captureAffectedItems(before, new Set(["a"])));
+    guard.invalidate(new Set(["a"]));
+    const during = appendItems(
+      removeItems(before, new Set(["a"])),
+      [item("a", { title: "new" })],
+      "history",
+    );
+    const after = restoreAffectedItems(during, snapshot);
+    expect(after.byId.get("a")!.title).toBe("new");
+    expect(after.detailId).toBeNull();
+  });
+
+  it("does not patch a reloaded same-valued field using a pre-removal snapshot", () => {
+    const guard = createRemovalRollbackGuard();
+    const before = createItemStore([item("a", { deleted: true })]);
+    const snapshot = guard.track(
+      captureAffectedItems(before, new Set(["a"]), new Set(), {
+        patches: new Map([["a", { deleted: false }]]),
+        restoreRemoved: false,
+      }),
+    );
+    guard.invalidate(new Set(["a"]));
+    const during = createItemStore([item("a", { deleted: false, title: "restored later" })]);
+    expect(restoreAffectedItems(during, snapshot).byId.get("a")).toMatchObject({
+      deleted: false,
+      title: "restored later",
+    });
+  });
+
+  it("releases settled snapshots while keeping later requests independently guarded", () => {
+    const guard = createRemovalRollbackGuard();
+    const before = createItemStore([item("a")]);
+    const first = guard.track(captureAffectedItems(before, new Set(["a"])));
+    guard.finish(first);
+    const second = guard.track(captureAffectedItems(before, new Set(["a"])));
+    guard.invalidate(new Set(["a"]));
+    expect(first.invalidatedIds!.has("a")).toBe(false);
+    expect(restoreAffectedItems(removeItems(before, new Set(["a"])), second).byId.has("a")).toBe(
+      false,
+    );
+  });
+
+  it("invalidates all pending rollback rows on teardown", () => {
+    const guard = createRemovalRollbackGuard();
+    const before = createItemStore([item("a")]);
+    const snapshot = guard.track(captureAffectedItems(before, new Set(["a"])));
+    guard.destroy();
+    expect(restoreAffectedItems(removeItems(before, new Set(["a"])), snapshot).byId.has("a")).toBe(
+      false,
+    );
+    guard.finish(snapshot);
+  });
+});
 
 function item(id: string, overrides: Partial<ClipboardItem> = {}): ClipboardItem {
   return {
