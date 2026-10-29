@@ -155,6 +155,15 @@ Main-route group switching and navigation are configurable: the route loads `con
 
 Item-action shortcuts (copy/delete/favorite/tag/detail/save/select-all; canonical defaults `Ctrl/⌘` + `C`/`D`/`F`/`T`/`E`/`S`/`A`, plus `Enter`/`Space`) are resolved by the pure `utils/keyboard/keyboard-actions.ts::resolveKeyAction` table against the user's configured chords (route `itemShortcutBindings`, absent falls back to `keyboard-defaults.json`, empty disables; unit-tested in `keyboard-actions.test.ts`) and executed by the route's `executeKeyAction` switch. Priority order inside the table is load-bearing when custom chords overlap. They are exempt from the editable-target early return, so they still operate on the selected entry even when focus is in the search box; `Ctrl+A` is intentionally left to the editable target (select-all text). Do not re-add an `HTMLInputElement`/`HTMLTextAreaElement` guard inside the item-action block — it is dead code because the editable-target early return already precedes it. The `Enter`/`Space` branches additionally skip when `isActivatableKeyboardTarget(event.target)` matches (`button, a, link, select, summary, label`, plus `role="tab"/"menuitem"/"button"/"link"/"checkbox"`) so native controls keep their keyboard activation; history cards keep theirs because they are divs with `role="option"`, which is deliberately absent from that selector. The target guards live in `utils/keyboard/keyboard.ts` (`isEditableKeyboardTarget`, `isItemActionShortcut`, `isActivatableKeyboardTarget`), covered by `keyboard.test.ts`.
 
+`TagEditDialog` serializes rename and color saves in submission order. Each rename
+captures its submitted draft, reads the confirmed source name when its turn starts,
+and emits that immutable old/new pair after success; later typing retains its draft.
+Color writes wait for earlier renames and use their confirmed name. Closing the
+dialog cancels queued work and pending read-only conflict checks, while already
+sent successful mutations still broadcast to other windows without late UI feedback.
+A zero affected-record count remains a valid registry-color rename. Mounted
+`TagEditDialog.test.ts` verifies these cases with synthetic IPC and events.
+
 ### `ImageFullscreenOverlay.svelte`
 
 Shared fullscreen image viewer for both in-app overlay and desktop Fullscreen API modes. Renders at `z-index: 200` with zoom, pan, drag, double-click reset, and Escape/close-button dismissal. Uses `window.addEventListener("keydown", ..., true)` in capture phase with `stopPropagation` to intercept Escape before other handlers.

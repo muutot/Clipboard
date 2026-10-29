@@ -25,51 +25,76 @@
   let currentName = $state(untrack(() => tag));
   let nameDraft = $state(untrack(() => tag));
   let currentColor = $state(untrack(() => color));
+  let disposed = false;
+  let editQueue = Promise.resolve();
 
   onMount(() => {
     queueMicrotask(() => {
+      if (disposed) return;
       dialog?.showModal();
       nameInput?.focus();
       nameInput?.select();
     });
+    return () => {
+      disposed = true;
+    };
   });
 
   function emitTagsChanged(payload: TagsChangedPayload) {
     emit("tags-changed", payload).catch((err) => console.warn("tags-changed emit failed:", err));
   }
 
-  async function commitRename() {
-    const name = nameDraft.trim();
-    if (!name || name === currentName) {
-      nameDraft = currentName;
-      return;
-    }
-    try {
-      const all = (await listAllTags()) ?? [];
-      if (all.some((entry) => entry.name !== currentName && entry.name === name)) {
-        showToast(_t("tags.renameConflict"), "error");
-        return;
-      }
-      const ok = await renameTag(currentName, name);
-      if (ok !== null) {
-        showToast(_t("tags.renamed"), "success");
-        emitTagsChanged({ renamed: { old: currentName, new: name } });
-        currentName = name;
-        nameDraft = name;
-      }
-    } catch (error) {
-      console.error("Tag rename failed:", error);
-      showToast(_t("tags.renameFailed"), "error");
-    }
+  // Rename and color writes share the tag identity established by prior saves.
+  function enqueueEdit(edit: () => Promise<void>): Promise<void> {
+    const next = editQueue.then(async () => {
+      if (!disposed) await edit();
+    });
+    editQueue = next.catch(() => {});
+    return next;
   }
 
-  async function saveColor(target: string) {
-    const ok = await setTagColor(currentName, target);
-    if (ok) {
-      currentColor = target;
-      showToast(target ? _t("tags.colorSaved") : _t("tags.saved"), "success");
-      emitTagsChanged({});
-    }
+  function commitRename() {
+    const submittedDraft = nameDraft;
+    const name = submittedDraft.trim();
+    return enqueueEdit(async () => {
+      const old = currentName;
+      if (!name || name === old) {
+        if (nameDraft === submittedDraft) nameDraft = old;
+        return;
+      }
+      try {
+        const all = (await listAllTags()) ?? [];
+        if (disposed) return;
+        if (all.some((entry) => entry.name !== old && entry.name === name)) {
+          showToast(_t("tags.renameConflict"), "error");
+          return;
+        }
+        const ok = await renameTag(old, name);
+        if (ok !== null) {
+          // Other windows must still receive a mutation that already committed.
+          emitTagsChanged({ renamed: { old, new: name } });
+          if (disposed) return;
+          currentName = name;
+          if (nameDraft === submittedDraft) nameDraft = name;
+          showToast(_t("tags.renamed"), "success");
+        }
+      } catch (error) {
+        console.error("Tag rename failed:", error);
+        if (!disposed) showToast(_t("tags.renameFailed"), "error");
+      }
+    });
+  }
+
+  function saveColor(target: string) {
+    return enqueueEdit(async () => {
+      const ok = await setTagColor(currentName, target);
+      if (ok) {
+        emitTagsChanged({});
+        if (disposed) return;
+        currentColor = target;
+        showToast(target ? _t("tags.colorSaved") : _t("tags.saved"), "success");
+      }
+    });
   }
 
   function handleBackdropClick(event: MouseEvent) {
