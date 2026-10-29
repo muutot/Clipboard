@@ -2,6 +2,8 @@ import { flushSync, mount, unmount } from "svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ClipboardItem, ClipboardItemsChangedPayload } from "$lib/types/clipboard";
 import { generalSettings } from "$lib/services/settings";
+import { onToast, type ToastEntry } from "$lib/services/toast";
+import { t } from "$lib/i18n";
 import FloatPage from "./+page.svelte";
 
 const bridge = vi.hoisted(() => ({
@@ -121,6 +123,26 @@ function changed(payload: Partial<ClipboardItemsChangedPayload>) {
 }
 
 describe("float history reconciliation", () => {
+  it("reports a rejected favorite request and retains the row for retry", async () => {
+    bridge.load.mockResolvedValue([item("a", false)]);
+    bridge.favorite.mockRejectedValueOnce(new Error("synthetic persistence failure"));
+    const toasts: ToastEntry[] = [];
+    const stop = onToast((toast) => toasts.push(toast));
+    cleanups.push(async () => stop());
+    const page = await render();
+    page.rows()[0].click();
+    await settle();
+    expect(toasts).toContainEqual(
+      expect.objectContaining({ type: "error", message: t("app.favoriteFailed") }),
+    );
+    expect(page.rows()).toHaveLength(1);
+    expect(page.rows()[0].querySelectorAll("svg")).toHaveLength(1);
+    page.rows()[0].click();
+    await settle();
+    expect(bridge.favorite).toHaveBeenCalledTimes(2);
+    expect(page.rows()[0].querySelectorAll("svg")).toHaveLength(2);
+  });
+
   it("keeps a later favorite event when an earlier favorite reply arrives", async () => {
     bridge.load.mockResolvedValue([item("a", false)]);
     let finish!: (ok: boolean) => void;

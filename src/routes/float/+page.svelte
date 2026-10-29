@@ -134,8 +134,9 @@
       return;
     }
     if (action === "favorite") {
-      const ok = await persistFavorite(id, !item.favorite);
-      if (ok) {
+      try {
+        const ok = await persistFavorite(id, !item.favorite);
+        if (!ok) throw new Error("record was not updated");
         // Commands broadcast before replying. A later event, reload or action
         // owns the newer immutable row; this reply is only a fallback while
         // the record captured at request entry is still current.
@@ -149,7 +150,7 @@
           _t(item.favorite ? "toast.unfavoriteSuccess" : "toast.favoriteSuccess"),
           "success",
         );
-      } else {
+      } catch {
         showToast(_t("app.favoriteFailed"), "error");
       }
       return;

@@ -53,6 +53,8 @@ Favorite and delete success replies patch/remove only the immutable row captured
 at request entry, while it remains current. Backend commands broadcast before
 replying; later events, reloads or completed actions own the newer row, so an old
 reply cannot undo a subsequent favorite change or hide a restored record.
+Favorite IPC rejections and false results show the same localized failure toast
+and retain the current row for retry; click dispatch must not leak a rejected promise.
 
 `src/routes/float/+page.svelte` tracks in-flight copy and copy/paste actions with a reactive set of item IDs. Each row remains disabled until its own request completes; starting or finishing another row's operation must not release that guard. The mounted route tests in `src/routes/float/float-page.test.ts` cover concurrent completion as well as cross-window history reconciliation.
 
