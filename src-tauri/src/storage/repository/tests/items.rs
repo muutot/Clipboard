@@ -27,6 +27,98 @@ fn dedup_upsert_preserves_existing_tags() {
 }
 
 #[test]
+fn recapture_clears_web_source_without_removing_user_metadata() {
+    for kind in [ClipboardKind::Text, ClipboardKind::Link] {
+        for incoming_metadata in [None, Some(serde_json::json!({"captureExtra": "new"}))] {
+            let database = Database::open_in_memory().unwrap();
+            let mut original = text_item("original", "same-content", 100);
+            original.kind = kind;
+            original.title = "User title".into();
+            original.source_app = Some("chrome".into());
+            original.metadata_json = Some(serde_json::json!({
+                "schemaVersion": 2,
+                "customTitle": true,
+                "note": "keep",
+                "web": {"title": "Old page", "url": "https://github.com/old", "domain": "github.com"}
+            }).to_string());
+            database.save_item(&original).unwrap();
+            database.set_tags("original", &["manual".into()]).unwrap();
+
+            let mut recapture = original.clone();
+            recapture.id = "recaptured".into();
+            recapture.created_at_ms = 200;
+            recapture.title = "Automatic title".into();
+            recapture.source_app = Some("notepad".into());
+            recapture.metadata_json = incoming_metadata.map(|value| value.to_string());
+            assert_eq!(database.save_item(&recapture).unwrap(), "original");
+
+            let saved = database.get_item("original").unwrap().unwrap();
+            let metadata: serde_json::Value =
+                serde_json::from_str(saved.metadata_json.as_deref().unwrap()).unwrap();
+            assert_eq!(saved.source_app.as_deref(), Some("notepad"));
+            assert!(metadata.get("web").is_none());
+            assert_eq!(saved.title, "User title");
+            assert_eq!(saved.created_at_ms, 100);
+            assert_eq!(metadata["customTitle"], true);
+            assert_eq!(metadata["note"], "keep");
+            assert_eq!(metadata["tags"], serde_json::json!(["manual"]));
+            assert_eq!(database.list_all_tags().unwrap()[0].name, "manual");
+        }
+    }
+}
+
+#[test]
+fn recapture_replaces_web_source_as_a_whole() {
+    for kind in [ClipboardKind::Text, ClipboardKind::Link] {
+        for previous_web in [
+            None,
+            Some(serde_json::json!({
+                "title": "Old page", "url": "https://github.com/old", "domain": "github.com"
+            })),
+        ] {
+            for new_web in [
+                serde_json::json!({"title": "New page", "url": "https://gitlab.com/new", "domain": "gitlab.com"}),
+                serde_json::json!({"title": "New page without SourceURL"}),
+            ] {
+                let database = Database::open_in_memory().unwrap();
+                let mut original = text_item("original", "same-content", 100);
+                original.kind = kind;
+                original.metadata_json = Some(
+                    serde_json::json!({
+                        "customTitle": true, "note": "keep", "web": previous_web
+                    })
+                    .to_string(),
+                );
+                database.save_item(&original).unwrap();
+                database.set_tags("original", &["manual".into()]).unwrap();
+
+                let mut recapture = original.clone();
+                recapture.id = "recaptured".into();
+                recapture.created_at_ms = 200;
+                recapture.source_app = Some("firefox".into());
+                recapture.metadata_json = Some(
+                    serde_json::json!({
+                        "schemaVersion": 2, "web": new_web
+                    })
+                    .to_string(),
+                );
+                assert_eq!(database.save_item(&recapture).unwrap(), "original");
+
+                let saved = database.get_item("original").unwrap().unwrap();
+                let metadata: serde_json::Value =
+                    serde_json::from_str(saved.metadata_json.as_deref().unwrap()).unwrap();
+                assert_eq!(saved.source_app.as_deref(), Some("firefox"));
+                assert_eq!(metadata["web"], new_web);
+                assert_eq!(metadata["customTitle"], true);
+                assert_eq!(metadata["note"], "keep");
+                assert_eq!(metadata["tags"], serde_json::json!(["manual"]));
+                assert_eq!(database.list_all_tags().unwrap()[0].name, "manual");
+            }
+        }
+    }
+}
+
+#[test]
 fn save_rolls_back_record_and_tags_on_derived_index_failure() {
     let database = Database::open_in_memory().unwrap();
     let existing = text_item("existing", "hash-existing", 100);

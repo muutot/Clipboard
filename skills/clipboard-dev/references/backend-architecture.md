@@ -238,6 +238,8 @@ a missing rescale misaligns those overlays on downscaled OCR inputs.
 
 ## Capture, content, and self-trigger suppression
 
+The content-dedup upsert in `storage/repository/helpers.rs::insert_item_row` treats text/link `web` metadata as one value owned by the latest capture: it removes the old blob before merging incoming metadata, or clears it when none arrives. This prevents non-browser recaptures and pages without SourceURL from inheriting an old URL/domain while retaining user tags, custom titles and unrelated root metadata. The saved record and derived tag mirror commit together; image/file metadata retains its existing merge policy.
+
 Currency quick actions retain the complete digit/separator sequence from the
 source, including ungrouped amounts beyond three digits and decimal precision.
 Detection extracts text without interpreting locale-dependent numeric values;

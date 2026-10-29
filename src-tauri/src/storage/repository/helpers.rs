@@ -113,13 +113,26 @@ pub(super) fn insert_item_row(
             -- carries its own dimensions/paths but no user tags, and a plain
             -- COALESCE would wipe the existing `tags` while `item_tags` keeps
             -- them. json_patch lets the new metadata overwrite its own keys
-            -- while preserving keys it does not mention.
+            -- while preserving keys it does not mention. Web attribution is
+            -- owned by the latest text/link capture, so replace it as a whole
+            -- (or remove it when absent), independently of user metadata.
             metadata_json = CASE
+                WHEN excluded.metadata_json IS NULL
+                     AND excluded.kind IN ('text', 'link')
+                     AND json_valid(clipboard_items.metadata_json)
+                    THEN json_remove(clipboard_items.metadata_json, '$.web')
                 WHEN excluded.metadata_json IS NULL THEN clipboard_items.metadata_json
                 WHEN clipboard_items.metadata_json IS NULL THEN excluded.metadata_json
                 WHEN json_valid(clipboard_items.metadata_json)
                      AND json_valid(excluded.metadata_json)
-                    THEN json_patch(clipboard_items.metadata_json, excluded.metadata_json)
+                    THEN json_patch(
+                        CASE
+                            WHEN excluded.kind IN ('text', 'link')
+                                THEN json_remove(clipboard_items.metadata_json, '$.web')
+                            ELSE clipboard_items.metadata_json
+                        END,
+                        excluded.metadata_json
+                    )
                 ELSE excluded.metadata_json
             END,
             deleted = 0,
