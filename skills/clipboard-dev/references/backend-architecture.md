@@ -155,18 +155,18 @@ boundary.
 
 ## Storage paths and ownership
 
-`src-tauri/src/storage/paths.rs` owns resource-root resolution and validation.
+`src-tauri/src/storage/paths/` owns resource-root resolution/validation and metadata; `databases.rs` owns bounded additive database claims.
 
 Resource-root safety is mandatory:
 
 - default roots are application-owned;
 - custom roots require an explicit `.clipboard-resource-root` marker before orphan cleanup is enabled;
-- startup may use an unmarked custom root but must not auto-claim it;
+- startup may use an unmarked custom root but must not auto-claim it; registering database coordination metadata does not grant ownership;
 - the Windows uninstaller resolves the storage root plus custom image/file roots, and deletes a custom root only when its marker matches the project key and role; an invalid/missing marker is retained even when "delete clipboard data" is checked;
 - explicit settings may claim only a safe empty root or validate a matching marker;
 - the `set_resource_ownership(owned)` command is the explicit recovery action for an already-used unmarked root: it writes or removes the marker under the persistent root coordination lock (never deleting or touching resource contents), skips roots that do not require a marker (default project data directories), and reports `restartRequired` only when the resulting ownership differs from the cleanup flags captured at startup (an off-and-on round trip in one session needs no restart);
 - image and file roots must not overlap each other or reserved project/data/database/index/icon paths;
-- cleanup skips the ownership marker and `.clipboard-resource-root.lock`; a custom root requires both startup eligibility and current marker validation under the root lock for each unlink;
+- cleanup skips the ownership marker, `.clipboard-resource-root.lock` and `.clipboard-resource-root.databases`; each image/file/preview unlink requires a single registered database under the root lock, and custom roots also require current marker validation;
 - every orphan-cleanup entry point (scheduled `CleanupWorker`, `enforceHistoryCleanup`, `cleanupStorageFiles`), the `renameItem` command, and `permanentlyDeleteStorageKind` (whose in-run orphan cleanup uses zero grace) hold `CaptureState.storage_maintenance_lock` for the run: a rename copies a new body before saving its paths, so cleanup must not reclaim that temporarily unreferenced copy before commit. Commands that pair it with `ingestion_guard` must acquire maintenance first (the storage-root migration order). This lock is deliberately separate from `ingestion_guard` so a long scan never stalls the capture loop.
 
 Changing data directories is a migration workflow, not a path-string edit. Keep managed/external path rewriting, database backup, search-index derivation, and concurrent ingestion/worker coordination in scope. The webview asset protocol's static scope is empty; at startup the app grants the managed storage root plus any configured image/file roots with `asset_protocol_scope().allow_directory`, so previews and thumbnails render even when a custom resource directory lives outside `storage`, and the install directory — where `$EXE`/`$RESOURCE` both resolve on Windows and where `conf/api.token`, `conf/conf.json`, and the database live — is never exposed. Migration must be retryable: `VACUUM INTO` refuses an existing destination, so `migrate_storage_data` first moves the existing database and its `-wal`/`-shm` sidecars into an exclusively created `clipboard.sqlite3.pre-migrate-<uuid>` directory. A partial quarantine failure restores earlier moves; a snapshot, open, or path-rewrite failure preserves the failed database bundle in a separate quarantine before restoring the originals. Rollback refuses conflicting destinations and reports the remaining backup paths on failure. Successful migration retains the old bundle for recovery, and rapid retries cannot overwrite earlier backups. Directory copies and size walks track canonical ancestor paths (`copy_dir_contents`/`dir_size` in `commands/config/storage/migration.rs`) so a junction/reparse cycle cannot recurse until the stack overflows.
@@ -297,7 +297,7 @@ would itself prevent replacement.
 
 Tray pause toggles hold the privacy-manager lock through the capture update and config save. A failed save keeps the requested session state, emits `privacy-pause-changed`, and opens a non-blocking native warning that explains the restart risk even with the main window hidden. Settings-command toggles use the same lock ordering but retain the previous state on save failure. The tray warning's English/Chinese strings intentionally live in Rust rather than the WebView catalog; they follow `general.language` and the OS locale for `system`. Native dialog appearance still needs runtime verification.
 
-`storage/resource_publication.rs` coordinates this application's connections and processes keyed by the canonical database path. Capture (including icons), JSON/PPaste/portable-backup import, record duplication, sync/materialization and thumbnail jobs hold a publication guard from before resource lookup/reuse through the DB commit; repository save/preview methods also register publication. File databases use two siblings: `.resource-writers.lock` carries a shared OS lock for each active writer, and `.resource-generation` holds an eight-byte little-endian counter incremented under its own exclusive lock. Cleanup briefly tries an exclusive writer lock to snapshot/check that counter, including before each unlink; directory scans and reference resolution hold no file lock or publication mutex. Active writers or any intervening publication defer the remaining cleanup, including a writer that finished in another process during the scan. Nested/parallel writes use independently opened handles; close or abrupt process exit releases locks. Coordination I/O failures reject publication and defer cleanup; malformed counters are never replaced with a default. In-memory databases retain the local count/generation only. Counters need process visibility, not per-record fsync, because no cleanup snapshot survives reboot. The ten-minute mtime grace retains fresh/interrupted files but is not the concurrency guarantee. Temporary sync snapshots remove their coordination siblings on drop; data migration creates independent coordination at the destination instead of copying the source locks. The standard-library file-lock APIs require Rust 1.89 or newer. Windows UTs cover actual child-process publication and abrupt exit; matching macOS/Linux CI remains required. Independent tools that bypass this protocol or different databases sharing one resource directory are outside this guarantee.
+`storage/resource_publication.rs` coordinates this application's connections and processes keyed by the canonical database path. Capture (including icons), JSON/PPaste/portable-backup import, record duplication, sync/materialization and thumbnail jobs hold a publication guard from before resource lookup/reuse through the DB commit; repository save/preview methods also register publication. File databases use two siblings: `.resource-writers.lock` carries a shared OS lock for each active writer, and `.resource-generation` holds an eight-byte little-endian counter incremented under its own exclusive lock. Cleanup briefly tries an exclusive writer lock to snapshot/check that counter, including before each unlink; directory scans and reference resolution hold no file lock or publication mutex. Active writers or any intervening publication defer the remaining cleanup, including a writer that finished in another process during the scan. Nested/parallel writes use independently opened handles; close or abrupt process exit releases locks. Coordination I/O failures reject publication and defer cleanup; malformed counters are never replaced with a default. In-memory databases retain the local count/generation only. Counters need process visibility, not per-record fsync, because no cleanup snapshot survives reboot. The ten-minute mtime grace retains fresh/interrupted files but is not the concurrency guarantee. Temporary sync snapshots remove their coordination siblings on drop; data migration creates independent coordination at the destination instead of copying the source locks. The standard-library file-lock APIs require Rust 1.89 or newer. Windows UTs cover actual child-process publication and abrupt exit; matching macOS/Linux CI remains required. Independent tools that bypass the protocol are outside this guarantee. The separate resource-root database registry (below) disables deletion when different databases share a root.
 
 File renames hold the database's publication guard from before reading the row
 until a completed new-body copy and its path/title commit. Known shared files
@@ -313,19 +313,38 @@ Real independent-Database UTs interleave duplicate's read/save with rename,
 exercise cleanup during copy and after commit, reject target conflicts, and
 inject copy/save failures without changing the source paths.
 
-Custom-root ownership actions and per-file orphan deletion share an exclusive
+Resource-root ownership actions and per-file orphan deletion share an exclusive
 `.clipboard-resource-root.lock` inside that root. Cleanup tries the lock without
-waiting and revalidates the project/role marker while holding it through one
+waiting and revalidates required project/role ownership and database exclusivity through one
 unlink; revoked, transferred, busy or unreadable ownership defers that root.
 The preview directory uses its image root's lock. Claim/revoke wait for a current
 unlink; a stale revoke does not remove a foreign marker. Enabling a previously
 ineligible root still requires startup, while revocation now prevents subsequent
 custom-root deletion immediately. Configuration checks empty roots again under
 the lock; the coordination file is excluded from that check and orphan/rename
-operations. Marker bytes remain v1, so uninstall validation is unchanged. This
-addresses ownership transfer, not different databases with the same project/role
-marker sharing one root. UTs use independent projects/databases, a held unlink
+operations. Marker bytes remain v1, so uninstall validation is unchanged. Database claims below additionally protect roots shared by different databases, including the same project/role marker after a data migration. UTs use independent projects/databases, a held unlink
 guard, stale revoke and busy/invalid coordination; Unix CI remains a separate gate.
+
+Every image/file resource root retains `.clipboard-resource-root.databases`
+(version 1 JSON: `version`, sorted `databases`). `paths/databases.rs` registers the
+canonical database path under the same root lock before any initializer returns,
+including default and unmarked roots; this is coordination metadata, not ownership.
+A root used by multiple database paths cannot be scanned as one database's orphan
+space. Its startup cleanup flag is false, and every unlink rechecks the sole-path
+claim under lock so a second initializer invalidates an earlier snapshot's permission.
+Previews use their image root. Aliases normalize to one database identity.
+Registration is additive and is never reset by claim/revoke or pruned by database
+age/existence. Inactive databases and migration attempts may therefore keep a shared
+root's orphan deletion disabled; use distinct roots when reclamation is required.
+Read validation is bounded to 64 KiB and 64 identities; malformed/unknown/oversized
+metadata rejects initialization, and missing/unreadable/invalid metadata defers an
+already-running cleanup. Metadata writes use exclusive UUID staging and atomic
+replacement. Migration copies skip database claims and root locks, because target
+roots own their coordination; reference bodies and v1 marker bytes are unchanged.
+Real UTs cover migration/restart plus an older instance's late write, a late join
+of a default root, invalid/missing claims, aliases and independent-root migration.
+These guarantees require participating Clipboard versions and intact coordination;
+external tools that replace/remove the registry bypass the protocol.
 
 Ownership marker publication uses an exclusively created UUID staging file,
 flushes it, then atomically replaces the marker's directory entry under the root

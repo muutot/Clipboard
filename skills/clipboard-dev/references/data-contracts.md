@@ -394,14 +394,28 @@ Revocation/transfer, unavailable locks or invalid markers defer cleanup; preview
 use their image root's lock. Claims/revokes use the same lock, and stale revokes
 retain foreign markers. Startup eligibility remains required for enabling cleanup.
 The lock is never an orphan or rename source, and the marker's v1 bytes are unchanged.
-Different databases sharing one matching project/role root remain outside the
-per-database publication guarantee and require separate investigation.
+Different databases are additionally covered by the root database registry below; the per-database publication counter alone does not prove cross-database exclusivity.
 
 Marker writes stage to an exclusively created UUID file, flush and atomically
 replace the directory entry while holding the root lock. An existing marker's
 hard-link/symlink target is not written through; publication failure retains the
 old entry and removes staging. Explicit and empty-root claims share this helper,
 without changing v1 marker bytes or the ownership command payload.
+
+`.clipboard-resource-root.databases` is local version-1 coordination JSON
+(`version`, sorted `databases`), written atomically under the root lock. Every
+StoragePaths initializer registers its canonical database path for image/file
+roots, including unmarked/default roots, before returning usable paths. Registration
+does not grant marker ownership. Multiple registered database paths disable that
+root's orphan deletion; each unlink checks single-database identity under lock
+alongside custom ownership, so a new initializer invalidates older scan permission.
+Previews use their image-root claim; aliases normalize to one path. Validation
+bounds input to 64 KiB/64 identities. Invalid claims reject new initialization and
+unavailable claims defer existing cleanup. Registrations are additive and never
+pruned/reset by marker actions: migration attempts or retained databases may leave
+shared-root reclamation disabled. Fresh independent roots retain normal cleanup.
+Migration does not copy these claims or the root lock, and cleanup/rename never
+remove/rename either metadata file. No IPC/config/SQLite schema changes are required.
 
 `content/resource_metadata.rs` and frontend `ResourceMetadata`/`ResourceFileMetadata` carry schema version, MIME/extension, size, storage/original paths, hashes, image dimensions, and per-file entries.
 

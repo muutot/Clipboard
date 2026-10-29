@@ -4,8 +4,8 @@ use std::{
 };
 
 use super::types::{
-    ResourceRootRole, StoragePaths, RESOURCE_ROOT_LOCK, RESOURCE_ROOT_MARKER,
-    RESOURCE_ROOT_MARKER_HEADER,
+    ResourceRootRole, StoragePaths, RESOURCE_ROOT_DATABASES, RESOURCE_ROOT_LOCK,
+    RESOURCE_ROOT_MARKER, RESOURCE_ROOT_MARKER_HEADER,
 };
 use crate::storage::StorageError;
 
@@ -189,8 +189,12 @@ impl StoragePaths {
         }
 
         let mut paths = paths;
-        paths.image_cleanup_enabled = image_cleanup_enabled;
-        paths.file_cleanup_enabled = file_cleanup_enabled;
+        // Every root is registered before use, even when it is not yet owned.
+        // Registration is coordination metadata, never a cleanup permission.
+        paths.image_cleanup_enabled =
+            paths.register_resource_database(ResourceRootRole::Image)? && image_cleanup_enabled;
+        paths.file_cleanup_enabled =
+            paths.register_resource_database(ResourceRootRole::File)? && file_cleanup_enabled;
 
         Ok(paths)
     }
@@ -213,6 +217,7 @@ impl StoragePaths {
         fs::create_dir_all(path)?;
         let lock = resource_root_lock_file(path)?;
         lock.lock()?;
+        super::databases::register_database(path, database_identity(&self.database))?;
         write_resource_root_marker(
             path,
             &resource_root_marker_content(&self.project, role.as_str()),
@@ -242,8 +247,8 @@ impl StoragePaths {
         Ok(())
     }
 
-    /// Fence each custom-root unlink against an ownership action. Cleanup never
-    /// waits for a busy or unreadable root and validates the marker under lock.
+    /// Fence each root unlink against ownership actions and new database claims.
+    /// Cleanup never waits for a busy root and validates eligibility under lock.
     pub(crate) fn resource_root_cleanup_lock(&self, role: ResourceRootRole) -> Option<fs::File> {
         let path = match role {
             ResourceRootRole::Image => &self.images,
@@ -254,7 +259,7 @@ impl StoragePaths {
             Ok(lock)
         });
         match result {
-            Ok(lock) if self.resource_root_marker_valid(role) => Some(lock),
+            Ok(lock) if self.resource_root_cleanup_allowed(role) => Some(lock),
             Ok(_) => None,
             Err(error) => {
                 crate::log_warn!(
@@ -264,6 +269,27 @@ impl StoragePaths {
                 None
             }
         }
+    }
+
+    fn register_resource_database(&self, role: ResourceRootRole) -> Result<bool, StorageError> {
+        let path = match role {
+            ResourceRootRole::Image => &self.images,
+            ResourceRootRole::File => &self.files,
+        };
+        let lock = resource_root_lock_file(path)?;
+        lock.lock()?;
+        super::databases::register_database(path, database_identity(&self.database))
+    }
+
+    /// Current marker and database exclusivity, rechecked under the root lock
+    /// before unlink. Startup eligibility remains an additional cleanup gate.
+    pub(crate) fn resource_root_cleanup_allowed(&self, role: ResourceRootRole) -> bool {
+        let (path, marker_required) = match role {
+            ResourceRootRole::Image => (&self.images, self.image_marker_required),
+            ResourceRootRole::File => (&self.files, self.file_marker_required),
+        };
+        (!marker_required || self.resource_root_marker_valid(role))
+            && super::databases::database_is_exclusive(path, &database_identity(&self.database))
     }
 
     /// Whether a resource root currently carries this project's valid ownership
@@ -284,12 +310,10 @@ impl StoragePaths {
     /// captured at startup. A settings change that leaves them matching (for
     /// example a marker removed and re-added in the same session) does not
     /// change startup eligibility, so it needs no restart. Cleanup additionally
-    /// validates current ownership before each custom-root unlink.
+    /// validates current ownership and database exclusivity before each unlink.
     pub fn cleanup_flags_match_markers(&self) -> bool {
-        let image_owned =
-            !self.image_marker_required || self.resource_root_marker_valid(ResourceRootRole::Image);
-        let file_owned =
-            !self.file_marker_required || self.resource_root_marker_valid(ResourceRootRole::File);
+        let image_owned = self.resource_root_cleanup_allowed(ResourceRootRole::Image);
+        let file_owned = self.resource_root_cleanup_allowed(ResourceRootRole::File);
         image_owned == self.image_cleanup_enabled && file_owned == self.file_cleanup_enabled
     }
 }
@@ -362,7 +386,10 @@ fn resource_root_cleanup_enabled(
         && path.is_dir()
         && fs::read_dir(path)?.any(|entry| {
             entry
-                .map(|entry| entry.file_name() != RESOURCE_ROOT_LOCK)
+                .map(|entry| {
+                    entry.file_name() != RESOURCE_ROOT_LOCK
+                        && entry.file_name() != RESOURCE_ROOT_DATABASES
+                })
                 .unwrap_or(true)
         })
     {
@@ -406,7 +433,10 @@ fn resource_root_cleanup_enabled(
     }
     let has_entries = fs::read_dir(path)?.any(|entry| {
         entry
-            .map(|entry| entry.file_name() != RESOURCE_ROOT_LOCK)
+            .map(|entry| {
+                entry.file_name() != RESOURCE_ROOT_LOCK
+                    && entry.file_name() != RESOURCE_ROOT_DATABASES
+            })
             .unwrap_or(true)
     });
     if has_entries {
@@ -423,12 +453,17 @@ fn resource_root_cleanup_enabled(
 /// Replace the marker's directory entry without writing through a link to an
 /// unrelated inode. A failed flush/replace retains the old entry and bytes.
 fn write_resource_root_marker(root: &Path, contents: &[u8]) -> Result<(), StorageError> {
+    write_resource_root_metadata(root, RESOURCE_ROOT_MARKER, contents)
+}
+
+pub(super) fn write_resource_root_metadata(
+    root: &Path,
+    name: &str,
+    contents: &[u8],
+) -> Result<(), StorageError> {
     use std::io::Write;
 
-    let temporary = root.join(format!(
-        "{RESOURCE_ROOT_MARKER}.tmp-{}",
-        uuid::Uuid::new_v4()
-    ));
+    let temporary = root.join(format!("{name}.tmp-{}", uuid::Uuid::new_v4()));
     let mut file = fs::OpenOptions::new()
         .write(true)
         .create_new(true)
@@ -437,12 +472,16 @@ fn write_resource_root_marker(root: &Path, contents: &[u8]) -> Result<(), Storag
         file.write_all(contents)?;
         file.sync_all()?;
         drop(file);
-        crate::storage::replace_file(&temporary, &root.join(RESOURCE_ROOT_MARKER))
+        crate::storage::replace_file(&temporary, &root.join(name))
     })();
     if result.is_err() {
         let _ = fs::remove_file(temporary);
     }
     result
+}
+
+fn database_identity(path: &Path) -> String {
+    lexical_path_key(&canonicalize_through_existing_parent(path))
 }
 
 fn resource_root_lock_file(root: &Path) -> std::io::Result<fs::File> {

@@ -50,6 +50,13 @@ fn copy_dir_contents_children(
     std::fs::create_dir_all(to).map_err(|e| format!("create dir: {}", e))?;
     for entry in std::fs::read_dir(from).map_err(|e| format!("read dir: {}", e))? {
         let entry = entry.map_err(|e| format!("dir entry: {}", e))?;
+        // Each destination owns its own coordination. Copying source database
+        // claims would disable a distinct root or conflict with target metadata.
+        if entry.file_name() == crate::storage::RESOURCE_ROOT_DATABASES
+            || entry.file_name() == crate::storage::RESOURCE_ROOT_LOCK
+        {
+            continue;
+        }
         let dest = to.join(entry.file_name());
         if entry
             .file_type()

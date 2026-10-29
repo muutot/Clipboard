@@ -5,8 +5,42 @@ use std::{
 };
 
 use super::store::resource_root_marker_content;
-use super::{ResourceRootRole, StoragePaths, RESOURCE_ROOT_MARKER};
+use super::{
+    ResourceRootRole, StoragePaths, RESOURCE_ROOT_DATABASES, RESOURCE_ROOT_LOCK,
+    RESOURCE_ROOT_MARKER,
+};
 use crate::storage::StorageError;
+
+#[test]
+fn invalid_database_claims_reject_new_initialization_without_replacing_metadata() {
+    let root = temporary_test_directory("invalid-database-claims");
+    let project = root.join("project");
+    let paths = StoragePaths::initialize(project.clone()).unwrap();
+    let claims_path = paths.files.join(RESOURCE_ROOT_DATABASES);
+    let invalid = b"{\"version\":99,\"databases\":[]}";
+    fs::write(&claims_path, invalid).unwrap();
+    let result = StoragePaths::initialize(project);
+    let retained = fs::read(&claims_path).unwrap();
+    fs::remove_dir_all(root).unwrap();
+    assert!(result.is_err());
+    assert_eq!(retained, invalid);
+}
+
+#[test]
+fn equivalent_database_paths_reuse_one_resource_claim() {
+    let root = temporary_test_directory("database-alias");
+    let project = root.join("project");
+    let first = StoragePaths::initialize(project.clone()).unwrap();
+    let alias = StoragePaths::initialize(project.join(".")).unwrap();
+    assert!(first.file_cleanup_enabled);
+    assert!(alias.file_cleanup_enabled);
+    let claims: serde_json::Value =
+        serde_json::from_slice(&fs::read(first.files.join(RESOURCE_ROOT_DATABASES)).unwrap())
+            .unwrap();
+    assert_eq!(claims["databases"].as_array().unwrap().len(), 1);
+    assert!(first.resource_root_cleanup_allowed(ResourceRootRole::File));
+    fs::remove_dir_all(root).unwrap();
+}
 
 #[test]
 fn failed_marker_replacement_preserves_existing_entry_and_removes_staging() {
@@ -64,7 +98,7 @@ fn claiming_a_root_preserves_an_external_hard_link_target_of_the_marker() {
 }
 
 #[test]
-fn ownership_transfer_waits_for_unlink_guard_and_stale_revoke_keeps_foreign_marker() {
+fn ownership_transfer_waits_for_root_guard_and_stale_revoke_keeps_foreign_marker() {
     let root = temporary_test_directory("transfer-lock");
     let shared = root.join("resources");
     let first = StoragePaths::initialize_with_resource_directories_for_configuration(
@@ -81,9 +115,14 @@ fn ownership_transfer_waits_for_unlink_guard_and_stale_revoke_keeps_foreign_mark
         Some(shared.clone()),
     )
     .unwrap();
-    let ownership = first
-        .resource_root_cleanup_lock(ResourceRootRole::File)
+    // Two registered databases disable unlink permission. Ownership actions
+    // still serialize on the same root lock, including a stale revoke.
+    let ownership = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(first.files.join(RESOURCE_ROOT_LOCK))
         .unwrap();
+    ownership.lock().unwrap();
     let (started_tx, started_rx) = std::sync::mpsc::channel();
     let (finished_tx, finished_rx) = std::sync::mpsc::channel();
     let transfer = std::thread::spawn(move || {

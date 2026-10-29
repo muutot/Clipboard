@@ -5,6 +5,84 @@ use super::{
 use std::time::SystemTime;
 
 #[test]
+fn migration_shared_resource_root_preserves_other_database_references_after_restart() {
+    use crate::domain::{ClipboardItem, ClipboardKind};
+    use crate::storage::{ClipboardRepository, Database, ResourceRootRole, StoragePaths};
+
+    let root = std::env::temp_dir().join(format!(
+        "clipboard-shared-root-migration-{}",
+        uuid::Uuid::new_v4()
+    ));
+    let project = root.join("project");
+    let shared = root.join("files");
+    let old = StoragePaths::initialize_with_resource_directories_for_configuration(
+        project.clone(),
+        Some(root.join("old-data")),
+        None,
+        Some(shared.clone()),
+    )
+    .unwrap();
+    let database = Database::open(&old.database).unwrap();
+    let older_instance = Database::open(&old.database).unwrap();
+    let new = StoragePaths::initialize_with_resource_directories_for_configuration(
+        project,
+        Some(root.join("new-data")),
+        None,
+        Some(shared.clone()),
+    )
+    .unwrap();
+    super::migrate_and_save_storage(&old, &new, &database, || Ok(())).unwrap();
+    drop(database); // The migrating instance restarts, releasing its reservation.
+    let body = shared.join("captured-by-older-instance.txt");
+    std::fs::write(&body, b"late capture").unwrap();
+    std::fs::File::options()
+        .write(true)
+        .open(&body)
+        .unwrap()
+        .set_modified(std::time::UNIX_EPOCH + std::time::Duration::from_secs(3600))
+        .unwrap();
+    older_instance
+        .save_item(&ClipboardItem {
+            id: "late-capture".into(),
+            kind: ClipboardKind::File,
+            title: "fixture".into(),
+            text_content: None,
+            html_content: None,
+            rtf_content: None,
+            resource_path: Some(body.display().to_string()),
+            preview_path: None,
+            content_hash: "late-capture".into(),
+            source_app: None,
+            size_bytes: 12,
+            created_at_ms: 1,
+            last_used_at_ms: None,
+            is_favorite: false,
+            icon_path: None,
+            metadata_json: None,
+        })
+        .unwrap();
+    let restarted = Database::open(&new.database).unwrap();
+    assert!(old.resource_root_marker_valid(ResourceRootRole::File));
+    assert!(new.resource_root_marker_valid(ResourceRootRole::File));
+    let result = crate::commands::cleanup::cleanup_orphan_storage_files_with_grace(
+        &restarted,
+        &new,
+        crate::commands::cleanup::ORPHAN_FILE_GRACE,
+    )
+    .unwrap();
+    let retained = body.exists();
+    assert!(older_instance.get_item("late-capture").unwrap().is_some());
+    drop(restarted);
+    drop(older_instance);
+    std::fs::remove_dir_all(root).unwrap();
+    assert!(
+        retained,
+        "the new database must not delete the older instance's referenced body"
+    );
+    assert_eq!(result.removed_files, 0);
+}
+
+#[test]
 fn migration_copy_preserves_existing_destination_files() {
     let root =
         std::env::temp_dir().join(format!("clipboard-copy-conflict-{}", uuid::Uuid::new_v4()));

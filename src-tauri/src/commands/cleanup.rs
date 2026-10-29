@@ -11,7 +11,7 @@ use crate::config::ConfigStore;
 use crate::state::CaptureState;
 use crate::storage::{
     ClipboardRepository, Database, ResourceRootRole, StorageFileReferences, StoragePaths,
-    RESOURCE_ROOT_LOCK, RESOURCE_ROOT_MARKER,
+    RESOURCE_ROOT_DATABASES, RESOURCE_ROOT_LOCK, RESOURCE_ROOT_MARKER,
 };
 
 #[derive(Debug, Serialize)]
@@ -122,6 +122,81 @@ pub fn enforce_history_cleanup_with_policy(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cleanup_retains_bodies_when_database_claims_are_unavailable_or_invalid() {
+        for invalid in [None, Some(b"{ broken".to_vec()), Some(vec![b' '; 65_537])] {
+            let paths = policy_paths();
+            let database = Database::open(&paths.database).unwrap();
+            let claims_path = paths.files.join(RESOURCE_ROOT_DATABASES);
+            let valid = std::fs::read(&claims_path).unwrap();
+            let body = paths.files.join("fixture.txt");
+            std::fs::write(&body, b"fixture").unwrap();
+            match invalid {
+                Some(bytes) => std::fs::write(&claims_path, bytes).unwrap(),
+                None => std::fs::remove_file(&claims_path).unwrap(),
+            }
+            let result = cleanup_orphan_storage_files(&database, &paths).unwrap();
+            assert_eq!(result.removed_files, 0);
+            assert!(body.is_file());
+            std::fs::write(&claims_path, valid).unwrap();
+            let result = cleanup_orphan_storage_files(&database, &paths).unwrap();
+            assert_eq!(result.removed_files, 1);
+            assert!(claims_path.is_file());
+            drop(database);
+            std::fs::remove_dir_all(paths.project).unwrap();
+        }
+    }
+
+    #[test]
+    fn cleanup_defers_a_default_root_registered_by_another_database_after_snapshot() {
+        use crate::domain::{ClipboardItem, ClipboardKind};
+
+        let paths = policy_paths();
+        let database = Database::open(&paths.database).unwrap();
+        let body = paths.files.join("late-peer.txt");
+        let result = cleanup_orphans_after_snapshot(&database, &paths, Duration::ZERO, || {
+            let other = StoragePaths::initialize_with_resource_directories_for_configuration(
+                paths.project.join("other-project"),
+                None,
+                None,
+                Some(paths.files.clone()),
+            )
+            .unwrap();
+            let peer = Database::open(&other.database).unwrap();
+            std::fs::write(&body, b"peer fixture").unwrap();
+            peer.save_item(&ClipboardItem {
+                id: "peer".into(),
+                kind: ClipboardKind::File,
+                title: "fixture".into(),
+                text_content: None,
+                html_content: None,
+                rtf_content: None,
+                resource_path: Some(body.display().to_string()),
+                preview_path: None,
+                content_hash: "peer".into(),
+                source_app: None,
+                size_bytes: 12,
+                created_at_ms: 1,
+                last_used_at_ms: None,
+                is_favorite: false,
+                icon_path: None,
+                metadata_json: None,
+            })
+            .unwrap();
+            assert!(!other.file_cleanup_enabled);
+        })
+        .unwrap();
+        let retained = body.exists();
+        assert!(!paths.resource_root_cleanup_allowed(ResourceRootRole::File));
+        drop(database);
+        std::fs::remove_dir_all(paths.project).unwrap();
+        assert_eq!(result.removed_files, 0);
+        assert!(
+            retained,
+            "joining a default root must invalidate earlier cleanup permission"
+        );
+    }
 
     #[test]
     fn cleanup_defers_busy_or_invalid_custom_root_ownership_lock() {
@@ -567,10 +642,8 @@ fn cleanup_orphans_after_snapshot(
     let mut removed_files = 0u64;
     let mut freed_bytes = 0u64;
 
-    let image_ownership = paths
-        .image_marker_required
-        .then_some(ResourceRootRole::Image);
-    let file_ownership = paths.file_marker_required.then_some(ResourceRootRole::File);
+    let image_ownership = Some(ResourceRootRole::Image);
+    let file_ownership = Some(ResourceRootRole::File);
     let scan_dirs: &[(&Path, bool, Option<ResourceRootRole>)] = &[
         (&paths.images, paths.image_cleanup_enabled, image_ownership),
         (
@@ -583,10 +656,11 @@ fn cleanup_orphans_after_snapshot(
     ];
 
     'roots: for (dir, cleanup_enabled, ownership) in scan_dirs {
-        if !cleanup_enabled || ownership.is_some_and(|role| !paths.resource_root_marker_valid(role))
+        if !cleanup_enabled
+            || ownership.is_some_and(|role| !paths.resource_root_cleanup_allowed(role))
         {
             crate::log_warn!(
-                "[cleanup] skipping unowned resource directory {}",
+                "[cleanup] skipping resource directory without exclusive cleanup permission {}",
                 dir.display()
             );
             continue;
@@ -611,10 +685,11 @@ fn cleanup_orphans_after_snapshot(
             if entry_path.is_dir() {
                 continue;
             }
-            if entry_path
-                .file_name()
-                .is_some_and(|name| name == RESOURCE_ROOT_MARKER || name == RESOURCE_ROOT_LOCK)
-            {
+            if entry_path.file_name().is_some_and(|name| {
+                name == RESOURCE_ROOT_MARKER
+                    || name == RESOURCE_ROOT_LOCK
+                    || name == RESOURCE_ROOT_DATABASES
+            }) {
                 continue;
             }
             if referenced_paths.contains(&normalized_cleanup_path(&entry_path)) {
