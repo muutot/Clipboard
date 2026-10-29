@@ -192,8 +192,10 @@ pub(super) fn signed_request_with_payload_hash(
     let host = url_parsed
         .host_str()
         .ok_or_else(|| "endpoint host is empty".to_string())?;
+    // URL parsing already removes the scheme's default port. Any remaining
+    // port must be signed, including HTTPS on 80 and loopback HTTP on 443.
     let host_header = match url_parsed.port() {
-        Some(p) if p != 443 && p != 80 => format!("{host}:{p}"),
+        Some(p) => format!("{host}:{p}"),
         _ => host.to_string(),
     };
 

@@ -114,6 +114,9 @@ must remain literal object names for every HTTP method. SigV4 signs the same enc
 path sent by reqwest; an existing percent escape in a key is escaped as literal data.
 Request-builder regressions and a temporary loopback HTTP fixture verify reserved
 prefixes through the production S3ObjectStore without touching a real remote bucket.
+The signed Host includes every non-default port returned by URL parsing. Default
+ports are scheme-specific: HTTP on 443 and HTTPS on 80 retain their ports, while
+HTTP on 80 and HTTPS on 443 omit them. IPv6 literals retain their brackets.
 
 Desktop sync resolves `clipboard_sync::v1::namespace` before engine work. New
 identities exclude S3 credentials; existing v1 scopes are authenticated and bound

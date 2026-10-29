@@ -85,6 +85,56 @@ fn s3_endpoint_parses_scheme_and_host() {
 }
 
 #[test]
+fn sigv4_host_keeps_non_default_ports_for_each_scheme() {
+    let client = Client::new();
+    for (scheme, endpoint_host, expected_host) in [
+        ("http", "localhost:80", "localhost"),
+        ("https", "s3.example.test:443", "s3.example.test"),
+        ("http", "localhost:9000", "localhost:9000"),
+        ("http", "localhost:443", "localhost:443"),
+        ("https", "s3.example.test:80", "s3.example.test:80"),
+        ("http", "[::1]:443", "[::1]:443"),
+    ] {
+        let req = S3Request {
+            method: "GET",
+            scheme,
+            endpoint_host,
+            bucket: "clipboard",
+            key: "v1/head.json",
+            query: None,
+            payload: None,
+            access_key: AKID,
+            secret_key: SECRET,
+            region: "us-east-1",
+            extra_headers: &[],
+        };
+        let request = signed_request(&client, &req).unwrap().build().unwrap();
+        let amz_date = request.headers()["x-amz-date"].to_str().unwrap();
+        let signed_at = chrono::NaiveDateTime::parse_from_str(amz_date, "%Y%m%dT%H%M%SZ")
+            .unwrap()
+            .and_utc()
+            .timestamp_millis();
+        let signer = SigV4::new(AKID, SECRET, "us-east-1", "s3", signed_at);
+        let expected = signer.sign(
+            "GET",
+            "/clipboard/v1/head.json",
+            "",
+            &[
+                ("host".to_owned(), expected_host.to_owned()),
+                ("x-amz-date".to_owned(), amz_date.to_owned()),
+                ("x-amz-content-sha256".to_owned(), EMPTY_PAYLOAD.to_owned()),
+            ],
+            EMPTY_PAYLOAD,
+        );
+        assert_eq!(
+            request.headers()["authorization"].to_str().unwrap(),
+            expected,
+            "{scheme}://{endpoint_host}"
+        );
+    }
+}
+
+#[test]
 fn signed_requests_preserve_literal_s3_object_keys() {
     let client = Client::new();
     for (key, encoded) in [
