@@ -13,10 +13,8 @@ pub fn rename_item(
     id: String,
     new_name: String,
 ) -> Result<ClipboardItem, String> {
-    // The rename persists the new paths before moving the file. Hold the
-    // storage maintenance lock so a concurrent orphan cleanup cannot judge the
-    // not-yet-moved old file unreferenced, delete it, and leave the
-    // rolled-back record pointing at a missing file.
+    // Keep maintenance ordered with resource-path changes. Publication also
+    // protects the new file until its row commits across independent instances.
     let _maintenance = lock_state(
         &capture.storage_maintenance_lock,
         "storage maintenance lock is poisoned",
@@ -33,21 +31,19 @@ pub(super) fn rename_item_record(
     id: String,
     new_name: String,
 ) -> Result<ClipboardItem, String> {
-    rename_item_record_with_move(database, paths, id, new_name, |from, to| {
-        std::fs::rename(from, to)
-    })
+    rename_item_record_with_copy(database, paths, id, new_name, copy_rename_resource)
 }
 
-fn rename_item_record_with_move(
+fn rename_item_record_with_copy(
     database: &Database,
     paths: &StoragePaths,
     id: String,
     new_name: String,
-    move_file: impl FnOnce(&std::path::Path, &std::path::Path) -> std::io::Result<()>,
+    copy_file: impl FnOnce(&std::path::Path, &std::path::Path) -> std::io::Result<()>,
 ) -> Result<ClipboardItem, String> {
     // The maintenance mutex is local to one instance. Keep publication active
-    // through the DB-first move and any rollback so other instances cannot
-    // delete the temporarily unreferenced old path after save_item returns.
+    // until the copied file's new paths commit. Existing paths remain intact
+    // for writers that read them before this rename's reference-count check.
     let _publication = database.begin_resource_write().map_err(|e| e.to_string())?;
     let items = database
         .get_items_by_ids(std::slice::from_ref(&id))
@@ -68,10 +64,10 @@ fn rename_item_record_with_move(
         if let Some(ref old_path) = item.resource_path {
             let old = std::path::Path::new(old_path);
             // Storage files are content-hash-named and can be shared by several
-            // records (dedup, duplicates, previews). Only rename the physical
-            // file when this record is its sole owner; otherwise the rename
-            // would break the other records sharing it. In that case fall back
-            // to renaming the display title only.
+            // records (dedup, duplicates, previews). Known shared files receive
+            // a display-title change only. A currently unshared file is copied
+            // to the new name; a concurrent writer may already have read the
+            // old path without committing its reference yet.
             let shared = database
                 .resource_reference_count(old_path, &id)
                 .map_err(|e| e.to_string())?
@@ -102,13 +98,13 @@ fn rename_item_record_with_move(
                     if new_path.exists() {
                         return Err(format!("file already exists: {}", new_path.display()));
                     }
-                    // Persist the new paths FIRST, then move the file. A
-                    // failed database write leaves the disk untouched; a
-                    // failed rename is rolled back in the database so the
-                    // record never points at a missing file.
+                    // Finish the copy before publishing any new DB paths.
+                    // Keep the old file for in-flight duplicates/captures;
+                    // orphan cleanup reclaims it once no writer or row uses it.
+                    // A failed save leaves only an unreferenced complete copy.
+                    copy_file(old, &new_path).map_err(|e| format!("rename failed: {e}"))?;
                     let old_path_string = old.to_string_lossy().to_string();
                     let new_path_string = new_path.to_string_lossy().to_string();
-                    let rollback = updated.clone();
                     updated.resource_path = Some(new_path_string.clone());
                     // preview_path either points at the dedicated thumbnail
                     // under previews/ or falls back to the original image
@@ -122,15 +118,6 @@ fn rename_item_record_with_move(
                     // path out of `metadata_json`/`text_content` before
                     // `resource_path`, so those copies must move with the file.
                     rewrite_stored_resource_paths(&mut updated, &old_path_string, &new_path_string);
-                    database.save_item(&updated).map_err(|e| e.to_string())?;
-                    if let Err(e) = move_file(old, &new_path) {
-                        database.save_item(&rollback).map_err(|rollback_error| {
-                            format!(
-                                "rename failed ({e}) and the database rollback also failed ({rollback_error})"
-                            )
-                        })?;
-                        return Err(format!("rename failed: {e}"));
-                    }
                 }
             }
         }
@@ -170,13 +157,49 @@ fn rename_item_record_with_move(
     Ok(updated)
 }
 
+/// Create a new complete body without overwriting a concurrent rename target.
+/// The destination is unreferenced until the copy and flush both succeed.
+fn copy_rename_resource(from: &std::path::Path, to: &std::path::Path) -> std::io::Result<()> {
+    let mut source = std::fs::File::open(from)?;
+    let mut destination = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(to)?;
+    let result = std::io::copy(&mut source, &mut destination).and_then(|_| destination.sync_all());
+    drop(destination);
+    if result.is_err() {
+        let _ = std::fs::remove_file(to);
+    }
+    result
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn rename_preserves_the_old_file_until_move_or_rollback_finishes() {
-        for fail_move in [false, true] {
+    fn rename_copy_never_overwrites_an_existing_destination() {
+        let root = std::env::temp_dir().join(format!(
+            "clipboard-rename-conflict-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let source = root.join("source.txt");
+        let target = root.join("target.txt");
+        std::fs::write(&source, b"source bytes").unwrap();
+        std::fs::write(&target, b"other rename's bytes").unwrap();
+        assert_eq!(
+            copy_rename_resource(&source, &target).unwrap_err().kind(),
+            std::io::ErrorKind::AlreadyExists,
+        );
+        assert_eq!(std::fs::read(&target).unwrap(), b"other rename's bytes");
+        assert_eq!(std::fs::read(&source).unwrap(), b"source bytes");
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn rename_preserves_old_and_new_files_until_paths_commit() {
+        for (fail_copy, fail_save) in [(false, false), (true, false), (false, true)] {
             let root = std::env::temp_dir()
                 .join(format!("clipboard-rename-cleanup-{}", uuid::Uuid::new_v4()));
             let paths = StoragePaths::initialize(root.clone()).unwrap();
@@ -211,7 +234,18 @@ mod tests {
                 metadata_json: None,
             };
             database.save_item(&item).unwrap();
-            let result = rename_item_record_with_move(
+            if fail_save {
+                database
+                    .with_connection(|connection| {
+                        connection.execute_batch(
+                            "CREATE TRIGGER reject_rename BEFORE UPDATE ON clipboard_items
+                         BEGIN SELECT RAISE(ABORT, 'injected save failure'); END;",
+                        )?;
+                        Ok(())
+                    })
+                    .unwrap();
+            }
+            let result = rename_item_record_with_copy(
                 &database,
                 &paths,
                 item.id.clone(),
@@ -224,8 +258,17 @@ mod tests {
                             .unwrap()
                             .resource_path
                             .as_deref(),
-                        to.to_str()
+                        from.to_str()
                     );
+                    if !fail_copy {
+                        copy_rename_resource(from, to)?;
+                        std::fs::File::options()
+                            .write(true)
+                            .open(to)?
+                            .set_modified(
+                                std::time::UNIX_EPOCH + std::time::Duration::from_secs(3600),
+                            )?;
+                    }
                     let cleanup =
                         crate::commands::cleanup::cleanup_orphan_storage_files_with_grace(
                             &cleaner,
@@ -235,27 +278,53 @@ mod tests {
                         .unwrap();
                     assert_eq!(
                         cleanup.removed_files, 0,
-                        "cleanup must retain the file between the path commit and move"
+                        "cleanup must retain both bodies before the path commit"
                     );
                     assert!(from.is_file());
-                    if fail_move {
-                        Err(std::io::Error::other("injected move failure"))
+                    if fail_copy {
+                        Err(std::io::Error::other("injected copy failure"))
                     } else {
-                        std::fs::rename(from, to)
+                        Ok(())
                     }
                 },
             );
             let stored = database.get_item(&item.id).unwrap().unwrap();
-            if fail_move {
-                assert!(result.unwrap_err().contains("injected move failure"));
+            if fail_copy || fail_save {
+                let message = result.unwrap_err();
+                assert!(message.contains(if fail_copy {
+                    "injected copy failure"
+                } else {
+                    "injected save failure"
+                }));
                 assert_eq!(stored.resource_path, item.resource_path);
+                assert_eq!(stored.title, item.title);
                 assert!(old.is_file());
+                if fail_save {
+                    let cleanup =
+                        crate::commands::cleanup::cleanup_orphan_storage_files_with_grace(
+                            &cleaner,
+                            &paths,
+                            std::time::Duration::ZERO,
+                        )
+                        .unwrap();
+                    assert_eq!(cleanup.removed_files, 1);
+                    assert!(!paths.files.join("new.txt").exists());
+                    assert!(old.is_file());
+                }
             } else {
                 assert!(result.is_ok());
                 assert_eq!(
                     stored.resource_path.as_deref(),
                     paths.files.join("new.txt").to_str()
                 );
+                assert!(old.is_file());
+                let cleanup = crate::commands::cleanup::cleanup_orphan_storage_files_with_grace(
+                    &cleaner,
+                    &paths,
+                    std::time::Duration::ZERO,
+                )
+                .unwrap();
+                assert_eq!(cleanup.removed_files, 1);
                 assert!(!old.exists());
             }
             assert_eq!(

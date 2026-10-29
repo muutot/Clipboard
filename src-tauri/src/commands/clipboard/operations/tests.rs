@@ -303,7 +303,9 @@ fn rename_keeps_generated_thumbnail_preview_path() {
         Some("/store/previews/thumb.jpg")
     );
     assert!(new_path.exists());
-    assert!(!old_path.exists());
+    // An in-flight duplicate may still commit the old path. Only reference
+    // cleanup can determine when the original is safe to reclaim.
+    assert!(old_path.exists());
 
     // A fallback preview (thumbnail not yet generated) follows the file.
     let mut fallback = item("img-2", "old2");
