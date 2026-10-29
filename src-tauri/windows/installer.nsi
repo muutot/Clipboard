@@ -552,21 +552,26 @@ Function un.WriteStorageResolver
   FileWrite $0 `  if ($$hasStorage) { $$lines.Add("S|$$root") }$\r$\n`
   FileWrite $0 `  $$projectPath = Normalize-Directory $$ProjectPath$\r$\n`
   FileWrite $0 `  $$projectKey = $$projectPath.Replace('\','/').ToLowerInvariant()$\r$\n`
-  FileWrite $0 `  function Add-OwnedRoot([string]$$value, [string]$$role, [string]$$prefix) {$\r$\n`
+  FileWrite $0 `  $$defaultStorage = $$projectPath$\r$\n`
+  FileWrite $0 `  if ([IO.Path]::GetFileName($$defaultStorage.TrimEnd([char[]]'\/')) -cne 'storage') { $$defaultStorage = [IO.Path]::Combine($$defaultStorage, 'storage') }$\r$\n`
+  FileWrite $0 `  $$defaultOwned = [string]::Equals($$root.TrimEnd([char[]]'\/'), $$defaultStorage.TrimEnd([char[]]'\/'), [StringComparison]::OrdinalIgnoreCase)$\r$\n`
+  FileWrite $0 `  function Add-OwnedRoot([string]$$value, [string]$$role, [string]$$prefix, [bool]$$projectDefault = $$false) {$\r$\n`
   FileWrite $0 `    if ([string]::IsNullOrWhiteSpace($$value)) { return }$\r$\n`
   FileWrite $0 `    $$path = Normalize-Directory $$value$\r$\n`
   FileWrite $0 `    $$comparison = [StringComparison]::OrdinalIgnoreCase$\r$\n`
   FileWrite $0 `    $$trimmed = $$path.TrimEnd([char[]]'\/')$\r$\n`
   FileWrite $0 `    if ([string]::Equals($$trimmed, $$projectPath.TrimEnd([char[]]'\/'), $$comparison)) { return }$\r$\n`
   FileWrite $0 `    if ($$projectPath.StartsWith($$trimmed + '\', $$comparison)) { return }$\r$\n`
+  FileWrite $0 `    if (-not (Test-Path -LiteralPath $$path -PathType Container)) { return }$\r$\n`
+  FileWrite $0 `    if ($$projectDefault) { $$lines.Add("$$prefix|$$path"); return }$\r$\n`
   FileWrite $0 `    $$marker = Join-Path $$path '.clipboard-resource-root'$\r$\n`
   FileWrite $0 `    if (-not (Test-Path -LiteralPath $$marker -PathType Leaf)) { return }$\r$\n`
   FileWrite $0 `    $$expected = 'clipboard-resource-root-v1' + [char]10 + 'project=' + $$projectKey + [char]10 + 'role=' + $$role + [char]10$\r$\n`
   FileWrite $0 `    $$actual = [IO.File]::ReadAllText($$marker, $$utf8)$\r$\n`
   FileWrite $0 `    if ($$actual -ceq $$expected) { $$lines.Add("$$prefix|$$path") }$\r$\n`
   FileWrite $0 `  }$\r$\n`
-  FileWrite $0 `  Add-OwnedRoot $$imageRoot 'image' 'I'$\r$\n`
-  FileWrite $0 `  Add-OwnedRoot $$fileRoot 'file' 'F'$\r$\n`
+  FileWrite $0 `  if ([string]::IsNullOrWhiteSpace($$imageRoot)) { Add-OwnedRoot (Join-Path $$root 'image') 'image' 'I' $$defaultOwned } else { Add-OwnedRoot $$imageRoot 'image' 'I' }$\r$\n`
+  FileWrite $0 `  if ([string]::IsNullOrWhiteSpace($$fileRoot)) { Add-OwnedRoot (Join-Path $$root 'files') 'file' 'F' $$defaultOwned } else { Add-OwnedRoot $$fileRoot 'file' 'F' }$\r$\n`
   FileWrite $0 `  $$output = [string]::Join([char]10, $$lines)$\r$\n`
   FileWrite $0 `  if ($$lines.Count -gt 0) { $$output += [char]10 }$\r$\n`
   FileWrite $0 `  [IO.File]::WriteAllText($$ResultPath, $$output, [Text.Encoding]::Unicode)$\r$\n`
@@ -628,16 +633,14 @@ Function un.DeleteStorageAt
     ${If} $UninstallStorageRoot != ""
       DetailPrint "Deleting clipboard data from $UninstallStorageRoot"
       RmDir /r "$UninstallStorageRoot\database"
-      RmDir /r "$UninstallStorageRoot\image"
-      RmDir /r "$UninstallStorageRoot\files"
       RmDir /r "$UninstallStorageRoot\icons"
     ${EndIf}
     ${If} $UninstallImageRoot != ""
-      DetailPrint "Deleting custom image storage from $UninstallImageRoot"
+      DetailPrint "Deleting image storage from $UninstallImageRoot"
       RmDir /r "$UninstallImageRoot"
     ${EndIf}
     ${If} $UninstallFileRoot != ""
-      DetailPrint "Deleting custom file storage from $UninstallFileRoot"
+      DetailPrint "Deleting file storage from $UninstallFileRoot"
       RmDir /r "$UninstallFileRoot"
     ${EndIf}
   ${EndIf}

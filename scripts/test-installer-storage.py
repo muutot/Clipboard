@@ -144,8 +144,40 @@ def main() -> None:
                     marker = storage / folder / "keep.txt"
                     marker.parent.mkdir(parents=True)
                     marker.write_text("fixture", encoding="utf-8")
+                # Custom data roots require the same explicit resource ownership
+                # as independent image/file roots; these option fixtures are owned.
+                for folder, role in (("image", "image"), ("files", "file")):
+                    (storage / folder / ".clipboard-resource-root").write_bytes(marker_text(project, role).encode("utf-8"))
                 cleanup_cases.append((storage, config, original_config, data, models))
                 calls += f'StrCpy $UninstallProjectRoot "{nsis_string(project)}"\nStrCpy $DeleteDataState {data}\nStrCpy $DeleteModelsState {models}\nCall DeleteStorageAt\n'
+        default_root_cases = []
+        for name, custom_data, explicit_resources, image_owned, file_owned in (
+            ("custom-default-unmarked", True, False, False, False),
+            ("custom-default-owned", True, False, True, True),
+            ("custom-default-mixed", True, False, True, False),
+            ("project-default-unmarked", False, False, True, True),
+            ("project-explicit-unmarked", False, True, False, False),
+        ):
+            project = workspace / name
+            data_directory = workspace / (name + "-data") if custom_data else project
+            storage = data_directory / "storage"
+            config = project / "conf/conf.json"
+            config.parent.mkdir(parents=True)
+            storage_config = {"dataDirectory": str(data_directory)}
+            if explicit_resources:
+                storage_config.update(imageStoragePath=str(storage / "image"), fileStoragePath=str(storage / "files"))
+            config.write_text(json.dumps({"storage": storage_config}), encoding="utf-8")
+            for folder in ("database", "image", "files"):
+                fixture_path = storage / folder / "keep.txt"
+                fixture_path.parent.mkdir(parents=True)
+                fixture_path.write_bytes(b"protected fixture")
+            for folder, role, owned in (("image", "image", image_owned), ("files", "file", file_owned)):
+                if custom_data and owned:
+                    (storage / folder / ".clipboard-resource-root").write_bytes(marker_text(project, role).encode("utf-8"))
+                elif custom_data and name.endswith("mixed"):
+                    (storage / folder / ".clipboard-resource-root").write_bytes(b"foreign marker")
+            default_root_cases.append((name, storage, image_owned, file_owned))
+            calls += f'StrCpy $UninstallProjectRoot "{nsis_string(project)}"\nStrCpy $DeleteDataState 1\nStrCpy $DeleteModelsState 0\nCall DeleteStorageAt\n'
         for name, project, _, _, _, _ in custom_cases:
             calls += (
                 f'StrCpy $UninstallProjectRoot "{nsis_string(project)}"\n'
@@ -184,6 +216,10 @@ def main() -> None:
             assert image.exists() != valid_image, f"Incorrect custom image cleanup: {name}"
             assert files.exists() != valid_file, f"Incorrect custom file cleanup: {name}"
         assert not failures, "Incorrect storage resolution: " + ", ".join(failures)
+        for name, storage, image_owned, file_owned in default_root_cases:
+            assert not (storage / "database/keep.txt").exists(), f"History not deleted: {name}"
+            for folder, owned in (("image", image_owned), ("files", file_owned)):
+                assert (storage / folder / "keep.txt").exists() != owned, f"Unowned default resource deleted: {name}/{folder}"
         for storage, config, original_config, data, models in cleanup_cases:
             for folder in ("database", "image", "files", "icons", "models", "unrelated"):
                 deleted = bool(models) if folder == "models" else bool(data) if folder != "unrelated" else False
@@ -191,7 +227,7 @@ def main() -> None:
             assert config.read_bytes() == original_config, "Storage cleanup changed configuration"
     print(
         f"PASS: {len(cases)} compiled NSIS storage resolution scenarios, "
-        f"{len(custom_cases)} custom-root cases and {len(cleanup_cases)} cleanup option combinations"
+        f"{len(custom_cases)} custom-root cases, {len(default_root_cases)} default-root cases and {len(cleanup_cases)} cleanup option combinations"
     )
 
 

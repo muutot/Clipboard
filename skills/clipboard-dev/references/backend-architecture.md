@@ -173,6 +173,12 @@ with plaintext/encryption and genuine media-orphan retry preserving canonical re
 Resource-root safety is mandatory:
 
 - default roots are application-owned;
+- uninstall only deletes image/file roots resolved as owned: unconfigured defaults
+  under the project root are application-owned, while defaults under a custom data
+  directory and explicit resource paths require a matching project/role marker;
+  an explicit path equal to a project default still requires that marker. Database,
+  icons and models retain their separate options. Unmarked/foreign resource folders
+  are preserved even when the user selects data deletion;
 - custom roots require an explicit `.clipboard-resource-root` marker before orphan cleanup is enabled;
 - startup may use an unmarked custom root but must not auto-claim it; registering database coordination metadata does not grant ownership;
 - the Windows uninstaller resolves the storage root plus custom image/file roots, and deletes a custom root only when its marker matches the project key and role; an invalid/missing marker is retained even when "delete clipboard data" is checked;

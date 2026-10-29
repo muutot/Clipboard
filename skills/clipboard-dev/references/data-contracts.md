@@ -412,6 +412,15 @@ hard-link/symlink target is not written through; publication failure retains the
 old entry and removes staging. Explicit and empty-root claims share this helper,
 without changing v1 marker bytes or the ownership command payload.
 
+Uninstall resource deletion uses those marker bytes for custom data-directory
+defaults as well as explicit image/file paths. Only unconfigured defaults under
+the project root bypass markers. An explicit path equal to the default still
+requires ownership. `un.DeleteStorageAt` deletes only resolved image/file roots;
+it cannot recursively delete them just because the parent storage path was found.
+Data/model/settings options remain independent. The compiled production NSIS UT
+retains unmarked/foreign custom defaults and tests owned, mixed, project-default
+and explicit-default roots without accessing real data.
+
 `.clipboard-resource-root.databases` is local version-1 coordination JSON
 (`version`, sorted `databases`), written atomically under the root lock. Every
 StoragePaths initializer registers its canonical database path for image/file
