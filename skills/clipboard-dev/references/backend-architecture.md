@@ -202,6 +202,15 @@ that descriptor via `storage/sync_namespace.rs` for offline materialization and
 rejects replacement of a known binding. All resolution I/O stays inside the same
 cancellation scope. See `docs/SYNC_V1.md` for upgrading before credential rotation.
 
+`commands/sync::persist_sync_config` owns the target-switch publication reset before
+saving settings. Any newly enabled valid S3 target whose stable identity differs
+from the previous active target (including an Off-to-S3 transition) must bootstrap
+the complete local state: the shared outbox may already have been acknowledged
+elsewhere. For a known target, reset its cached namespace's actual scope, which
+can be a legacy scope; otherwise reset the stable identity. Saving the same active
+target preserves its epoch/publication. Configured target identities and bound
+publication scopes are distinct and must not be interchanged.
+
 `sync/v1/s3_smoke.rs` holds opt-in real-server regressions that `MemoryStore` cannot prove:
 a thin ObjectStore decorator cancels after a successful immutable snapshot/segment PUT (the
 real head must stay unchanged; retry preserves pending rows and converges), an encrypted

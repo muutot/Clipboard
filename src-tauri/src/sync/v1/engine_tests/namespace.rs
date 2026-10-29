@@ -2,6 +2,165 @@
 
 use super::*;
 
+fn target_switch_scenario(via_off: bool, legacy: bool) {
+    use crate::commands::sync::{persist_sync_config, SyncSettings};
+    use crate::config::{ConfigStore, SyncConfig, SyncProvider};
+    use clipboard_sync::v1::namespace::resolve_namespace;
+
+    let source_paths = temp_paths("target-switch-source");
+    let reader_paths = temp_paths("target-switch-reader");
+    let source = Database::open(&source_paths.database).unwrap();
+    let reader = Database::open(&reader_paths.database).unwrap();
+    let mut config = ConfigStore::load(&source_paths.project).unwrap();
+    let target_b = SyncConfig {
+        provider: SyncProvider::S3,
+        endpoint: Some("http://127.0.0.1:9000".into()),
+        s3_bucket: Some("target-b".into()),
+        s3_access_key: Some("fixture-access".into()),
+        s3_secret_key: Some("fixture-secret".into()),
+        ..SyncConfig::default()
+    };
+    let mut target_a = target_b.clone();
+    target_a.s3_bucket = Some("target-a".into());
+    let b_settings = SyncSettings::validated_from_sync_config(&target_b).unwrap();
+    let a_settings = SyncSettings::validated_from_sync_config(&target_a).unwrap();
+    let store_b = MemoryStore::default();
+    let store_a = MemoryStore::default();
+    source.save_item(&text_item("shared", "original")).unwrap();
+
+    persist_sync_config(&source, &mut config, target_b.clone()).unwrap();
+    // A legacy remote acquires a descriptor with its historical scope, which
+    // differs from the credential-independent settings identity.
+    if legacy {
+        sync_database(
+            &store_b,
+            &source,
+            &source_paths,
+            &b_settings.legacy_scope_id(),
+            None,
+            options(),
+        )
+        .unwrap();
+    }
+    let (binding, key) = resolve_namespace(
+        &store_b,
+        &b_settings.remote_scope_id(),
+        &b_settings.legacy_scope_id(),
+        None,
+        None,
+    )
+    .unwrap();
+    source
+        .remember_sync_namespace(&b_settings.remote_scope_id(), &binding.to_bytes())
+        .unwrap();
+    sync_database(
+        &store_b,
+        &source,
+        &source_paths,
+        &binding.scope,
+        key.as_ref(),
+        options(),
+    )
+    .unwrap();
+
+    let published = source
+        .get_or_create_sync_remote_state(&binding.scope)
+        .unwrap();
+    persist_sync_config(&source, &mut config, target_b.clone()).unwrap();
+    let unchanged = source
+        .get_or_create_sync_remote_state(&binding.scope)
+        .unwrap();
+    assert_eq!(unchanged.epoch, published.epoch);
+    assert!(
+        unchanged.initialized,
+        "saving the same target must retain its publication"
+    );
+
+    persist_sync_config(&source, &mut config, target_a.clone()).unwrap();
+    sync_database(
+        &store_a,
+        &source,
+        &source_paths,
+        &a_settings.remote_scope_id(),
+        None,
+        options(),
+    )
+    .unwrap();
+    source.set_favorite("shared", true).unwrap();
+    source
+        .save_item(&text_item("new-at-a", "new payload"))
+        .unwrap();
+    sync_database(
+        &store_a,
+        &source,
+        &source_paths,
+        &a_settings.remote_scope_id(),
+        None,
+        options(),
+    )
+    .unwrap();
+    assert!(source.get_sync_outbox_batch(100).unwrap().is_none());
+
+    if via_off {
+        target_a.provider = SyncProvider::Off;
+        persist_sync_config(&source, &mut config, target_a).unwrap();
+    }
+    persist_sync_config(&source, &mut config, target_b).unwrap();
+    sync_database(
+        &store_b,
+        &source,
+        &source_paths,
+        &binding.scope,
+        key.as_ref(),
+        options(),
+    )
+    .unwrap();
+    // A new peer reads B alone: local state at the switching device cannot
+    // conceal a missed publication.
+    sync_database(
+        &store_b,
+        &reader,
+        &reader_paths,
+        &binding.scope,
+        key.as_ref(),
+        options(),
+    )
+    .unwrap();
+    let shared = reader.get_item("shared").unwrap().unwrap();
+    let added = reader.get_item("new-at-a").unwrap();
+    drop(source);
+    drop(reader);
+    drop(config);
+    fs::remove_dir_all(source_paths.project).unwrap();
+    fs::remove_dir_all(reader_paths.project).unwrap();
+    assert!(
+        shared.is_favorite && added.is_some(),
+        "B must receive changes acknowledged by A: favorite={}, insertion={}",
+        shared.is_favorite,
+        added.is_some()
+    );
+}
+
+#[test]
+fn target_switch_directly_republishes_acknowledged_changes() {
+    target_switch_scenario(false, false);
+}
+
+#[test]
+fn target_switch_through_off_republishes_acknowledged_changes() {
+    target_switch_scenario(true, false);
+}
+
+#[test]
+fn target_switch_to_legacy_binding_republishes_acknowledged_changes() {
+    target_switch_scenario(false, true);
+}
+
+#[test]
+fn target_switch_through_off_to_legacy_binding_republishes_acknowledged_changes() {
+    target_switch_scenario(true, true);
+}
+
 #[test]
 fn portable_backup_restored_shared_media_remains_publishable() {
     use crate::export::backup;

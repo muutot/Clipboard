@@ -340,12 +340,6 @@ pub fn set_sync_config(
 ) -> Result<(), String> {
     let mut guard = lock_state(&config, "configuration lock is poisoned")?;
     let previous = guard.sync_config();
-    let previous_scope = previous
-        .provider
-        .eq(&SyncProvider::S3)
-        .then(|| SyncSettings::validated_from_sync_config(&previous).ok())
-        .flatten()
-        .map(|settings| settings.remote_scope_id());
     let mut sync = SyncConfig {
         provider: if provider == "s3" {
             SyncProvider::S3
@@ -377,6 +371,21 @@ pub fn set_sync_config(
     if let Some(endpoint) = sync.endpoint.clone() {
         sync.endpoint = Some(validate_sync_endpoint(&endpoint)?);
     }
+    persist_sync_config(&database, &mut guard, sync)
+}
+
+pub(crate) fn persist_sync_config(
+    database: &Database,
+    config: &mut ConfigStore,
+    sync: SyncConfig,
+) -> Result<(), String> {
+    let previous = config.sync_config();
+    let previous_scope = previous
+        .provider
+        .eq(&SyncProvider::S3)
+        .then(|| SyncSettings::validated_from_sync_config(&previous).ok())
+        .flatten()
+        .map(|settings| settings.remote_scope_id());
     // The outbox is local state shared by every remote target. When the user
     // points sync at a different endpoint/bucket/prefix, the new target must
     // bootstrap the complete local state instead of consuming changes that
@@ -389,14 +398,25 @@ pub fn set_sync_config(
         .then(|| SyncSettings::validated_from_sync_config(&sync).ok())
         .flatten()
         .map(|settings| settings.remote_scope_id());
-    if let (Some(previous_scope), Some(next_scope)) = (previous_scope, next_scope) {
-        if previous_scope != next_scope {
+    if let Some(next_scope) = next_scope {
+        if previous_scope.as_ref() != Some(&next_scope) {
+            // Off has no active target, and a known namespace may use its
+            // historical scope rather than the stable settings identity.
+            let binding = database
+                .sync_namespace_binding(&next_scope)
+                .map_err(|error| error.to_string())?
+                .map(|bytes| clipboard_sync::v1::namespace::Namespace::from_bytes(&bytes))
+                .transpose()?;
+            let publication_scope = binding
+                .as_ref()
+                .map(|namespace| namespace.scope.as_str())
+                .unwrap_or(&next_scope);
             database
-                .reset_sync_remote_state(&next_scope)
+                .reset_sync_remote_state(publication_scope)
                 .map_err(|error| error.to_string())?;
         }
     }
-    guard
+    config
         .set_sync_config(sync)
         .map_err(|error| error.to_string())
 }

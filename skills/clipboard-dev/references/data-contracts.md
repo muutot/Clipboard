@@ -352,6 +352,18 @@ variant without its files cannot run, so the statistics panel reports "no engine
 instead of the configured engine id, and an external engine is reported without a PP-OCR
 variant. `ocr.installedVariants` lists the variants that pass the same install check.
 
+## Sync target publication reset
+
+The sync outbox is shared locally across targets. `set_sync_config` delegates
+publication reset and persistence to `commands/sync::persist_sync_config`. Enabling
+a valid S3 target after Off or switching between different stable target identities
+resets the destination publication state so its next run republishes complete local
+state, including edits already acknowledged at another target. A cached namespace
+descriptor selects the actual publication scope (including legacy bindings);
+without a cache, the stable settings identity is used. Re-saving the same active
+target preserves its epoch and initialized state. No config, IPC or wire fields
+change; config-save failure can leave a reset publication state for safe retry.
+
 ## Event contract
 
 Long operations use polling rather than payload-bearing events:
