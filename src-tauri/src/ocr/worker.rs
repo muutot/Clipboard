@@ -67,13 +67,19 @@ pub struct OcrWorker {
 #[derive(Clone)]
 pub struct OcrWorkerManager {
     worker: Arc<Mutex<OcrWorker>>,
+    settings_apply: Arc<Mutex<()>>,
 }
 
 impl OcrWorkerManager {
     pub fn start(engine: Arc<dyn OcrEngine>, database: Arc<Database>) -> Result<Self, String> {
         Ok(Self {
             worker: Arc::new(Mutex::new(OcrWorker::start(engine, database)?)),
+            settings_apply: Arc::new(Mutex::new(())),
         })
+    }
+
+    pub(crate) fn lock_settings_apply(&self) -> std::sync::MutexGuard<'_, ()> {
+        lock_unpoisoned(&self.settings_apply)
     }
 
     pub fn restart(

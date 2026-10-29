@@ -32,28 +32,43 @@ pub fn ocr_config_response(config: &ConfigStore) -> OcrConfigResponse {
     }
 }
 
+struct ResolvedOcrSettings {
+    engine: String,
+    model: &'static ocr::models::PpOcrModelSpec,
+    score_threshold: f32,
+    box_threshold: f32,
+    unclip_ratio: f32,
+    tesseract_languages: String,
+}
+
 pub fn apply_ocr_runtime_settings(
     config: &Mutex<ConfigStore>,
     paths: &StoragePaths,
     worker: &OcrWorkerManager,
     update: OcrConfigUpdate,
 ) -> Result<OcrConfigResponse, String> {
-    // Snapshot everything the probe and the write-back need, then release
-    // the config lock BEFORE spawning any child process. The tesseract
-    // probes (`is_available` + `with_languages` → `detect_tesseract_version`)
-    // each allow up to PROBE_TIMEOUT (10s); holding the global config lock
-    // across them would stall every config-dependent command. This mirrors
-    // the release-before-probe pattern already used by `get_ocr_status` and
-    // `check_ppocr_status`. A concurrent writer between the snapshot and the
-    // write-back resolves as last-write-wins, matching single-lock semantics.
-    struct ResolvedOcrSettings {
-        engine: String,
-        model: &'static ocr::models::PpOcrModelSpec,
-        score_threshold: f32,
-        box_threshold: f32,
-        unclip_ratio: f32,
-        tesseract_languages: String,
-    }
+    apply_ocr_runtime_settings_with(
+        config,
+        paths,
+        worker,
+        update,
+        prepare_runtime_engine,
+        |engine, database| worker.restart(engine, database),
+    )
+}
+
+fn apply_ocr_runtime_settings_with(
+    config: &Mutex<ConfigStore>,
+    paths: &StoragePaths,
+    worker: &OcrWorkerManager,
+    update: OcrConfigUpdate,
+    prepare: impl FnOnce(&ResolvedOcrSettings, &StoragePaths) -> Result<Arc<dyn OcrEngine>, String>,
+    restart: impl FnOnce(Arc<dyn OcrEngine>, Arc<Database>) -> Result<(), String>,
+) -> Result<OcrConfigResponse, String> {
+    // Serialize the entire apply across manager clones, including partial
+    // update resolution, probing, persistence and worker replacement. The
+    // global config lock is still released before slow probes and joins.
+    let _settings_apply = worker.lock_settings_apply();
     let resolved = {
         let cfg = lock_state(&config, "config lock poisoned")?;
         let engine = update.engine.unwrap_or_else(|| cfg.ocr_engine().to_owned());
@@ -78,10 +93,31 @@ pub fn apply_ocr_runtime_settings(
         }
     };
 
-    // Probe and construct the runtime engine with no locks held. `worker.restart`
-    // joins the OCR thread, which may be busy with a long inference; that must
-    // also stay outside the critical section (see previous comment).
-    let runtime_engine: Arc<dyn OcrEngine> = match resolved.engine.as_str() {
+    let runtime_engine = prepare(&resolved, paths)?;
+    let database = Database::open(&paths.database).map_err(|e| e.to_string())?;
+
+    let response = {
+        let mut cfg = lock_state(&config, "config lock poisoned")?;
+        cfg.set_ocr_settings(
+            resolved.engine,
+            resolved.model.id.to_owned(),
+            resolved.score_threshold,
+            resolved.box_threshold,
+            resolved.unclip_ratio,
+        )
+        .map_err(|e| e.to_string())?;
+        ocr_config_response(&cfg)
+    };
+
+    restart(runtime_engine, Arc::new(database))?;
+    Ok(response)
+}
+
+fn prepare_runtime_engine(
+    resolved: &ResolvedOcrSettings,
+    paths: &StoragePaths,
+) -> Result<Arc<dyn OcrEngine>, String> {
+    let engine: Arc<dyn OcrEngine> = match resolved.engine.as_str() {
         "ppocr" => {
             let ppocr = PpOcrEngine::new(
                 ocr::models::models_dir(&paths.storage),
@@ -99,29 +135,12 @@ pub fn apply_ocr_runtime_settings(
             Arc::new(ppocr)
         }
         "tesseract" if TesseractOcrEngine::is_available() => Arc::new(
-            TesseractOcrEngine::with_languages(resolved.tesseract_languages),
+            TesseractOcrEngine::with_languages(resolved.tesseract_languages.clone()),
         ),
         "tesseract" => return Err("Tesseract is not available".to_owned()),
         _ => return Err(format!("unsupported OCR engine: {}", resolved.engine)),
     };
-    let database = Database::open(&paths.database).map_err(|e| e.to_string())?;
-
-    let response = {
-        let mut cfg = lock_state(&config, "config lock poisoned")?;
-        cfg.set_ocr_settings(
-            resolved.engine,
-            resolved.model.id.to_owned(),
-            resolved.score_threshold,
-            resolved.box_threshold,
-            resolved.unclip_ratio,
-        )
-        .map_err(|e| e.to_string())?;
-        ocr_config_response(&cfg)
-    };
-
-    worker.restart(runtime_engine, Arc::new(database))?;
-
-    Ok(response)
+    Ok(engine)
 }
 
 #[tauri::command]
@@ -541,6 +560,182 @@ mod tests {
             paths,
             worker,
         }
+    }
+
+    struct SettingsEngine(String);
+
+    impl OcrEngine for SettingsEngine {
+        fn name(&self) -> &'static str {
+            "settings-test"
+        }
+        fn model_version(&self) -> &str {
+            &self.0
+        }
+        fn recognize(&self, _: &ocr::OcrInput) -> Result<ocr::OcrOutput, ocr::OcrEngineError> {
+            Ok(ocr::OcrOutput {
+                language: None,
+                full_text: self.0.clone(),
+                blocks: Vec::new(),
+            })
+        }
+    }
+
+    fn settings_engine(
+        settings: &ResolvedOcrSettings,
+        _: &StoragePaths,
+    ) -> Result<Arc<dyn OcrEngine>, String> {
+        Ok(Arc::new(SettingsEngine(format!(
+            "score-{}",
+            settings.score_threshold
+        ))))
+    }
+
+    fn score_update(value: f32) -> OcrConfigUpdate {
+        OcrConfigUpdate {
+            det_score_threshold: Some(value),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn concurrent_applies_cannot_restart_an_older_engine_after_a_newer_save() {
+        use crate::storage::ClipboardRepository;
+        use std::sync::mpsc;
+        use std::time::{Duration, Instant};
+        let fixture = fixture("apply-order");
+        let config = &fixture.config;
+        let paths = &fixture.paths;
+        let manager = &fixture.worker;
+        let second_manager = manager.clone();
+        let (saved_tx, saved_rx) = mpsc::channel();
+        let (release_tx, release_rx) = mpsc::channel();
+        let (prepared_tx, prepared_rx) = mpsc::channel();
+        let entered_early = std::thread::scope(|scope| {
+            let first = scope.spawn(move || {
+                apply_ocr_runtime_settings_with(
+                    config,
+                    paths,
+                    manager,
+                    score_update(0.4),
+                    settings_engine,
+                    |engine, database| {
+                        saved_tx.send(()).unwrap();
+                        release_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+                        manager.restart(engine, database)
+                    },
+                )
+            });
+            saved_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+            // A is between persistence and restart, with the global config
+            // lock free. B uses another clone of the same manager.
+            assert_eq!(config.try_lock().unwrap().det_score_threshold(), 0.4);
+            let second = scope.spawn(move || {
+                apply_ocr_runtime_settings_with(
+                    config,
+                    paths,
+                    &second_manager,
+                    score_update(0.9),
+                    |settings, paths| {
+                        prepared_tx.send(()).unwrap();
+                        settings_engine(settings, paths)
+                    },
+                    |engine, database| second_manager.restart(engine, database),
+                )
+            });
+            let entered_early = prepared_rx.recv_timeout(Duration::from_millis(100)).is_ok();
+            release_tx.send(()).unwrap();
+            assert_eq!(first.join().unwrap().unwrap().det_score_threshold, 0.4);
+            assert_eq!(second.join().unwrap().unwrap().det_score_threshold, 0.9);
+            entered_early
+        });
+        assert!(
+            !entered_early,
+            "a newer apply overtook the saved older apply"
+        );
+        assert_eq!(config.lock().unwrap().det_score_threshold(), 0.9);
+        assert_eq!(
+            ConfigStore::load(&fixture.root)
+                .unwrap()
+                .det_score_threshold(),
+            0.9
+        );
+
+        // Verify the actual replacement worker, not only the returned config.
+        let database = Database::open(&paths.database).unwrap();
+        database
+            .save_item(&crate::domain::ClipboardItem {
+                id: "settings-image".into(),
+                kind: crate::domain::ClipboardKind::Image,
+                title: "settings-image.png".into(),
+                text_content: None,
+                html_content: None,
+                rtf_content: None,
+                resource_path: Some("synthetic.png".into()),
+                preview_path: None,
+                content_hash: "settings-image-hash".into(),
+                source_app: None,
+                icon_path: None,
+                size_bytes: 1,
+                created_at_ms: 100,
+                last_used_at_ms: None,
+                is_favorite: false,
+                metadata_json: None,
+            })
+            .unwrap();
+        database.enqueue_ocr("settings-image").unwrap();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            if let Some(result) = database.get_ocr_result("settings-image").unwrap() {
+                if result.status == crate::domain::OcrStatus::Completed {
+                    assert_eq!(result.model_version, "score-0.9");
+                    break;
+                }
+            }
+            assert!(
+                Instant::now() < deadline,
+                "replacement worker did not process the image"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        drop(database);
+        fixture.cleanup();
+    }
+
+    #[test]
+    fn a_failed_save_does_not_restart_and_releases_the_apply_gate() {
+        let fixture = fixture("apply-save-failure");
+        let before = fixture.config.lock().unwrap().det_score_threshold();
+        fs::rename(fixture.root.join("conf"), fixture.root.join("saved-conf")).unwrap();
+        let restarted = std::sync::atomic::AtomicBool::new(false);
+        assert!(apply_ocr_runtime_settings_with(
+            &fixture.config,
+            &fixture.paths,
+            &fixture.worker,
+            score_update(0.4),
+            settings_engine,
+            |_, _| {
+                restarted.store(true, std::sync::atomic::Ordering::SeqCst);
+                Ok(())
+            },
+        )
+        .is_err());
+        assert!(!restarted.load(std::sync::atomic::Ordering::SeqCst));
+        assert_eq!(fixture.config.lock().unwrap().det_score_threshold(), before);
+        fs::rename(fixture.root.join("saved-conf"), fixture.root.join("conf")).unwrap();
+        assert_eq!(
+            apply_ocr_runtime_settings_with(
+                &fixture.config,
+                &fixture.paths,
+                &fixture.worker,
+                score_update(0.4),
+                settings_engine,
+                |engine, database| fixture.worker.restart(engine, database),
+            )
+            .unwrap()
+            .det_score_threshold,
+            0.4
+        );
+        fixture.cleanup();
     }
 
     #[test]

@@ -197,6 +197,8 @@ The only wire namespace is `v1/`, and every object has the `CLPSYNC1` magic plus
 
 ## Tauri command contract
 
+OCR configuration application (`set_ocr_config`, `restart_ocr_engine`, and post-install activation) shares the manager's operation mutex across clones. Partial updates resolve against the latest preceding applied configuration, and save/restart stay in one operation. Engine probing and worker joins do not hold `Mutex<ConfigStore>`; a save failure leaves the old configuration and worker unchanged and releases the operation gate.
+
 Commands are registered in `src-tauri/src/lib.rs` with `tauri::generate_handler!`. Frontend wrappers live primarily under `src/lib/services/`.
 
 `read_clipboard_text` (registered in `lib.rs`, returns `Option<String>`, no arguments) exposes the active `platform::platform()` adapter's clipboard text read so the editor context menu can Paste without depending on the WebView granting `navigator.clipboard.readText`. It only reads; unlike the copy paths it writes nothing and registers no self-trigger. `services/clipboard.ts::readClipboardText()` wraps it (empty string when the clipboard holds no text) and falls back to `navigator.clipboard.readText()` outside Tauri.
