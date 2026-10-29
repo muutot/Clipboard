@@ -153,6 +153,7 @@ pub fn sync_database_with_progress(
     if options.segment_max_entries == 0 {
         return Err("sync segment entry limit must be greater than zero".to_string());
     }
+    let _run = database.acquire_sync_run()?;
     database.initialize_sync()?;
     let device_id = database.get_sync_device_id()?;
     let mut result = SyncEngineResult::default();

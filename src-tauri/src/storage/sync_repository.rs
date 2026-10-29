@@ -99,6 +99,12 @@ fn sync_error(error: String) -> StorageError {
 }
 
 impl SyncRepository for Database {
+    fn acquire_sync_run(&self) -> Result<Box<dyn crate::sync::v1::SyncRunLease + '_>, String> {
+        self.begin_sync_run()
+            .map(|lease| Box::new(lease) as Box<dyn crate::sync::v1::SyncRunLease>)
+            .map_err(|error| error.to_string())
+    }
+
     fn initialize_sync(&self) -> Result<bool, String> {
         Database::initialize_sync(self).map_err(|error| error.to_string())
     }

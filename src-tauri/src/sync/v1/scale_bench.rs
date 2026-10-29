@@ -250,6 +250,10 @@ struct MeasuredRepository<'a> {
 }
 
 impl SyncRepository for MeasuredRepository<'_> {
+    fn acquire_sync_run(&self) -> Result<Box<dyn crate::sync::v1::SyncRunLease + '_>, String> {
+        <Database as SyncRepository>::acquire_sync_run(self.database)
+    }
+
     fn initialize_sync(&self) -> Result<bool, String> {
         RepositoryMetrics::time(&self.metrics.other_ns, || {
             <Database as SyncRepository>::initialize_sync(self.database)

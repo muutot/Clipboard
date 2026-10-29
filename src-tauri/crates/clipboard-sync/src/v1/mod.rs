@@ -24,7 +24,7 @@ pub use remote::{
 };
 pub use repository::{
     SyncEnginePaths, SyncHeadCache, SyncIncomingBatch, SyncOutboxBatch, SyncRemoteState,
-    SyncRepository, SyncResourceReferences, SyncSnapshot, SyncSnapshotExport,
+    SyncRepository, SyncResourceReferences, SyncRunLease, SyncSnapshot, SyncSnapshotExport,
 };
 pub use resources::{
     collect_mutation_resource_refs, defer_mutation_resources, ensure_resource_uploaded,

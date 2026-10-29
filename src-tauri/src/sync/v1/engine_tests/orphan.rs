@@ -3,8 +3,106 @@
 use super::*;
 
 #[test]
+fn overlapping_database_connections_cannot_regress_the_published_head() {
+    use std::sync::Arc;
+    let store = Arc::new(MemoryStore::default());
+    let paths = temp_paths("overlapping-sync-source");
+    let peer_paths = temp_paths("overlapping-sync-peer");
+    let source = Database::open(&paths.database).unwrap();
+    let other = Arc::new(Database::open(&paths.database).unwrap());
+    source.save_item(&text_item("initial", "initial")).unwrap();
+    sync_database(&*store, &source, &paths, REMOTE_SCOPE, None, options()).unwrap();
+    source.save_item(&text_item("first", "first")).unwrap();
+    let other_result = Arc::new(Mutex::new(None));
+    let hook_result = other_result.clone();
+    let hook_other = other.clone();
+    let hook_store = store.clone();
+    let hook_paths = paths.clone();
+    *store.after_put.lock().unwrap() = Some((
+        "/segments/".into(),
+        Box::new(move || {
+            hook_other
+                .save_item(&text_item("second", "second"))
+                .unwrap();
+            *hook_result.lock().unwrap() = Some(sync_database(
+                &*hook_store,
+                &*hook_other,
+                &hook_paths,
+                REMOTE_SCOPE,
+                None,
+                options(),
+            ));
+        }),
+    ));
+    let first_result = sync_database(&*store, &source, &paths, REMOTE_SCOPE, None, options());
+    let overlap = other_result.lock().unwrap().take().unwrap();
+    if let Err(error) = overlap {
+        assert!(
+            error.contains("already in progress"),
+            "unexpected overlap failure: {error}"
+        );
+        assert!(first_result.is_ok());
+        // The second caller retries after the first run releases its lease.
+        sync_database(&*store, &*other, &paths, REMOTE_SCOPE, None, options()).unwrap();
+    }
+    let state = source
+        .get_or_create_sync_remote_state(REMOTE_SCOPE)
+        .unwrap();
+    let device = source.get_sync_device_id().unwrap();
+    let head = decode_device_head(
+        store
+            .objects
+            .lock()
+            .unwrap()
+            .get(&head_object_key(&device).unwrap())
+            .unwrap(),
+        None,
+    )
+    .unwrap();
+    let peer = Database::open(&peer_paths.database).unwrap();
+    sync_database(&*store, &peer, &peer_paths, REMOTE_SCOPE, None, options()).unwrap();
+    let second_present = peer.get_item("second").unwrap().is_some();
+    drop(peer);
+    drop(source);
+    drop(other);
+    fs::remove_dir_all(paths.project).unwrap();
+    fs::remove_dir_all(peer_paths.project).unwrap();
+    assert_eq!(
+        head.published_sequence, state.published_sequence,
+        "a late earlier run must not overwrite a successful newer head"
+    );
+    assert!(
+        second_present,
+        "the successful second publication must remain discoverable"
+    );
+}
+
+#[test]
 fn restored_same_item_edit_is_not_acknowledged_by_an_old_orphan() {
     assert_restored_edit_survives_interrupted_publication(false, None);
+}
+
+#[test]
+fn unavailable_sync_ownership_fails_before_remote_io_or_sync_initialization() {
+    let store = MemoryStore::default();
+    let paths = temp_paths("unavailable-sync-lock");
+    let database = Database::open(&paths.database).unwrap();
+    let lock = paths
+        .database
+        .with_file_name("clipboard.sqlite3.sync-run.lock");
+    fs::create_dir(&lock).unwrap();
+    assert!(sync_database(&store, &database, &paths, REMOTE_SCOPE, None, options()).is_err());
+    assert!(store.puts.lock().unwrap().is_empty());
+    assert!(store.gets.lock().unwrap().is_empty());
+    assert!(store.lists.lock().unwrap().is_empty());
+    assert!(
+        database.initialize_sync().unwrap(),
+        "failed ownership must precede sync initialization"
+    );
+    fs::remove_dir(lock).unwrap();
+    sync_database(&store, &database, &paths, REMOTE_SCOPE, None, options()).unwrap();
+    drop(database);
+    fs::remove_dir_all(paths.project).unwrap();
 }
 
 #[test]

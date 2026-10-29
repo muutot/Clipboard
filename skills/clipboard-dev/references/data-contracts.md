@@ -130,6 +130,16 @@ through live orphan republish or published-head pull/reset/bootstrap recovery. L
 same-item edits may conservatively prevent adoption. No SQLite schema, v1 bincode field
 order or desktop IPC change accompanies this repository-boundary update.
 
+`SyncRepository::acquire_sync_run` returns an opaque RAII `SyncRunLease` held for
+the complete engine pass. The SQLite adapter uses `storage/sync_run.rs`: a
+canonical `.sync-run.lock` sibling coordinates file-DB connections/processes,
+and a database mutex coordinates in-memory runs. A busy/unavailable lease fails
+before sync initialization and any remote I/O. Migration reserves the same file
+lock before its source SQLite writer reservation, retaining it until restart on
+success. Drop/failure/crash releases leases without unlinking the lock file.
+This contract adds no schema, config, IPC or wire fields. Different DB paths are
+independent; cloned remote device identities require separate coordination.
+
 ## Configuration contracts
 
 `privacy.localOnly` gates every desktop S3 entry (manual/automatic sync, connection

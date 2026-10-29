@@ -47,6 +47,7 @@ struct MemoryStore {
     cancel_after_key_fragment:
         Mutex<Option<(String, clipboard_sync::cancellation::CancellationToken)>>,
     after_list: Mutex<Option<AfterListHook>>,
+    after_put: Mutex<Option<AfterListHook>>,
 }
 
 impl ObjectStore for MemoryStore {
@@ -181,6 +182,21 @@ impl ObjectStore for MemoryStore {
             if key.contains(fragment) {
                 token.cancel();
             }
+        }
+        drop(objects);
+        let hook = {
+            let mut hook = self.after_put.lock().unwrap();
+            if hook
+                .as_ref()
+                .is_some_and(|(fragment, _)| key.contains(fragment))
+            {
+                hook.take()
+            } else {
+                None
+            }
+        };
+        if let Some((_, hook)) = hook {
+            hook();
         }
         Ok(PutOutcome::Stored { etag: Some(etag) })
     }

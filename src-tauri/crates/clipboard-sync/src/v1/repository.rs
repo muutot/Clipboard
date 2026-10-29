@@ -25,6 +25,9 @@ impl SyncEnginePaths {
 pub type SyncResourceReferences = BTreeMap<String, Vec<SyncResourceRef>>;
 pub type SyncIncomingBatch = Result<(MutationBatch, SyncResourceReferences), String>;
 
+/// Opaque run ownership; dropping the lease releases repository coordination.
+pub trait SyncRunLease {}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SyncHeadCache {
     pub etag: String,
@@ -112,6 +115,9 @@ impl SyncRemoteState {
 /// streamed snapshot/checkpoint application must commit all batches and cursor
 /// state atomically or roll the entire operation back.
 pub trait SyncRepository {
+    /// Fail fast if another connection/process is syncing or migrating the
+    /// same database. Hold the lease through all remote and local effects.
+    fn acquire_sync_run(&self) -> Result<Box<dyn SyncRunLease + '_>, String>;
     fn initialize_sync(&self) -> Result<bool, String>;
     fn get_sync_device_id(&self) -> Result<String, String>;
     fn get_or_create_sync_remote_state(

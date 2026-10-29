@@ -222,6 +222,16 @@ recreates it from the complete local materialized state.
 
 ## Incremental push
 
+One repository run lease covers initialization, publication, pull and compaction.
+For SQLite files, an exclusive nonblocking `.sync-run.lock` beside the canonical
+database coordinates all connections and processes; in-memory repositories use
+a local mutex. Busy or unavailable coordination refuses the run before remote I/O.
+Storage migration holds the same lock with its source writer reservation until
+restart on success. Failure/drop/crash releases ownership; runs never remove the
+persistent lock file. This prevents a delayed earlier publisher from regressing a
+newer successful head on the same database. Different databases or independent
+copies with a shared device UUID are outside this per-database guarantee.
+
 Local mutation triggers append compact outbox rows containing sequence, item id, operation and
 version metadata. They do not copy binary resource bytes into SQLite.
 

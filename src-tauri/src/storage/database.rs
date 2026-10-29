@@ -7,15 +7,21 @@ use super::{schema, StorageError};
 pub struct Database {
     pub(super) connection: Mutex<Connection>,
     schema_was_reset: bool,
-    migration_writer: Mutex<Option<Connection>>,
+    migration_writer: Mutex<Option<MigrationWriter>>,
+    pub(super) sync_run: Mutex<()>,
     resource_publication: std::sync::Arc<super::resource_publication::ResourcePublication>,
 }
 
 /// Holds SQLite's writer reservation across resource copy and config save.
 /// On success the owning Database retains it until restart; failure releases it.
 pub(crate) struct StorageMigrationGuard<'a> {
-    writer: std::sync::MutexGuard<'a, Option<Connection>>,
+    writer: std::sync::MutexGuard<'a, Option<MigrationWriter>>,
     keep_until_restart: bool,
+}
+
+struct MigrationWriter {
+    _connection: Connection,
+    _sync_run: fs::File,
 }
 
 impl StorageMigrationGuard<'_> {
@@ -62,6 +68,7 @@ impl Database {
             connection: Mutex::new(connection),
             schema_was_reset: schema.was_reset,
             migration_writer: Mutex::new(None),
+            sync_run: Mutex::new(()),
         };
         database.ensure_sync_device_id()?;
         Ok(database)
@@ -123,12 +130,16 @@ impl Database {
                 .map(str::to_owned)
                 .ok_or(StorageError::StorageMigrationRequiresFile)
         })?;
+        let sync_run = super::sync_run::lock_database(Path::new(&path))?;
         let reservation = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_WRITE)?;
         reservation.busy_timeout(Duration::from_secs(5))?;
         // Wait for the current writer, then block every SQLite connection,
         // including CLI/API connections, from committing after the snapshot.
         reservation.execute_batch("BEGIN IMMEDIATE")?;
-        *writer = Some(reservation);
+        *writer = Some(MigrationWriter {
+            _connection: reservation,
+            _sync_run: sync_run,
+        });
         Ok(StorageMigrationGuard {
             writer,
             keep_until_restart: false,

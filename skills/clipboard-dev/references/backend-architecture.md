@@ -166,6 +166,21 @@ item may conservatively decline adoption and increase traffic. No IPC, schema or
 wire change is required. Real backup/restore UTs cover both interruption windows,
 with plaintext/encryption and genuine media-orphan retry preserving canonical refs.
 
+`storage/sync_run.rs` owns each database's complete sync lease. The engine acquires
+`SyncRepository::acquire_sync_run` before initialization or remote I/O and holds it
+through publication, pull and compaction. File DBs use the canonical DB sibling
+`.sync-run.lock` with an exclusive nonblocking OS lock; in-memory DBs use their
+own mutex. Different connections/processes of the same DB fail fast on overlap;
+different databases remain independent. Failure/drop/crash releases ownership and
+the persistent lock file is never removed by a run. Coordination errors refuse
+the run before remote effects. `begin_storage_migration` acquires the same file
+lock before its SQLite writer reservation, retaining both until restart on success
+or releasing both on failure. The process-wide command mutex still supplies UI
+serialization; it is insufficient alone for independent app processes. Real-engine
+UTs reproduce an old head overwriting a successful newer head; native child UTs
+cover cross-process exclusion and abrupt exit. This is per-database coordination;
+independent copies with the same remote device identity are outside this guarantee.
+
 ## Storage paths and ownership
 
 `src-tauri/src/storage/paths/` owns resource-root resolution/validation and metadata; `databases.rs` owns bounded additive database claims.
