@@ -280,6 +280,14 @@ These bounds do not make unrelated native display/filesystem calls preemptible.
 
 ## Privacy and cleanup
 
+`commands/config/misc.rs::apply_privacy_settings` validates patterns first, then
+holds the privacy mutex across persistence and both runtime-policy mirrors.
+Its lock order is privacy -> config, matching pause and getters. A poisoned
+privacy manager rejects the update before writing; concurrent saves wait for
+the previous capture-policy application. Disk failures preserve the old patterns.
+Tests exercise the real ConfigStore, PrivacyManager and CaptureState with a
+blocked policy write, poisoned runtime and failed config save.
+
 Tray pause toggles hold the privacy-manager lock through the capture update and config save. A failed save keeps the requested session state, emits `privacy-pause-changed`, and opens a non-blocking native warning that explains the restart risk even with the main window hidden. Settings-command toggles use the same lock ordering but retain the previous state on save failure. The tray warning's English/Chinese strings intentionally live in Rust rather than the WebView catalog; they follow `general.language` and the OS locale for `system`. Native dialog appearance still needs runtime verification.
 
 `storage/resource_publication.rs` shares a process-local writer count and generation across `Database` connections keyed by the canonical database path. Capture (including icons), JSON/PPaste/portable-backup import, record duplication, sync/materialization and thumbnail jobs hold a publication guard from before resource lookup/reuse through the DB commit; repository save/preview methods also register publication. Orphan cleanup snapshots the generation before resolving references, holds no publication mutex during scans, and checks it under a short mutex for each unlink. Active writers or any intervening publication defer the remaining cleanup. The ten-minute mtime grace still retains fresh/interrupted files but is not the concurrency guarantee. This mechanism coordinates this application's threads; it is not an interprocess lock for independent applications sharing a data directory.

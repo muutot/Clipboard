@@ -100,6 +100,24 @@ pub fn set_privacy_settings(
     local_only: Option<bool>,
     sensitive_patterns: Option<Vec<String>>,
 ) -> Result<PrivacySettings, String> {
+    apply_privacy_settings(
+        config.inner(),
+        sync_cancellation.inner(),
+        privacy.inner(),
+        capture.inner(),
+        local_only,
+        sensitive_patterns,
+    )
+}
+
+fn apply_privacy_settings(
+    config: &Mutex<ConfigStore>,
+    sync_cancellation: &crate::commands::sync::SyncCancellation,
+    privacy: &Mutex<PrivacyManager>,
+    capture: &CaptureState,
+    local_only: Option<bool>,
+    sensitive_patterns: Option<Vec<String>>,
+) -> Result<PrivacySettings, String> {
     // Validate the pattern list up front so nothing is persisted when one of
     // the regexes fails to compile.
     if let Some(patterns) = sensitive_patterns.as_ref() {
@@ -110,6 +128,10 @@ pub fn set_privacy_settings(
         }
     }
 
+    // Use the same privacy -> config order as pause/getters, and retain the
+    // privacy guard through both runtime mirrors. A later save must not apply
+    // before this one, and a poisoned runtime must fail before persistence.
+    let mut privacy = lock_state(&privacy, "privacy manager lock is poisoned")?;
     let persisted_patterns: Option<Vec<String>> = {
         let mut config = lock_state(&config, "configuration lock is poisoned")?;
         if let Some(value) = local_only {
@@ -137,15 +159,13 @@ pub fn set_privacy_settings(
             .filter_map(|pattern| regex_lite::Regex::new(pattern).ok())
             .collect();
 
-        lock_state(&privacy, "privacy manager lock is poisoned")?.sensitive_patterns =
-            compiled.clone();
+        privacy.sensitive_patterns = compiled.clone();
         capture.set_sensitive_patterns(compiled);
     }
 
     // No event is emitted here: the command returns the fresh
     // `PrivacySettings` and the settings panel renders from that value.
 
-    let privacy = lock_state(&privacy, "privacy manager lock is poisoned")?;
     let config = lock_state(&config, "configuration lock is poisoned")?;
 
     Ok(PrivacySettings {
@@ -478,13 +498,193 @@ pub fn set_clipboard_ignored_apps(
 
 #[cfg(test)]
 mod tests {
-    use super::{apply_ignored_applications, preview_auto_tag_rules, save_source_mapping_rules};
+    use super::{
+        apply_ignored_applications, apply_privacy_settings, preview_auto_tag_rules,
+        save_source_mapping_rules,
+    };
     use crate::config::{AutoTagRule, ConfigStore, SourceMappingRule};
     use crate::domain::ClipboardKind;
     use crate::platform::ClipboardMonitor;
     use crate::privacy::PrivacyManager;
     use crate::state::CaptureState;
     use std::fs;
+
+    #[test]
+    fn unavailable_privacy_runtime_cannot_commit_a_new_capture_policy() {
+        let root =
+            std::env::temp_dir().join(format!("clipboard-privacy-policy-{}", uuid::Uuid::new_v4()));
+        let mut store = ConfigStore::load(&root).unwrap();
+        store
+            .set_sensitive_patterns(vec!["old-secret".into()])
+            .unwrap();
+        let mut manager = PrivacyManager::new();
+        manager.sync_with_config(&store);
+        let capture = CaptureState::new(&manager, vec![], 0, 100_000);
+        let config = Mutex::new(store);
+        let privacy = std::sync::Arc::new(Mutex::new(manager));
+        let poisoned = privacy.clone();
+        let _ = std::thread::spawn(move || {
+            let _guard = poisoned.lock().unwrap();
+            panic!("simulate a failed privacy operation");
+        })
+        .join();
+        let result = apply_privacy_settings(
+            &config,
+            &Default::default(),
+            &privacy,
+            &capture,
+            None,
+            Some(vec!["new-secret".into()]),
+        );
+        assert!(result.is_err());
+        assert_eq!(config.lock().unwrap().sensitive_patterns(), &["old-secret"]);
+        assert_eq!(
+            ConfigStore::load(&root).unwrap().sensitive_patterns(),
+            &["old-secret"]
+        );
+        assert!(capture.should_skip(None, Some("old-secret")));
+        assert!(!capture.should_skip(None, Some("new-secret")));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn privacy_policy_updates_apply_only_after_a_successful_save() {
+        let root =
+            std::env::temp_dir().join(format!("clipboard-privacy-policy-{}", uuid::Uuid::new_v4()));
+        let store = ConfigStore::load(&root).unwrap();
+        let privacy = Mutex::new(PrivacyManager::new());
+        let capture = CaptureState::new(&privacy.lock().unwrap(), vec![], 0, 100_000);
+        let config = Mutex::new(store);
+        let cancellation = Default::default();
+        apply_privacy_settings(
+            &config,
+            &cancellation,
+            &privacy,
+            &capture,
+            None,
+            Some(vec!["old-secret".into()]),
+        )
+        .unwrap();
+        fs::rename(root.join("conf"), root.join("saved-conf")).unwrap();
+        assert!(apply_privacy_settings(
+            &config,
+            &cancellation,
+            &privacy,
+            &capture,
+            None,
+            Some(vec!["new-secret".into()])
+        )
+        .is_err());
+        assert!(privacy.lock().unwrap().is_sensitive_content("old-secret"));
+        assert!(capture.should_skip(None, Some("old-secret")));
+        assert!(!capture.should_skip(None, Some("new-secret")));
+        fs::rename(root.join("saved-conf"), root.join("conf")).unwrap();
+        assert!(apply_privacy_settings(
+            &config,
+            &cancellation,
+            &privacy,
+            &capture,
+            None,
+            Some(vec!["[".into()])
+        )
+        .is_err());
+        let saved = apply_privacy_settings(
+            &config,
+            &cancellation,
+            &privacy,
+            &capture,
+            Some(true),
+            Some(vec!["new-secret".into()]),
+        )
+        .unwrap();
+        assert!(saved.local_only);
+        assert_eq!(saved.sensitive_patterns, vec!["new-secret"]);
+        assert!(privacy.lock().unwrap().is_sensitive_content("new-secret"));
+        assert!(!capture.should_skip(None, Some("old-secret")));
+        assert!(capture.should_skip(None, Some("new-secret")));
+        assert_eq!(
+            ConfigStore::load(&root).unwrap().sensitive_patterns(),
+            &["new-secret"]
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn concurrent_privacy_saves_wait_for_the_previous_runtime_application() {
+        use std::sync::{mpsc, Arc};
+        use std::time::{Duration, Instant};
+        let root =
+            std::env::temp_dir().join(format!("clipboard-privacy-policy-{}", uuid::Uuid::new_v4()));
+        let config = Arc::new(Mutex::new(ConfigStore::load(&root).unwrap()));
+        let privacy = Arc::new(Mutex::new(PrivacyManager::new()));
+        let capture = CaptureState::new(&privacy.lock().unwrap(), vec![], 0, 100_000);
+        let cancellation = Arc::new(crate::commands::sync::SyncCancellation::default());
+        // Block the real capture-policy application, after the first save.
+        let blocked_capture = capture.policy.sensitive_patterns.write().unwrap();
+        let spawn_update = |pattern: &str, started: Option<mpsc::Sender<()>>| {
+            let config = config.clone();
+            let privacy = privacy.clone();
+            let capture = capture.clone();
+            let cancellation = cancellation.clone();
+            let pattern = pattern.to_owned();
+            std::thread::spawn(move || {
+                if let Some(started) = started {
+                    started.send(()).unwrap();
+                }
+                apply_privacy_settings(
+                    &config,
+                    &cancellation,
+                    &privacy,
+                    &capture,
+                    None,
+                    Some(vec![pattern]),
+                )
+            })
+        };
+        let first = spawn_update("first-secret", None);
+        let deadline = Instant::now() + Duration::from_secs(3);
+        let first_saved = loop {
+            if config.lock().unwrap().sensitive_patterns() == ["first-secret"] {
+                break true;
+            }
+            if Instant::now() >= deadline {
+                break false;
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        };
+        let (started, receiver) = mpsc::channel();
+        let second = spawn_update("second-secret", Some(started));
+        receiver.recv_timeout(Duration::from_secs(3)).unwrap();
+        let deadline = Instant::now() + Duration::from_millis(200);
+        let saved_ahead = loop {
+            if config.lock().unwrap().sensitive_patterns() == ["second-secret"] {
+                break true;
+            }
+            if Instant::now() >= deadline {
+                break false;
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        };
+        drop(blocked_capture);
+        first.join().unwrap().unwrap();
+        second.join().unwrap().unwrap();
+        assert!(first_saved, "first request must reach persistence");
+        assert!(
+            !saved_ahead,
+            "second request must not save ahead of the blocked runtime update"
+        );
+        assert!(capture.should_skip(None, Some("second-secret")));
+        assert!(!capture.should_skip(None, Some("first-secret")));
+        assert!(privacy
+            .lock()
+            .unwrap()
+            .is_sensitive_content("second-secret"));
+        assert_eq!(
+            ConfigStore::load(&root).unwrap().sensitive_patterns(),
+            &["second-secret"]
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
     use std::path::PathBuf;
     use std::sync::Mutex;
 
