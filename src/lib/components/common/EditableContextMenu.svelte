@@ -37,19 +37,85 @@
   const initialTarget = untrack(() => target);
   if (!isField(initialTarget)) {
     const selection = window.getSelection();
-    if (selection && selection.rangeCount > 0 && !selection.isCollapsed) {
-      savedRange = selection.getRangeAt(0).cloneRange();
+    if (selection && selection.rangeCount > 0) {
+      const range = selection.getRangeAt(0);
+      if (
+        initialTarget.contains(range.startContainer) &&
+        initialTarget.contains(range.endContainer)
+      )
+        savedRange = range.cloneRange();
     }
   }
 
-  function restoreSelection() {
-    target.focus();
-    if (isField(target) || !savedRange) return;
+  function restoreSelection(element: HTMLElement) {
+    element.focus();
+    if (isField(element) || !savedRange) return;
+    if (!element.contains(savedRange.startContainer) || !element.contains(savedRange.endContainer))
+      return;
     const selection = window.getSelection();
     if (selection) {
       selection.removeAllRanges();
       selection.addRange(savedRange.cloneRange());
     }
+  }
+
+  /** Keep the action target alive independently of the parent menu's nullable props. */
+  function captureEdit(element: HTMLElement) {
+    const field = isField(element) ? element : null;
+    const value = field ? field.value : element.innerHTML;
+    const start = field?.selectionStart ?? value.length;
+    const end = field?.selectionEnd ?? start;
+    const selection = window.getSelection();
+    const candidate = !field && selection?.rangeCount ? selection.getRangeAt(0) : null;
+    const range =
+      candidate &&
+      element.contains(candidate.startContainer) &&
+      element.contains(candidate.endContainer)
+        ? candidate.cloneRange()
+        : null;
+    const selectedText = field ? value.slice(start, end) : (range?.toString() ?? "");
+
+    function replace(text: string): boolean {
+      if (!element.isConnected || !element.contains(document.activeElement)) return false;
+      if (field) {
+        if (field.disabled || field.readOnly || field.value !== value) return false;
+        if (
+          (field.selectionStart ?? value.length) !== start ||
+          (field.selectionEnd ?? start) !== end
+        )
+          return false;
+        replaceFieldSelection(field, text);
+      } else {
+        if (element.innerHTML !== value || element.getAttribute("contenteditable") === "false")
+          return false;
+        if (
+          !range ||
+          !element.contains(range.startContainer) ||
+          !element.contains(range.endContainer)
+        )
+          return false;
+        const current = window.getSelection();
+        const live = current?.rangeCount ? current.getRangeAt(0) : null;
+        if (
+          !live ||
+          live.startContainer !== range.startContainer ||
+          live.startOffset !== range.startOffset ||
+          live.endContainer !== range.endContainer ||
+          live.endOffset !== range.endOffset
+        )
+          return false;
+        if (text) document.execCommand("insertText", false, text);
+        else {
+          range.deleteContents();
+          range.collapse(true);
+          current!.removeAllRanges();
+          current!.addRange(range);
+          element.dispatchEvent(new Event("input", { bubbles: true }));
+        }
+      }
+      return true;
+    }
+    return { selectedText, replace };
   }
 
   function replaceFieldSelection(
@@ -65,14 +131,15 @@
   }
 
   async function handleAction(id: string) {
-    restoreSelection();
+    const element = target;
+    restoreSelection(element);
 
     if (id === "selectAll") {
-      if (isField(target)) {
-        target.select();
+      if (isField(element)) {
+        element.select();
       } else {
         const range = document.createRange();
-        range.selectNodeContents(target);
+        range.selectNodeContents(element);
         const selection = window.getSelection();
         if (selection) {
           selection.removeAllRanges();
@@ -82,6 +149,7 @@
       return;
     }
 
+    const edit = captureEdit(element);
     if (id === "paste") {
       let text = "";
       try {
@@ -92,14 +160,11 @@
         return;
       }
       if (!text) return;
-      if (isField(target)) replaceFieldSelection(target, text);
-      else document.execCommand("insertText", false, text);
+      edit.replace(text);
       return;
     }
 
-    const text = isField(target)
-      ? target.value.slice(target.selectionStart ?? 0, target.selectionEnd ?? 0)
-      : (savedRange?.toString() ?? "");
+    const text = edit.selectedText;
     if (!text) return;
     try {
       await writeClipboardText(text);
@@ -108,16 +173,8 @@
       showToast(_t("toast.copyFailed"), "error");
       return;
     }
-    if (id === "cut") {
-      if (isField(target)) {
-        replaceFieldSelection(target, "");
-      } else if (savedRange) {
-        savedRange.deleteContents();
-        savedRange.collapse(true);
-        target.dispatchEvent(new Event("input", { bubbles: true }));
-      }
-    }
-    showToast(id === "cut" ? _t("toast.cutSuccess") : _t("toast.copySuccess"), "success");
+    const cut = id === "cut" && edit.replace("");
+    showToast(cut ? _t("toast.cutSuccess") : _t("toast.copySuccess"), "success");
   }
 </script>
 

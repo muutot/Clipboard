@@ -234,6 +234,19 @@ Main-route search bar: the draggable header, search input, inline suggestion hin
 
 These preview surfaces have niche palettes recorded in `niche_ui_style.md`; do not use them as project-wide theme examples.
 
+`EditableContextMenu` captures its action's element, original field value and
+selection or owned DOM range before awaiting clipboard I/O. Its parent closes
+the menu immediately on action; reading a nullable `menu.target` prop getter
+after that await throws even though the editable itself still exists. Normal
+menu closure must not cancel the edit. Delayed mutations require a connected,
+still-focused target with unchanged content and selection; changed drafts or a
+different focus retain the user's later state. Contenteditable snapshots include
+collapsed carets and stay inside the original target. Successful cut/caret edits
+dispatch `input` for bound state; a copied selection that can no longer be safely
+cut reports copy success. Mounted `AppContextMenu.test.ts` covers actual menu
+closure, text fields, contenteditable ranges, stale selections/content/focus and
+the existing global menu routing with controlled clipboard/browser commands.
+
 ## Settings composition
 
 ### `StorageSettingsDialog.svelte`
