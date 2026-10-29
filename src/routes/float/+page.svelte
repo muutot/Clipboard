@@ -136,13 +136,15 @@
     if (action === "favorite") {
       const ok = await persistFavorite(id, !item.favorite);
       if (ok) {
-        // The main window's optimistic path reuses the record the backend
-        // broadcast; the panel holds the row itself, so patching the one record
-        // in its store is the same funnel without a second round trip.
-        itemStore.current = applyItemPatches(
-          itemStore.current,
-          new Map([[id, { favorite: !item.favorite }]]),
-        );
+        // Commands broadcast before replying. A later event, reload or action
+        // owns the newer immutable row; this reply is only a fallback while
+        // the record captured at request entry is still current.
+        if (itemStore.current.byId.get(id) === item) {
+          itemStore.current = applyItemPatches(
+            itemStore.current,
+            new Map([[id, { favorite: !item.favorite }]]),
+          );
+        }
         showToast(
           _t(item.favorite ? "toast.unfavoriteSuccess" : "toast.favoriteSuccess"),
           "success",
@@ -168,7 +170,9 @@
           ? persistDelete(id)
           : persistHardDelete(id));
         if (!ok) throw new Error("record was not deleted");
-        itemStore.current = removeItems(itemStore.current, new Set([id]));
+        if (itemStore.current.byId.get(id) === item) {
+          itemStore.current = removeItems(itemStore.current, new Set([id]));
+        }
         showToast(_t("toast.deleteSuccess"), "success");
       } catch {
         showToast(_t("app.deleteFailed"), "error");

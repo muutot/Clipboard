@@ -121,6 +121,62 @@ function changed(payload: Partial<ClipboardItemsChangedPayload>) {
 }
 
 describe("float history reconciliation", () => {
+  it("keeps a later favorite event when an earlier favorite reply arrives", async () => {
+    bridge.load.mockResolvedValue([item("a", false)]);
+    let finish!: (ok: boolean) => void;
+    bridge.favorite.mockReturnValueOnce(new Promise<boolean>((resolve) => (finish = resolve)));
+    const page = await render();
+    page.rows()[0].click();
+    await settle();
+    expect(bridge.favorite).toHaveBeenCalledWith("a", true);
+    // The first favorite has committed and emitted. Another window then
+    // unfavorites the row before the first command's IPC reply is delivered.
+    bridge.load.mockReturnValue(new Promise(() => {}));
+    const record = {
+      id: "a",
+      kind: "text" as const,
+      title: "a",
+      sourceApp: "test",
+      sizeBytes: 1,
+      createdAtMs: 0,
+      isFavorite: true,
+    };
+    changed({ items: [record] });
+    await settle();
+    expect(page.rows()[0].querySelectorAll("svg")).toHaveLength(2);
+    changed({ items: [{ ...record, isFavorite: false }] });
+    await settle();
+    finish(true);
+    await settle();
+    expect(page.rows()[0].querySelectorAll("svg")).toHaveLength(1);
+  });
+
+  it("keeps a restored row when an earlier soft-delete reply arrives", async () => {
+    generalSettings.update((settings) => ({
+      ...settings,
+      useRecycleBin: true,
+      floatPanelLeftClick: "delete",
+    }));
+    bridge.load.mockResolvedValue([item("a")]);
+    let finish!: (ok: boolean) => void;
+    bridge.softDelete.mockReturnValueOnce(new Promise<boolean>((resolve) => (finish = resolve)));
+    const page = await render();
+    page.rows()[0].click();
+    await settle();
+    expect(bridge.softDelete).toHaveBeenCalledWith("a");
+    bridge.load.mockReturnValue(new Promise(() => {}));
+    changed({ deletedIds: ["a"] });
+    await settle();
+    expect(page.rows()).toHaveLength(0);
+    bridge.load.mockResolvedValue([item("a")]);
+    changed({ restoredIds: ["a"] });
+    await settle();
+    expect(page.rows()).toHaveLength(1);
+    finish(true);
+    await settle();
+    expect(page.rows().map((row) => row.title)).toEqual(["a"]);
+  });
+
   it.each([true, false])("honors useRecycleBin=%s when deleting", async (useRecycleBin) => {
     generalSettings.update((settings) => ({
       ...settings,
