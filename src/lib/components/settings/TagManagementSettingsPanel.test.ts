@@ -1,6 +1,7 @@
 import { flushSync, mount, unmount } from "svelte";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { locale } from "$lib/i18n";
+import type { TagsChangedPayload } from "$lib/types/clipboard";
 import { invoke } from "@tauri-apps/api/core";
 import { emit, listen } from "@tauri-apps/api/event";
 import TagManagementSettingsPanel from "./TagManagementSettingsPanel.svelte";
@@ -46,8 +47,8 @@ function render() {
   });
   flushSync();
 }
-function changed() {
-  vi.mocked(listen).mock.calls.at(-1)![1]({ event: "tags-changed", id: 1, payload: {} });
+function changed(payload: TagsChangedPayload = {}) {
+  vi.mocked(listen).mock.calls.at(-1)![1]({ event: "tags-changed", id: 1, payload });
   flushSync();
 }
 function deferred<T>() {
@@ -283,4 +284,30 @@ it("keeps the displayed tag color consistent with writes accepted by the backend
   first.resolve(true);
   await settle();
   expect(host.querySelector(".tag-color-trigger")?.getAttribute("style")).toContain(storedColor);
+});
+
+it("processes another window's tag event while its own success emission is pending", async () => {
+  const ownEvent = deferred<void>();
+  vi.mocked(emit).mockReturnValueOnce(ownEvent.promise);
+  color();
+  await settle();
+  vi.mocked(invoke).mockResolvedValueOnce([{ ...alpha, name: "beta", color: "#e5484d" }]);
+  changed({ renamed: { old: "alpha", new: "beta" } });
+  await settle();
+  try {
+    expect(
+      vi.mocked(invoke).mock.calls.filter(([command]) => command === "list_all_tags"),
+    ).toHaveLength(2);
+    expect(host.querySelector<HTMLInputElement>(".tag-name-input")?.value).toBe("beta");
+  } finally {
+    ownEvent.resolve();
+    await settle();
+  }
+});
+
+it("refreshes a tag event from another window while idle", async () => {
+  vi.mocked(invoke).mockResolvedValueOnce([{ ...alpha, name: "beta" }]);
+  changed({ renamed: { old: "alpha", new: "beta" } });
+  await settle();
+  expect(host.querySelector<HTMLInputElement>(".tag-name-input")?.value).toBe("beta");
 });

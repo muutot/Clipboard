@@ -19,19 +19,13 @@
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);
 
-  let suppressTagsChangedReload = false;
   let disposed = false;
   let loadGeneration = 0;
 
   function emitTagsChanged(payload: TagsChangedPayload) {
-    suppressTagsChangedReload = true;
-    emit("tags-changed", payload)
-      .catch((err) => console.warn("tags-changed emit failed:", err))
-      .finally(() => {
-        setTimeout(() => {
-          suppressTagsChangedReload = false;
-        }, 0);
-      });
+    void emit("tags-changed", payload).catch((err) =>
+      console.warn("tags-changed emit failed:", err),
+    );
   }
 
   interface Props {
@@ -80,7 +74,6 @@
     let unlistenTagsChanged: (() => void) | undefined;
     void load();
     listen<TagsChangedPayload>("tags-changed", () => {
-      if (suppressTagsChangedReload) return;
       void load();
     }).then((unlisten) => {
       if (disposed) unlisten();
