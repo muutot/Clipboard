@@ -135,6 +135,13 @@ Relative dates resolve when applied, so saved “yesterday” does not freeze a 
 
 `WindowConfig` is retrieved/saved by separate commands and currently defaults to launch-at-startup false, close-to-tray true, and single-instance true. The frontend mirrors it in the shared `windowConfig` store (`settings.ts`), loaded once at startup, so the General panel toggles render the real value without a load animation. Position is stored in the same backend window config group.
 
+Self-start changes keep the config mutex through the native registration and save.
+`platform/autostart.rs::persist_autostart` reads the actual registration, applies the
+requested value before persisting, and restores that actual value if the save fails.
+Registration failure leaves the stored preference unchanged; rollback failure reports
+both errors. Startup reconciliation still uses `sync_autostart`. UTs use temporary
+ConfigStore files and a controlled registration adapter, not the real OS registration.
+
 History/storage/OCR/privacy/export settings are separate Rust config groups and settings commands. Keyboard bindings remain in `conf/keyboard.json`. Do not add their fields to `GeneralSettings` merely because the controls appear in the same settings window.
 
 ## Backend representation caveat

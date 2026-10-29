@@ -6,7 +6,7 @@ use tauri::{Emitter, Manager};
 use crate::commands::clipboard::SearchResultCache;
 use crate::config::{ConfigStore, GeneralConfig, SearchIndexSyncMode};
 use crate::geometry::{clamp_window_position_to_work_areas, WindowPosition, WindowWorkArea};
-use crate::platform::{sync_autostart, WindowManager};
+use crate::platform::{autostart::persist_autostart, WindowManager};
 use crate::search::{SearchIndex, SearchSyncWorker};
 use crate::state::CaptureState;
 use crate::storage::{Database, StoragePaths};
@@ -575,18 +575,15 @@ pub fn set_window_config(
 ) -> Result<(), String> {
     let mut config = lock_state(&config, "configuration lock is poisoned")?;
     if let Some(v) = launch_at_startup {
-        config.set_launch_at_startup(v).map_err(|e| e.to_string())?;
+        persist_autostart(&app, v, || {
+            config.set_launch_at_startup(v).map_err(|e| e.to_string())
+        })?;
     }
     if let Some(v) = close_to_tray {
         config.set_close_to_tray(v).map_err(|e| e.to_string())?;
     }
     if let Some(v) = single_instance {
         config.set_single_instance(v).map_err(|e| e.to_string())?;
-    }
-
-    drop(config);
-    if let Some(desired) = launch_at_startup {
-        sync_autostart(&app, desired)?;
     }
 
     Ok(())
