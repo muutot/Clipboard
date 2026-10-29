@@ -97,6 +97,14 @@ counts documented below; local materialization reads the cache without that GET.
 - Preview images are device-local derived data: packs clear `preview_path` and `previewPath`, never
   create `resources/preview/` objects, and receivers can display the original image until a local
   preview is rebuilt.
+- File `originalPath` metadata is also device-local. Outgoing preparation and both incoming
+  resource paths remove it, including paths in older peers' packs; `files[].name` remains
+  portable. Remote edits with unchanged resource identities retain the receiver's own original
+  paths. Copying legacy records reuses a separate original name only when its bytes match the
+  stored body, using bounded buffers; changed/missing/unreadable originals fall back to that body.
+  Original-only entries cannot name a foreign file or directory. Local same-path pass-through
+  files/directories remain usable. Reusing a separate name adds file comparison I/O and does not
+  prevent external changes after comparison. No wire DTO layout or database schema changes.
 - Fixed-width sequence numbers preserve lexical and numeric order for S3 `start-after` listing.
 
 Normal discovery performs one paginated `v1/heads/` listing, which is O(device count). The client

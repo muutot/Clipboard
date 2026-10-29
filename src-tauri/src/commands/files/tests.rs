@@ -295,6 +295,90 @@ fn resolve_clipboard_file_paths_restores_the_original_file_name() {
 }
 
 #[test]
+fn legacy_original_paths_cannot_replace_a_different_managed_body() {
+    let project = save_file_test_project("foreign-original");
+    let paths = StoragePaths::initialize(project.clone()).unwrap();
+    // Equal size plus a difference after the first comparison buffer catches
+    // both a size-only identity check and an incomplete streamed comparison.
+    let expected = vec![b'a'; 64 * 1024 + 7];
+    let mut foreign = expected.clone();
+    foreign[64 * 1024 + 1] = b'b';
+    touch(&paths.files, "captured.txt", &expected);
+    touch(&project, "foreign.txt", &foreign);
+    let stored = paths.files.join("captured.txt");
+    let original = project.join("foreign.txt");
+    let row = persisted_file_item(
+        "old-remote",
+        "old-remote",
+        1,
+        stored.to_string_lossy().into_owned(),
+        original.to_string_lossy().into_owned(),
+    );
+    let resolved = resolve_clipboard_file_paths(&row, &paths, None).unwrap();
+    assert_eq!(resolved, vec![stored.clone()]);
+    assert_eq!(std::fs::read(&resolved[0]).unwrap(), expected);
+
+    // A foreign original-only entry from a skipped remote resource cannot
+    // authorize copying a receiver's unrelated file or directory either.
+    let mut no_body = row.clone();
+    no_body.resource_path = None;
+    no_body.metadata_json = Some(
+        serde_json::json!({
+            "files": [{"storagePath": null, "originalPath": original}]
+        })
+        .to_string(),
+    );
+    assert!(matches!(
+        resolve_clipboard_file_paths(&no_body, &paths, None),
+        Err(ClipboardFilesCopyError::ResourceMissing(_))
+    ));
+    no_body.metadata_json = Some(
+        serde_json::json!({
+            "files": [{"storagePath": null, "originalPath": project}]
+        })
+        .to_string(),
+    );
+    assert!(matches!(
+        resolve_clipboard_file_paths(&no_body, &paths, None),
+        Err(ClipboardFilesCopyError::ResourceMissing(_))
+    ));
+    std::fs::remove_dir_all(project).unwrap();
+}
+
+#[test]
+fn latest_original_name_cannot_donate_unrelated_file_contents() {
+    let project = save_file_test_project("foreign-inherited-original");
+    let paths = StoragePaths::initialize(project.clone()).unwrap();
+    let database = Database::open_in_memory().unwrap();
+    touch(&paths.files, "captured.txt", b"captured");
+    touch(&project, "foreign.txt", b"unrelated");
+    let storage = paths
+        .files
+        .join("captured.txt")
+        .to_string_lossy()
+        .into_owned();
+    let old = persisted_file_item(
+        "old",
+        "old",
+        100,
+        storage.clone(),
+        project.join("missing.txt").to_string_lossy().into_owned(),
+    );
+    let newer = persisted_file_item(
+        "new",
+        "new",
+        200,
+        storage.clone(),
+        project.join("foreign.txt").to_string_lossy().into_owned(),
+    );
+    database.save_item(&old).unwrap();
+    database.save_item(&newer).unwrap();
+    let resolved = resolve_clipboard_file_paths(&old, &paths, Some(&database)).unwrap();
+    assert_eq!(resolved, vec![std::path::PathBuf::from(storage)]);
+    std::fs::remove_dir_all(project).unwrap();
+}
+
+#[test]
 fn resolve_clipboard_file_paths_falls_back_to_storage_when_original_is_gone() {
     let project = save_file_test_project("original-gone");
     let paths = StoragePaths::initialize(project.clone()).unwrap();

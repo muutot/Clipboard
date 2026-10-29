@@ -68,6 +68,23 @@ busy wait is not preempted. The temporary plan is removed on success/failure.
 
 ## Synchronization
 
+File `originalPath` metadata is device-local, like derived previews. Outgoing
+preparation and both incoming resource paths remove it recursively, including
+older peers' metadata; the portable `files[].name` stays available. Remote
+metadata edits with unchanged canonical references preserve the receiver's own
+original path alongside its managed paths. Copy resolution also checks legacy
+stored originals and inherited names against the actual managed body using
+bounded 64 KiB buffers; existence or equal size alone is insufficient. Missing,
+unreadable or different bodies fall back to the managed path, and original-only
+entries cannot authorize a foreign file/directory. Same-path local pass-through
+captures (including directories) remain usable. This adds comparison I/O when
+reusing a separate original name; an edited original uses the captured body
+instead. These checks do not freeze a file against later external changes.
+Real SQLite sync/materialization/copy-resolution UTs cover receiver path
+collisions and preservation of a source's own name after a remote favorite edit.
+No wire field order, schema or IPC signature changes; native clipboard/S3 gates
+remain separate.
+
 Checkpoint pointer replacement always uses create-only or ETag CAS. If GET
 omits its ETag, the compactor reads HEAD and then requires a subsequent GET to
 match the original pointer bytes before pairing that HEAD identity with its

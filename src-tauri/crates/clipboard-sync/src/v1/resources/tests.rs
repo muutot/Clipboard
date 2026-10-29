@@ -689,6 +689,22 @@ fn mutation_resources_round_trip_without_machine_local_paths() {
         .unwrap()
         .starts_with("v1/resources/icon/"));
 
+    let mut metadata: serde_json::Value =
+        serde_json::from_str(batch.upserts[1].item.metadata_json.as_deref().unwrap()).unwrap();
+    assert!(metadata["files"][0].get("originalPath").is_none());
+    // An older publisher can still send these fields. Both incoming paths
+    // must strip them, even when they are not part of the resource key map.
+    metadata["originalPath"] = "C:/foreign/document.txt".into();
+    metadata["files"][0]["originalPath"] = "C:/foreign/document.txt".into();
+    batch.upserts[1].item.metadata_json = Some(metadata.to_string());
+    let mut deferred = batch.clone();
+    let refs = defer_mutation_resources(&mut deferred).unwrap();
+    assert_eq!(refs["file"].len(), 1);
+    let deferred_metadata: serde_json::Value =
+        serde_json::from_str(deferred.upserts[1].item.metadata_json.as_deref().unwrap()).unwrap();
+    assert!(deferred_metadata.get("originalPath").is_none());
+    assert!(deferred_metadata["files"][0].get("originalPath").is_none());
+
     let downloaded =
         materialize_mutation_resources(&store, &mut batch, &target_roots, limits, None).unwrap();
     assert_eq!(downloaded.referenced_resources, 3);
@@ -712,10 +728,8 @@ fn mutation_resources_round_trip_without_machine_local_paths() {
     assert!(
         Path::new(metadata["files"][0]["storagePath"].as_str().unwrap()).starts_with(&target_files)
     );
-    assert_eq!(
-        metadata["files"][0]["originalPath"],
-        "C:/original/document.txt"
-    );
+    assert!(metadata.get("originalPath").is_none());
+    assert!(metadata["files"][0].get("originalPath").is_none());
     let image_metadata: serde_json::Value =
         serde_json::from_str(batch.upserts[0].item.metadata_json.as_deref().unwrap()).unwrap();
     assert!(image_metadata.get("previewPath").is_none());

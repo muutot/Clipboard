@@ -126,9 +126,11 @@ pub fn change_membership(
 
 /// Resolves the existing local files behind an image/file record. Image items
 /// use the stored png; file items re-reference the still-existing original
-/// file for each entry (so pasting keeps the original name) and fall back to
+/// file for each entry when it matches the stored body (so pasting keeps the
+/// original name) and fall back to
 /// the managed storage copy / the record's resource path when the original is
-/// gone. When `database` is given and the original for a managed copy is gone,
+/// gone or changed. When `database` is given and the original for a managed copy
+/// is gone or changed,
 /// the freshest other record sharing that managed file is consulted so the
 /// pasted name stays the one from the most recent copy of the same content.
 /// Pass-through files that exceed the copy-size limit keep their original
@@ -157,19 +159,20 @@ pub(crate) fn resolve_clipboard_file_paths(
                     // OS clipboard semantics: re-reference the original file so
                     // the pasted copy keeps its original name instead of the
                     // managed (hash-named) storage copy. The managed copy stays
-                    // the fallback when the original no longer exists on disk;
+                    // the fallback when the original is missing or changed;
                     // with a database, the latest copy of the same content then
                     // donates its recorded original name.
-                    if let Some(original) = original {
-                        if is_copyable_path(std::path::Path::new(&original), item.kind) {
-                            candidates.push(original);
+                    if let (Some(original), Some(storage)) = (&original, &storage) {
+                        let stored = resolve_stored_path(storage, paths, item.kind);
+                        if original_matches_stored(std::path::Path::new(original), &stored) {
+                            candidates.push(original.clone());
                             continue;
                         }
                     }
                     if let Some(storage) = storage {
                         if let Some(database) = database {
                             if let Some(inherited) =
-                                latest_copied_original_path(database, &storage, &item.id)
+                                latest_copied_original_path(database, &storage, &item.id, paths)
                             {
                                 candidates.push(inherited.to_string_lossy().to_string());
                                 continue;
@@ -194,16 +197,7 @@ pub(crate) fn resolve_clipboard_file_paths(
 
     let mut resolved = Vec::new();
     for candidate in &candidates {
-        let raw = std::path::Path::new(candidate);
-        let path = if raw.is_absolute() {
-            raw.to_path_buf()
-        } else {
-            [&paths.images, &paths.files, &paths.storage]
-                .iter()
-                .map(|root| root.join(raw))
-                .find(|candidate| is_copyable_path(candidate, item.kind))
-                .unwrap_or_else(|| paths.storage.join(raw))
-        };
+        let path = resolve_stored_path(candidate, paths, item.kind);
         if is_copyable_path(&path, item.kind) {
             resolved.push(path);
         }
@@ -217,6 +211,62 @@ pub(crate) fn resolve_clipboard_file_paths(
     Ok(resolved)
 }
 
+fn resolve_stored_path(
+    value: &str,
+    paths: &StoragePaths,
+    kind: ClipboardKind,
+) -> std::path::PathBuf {
+    let raw = std::path::Path::new(value);
+    if raw.is_absolute() {
+        raw.to_path_buf()
+    } else {
+        [&paths.images, &paths.files, &paths.storage]
+            .iter()
+            .map(|root| root.join(raw))
+            .find(|candidate| is_copyable_path(candidate, kind))
+            .unwrap_or_else(|| paths.storage.join(raw))
+    }
+}
+
+/// Existing records can contain a foreign originalPath from older sync clients.
+/// Existence alone cannot authorize using it instead of the captured body.
+/// Pass-through captures (including directories) still refer to one path;
+/// separate originals must be regular files with identical bytes. Errors fall
+/// back to the stored body, and comparisons use constant-size buffers.
+fn original_matches_stored(original: &std::path::Path, stored: &std::path::Path) -> bool {
+    if original == stored {
+        return is_copyable_path(original, ClipboardKind::File);
+    }
+    let compare = || -> std::io::Result<bool> {
+        use std::io::Read;
+        let mut original = std::fs::File::open(original)?;
+        let mut stored = std::fs::File::open(stored)?;
+        let original_metadata = original.metadata()?;
+        let stored_metadata = stored.metadata()?;
+        if !original_metadata.is_file()
+            || !stored_metadata.is_file()
+            || original_metadata.len() != stored_metadata.len()
+        {
+            return Ok(false);
+        }
+        let mut remaining = stored_metadata.len();
+        let mut original_buffer = [0u8; 64 * 1024];
+        let mut stored_buffer = [0u8; 64 * 1024];
+        while remaining > 0 {
+            let amount = remaining.min(original_buffer.len() as u64) as usize;
+            original.read_exact(&mut original_buffer[..amount])?;
+            stored.read_exact(&mut stored_buffer[..amount])?;
+            if original_buffer[..amount] != stored_buffer[..amount] {
+                return Ok(false);
+            }
+            remaining -= amount as u64;
+        }
+        let mut tail = [0u8; 1];
+        Ok(original.read(&mut tail)? == 0 && stored.read(&mut tail)? == 0)
+    };
+    compare().unwrap_or(false)
+}
+
 fn is_copyable_path(path: &std::path::Path, kind: ClipboardKind) -> bool {
     path.metadata().is_ok_and(|metadata| {
         metadata.is_file() || (kind == ClipboardKind::File && metadata.is_dir())
@@ -225,13 +275,14 @@ fn is_copyable_path(path: &std::path::Path, kind: ClipboardKind) -> bool {
 
 /// Locates the original file recorded by the most recent copy of the same
 /// managed file (excluding `exclude_id`) and returns its path only when it
-/// still exists on disk. Content-storage dedup guarantees a matching record
-/// holds the identical bytes, so its original path is the last name given to
-/// this content by the user.
+/// still matches the stored bytes. The original path can change independently
+/// or come from older imported metadata; matching a managed path alone does
+/// not prove that its original still carries the same content.
 fn latest_copied_original_path(
     database: &Database,
     storage: &str,
     exclude_id: &str,
+    paths: &StoragePaths,
 ) -> Option<std::path::PathBuf> {
     let record = database
         .latest_file_record_referencing_storage(storage, exclude_id)
@@ -249,7 +300,8 @@ fn latest_copied_original_path(
             },
         )?;
     let path = std::path::PathBuf::from(&original);
-    path.is_file().then_some(path)
+    let stored = resolve_stored_path(storage, paths, ClipboardKind::File);
+    (path.is_file() && original_matches_stored(&path, &stored)).then_some(path)
 }
 
 /// Reads the `(storagePath, originalPath)` pair (legacy `path` for storage) of

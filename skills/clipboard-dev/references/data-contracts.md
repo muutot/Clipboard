@@ -18,6 +18,20 @@ save. Matching platform CI is required beyond the Windows UTs.
 
 ## Clipboard record contract
 
+Sync treats `metadata_json.originalPath` and every nested `originalPath` as
+device-local fields: outgoing preparation and incoming deferred/eager paths
+remove them, including fields received from older peers. File `name` and
+canonical resource identities remain portable. When canonical body references
+are unchanged, remote edits preserve this device's local original paths with
+its materialized storage paths. Existing/locally imported metadata can still
+contain originals; copy reuses a separate original (including one inherited
+from another row) only after a bounded byte comparison with the stored body.
+Mismatches/errors use the stored body, and original-only entries are unusable.
+Local same-path file/directory pass-through captures remain references. A
+modified original no longer replaces the captured bytes. Wire DTO layout and
+IPC/schema contracts remain unchanged; comparison does not lock out later
+external file modifications.
+
 Frontend `ClipboardItem.ocrBlocks?: OcrTextBlock[]` comes from the existing
 `get_clipboard_item_ocr` result's `blocks` array, preserving text/confidence/left/top/width/height.
 Coordinates refer to original image pixels. This is derived UI state, not a new
@@ -294,7 +308,7 @@ The CLI `paste` command and the local API `POST /paste` are manual text-ingestio
 
 `save_clipboard_item_as_new(id, newTitle, newTextContent)` is the atomic text/link "Save as new" path (formerly frontend `duplicate_clipboard_item` + `update_clipboard_text`). It validates non-empty text and text/link kind in one command, clears stale `html_content`/`rtf_content`, and when the proposed content hash already exists (including unchanged text saved beside its source) stores `{hash}-{uuid}` instead of failing the unique constraint. Failure cannot leave a half-created duplicate.
 
-`copy_clipboard_item_files(id)` makes the primary copy action on an image/file record copy the source file itself — on Windows the backend writes a `CF_HDROP` payload (DROPFILES header + UTF-16LE path list in a moveable `bytes` allocation) so pasting in a file manager copies the referenced files, plus a best-effort `CF_UNICODETEXT` of the joined paths (a text-stage failure after the `CF_HDROP` is placed keeps the files on the clipboard and reports success instead of leaving a half-cleared clipboard paired with an error) and the private self-trigger marker. The webview passes only the item id; the backend resolves the paths from the stored record (image → stored png; file → per-file `originalPath` when that file still exists so the paste keeps the original name, else the `storagePath`/legacy `path` managed copy, falling back to the record's resource path) and requires each to be an existing file. When a managed copy's own original is gone, the backend consults the most recent non-deleted file record sharing that same `storagePath` (`latest_file_record_referencing_storage`, JSON1) and reuses its still-existing `originalPath` — content-storage dedup makes that the same file captured later, so the pasted copy keeps the name from the last time the user copied that content (e.g. after a rename/move). Pass-through files that exceed the copy-size limit keep their original absolute location outside the managed roots and are accepted because the paths originate from the record, never from the webview — this does not reintroduce the unrestricted `copy_file_to` primitive.
+`copy_clipboard_item_files(id)` makes the primary copy action on an image/file record copy the source file itself — on Windows the backend writes a `CF_HDROP` payload (DROPFILES header + UTF-16LE path list in a moveable `bytes` allocation) so pasting in a file manager copies the referenced files, plus a best-effort `CF_UNICODETEXT` of the joined paths (a text-stage failure after the `CF_HDROP` is placed keeps the files on the clipboard and reports success instead of leaving a half-cleared clipboard paired with an error) and the private self-trigger marker. The webview passes only the item id; the backend resolves the paths from the stored record (image → stored png; file → per-file `originalPath` when its bytes match the stored body so the paste keeps the original name, else the `storagePath`/legacy `path` managed copy, falling back to the record's resource path) and requires each to be an existing file (or a directory for file-kind captures). When a managed copy's own original is missing or changed, the backend consults the most recent non-deleted file record sharing that same `storagePath` (`latest_file_record_referencing_storage`, JSON1) and reuses its `originalPath` only after checking that its bytes match the stored body, so the pasted copy keeps the name from the last time the user copied that content (e.g. after a rename/move). Pass-through files that exceed the copy-size limit keep their original absolute location outside the managed roots and are accepted because the paths originate from the record, never from the webview — this does not reintroduce the unrestricted `copy_file_to` primitive.
 
 A pack apply folds the decoded iterator one batch at a time (`Database::fold_decoded_batches`) inside the write transaction, so peak residency is one 16 MiB chunk rather than the whole pack (whose ceiling is the 1 GiB global uncompressed limit). The deliberate trade is that decompression of the already-downloaded local pack file runs while the transaction is open: a longer write lock stalls concurrent capture writes, whereas materialising the pack risks the OOM killer on a low-memory machine. A decode failure propagates and drops the transaction, so nothing partial is committed. A regression test asserts the laziness directly with a drop-instrumented payload.
 
@@ -480,7 +494,7 @@ cleanup snapshots from before the publication remain invalid after it finishes.
 
 - Treat metadata JSON as untrusted/optional at the frontend boundary.
 - Managed-body reuse requires exact bytes, not only the expected size. FileStore compares existing content with immutable staging or supplied bytes using bounded buffers, repairs equal-length corruption atomically, and leaves verified identical cache hits untouched.
-- Preserve external original paths separately from managed storage paths.
+- Preserve external original paths separately from managed storage paths locally; sync strips them and copy verifies separate original bytes before reuse.
 - `rename_item` receives managed `StoragePaths`; physical rename requires a regular, non-symlink file canonically inside an owned image/file root, with any required marker still valid. External originals, directories, unclaimed roots and shared files receive a display-title change only; metadata such as `copied` does not establish ownership.
 - The rename helper holds one publication guard across row lookup, copying/flushing the new body and the final path/title save. Old bodies remain for in-flight duplicates/captures; only reference-scanned cleanup may reclaim them. New destinations use `create_new` so concurrent rename conflicts cannot overwrite another file. Copy failure leaves the row unchanged; save failure leaves a complete orphan copy for later cleanup.
 - Rewrite only managed paths during data-directory migration.

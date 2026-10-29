@@ -101,6 +101,7 @@ pub(super) fn merge_local_resource_metadata(
         copy_json_key(&local, &mut remote, "resourcePath");
         copy_json_key(&local, &mut remote, "storagePath");
         copy_json_key(&local, &mut remote, "previewPath");
+        copy_json_key(&local, &mut remote, "originalPath");
         copy_file_storage_paths(&local, &mut remote);
     }
     if preserve_icon {
@@ -138,6 +139,7 @@ pub(super) fn copy_file_storage_paths(source: &serde_json::Value, target: &mut s
     for (source, target) in source_files.iter().zip(target_files.iter_mut()) {
         copy_json_key(source, target, "storagePath");
         copy_json_key(source, target, "path");
+        copy_json_key(source, target, "originalPath");
     }
 }
 

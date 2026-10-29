@@ -86,7 +86,7 @@ pub fn prepare_mutation_resources(
             session_key,
         );
         rewrite_metadata_paths(item.metadata_json.as_mut(), &path_map, true)?;
-        remove_preview_metadata(item.metadata_json.as_mut())?;
+        remove_device_local_metadata(item.metadata_json.as_mut())?;
     }
 
     let mut stats = ResourceTransferStats {
@@ -203,7 +203,7 @@ pub fn materialize_mutation_resources(
             &materialized_map(&materialized),
             false,
         )?;
-        remove_preview_metadata(item.metadata_json.as_mut())?;
+        remove_device_local_metadata(item.metadata_json.as_mut())?;
     }
     stats.referenced_resources = materialized.len() as u64;
     Ok(stats)
@@ -313,7 +313,7 @@ pub fn defer_mutation_resources(
         }
         item.icon_path = None;
         rewrite_metadata_paths(item.metadata_json.as_mut(), &path_map, true)?;
-        remove_preview_metadata(item.metadata_json.as_mut())?;
+        remove_device_local_metadata(item.metadata_json.as_mut())?;
         if !references.is_empty() {
             pending.insert(item.id.clone(), references);
         }
@@ -624,30 +624,33 @@ fn rewrite_metadata_paths(
     Ok(())
 }
 
-fn remove_preview_metadata(metadata_json: Option<&mut String>) -> Result<(), String> {
+fn remove_device_local_metadata(metadata_json: Option<&mut String>) -> Result<(), String> {
     let Some(metadata_json) = metadata_json else {
         return Ok(());
     };
     let Ok(mut value) = serde_json::from_str::<serde_json::Value>(metadata_json) else {
         return Ok(());
     };
-    remove_preview_keys(&mut value);
+    remove_device_local_keys(&mut value);
     *metadata_json = serde_json::to_string(&value)
-        .map_err(|error| format!("failed to remove preview metadata: {error}"))?;
+        .map_err(|error| format!("failed to remove device-local metadata: {error}"))?;
     Ok(())
 }
 
-fn remove_preview_keys(value: &mut serde_json::Value) {
+fn remove_device_local_keys(value: &mut serde_json::Value) {
     match value {
         serde_json::Value::Object(object) => {
             object.remove("previewPath");
+            // An original path belongs to the capturing device. A receiver
+            // can have unrelated private bytes at the same absolute name.
+            object.remove("originalPath");
             for child in object.values_mut() {
-                remove_preview_keys(child);
+                remove_device_local_keys(child);
             }
         }
         serde_json::Value::Array(array) => {
             for child in array {
-                remove_preview_keys(child);
+                remove_device_local_keys(child);
             }
         }
         _ => {}

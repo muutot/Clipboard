@@ -3,6 +3,117 @@
 use super::*;
 
 #[test]
+fn synced_file_copy_ignores_a_receiver_file_at_the_senders_original_path() {
+    let store = MemoryStore::default();
+    let source_paths = temp_paths("original-path-source");
+    let target_paths = temp_paths("original-path-target");
+    let source = Database::open(&source_paths.database).unwrap();
+    let target = Database::open(&target_paths.database).unwrap();
+    // These two devices share only the store. Replacing this temporary path
+    // after publication models the receiver's different bytes at the same
+    // absolute name, without touching a real clipboard or user file.
+    let original = source_paths.project.join("document.txt");
+    let expected = b"sender document";
+    fs::write(&original, expected).unwrap();
+    let files = crate::commands::capture::store_captured_file_references(
+        &[original.to_string_lossy().into_owned()],
+        &source_paths.files,
+        1024,
+    );
+    let mut item = text_item("synced-document", "document.txt");
+    item.kind = ClipboardKind::File;
+    item.resource_path = Some(files[0].storage_path.clone());
+    item.text_content = Some(serde_json::to_string(&vec![&files[0].storage_path]).unwrap());
+    item.metadata_json = Some(crate::commands::capture::captured_file_metadata(&files));
+    source.save_item(&item).unwrap();
+    sync_database(
+        &store,
+        &source,
+        &source_paths,
+        REMOTE_SCOPE,
+        None,
+        options(),
+    )
+    .unwrap();
+    fs::write(&original, b"receiver private document").unwrap();
+    sync_database(
+        &store,
+        &target,
+        &target_paths,
+        REMOTE_SCOPE,
+        None,
+        options(),
+    )
+    .unwrap();
+    let references = target
+        .get_sync_resource_refs(REMOTE_SCOPE, &item.id)
+        .unwrap();
+    assert_eq!(references.len(), 1);
+    let body = materialize_resource(
+        &store,
+        &references[0].object_key,
+        &target_paths.files,
+        options().resource_limits.file_bytes,
+        None,
+    )
+    .unwrap();
+    target
+        .mark_sync_resource_materialized(
+            REMOTE_SCOPE,
+            &item.id,
+            &references[0],
+            body.path.to_str().unwrap(),
+        )
+        .unwrap();
+    let received = target.get_item(&item.id).unwrap().unwrap();
+    let resolved = crate::item_operations::resolve_clipboard_file_paths(
+        &received,
+        &target_paths,
+        Some(&target),
+    )
+    .unwrap();
+    assert_eq!(resolved.len(), 1);
+    let copied = fs::read(&resolved[0]).unwrap();
+
+    // A remote metadata edit keeps this device's valid original name when
+    // the canonical body is unchanged; it never imports the peer's original.
+    fs::write(&original, expected).unwrap();
+    target.set_favorite(&item.id, true).unwrap();
+    sync_database(
+        &store,
+        &target,
+        &target_paths,
+        REMOTE_SCOPE,
+        None,
+        options(),
+    )
+    .unwrap();
+    sync_database(
+        &store,
+        &source,
+        &source_paths,
+        REMOTE_SCOPE,
+        None,
+        options(),
+    )
+    .unwrap();
+    let current = source.get_item(&item.id).unwrap().unwrap();
+    assert!(current.is_favorite);
+    let local_copy = crate::item_operations::resolve_clipboard_file_paths(
+        &current,
+        &source_paths,
+        Some(&source),
+    )
+    .unwrap();
+    assert_eq!(local_copy, vec![original]);
+    drop(source);
+    drop(target);
+    fs::remove_dir_all(source_paths.project).unwrap();
+    fs::remove_dir_all(target_paths.project).unwrap();
+    assert_eq!(copied, expected, "copy must resolve the synchronized body");
+}
+
+#[test]
 fn independent_snapshots_and_incremental_segments_converge() {
     let store = MemoryStore::default();
     store
