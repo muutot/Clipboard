@@ -267,24 +267,21 @@ export function createBulkController(deps: BulkDependencies) {
       const removedIds = new Set([...successfulPermanent, ...successfulHard]);
       const succeededIds = new Set([...successfulSoft, ...removedIds]);
 
-      for (const id of successfulPermanent) deps.history.addSuppressedId(id);
       for (const id of permanentIds) {
         if (!successfulPermanent.has(id)) deps.history.deletedHistorySuppressedIds.delete(id);
       }
-      for (const id of softIds) deps.history.deletedHistorySuppressedIds.delete(id);
 
-      // Mirror exactly which backend transaction succeeded: return the ids this
-      // batch touched to their pre-mutation state, then re-apply the per-outcome
-      // transitions. Going through the funnel (rather than rebuilding whole
-      // arrays from a snapshot) keeps records that arrived via clipboard events
-      // during the async window — a whole-array rebuild dropped them entirely.
-      let next = restoreAffectedItems(deps.itemStore.current, snapshot);
-      next = removeItems(next, removedIds);
-      next = applyItemPatches(
-        next,
-        new Map([...successfulSoft].map((id) => [id, { deleted: true }])),
-      );
-      deps.itemStore.current = next;
+      // Success already has its optimistic transition and canonical broadcast.
+      // Reapplying it here would undo a later restore or newly loaded record.
+      // Only failed transactions own a rollback, including their detail slot.
+      const failedSnapshot: AffectedItemSnapshot = {
+        ...snapshot,
+        previous: new Map([...snapshot.previous].filter(([id]) => failedIds.has(id))),
+        patches: new Map([...snapshot.patches].filter(([id]) => failedIds.has(id))),
+        detailId:
+          snapshot.detailId !== null && failedIds.has(snapshot.detailId) ? snapshot.detailId : null,
+      };
+      deps.itemStore.current = restoreAffectedItems(deps.itemStore.current, failedSnapshot);
       selectedIds = new Set([...selectedIds].filter((id) => !succeededIds.has(id)));
 
       // Failed (and partially failed) batches skip the success-path

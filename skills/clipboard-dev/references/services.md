@@ -76,6 +76,11 @@ current selection. A different row selected while IPC is pending remains selecte
 undelivered paste rows remain only if the user still has them selected. The mounted
 controller tests cover successful/copied/failed paste and delayed favorite saves.
 
+Bulk-delete completion restores only the failed transactions' captured records
+and detail slot. Successful rows retain their optimistic/canonical state and any
+later restore or reload; completion must not repeat deletion/removal or reset the
+recycle-bin paging suppression already established when the action began.
+
 Keep frontend mapping aligned with Rust serde names and `metadata_json`. `loadDeletedClipboardHistory` is the current deleted-list API name. A copy/write path must register a compatible self-trigger hash before touching the system clipboard. `readClipboardText()` is the read counterpart (`read_clipboard_text` command, fallback `navigator.clipboard.readText()` outside Tauri) used by the shared editor context menu; it never writes, so it registers no self-trigger.
 
 ## Invoke-wrapper services

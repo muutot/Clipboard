@@ -4,7 +4,13 @@ import Probe, { type ProbeState } from "./controllers.probe.svelte";
 import { createListenerScope } from "./window-lifecycle";
 import * as service from "$lib/services/clipboard";
 import { showToast } from "$lib/services/toast";
-import { appendItems, applyItemPatches, removeItems } from "$lib/utils/store/item-store";
+import {
+  appendItems,
+  applyItemPatches,
+  removeItems,
+  setDetailItem,
+} from "$lib/utils/store/item-store";
+import { applyItemsChangedEvent } from "$lib/utils/store/item-changes";
 import type { ClipboardItem } from "$lib/types/clipboard";
 vi.mock("$lib/services/runtime", async (original) => ({
   ...(await original<typeof import("$lib/services/runtime")>()),
@@ -16,6 +22,8 @@ vi.mock("$lib/services/clipboard", async (original) => ({
   loadDeletedClipboardHistory: vi.fn(async () => []),
   searchClipboardHistory: vi.fn(),
   persistBatchFavorite: vi.fn(),
+  persistBatchDelete: vi.fn(),
+  persistBatchPermanentDelete: vi.fn(),
   pasteClipboardItem: vi.fn(async () => "pasted" as const),
 }));
 vi.mock("$lib/services/toast", () => ({ showToast: vi.fn() }));
@@ -252,6 +260,84 @@ it("retains selections added while a bulk favorite is saving", async () => {
   expect([...out.bulk!.selectedIds]).toEqual(["arrived"]);
   expect(service.persistBatchFavorite).toHaveBeenLastCalledWith(["initial"], true);
 });
+
+it("keeps a later restore and its paging suppression when an earlier bulk delete succeeds", async () => {
+  const gate = deferred<boolean>();
+  vi.mocked(service.persistBatchDelete).mockReturnValueOnce(gate.promise);
+  vi.mocked(service.loadClipboardHistory).mockReturnValue(new Promise(() => {}));
+  vi.mocked(service.loadDeletedClipboardHistory).mockReturnValue(new Promise(() => {}));
+  out.bulk!.selectedIds = new Set(["initial"]);
+  out.bulk!.bulkDelete();
+  expect(out.store!.current.byId.get("initial")!.deleted).toBe(true);
+  // Delete has committed but its IPC reply is pending. Another window restores
+  // the row; a local restore also keeps stale recycle-bin pages suppressed.
+  out.history!.addSuppressedId("initial");
+  out.store!.current = applyItemsChangedEvent(out.store!.current, {
+    restoredIds: ["initial"],
+  });
+  gate.resolve(true);
+  await settle();
+  expect(out.store!.current.byId.get("initial")!.deleted).toBe(false);
+  expect(out.history!.deletedHistorySuppressedIds.has("initial")).toBe(true);
+});
+
+it("rolls back only failed rows of a partial bulk delete while preserving later restores", async () => {
+  const soft = deferred<boolean>();
+  const permanent = deferred<boolean>();
+  vi.mocked(service.persistBatchDelete).mockReturnValueOnce(soft.promise);
+  vi.mocked(service.persistBatchPermanentDelete).mockReturnValueOnce(permanent.promise);
+  vi.mocked(service.loadClipboardHistory).mockReturnValue(new Promise(() => {}));
+  vi.mocked(service.loadDeletedClipboardHistory).mockReturnValue(new Promise(() => {}));
+  out.store!.current = appendItems(
+    out.store!.current,
+    [{ ...item("bin"), deleted: true }],
+    "history",
+  );
+  out.store!.current = setDetailItem(out.store!.current, out.store!.current.byId.get("initial")!);
+  out.bulk!.selectedIds = new Set(["initial", "bin"]);
+  out.bulk!.bulkDelete();
+  expect(service.persistBatchDelete).toHaveBeenCalledWith(["initial"]);
+  expect(service.persistBatchPermanentDelete).toHaveBeenCalledWith(["bin"]);
+  expect(out.store!.current.byId.has("bin")).toBe(false);
+  out.store!.current = applyItemsChangedEvent(out.store!.current, { restoredIds: ["initial"] });
+  out.store!.current = appendItems(out.store!.current, [item("arrived")], "history");
+  out.store!.current = setDetailItem(out.store!.current, null);
+  out.bulk!.selectedIds = new Set(["arrived"]);
+  soft.resolve(true);
+  permanent.resolve(false);
+  await settle();
+  expect(out.store!.current.byId.get("initial")!.deleted).toBe(false);
+  expect(out.store!.current.byId.get("bin")!.deleted).toBe(true);
+  expect(out.store!.current.byId.has("arrived")).toBe(true);
+  expect(out.store!.current.detailId).toBeNull();
+  expect([...out.bulk!.selectedIds]).toEqual(["arrived"]);
+  expect(showToast).toHaveBeenCalledWith("app.deleteFailed", "error");
+});
+
+it.each([true, false])(
+  "preserves the actual bulk-delete outcome without later edits (%s)",
+  async (ok) => {
+    vi.mocked(service.persistBatchDelete).mockResolvedValueOnce(ok);
+    vi.mocked(service.persistBatchPermanentDelete).mockResolvedValueOnce(ok);
+    vi.mocked(service.loadClipboardHistory).mockReturnValue(new Promise(() => {}));
+    vi.mocked(service.loadDeletedClipboardHistory).mockReturnValue(new Promise(() => {}));
+    out.store!.current = appendItems(
+      out.store!.current,
+      [{ ...item("bin"), deleted: true }],
+      "history",
+    );
+    out.bulk!.selectedIds = new Set(["initial", "bin"]);
+    out.bulk!.bulkDelete();
+    await settle();
+    expect(Boolean(out.store!.current.byId.get("initial")!.deleted)).toBe(ok);
+    expect(out.store!.current.byId.has("bin")).toBe(!ok);
+    expect(showToast).toHaveBeenCalledWith(
+      ok ? "toast.bulkDeleteSuccess" : "app.deleteFailed",
+      ok ? "success" : "error",
+    );
+  },
+);
+
 it("disposes late native listener registrations exactly once", async () => {
   const scope = createListenerScope(),
     late = deferred<() => void>(),
