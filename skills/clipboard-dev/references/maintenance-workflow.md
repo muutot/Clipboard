@@ -70,11 +70,13 @@ Do not promote a niche exception into a general rule. Record newly discovered lo
 - Vitest defaults to two workers in `vitest.config.ts` to bound concurrent jsdom processes.
   Plain `npm test`, `verify` and `ci:local` inherit this limit. For an explicit larger
   machine experiment, `npm test -- --maxWorkers=N` overrides it; keep test isolation enabled.
-- Run focused unit tests or static checks while iterating.
-- Run `npm run check` for Svelte/TypeScript work and `npm run build` for frontend integration.
-- Run focused Cargo tests, then `npm run test:rust` for Rust behavior.
-- Run `npm run lint:rust` for Rust changes and `npm run format:check` before commit.
-- Run `npm run verify` for cross-layer changes and integration milestones.
+- During bug remediation, run only the unit tests (UTs) relevant to each minimal fix:
+  `npm test -- <test-file>` for frontend behavior and filtered `cargo test` for Rust behavior.
+  Cross-layer fixes use both focused UT groups; they do not trigger full suites between fixes.
+- After all requested fixes are complete, run `npm run verify` once. This final gate includes
+  the full frontend and Rust workspace suites, Svelte/TypeScript checking, frontend build,
+  Clippy and formatting. Do not repeat it unless later edits or failures require revalidation.
+- Keep per-commit formatting, Git hooks and the documentation currency gate.
 - Inspect rendered/runtime behavior for layout, theme, focus, multi-window, platform, or OS integration claims; static checks alone are insufficient.
 - Treat platform-gated code as unverified locally. Anything behind `#[cfg(target_os = ...)]` (the Linux/macOS halves of `src-tauri/src/platform/`) is not compiled by a Windows `npm run verify`, and cross-`cargo check` is not a substitute because native dependencies still need a cross C toolchain. After touching such code, the matching CI job is the only real gate — read its result, and do not treat a green local run as coverage. `docs/PITFALLS.md` ("平台专属代码是本地门禁的盲区") records a branch that stayed red through many green local runs.
 

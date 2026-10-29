@@ -29,8 +29,10 @@ Documentation is a navigation aid. Re-check a historical finding against current
 
 Use configured commands and record their actual results:
 
-- Frontend: `npm run check`, focused `npm test -- <test-file>`.
-- Rust: focused Cargo tests, `npm run test:rust`, `npm run lint:rust`.
+- During authorized remediation: only focused frontend `npm test -- <test-file>` and/or
+  filtered Cargo unit tests for each fix, including cross-layer fixes; no full suites between fixes.
+- After all requested fixes: one final `npm run verify` for full tests, type checking, build,
+  Clippy and formatting. Repeat only after later edits or failures that require revalidation.
 - Before a fix commit: `npm run format:check` and the applicable maintenance gates.
 - Release readiness: `npm run format:check`, `npm run check`, `npm run lint:rust`. Release building occurs in GitHub Actions on tag push. Never run or locally enable the extreme-release profile overrides.
 

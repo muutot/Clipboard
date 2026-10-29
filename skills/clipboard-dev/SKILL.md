@@ -104,9 +104,11 @@ npm run verify
 
 The local `verify` and `ci:local` gates include the frontend Vitest suite. The
 Rust format, test, and Clippy scripts cover every Cargo workspace member, including the
-Tauri-independent sync crate. Run the narrowest relevant checks during implementation. Run
-`npm run verify` at integration milestones or before a commit whose scope crosses frontend and
-backend. If an environment prevents a required runtime, visual, platform, packaging, or performance
+Tauri-independent sync crate. During bug remediation, verify each minimal fix with only its
+relevant unit tests (UTs), including cross-layer fixes; do not run the full Vitest suite, Cargo
+workspace suite, or `npm run verify` between fixes. After all requested fixes are complete, run
+`npm run verify` once as the final integration gate. Keep the per-commit formatting, hooks and
+documentation currency gates. If an environment prevents a required runtime, visual, platform, packaging, or performance
 check, report the missing evidence and leave the corresponding TODO unverified.
 
 The pre-release gate runs `format` + `check` + `lint:rust` and does **not** build locally (see `skills/version-release/SKILL.md`); building happens remotely in the GitHub Actions `release.yml` workflow on tag push, so the local build profile stays fast.
