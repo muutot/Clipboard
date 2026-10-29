@@ -7,6 +7,7 @@ use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, Emitter, Listener, Manager, Runtime,
 };
+use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 
 use crate::commands::clipboard::{broadcast_item_usage, record_item_usage, SearchResultCache};
 use crate::config::ConfigStore;
@@ -202,33 +203,23 @@ impl SystemTray {
                 crate::log_error!("[tray] failed to emit open-settings: {error}");
             }
         } else if id == Self::PAUSE_MENU_ID {
-            // Mirror the `toggle_privacy_pause` command ordering: the
-            // PrivacyManager flips first and is the source of truth, the
-            // CaptureState follows the resolved value, and config
-            // persistence errors are logged instead of silently dropped —
-            // a blind second flip could desync the two states when the
-            // config write fails.
             let Some(privacy) = app.try_state::<Mutex<PrivacyManager>>() else {
                 return;
             };
-            let Ok(mut privacy) = privacy.lock() else {
-                crate::log_error!("[tray] privacy manager lock is poisoned; pause state unchanged");
-                return;
-            };
-            privacy.toggle_pause();
-            let paused = privacy.is_paused();
-            drop(privacy);
-
-            if let Some(capture) = app.try_state::<CaptureState>() {
-                capture.set_paused(paused);
-            }
-            if let Some(config) = app.try_state::<Mutex<ConfigStore>>() {
-                if let Ok(mut config) = config.lock() {
-                    if let Err(error) = config.set_privacy_paused(paused) {
-                        crate::log_error!("[tray] failed to persist the pause state: {error}");
-                    }
+            let capture = app.try_state::<CaptureState>();
+            let config = app.try_state::<Mutex<ConfigStore>>();
+            let outcome = match toggle_tray_pause(
+                privacy.inner(),
+                capture.as_ref().map(|state| state.inner()),
+                config.as_ref().map(|state| state.inner()),
+            ) {
+                Ok(outcome) => outcome,
+                Err(error) => {
+                    crate::log_error!("[tray] pause state unchanged: {error}");
+                    return;
                 }
-            }
+            };
+            let paused = outcome.paused;
             if let Err(error) = app.emit("privacy-pause-changed", paused) {
                 crate::log_error!("[tray] failed to emit pause-changed: {error}");
             }
@@ -236,6 +227,27 @@ impl SystemTray {
             // privacy listener rebuilds again on the event above, which is
             // idempotent.
             refresh_tray_recent_menu(app);
+            if let Some(error) = outcome.persistence_error {
+                crate::log_error!("[tray] failed to persist the pause state: {error}");
+                let language = config
+                    .as_ref()
+                    .and_then(|config| config.lock().ok())
+                    .map(|config| config.general_settings().language.clone())
+                    .unwrap_or_else(|| "system".to_owned());
+                let chinese = if language == "system" {
+                    crate::platform::os_locale_name()
+                        .is_some_and(|locale| locale.to_ascii_lowercase().starts_with("zh"))
+                } else {
+                    language == "zh-CN"
+                };
+                // A native, non-blocking warning remains visible when the
+                // main WebView is hidden. No runtime/config lock is held.
+                app.dialog()
+                    .message(pause_persistence_warning(paused, chinese))
+                    .title("Clipboard")
+                    .kind(MessageDialogKind::Warning)
+                    .show(|_| {});
+            }
         } else if id == Self::QUIT_MENU_ID {
             app.exit(0);
         } else if id == Self::RESTART_MENU_ID {
@@ -256,6 +268,53 @@ impl SystemTray {
         } else if let Some(item_id) = recent_item_id(id) {
             tray_copy_item(app, item_id);
         }
+    }
+}
+
+struct TrayPauseOutcome {
+    paused: bool,
+    persistence_error: Option<String>,
+}
+
+fn toggle_tray_pause(
+    privacy: &Mutex<PrivacyManager>,
+    capture: Option<&CaptureState>,
+    config: Option<&Mutex<ConfigStore>>,
+) -> Result<TrayPauseOutcome, String> {
+    // Keep the privacy lock through persistence, serializing tray toggles
+    // with the settings command. A failed write must not undo a requested
+    // pause in this session; the caller reports the restart risk.
+    let mut privacy = privacy
+        .lock()
+        .map_err(|_| "privacy manager lock is poisoned".to_owned())?;
+    privacy.toggle_pause();
+    let paused = privacy.is_paused();
+    if let Some(capture) = capture {
+        capture.set_paused(paused);
+    }
+    let persisted = config
+        .ok_or_else(|| "configuration state is unavailable".to_owned())
+        .and_then(|config| {
+            config
+                .lock()
+                .map_err(|_| "configuration lock is poisoned".to_owned())?
+                .set_privacy_paused(paused)
+                .map_err(|error| error.to_string())
+        });
+    Ok(TrayPauseOutcome {
+        paused,
+        persistence_error: persisted.err(),
+    })
+}
+
+// Native tray feedback is localized in Rust because it must work without a
+// visible WebView; keep both languages and restart semantics aligned.
+fn pause_persistence_warning(paused: bool, chinese: bool) -> &'static str {
+    match (paused, chinese) {
+        (true, true) => "本次运行已暂停剪贴板记录，但无法保存此状态。重启后可能恢复记录。请修复配置目录的写入权限，并在重启前确认暂停状态已保存。",
+        (false, true) => "本次运行已恢复剪贴板记录，但无法保存此状态。重启后可能仍处于暂停状态。请检查配置目录的写入权限。",
+        (true, false) => "Clipboard recording is paused for this session, but the pause could not be saved. Recording may resume after a restart. Check write access to the configuration directory and make sure the pause is saved before restarting.",
+        (false, false) => "Clipboard recording has resumed for this session, but the change could not be saved. Recording may be paused again after a restart. Check write access to the configuration directory.",
     }
 }
 
@@ -491,6 +550,56 @@ fn tray_copy_item<R: Runtime>(app: &AppHandle<R>, item_id: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn failed_tray_pause_save_keeps_the_session_state_and_reports_restart_risk() {
+        for before in [false, true] {
+            let root = std::env::temp_dir().join(format!(
+                "clipboard-tray-pause-{}-{}",
+                std::process::id(),
+                uuid::Uuid::new_v4()
+            ));
+            let mut config = ConfigStore::load(&root).unwrap();
+            config.set_privacy_paused(before).unwrap();
+            let mut privacy = PrivacyManager::new();
+            privacy.sync_with_config(&config);
+            let capture = CaptureState::new(&privacy, vec![], 1024, 1024);
+            let privacy = Mutex::new(privacy);
+            let config = Mutex::new(config);
+            std::fs::rename(root.join("conf"), root.join("saved-conf")).unwrap();
+
+            let outcome = toggle_tray_pause(&privacy, Some(&capture), Some(&config)).unwrap();
+            assert_eq!(outcome.paused, !before);
+            assert!(outcome.persistence_error.is_some());
+            assert_eq!(privacy.lock().unwrap().is_paused(), !before);
+            assert_eq!(capture.is_paused(), !before);
+            assert_eq!(config.lock().unwrap().privacy_paused(), before);
+            assert!(pause_persistence_warning(outcome.paused, false).contains("restart"));
+
+            std::fs::rename(root.join("saved-conf"), root.join("conf")).unwrap();
+            assert_eq!(ConfigStore::load(&root).unwrap().privacy_paused(), before);
+            std::fs::remove_dir_all(root).unwrap();
+        }
+    }
+
+    #[test]
+    fn successful_tray_toggles_persist_and_keep_capture_in_sync() {
+        let root = std::env::temp_dir().join(format!(
+            "clipboard-tray-pause-success-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let config = Mutex::new(ConfigStore::load(&root).unwrap());
+        let privacy = Mutex::new(PrivacyManager::new());
+        let capture = CaptureState::new(&privacy.lock().unwrap(), vec![], 1024, 1024);
+        for paused in [true, false] {
+            let outcome = toggle_tray_pause(&privacy, Some(&capture), Some(&config)).unwrap();
+            assert_eq!(outcome.paused, paused);
+            assert!(outcome.persistence_error.is_none());
+            assert_eq!(capture.is_paused(), paused);
+            assert_eq!(ConfigStore::load(&root).unwrap().privacy_paused(), paused);
+        }
+        std::fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn recent_menu_ids_round_trip_item_ids() {

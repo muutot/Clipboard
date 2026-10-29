@@ -280,7 +280,7 @@ a successfully committed operation can win a late cancellation race.
 | `onboarding-replay-requested`   | settings General panel "Replay" custom entry (frontend `emit`, empty payload)                                                    | main route opens the onboarding overlay and shows/focuses itself                                                                       |
 | `viewer:open`                   | detail panel                                                                                                                     | dedicated viewer window                                                                                                                |
 | `ppocr-download-progress`       | OCR installer                                                                                                                    | settings UI download progress                                                                                                          |
-| `privacy-pause-changed`         | tray pause toggle, or `toggle_privacy_pause` command                                                                             | settings `GeneralSettingsPanel` and tray menu item refresh recording pause state                                                       |
+| `privacy-pause-changed`         | applied tray pause toggle (including failed persistence), or successful `toggle_privacy_pause` command                           | settings `SensitiveContentSettingsPanel` and tray menu item refresh the actual session pause state                                     |
 
 `clipboard-items-changed` carries four lists, and the split is forced by the
 data model rather than by taste: `deleted` is **not** a column a record carries.

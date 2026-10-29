@@ -36,24 +36,16 @@ pub fn toggle_privacy_pause(
     privacy: tauri::State<'_, Mutex<PrivacyManager>>,
     capture: tauri::State<'_, CaptureState>,
 ) -> Result<bool, String> {
-    let paused = {
-        let mut privacy = lock_state(&privacy, "privacy manager lock is poisoned")?;
-        privacy.toggle_pause();
-        privacy.is_paused()
-    };
-
-    // Persist before touching the capture worker: if the config write fails,
-    // roll the in-memory toggle back so `PrivacyManager` and `CaptureState`
-    // cannot fork (paused in memory while still recording).
-    if let Err(error) = lock_state(&config, "configuration lock is poisoned")?
+    // Hold the privacy lock through persistence to serialize with tray
+    // toggles. On failure the settings command retains the previous state.
+    let mut privacy = lock_state(&privacy, "privacy manager lock is poisoned")?;
+    let paused = !privacy.is_paused();
+    lock_state(&config, "configuration lock is poisoned")?
         .set_privacy_paused(paused)
-        .map_err(|e| e.to_string())
-    {
-        lock_state(&privacy, "privacy manager lock is poisoned")?.toggle_pause();
-        return Err(error);
-    }
-
+        .map_err(|error| error.to_string())?;
+    privacy.paused = paused;
     capture.set_paused(paused);
+    drop(privacy);
 
     if let Err(error) = app.emit("privacy-pause-changed", paused) {
         crate::log_error!("[privacy] failed to emit pause-changed: {error}");
