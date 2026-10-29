@@ -144,6 +144,17 @@ The signed Host includes every non-default port returned by URL parsing. Default
 ports are scheme-specific: HTTP on 443 and HTTPS on 80 retain their ports, while
 HTTP on 80 and HTTPS on 443 omit them. IPv6 literals retain their brackets.
 
+S3 listings require a complete UTF-8 `ListBucketResult` XML document before
+decoding any page. `s3/listing.rs` uses the locked quick-xml parser, validates
+the entire document (one root, closed/matched tags, bounded nesting, no DTD),
+and requires an explicit boolean `IsTruncated` plus a nonempty key per Contents.
+Malformed success responses, invalid UTF-8 and later-page failures return an
+error instead of empty or partial discovery. Existing body/object-count caps
+still apply. Namespace prefixes, CDATA, standard/numeric entities and literal
+key whitespace are preserved. Loopback S3ObjectStore UTs cover valid/invalid
+pages and pagination without using a real bucket. Discovery errors propagate
+through the engine's heads-list boundary before it can report sync success.
+
 Snapshot/checkpoint pack readers distinguish clean EOF at a chunk boundary from
 a partial 24-byte chunk header. Truncated framing is an iterator error so SQLite
 batch application rolls back both records and cursors, even when the object's

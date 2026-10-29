@@ -204,6 +204,8 @@ fn object_store_get_preserves_reserved_prefixes_on_the_wire() {
                 }
                 Err(error) => panic!("accept fixture request: {error}"),
             };
+            // Windows can inherit the listener's nonblocking mode.
+            stream.set_nonblocking(false).unwrap();
             stream
                 .set_read_timeout(Some(Duration::from_secs(2)))
                 .unwrap();
@@ -1332,7 +1334,8 @@ fn list_page_exposes_continuation_and_decodes_object_names() {
                 <Size>42</Size>
             </Contents>
         </ListBucketResult>"#,
-    );
+    )
+    .unwrap();
     assert!(page.is_truncated);
     assert_eq!(page.next_continuation_token.as_deref(), Some("next&token"));
     assert_eq!(page.entries.len(), 1);
@@ -1344,12 +1347,131 @@ fn list_page_exposes_continuation_and_decodes_object_names() {
 
 #[test]
 fn xml_text_decodes_named_and_numeric_entities() {
-    assert_eq!(
-        decode_xml_text("&quot;&#34;&#x22;&amp;&lt;&gt;&apos;"),
-        "\"\"\"&<>'"
-    );
-    assert_eq!(
-        decode_xml_text("keep-&unknown;-literal"),
-        "keep-&unknown;-literal"
-    );
+    let page = parse_s3_list_page("<ListBucketResult><IsTruncated>false</IsTruncated><Contents><Key>&quot;&#34;&#x22;&amp;&lt;&gt;&apos;</Key></Contents></ListBucketResult>").unwrap();
+    assert_eq!(page.entries[0].object_key, "\"\"\"&<>'");
+    assert!(parse_s3_list_page("<ListBucketResult><IsTruncated>false</IsTruncated><Contents><Key>keep-&unknown;-literal</Key></Contents></ListBucketResult>").is_err());
+}
+
+fn list_with_fixture_pages(pages: Vec<Vec<u8>>) -> Result<Vec<crate::v1::ObjectInfo>, String> {
+    use crate::v1::{ObjectStore, S3ObjectStore};
+    use std::{io::ErrorKind, net::TcpListener, time::Instant};
+
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let endpoint = format!("http://{}", listener.local_addr().unwrap());
+    let page_count = pages.len();
+    let server = std::thread::spawn(move || {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let mut served = 0;
+        for body in pages {
+            let mut stream = loop {
+                match listener.accept() {
+                    Ok((stream, _)) => break stream,
+                    Err(error) if error.kind() == ErrorKind::WouldBlock => {
+                        assert!(Instant::now() < deadline, "fixture request timed out");
+                        std::thread::sleep(Duration::from_millis(5));
+                    }
+                    Err(error) => panic!("accept list fixture request: {error}"),
+                }
+            };
+            stream.set_nonblocking(false).unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(2)))
+                .unwrap();
+            let mut request = Vec::new();
+            let mut byte = [0];
+            while !request.ends_with(b"\r\n\r\n") && request.len() < 8192 {
+                if stream.read(&mut byte).unwrap() == 0 {
+                    break;
+                }
+                request.push(byte[0]);
+            }
+            let line = String::from_utf8(request).unwrap();
+            let line = line.lines().next().unwrap();
+            assert!(line.starts_with("GET /clipboard/?"));
+            assert!(line.contains("list-type=2"));
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                body.len()
+            )
+            .unwrap();
+            stream.write_all(&body).unwrap();
+            served += 1;
+        }
+        served
+    });
+    let store =
+        S3ObjectStore::new(&endpoint, "us-east-1", "clipboard", AKID, SECRET, "team").unwrap();
+    let result = store.list("v1/heads/", None);
+    assert_eq!(server.join().unwrap(), page_count);
+    result
+}
+
+#[test]
+fn list_transport_rejects_incomplete_or_nonxml_success() {
+    let mut rejected = Vec::new();
+    for body in [
+        b"<html><body>Proxy sign-in required</body></html>".as_slice(),
+        b"<ListBucketResult><IsTruncated>false</IsTruncated><Contents><Key>team/v1/heads/peer.bin</Key>".as_slice(),
+        b"<ListBucketResult><IsTruncated>invalid</IsTruncated></ListBucketResult>".as_slice(),
+        b"<ListBucketResult></ListBucketResult>".as_slice(),
+        b"<ListBucketResult><IsTruncated>false</IsTruncated><Contents><Key>team/v1/heads/\xff.bin</Key></Contents></ListBucketResult>".as_slice(),
+    ] {
+        rejected.push(list_with_fixture_pages(vec![body.to_vec()]).is_err());
+    }
+    assert_eq!(rejected, [true; 5]);
+}
+
+#[test]
+fn list_transport_discards_a_valid_first_page_when_a_later_page_is_invalid() {
+    let first = br#"<ListBucketResult><IsTruncated>true</IsTruncated><NextContinuationToken>next</NextContinuationToken><Contents><Key>team/v1/heads/peer.bin</Key><Size>10</Size></Contents></ListBucketResult>"#;
+    let second = b"<ListBucketResult><IsTruncated>false</IsTruncated>";
+    assert!(list_with_fixture_pages(vec![first.to_vec(), second.to_vec()]).is_err());
+}
+
+#[test]
+fn list_transport_accepts_a_complete_empty_page() {
+    let body = b"<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><IsTruncated>false</IsTruncated><KeyCount>0</KeyCount></ListBucketResult>";
+    assert!(list_with_fixture_pages(vec![body.to_vec()])
+        .unwrap()
+        .is_empty());
+}
+
+#[test]
+fn list_transport_accepts_complete_pagination_without_changing_keys() {
+    let first = br#"<ListBucketResult><IsTruncated>true</IsTruncated><NextContinuationToken>next&amp;token</NextContinuationToken><Contents><Key>team/v1/heads/first.bin</Key><Size>10</Size></Contents></ListBucketResult>"#;
+    let second = br#"<ListBucketResult><IsTruncated>false</IsTruncated><Contents><Key>team/v1/heads/second.bin</Key><Size>20</Size></Contents></ListBucketResult>"#;
+    let entries = list_with_fixture_pages(vec![first.to_vec(), second.to_vec()]).unwrap();
+    assert_eq!(entries.len(), 2);
+    assert_eq!(entries[0].key, "v1/heads/first.bin");
+    assert_eq!(entries[1].key, "v1/heads/second.bin");
+}
+
+#[test]
+fn list_parser_rejects_broken_structure_and_ambiguous_fields() {
+    for xml in [
+        "<ListBucketResult><IsTruncated>false</IsTruncated></ListBucketResult><other/>",
+        "<ListBucketResult><IsTruncated>false</IsTruncated></ListBucketResult>trailing",
+        "<ListBucketResult><IsTruncated>false</IsTruncated></OtherRoot>",
+        "<ListBucketResult a='1' a='2'><IsTruncated>false</IsTruncated></ListBucketResult>",
+        "<ListBucketResult><IsTruncated>false</IsTruncated><IsTruncated>true</IsTruncated></ListBucketResult>",
+        "<ListBucketResult><IsTruncated>false</IsTruncated><Contents><Size>0</Size></Contents></ListBucketResult>",
+        "<ListBucketResult><IsTruncated>false</IsTruncated><Contents><Key></Key></Contents></ListBucketResult>",
+        "<ListBucketResult><IsTruncated>false</IsTruncated><Contents><Key>key</Key><Size>invalid</Size></Contents></ListBucketResult>",
+        "<!DOCTYPE ListBucketResult [<!ENTITY key 'private'>]><ListBucketResult><IsTruncated>false</IsTruncated></ListBucketResult>",
+    ] {
+        assert!(parse_s3_list_page(xml).is_err(), "fixture must fail validation");
+    }
+}
+
+#[test]
+fn list_parser_preserves_literal_cdata_and_key_whitespace() {
+    let page = parse_s3_list_page(r#"<?xml version="1.0"?><s3:ListBucketResult xmlns:s3="http://s3.amazonaws.com/doc/2006-03-01/">
+        <s3:IsTruncated>false</s3:IsTruncated>
+        <s3:Contents><s3:Key>  key<![CDATA[&literal;]]>&amp;tail  </s3:Key><s3:ETag>&quot;etag&quot;</s3:ETag><s3:Size>0</s3:Size></s3:Contents>
+    </s3:ListBucketResult>"#).unwrap();
+    assert_eq!(page.entries[0].object_key, "  key&literal;&tail  ");
+    assert_eq!(page.entries[0].etag.as_deref(), Some("\"etag\""));
+    assert_eq!(page.entries[0].size_bytes, Some(0));
 }

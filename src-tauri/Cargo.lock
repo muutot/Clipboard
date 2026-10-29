@@ -839,6 +839,7 @@ dependencies = [
  "hmac 0.13.0",
  "md-5",
  "pbkdf2",
+ "quick-xml 0.42.0",
  "rand 0.10.3",
  "reqwest",
  "serde",
@@ -4513,6 +4514,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "41b1177fdf999d2321d3fb46ff47159d9c1fb9ad66a4879f8c50a0b504615e9b"
 dependencies = [
  "memchr",
+ "serde",
 ]
 
 [[package]]

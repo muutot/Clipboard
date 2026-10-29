@@ -92,13 +92,13 @@ pub(crate) fn list_s3_objects_after_with_metrics(
         // Decode in place: `from_utf8_lossy().into_owned()` would keep the
         // bounded `Vec` and the `String` alive at the same time, doubling the
         // peak allocation for no benefit.
-        let xml =
-            String::from_utf8_lossy(&read_body_bounded(resp, MAX_S3_LIST_BODY_BYTES, "list")?)
-                .into_owned();
+        let body = read_body_bounded(resp, MAX_S3_LIST_BODY_BYTES, "list")?;
         if let Some(metrics) = metrics {
-            metrics.record_list_page(xml.len() as u64);
+            metrics.record_list_page(body.len() as u64);
         }
-        let page = parse_s3_list_page(&xml);
+        let xml = String::from_utf8(body)
+            .map_err(|_| "S3 list response is not valid UTF-8".to_string())?;
+        let page = parse_s3_list_page(&xml)?;
         entries.extend(page.entries);
         if entries.len() > MAX_LISTED_OBJECTS {
             return Err(format!(
@@ -147,94 +147,130 @@ pub(super) struct S3ListPage {
     pub(super) next_continuation_token: Option<String>,
 }
 
-pub(super) fn parse_s3_list_page(xml: &str) -> S3ListPage {
-    let mut entries = Vec::new();
-    let mut search_start = 0;
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "PascalCase")]
+struct ListResult {
+    is_truncated: bool,
+    next_continuation_token: Option<String>,
+    #[serde(rename = "Contents", default)]
+    entries: Vec<ListEntry>,
+}
 
-    while let Some(pos) = xml[search_start..].find("<Contents>") {
-        let abs_pos = search_start + pos;
-        let block = &xml[abs_pos..];
-        let end = block.find("</Contents>").unwrap_or(block.len());
-        let block = &block[..end];
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "PascalCase")]
+struct ListEntry {
+    key: String,
+    size: Option<u64>,
+    last_modified: Option<String>,
+    #[serde(rename = "ETag")]
+    etag: Option<String>,
+}
 
-        let key = decode_xml_text(extract_tag(block, "Key").unwrap_or_default());
-        let size = extract_tag(block, "Size").and_then(|s| s.parse::<u64>().ok());
-        let modified = extract_tag(block, "LastModified").and_then(|s| {
-            chrono::DateTime::parse_from_rfc3339(s)
-                .ok()
-                .map(|dt| dt.timestamp_millis())
-        });
-        let etag = extract_tag(block, "ETag")
-            .map(decode_xml_text)
-            .filter(|value| !value.is_empty());
+fn invalid_list_xml() -> String {
+    // Do not include response bodies or object keys in a parsing diagnostic.
+    "S3 list response is not a complete valid ListBucketResult XML document".to_string()
+}
 
-        if !key.is_empty() {
-            entries.push(S3Entry {
-                object_key: key.clone(),
-                name: key.split('/').next_back().unwrap_or(&key).to_string(),
+/// Serde consumes one value; validate the entire document first so a closed
+/// first root or missing trailing closing tag cannot return partial discovery.
+fn validate_list_document(xml: &str) -> Result<(), String> {
+    use quick_xml::{events::Event, Reader};
+
+    let mut reader = Reader::from_str(xml);
+    reader.config_mut().expand_empty_elements = true;
+    reader.config_mut().check_comments = true;
+    let mut depth = 0usize;
+    let mut root_seen = false;
+    loop {
+        match reader.read_event().map_err(|_| invalid_list_xml())? {
+            Event::Start(element) => {
+                if depth == 0 {
+                    if root_seen || element.local_name().as_ref() != "ListBucketResult" {
+                        return Err(invalid_list_xml());
+                    }
+                    root_seen = true;
+                }
+                for attribute in element.attributes() {
+                    attribute
+                        .map_err(|_| invalid_list_xml())?
+                        .normalized_value(quick_xml::XmlVersion::Implicit1_0)
+                        .map_err(|_| invalid_list_xml())?;
+                }
+                depth += 1;
+                if depth > 64 {
+                    return Err(invalid_list_xml());
+                }
+            }
+            Event::End(_) => {
+                depth = depth.checked_sub(1).ok_or_else(invalid_list_xml)?;
+            }
+            Event::Text(text) => {
+                if depth == 0 && !text.trim().is_empty() {
+                    return Err(invalid_list_xml());
+                }
+            }
+            Event::GeneralRef(reference) => {
+                if depth == 0 {
+                    return Err(invalid_list_xml());
+                }
+                if reference
+                    .resolve_char_ref()
+                    .map_err(|_| invalid_list_xml())?
+                    .is_none()
+                    && quick_xml::escape::resolve_predefined_entity(&reference).is_none()
+                {
+                    return Err(invalid_list_xml());
+                }
+            }
+            Event::CData(_) if depth == 0 => return Err(invalid_list_xml()),
+            Event::DocType(_) => return Err(invalid_list_xml()),
+            Event::Decl(_) if root_seen => return Err(invalid_list_xml()),
+            Event::Eof => {
+                return if root_seen && depth == 0 {
+                    Ok(())
+                } else {
+                    Err(invalid_list_xml())
+                };
+            }
+            _ => {}
+        }
+    }
+}
+
+pub(super) fn parse_s3_list_page(xml: &str) -> Result<S3ListPage, String> {
+    validate_list_document(xml)?;
+    let result: ListResult = quick_xml::de::from_str(xml).map_err(|_| invalid_list_xml())?;
+    let entries = result
+        .entries
+        .into_iter()
+        .map(|entry| {
+            if entry.key.is_empty() {
+                return Err(invalid_list_xml());
+            }
+            Ok(S3Entry {
+                name: entry
+                    .key
+                    .split('/')
+                    .next_back()
+                    .unwrap_or(&entry.key)
+                    .to_string(),
+                object_key: entry.key,
                 is_directory: false,
-                size_bytes: size,
-                modified_ms: modified,
-                etag,
-            });
-            search_start = abs_pos + end;
-        } else {
-            search_start = abs_pos + 1;
-        }
-    }
-
-    S3ListPage {
+                size_bytes: entry.size,
+                modified_ms: entry.last_modified.and_then(|value| {
+                    chrono::DateTime::parse_from_rfc3339(&value)
+                        .ok()
+                        .map(|dt| dt.timestamp_millis())
+                }),
+                etag: entry.etag.filter(|value| !value.is_empty()),
+            })
+        })
+        .collect::<Result<_, String>>()?;
+    Ok(S3ListPage {
         entries,
-        is_truncated: extract_tag(xml, "IsTruncated")
-            .is_some_and(|value| value.trim().eq_ignore_ascii_case("true")),
-        next_continuation_token: extract_tag(xml, "NextContinuationToken")
-            .map(decode_xml_text)
+        is_truncated: result.is_truncated,
+        next_continuation_token: result
+            .next_continuation_token
             .filter(|value| !value.is_empty()),
-    }
-}
-
-pub(super) fn decode_xml_text(value: &str) -> String {
-    let mut decoded = String::with_capacity(value.len());
-    let mut remaining = value;
-    while let Some(start) = remaining.find('&') {
-        decoded.push_str(&remaining[..start]);
-        let entity = &remaining[start..];
-        let Some(end) = entity.find(';') else {
-            decoded.push_str(entity);
-            return decoded;
-        };
-        let name = &entity[1..end];
-        let character = match name {
-            "lt" => Some('<'),
-            "gt" => Some('>'),
-            "quot" => Some('"'),
-            "apos" => Some('\''),
-            "amp" => Some('&'),
-            numeric if numeric.starts_with("#x") || numeric.starts_with("#X") => {
-                u32::from_str_radix(&numeric[2..], 16)
-                    .ok()
-                    .and_then(char::from_u32)
-            }
-            numeric if numeric.starts_with('#') => {
-                numeric[1..].parse::<u32>().ok().and_then(char::from_u32)
-            }
-            _ => None,
-        };
-        if let Some(character) = character {
-            decoded.push(character);
-        } else {
-            decoded.push_str(&entity[..=end]);
-        }
-        remaining = &entity[end + 1..];
-    }
-    decoded.push_str(remaining);
-    decoded
-}
-
-fn extract_tag<'a>(block: &'a str, tag: &str) -> Option<&'a str> {
-    let open = format!("<{tag}>");
-    let close = format!("</{tag}>");
-    let s = block.find(&open)? + open.len();
-    let e = block[s..].find(&close)? + s;
-    Some(&block[s..e])
+    })
 }
