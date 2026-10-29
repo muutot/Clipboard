@@ -190,16 +190,26 @@ pub fn set_auto_tag_rules(
     capture: tauri::State<'_, CaptureState>,
     rules: Vec<crate::config::AutoTagRule>,
 ) -> Result<Vec<crate::config::AutoTagRule>, String> {
+    apply_auto_tag_rules(config.inner(), capture.inner(), rules)
+}
+
+fn apply_auto_tag_rules(
+    config: &Mutex<ConfigStore>,
+    capture: &CaptureState,
+    rules: Vec<crate::config::AutoTagRule>,
+) -> Result<Vec<crate::config::AutoTagRule>, String> {
     crate::tags::validate_auto_tag_rules(&rules)?;
 
-    let persisted = {
-        lock_state(&config, "configuration lock is poisoned")?
-            .set_auto_tag_rules(rules)
-            .map_err(|error| error.to_string())?
-    };
+    // Retain the config guard until the running rules match this save, so an
+    // older caller cannot apply after a newer caller has already persisted.
+    let mut config = lock_state(&config, "configuration lock is poisoned")?;
+    let persisted = config
+        .set_auto_tag_rules(rules)
+        .map_err(|error| error.to_string())?;
 
     // Mirror into the running capture worker without a restart.
     capture.set_auto_tag_rules(crate::tags::compile_auto_tag_rules(&persisted));
+    drop(config);
     Ok(persisted)
 }
 
@@ -499,8 +509,8 @@ pub fn set_clipboard_ignored_apps(
 #[cfg(test)]
 mod tests {
     use super::{
-        apply_ignored_applications, apply_privacy_settings, preview_auto_tag_rules,
-        save_source_mapping_rules,
+        apply_auto_tag_rules, apply_ignored_applications, apply_privacy_settings,
+        preview_auto_tag_rules, save_source_mapping_rules,
     };
     use crate::config::{AutoTagRule, ConfigStore, SourceMappingRule};
     use crate::domain::ClipboardKind;
@@ -508,6 +518,111 @@ mod tests {
     use crate::privacy::PrivacyManager;
     use crate::state::CaptureState;
     use std::fs;
+
+    fn automatic_tag_rule(tag: &str) -> AutoTagRule {
+        AutoTagRule {
+            pattern: "fixture".into(),
+            source_app: String::new(),
+            kind: None,
+            tag: tag.into(),
+        }
+    }
+
+    #[test]
+    fn automatic_tag_save_failure_keeps_the_running_rules() {
+        let root =
+            std::env::temp_dir().join(format!("clipboard-tag-policy-{}", uuid::Uuid::new_v4()));
+        let config = Mutex::new(ConfigStore::load(&root).unwrap());
+        let capture = CaptureState::new(&PrivacyManager::new(), vec![], 0, 100_000);
+        apply_auto_tag_rules(&config, &capture, vec![automatic_tag_rule("old")]).unwrap();
+        fs::rename(root.join("conf"), root.join("saved-conf")).unwrap();
+        assert!(apply_auto_tag_rules(&config, &capture, vec![automatic_tag_rule("new")]).is_err());
+        assert_eq!(
+            crate::tags::match_auto_tags(
+                &capture.policy.auto_tag_rules.read().unwrap(),
+                "fixture",
+                "",
+                ClipboardKind::Text
+            ),
+            vec!["old"]
+        );
+        fs::rename(root.join("saved-conf"), root.join("conf")).unwrap();
+        assert_eq!(
+            ConfigStore::load(&root).unwrap().auto_tag_rules()[0].tag,
+            "old"
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn concurrent_automatic_tag_saves_follow_runtime_application_order() {
+        use std::sync::{mpsc, Arc};
+        use std::time::{Duration, Instant};
+        let root =
+            std::env::temp_dir().join(format!("clipboard-tag-policy-{}", uuid::Uuid::new_v4()));
+        let config = Arc::new(Mutex::new(ConfigStore::load(&root).unwrap()));
+        let capture = CaptureState::new(&PrivacyManager::new(), vec![], 0, 100_000);
+        let blocked_capture = capture.policy.auto_tag_rules.write().unwrap();
+        let spawn_update = |tag: &str, started: Option<mpsc::Sender<()>>| {
+            let config = config.clone();
+            let capture = capture.clone();
+            let tag = tag.to_owned();
+            std::thread::spawn(move || {
+                if let Some(started) = started {
+                    started.send(()).unwrap();
+                }
+                apply_auto_tag_rules(&config, &capture, vec![automatic_tag_rule(&tag)])
+            })
+        };
+        let initial_bytes = fs::metadata(root.join("conf/conf.json")).unwrap().len();
+        let first = spawn_update("first", None);
+        let deadline = Instant::now() + Duration::from_secs(3);
+        let first_saved = loop {
+            if fs::metadata(root.join("conf/conf.json")).unwrap().len() != initial_bytes {
+                break true;
+            }
+            if Instant::now() >= deadline {
+                break false;
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        };
+        let (started, receiver) = mpsc::channel();
+        let first_bytes = fs::metadata(root.join("conf/conf.json")).unwrap().len();
+        let second = spawn_update("second", Some(started));
+        receiver.recv_timeout(Duration::from_secs(3)).unwrap();
+        let deadline = Instant::now() + Duration::from_millis(200);
+        let saved_ahead = loop {
+            if fs::metadata(root.join("conf/conf.json")).unwrap().len() != first_bytes {
+                break true;
+            }
+            if Instant::now() >= deadline {
+                break false;
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        };
+        drop(blocked_capture);
+        first.join().unwrap().unwrap();
+        second.join().unwrap().unwrap();
+        assert!(first_saved);
+        assert!(
+            !saved_ahead,
+            "later tag rules must wait for the previous runtime update"
+        );
+        assert_eq!(
+            crate::tags::match_auto_tags(
+                &capture.policy.auto_tag_rules.read().unwrap(),
+                "fixture",
+                "",
+                ClipboardKind::Text
+            ),
+            vec!["second"]
+        );
+        assert_eq!(
+            ConfigStore::load(&root).unwrap().auto_tag_rules()[0].tag,
+            "second"
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn unavailable_privacy_runtime_cannot_commit_a_new_capture_policy() {

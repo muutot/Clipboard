@@ -288,6 +288,13 @@ the previous capture-policy application. Disk failures preserve the old patterns
 Tests exercise the real ConfigStore, PrivacyManager and CaptureState with a
 blocked policy write, poisoned runtime and failed config save.
 
+`apply_auto_tag_rules` retains the config mutex from its normalized save through
+the capture-policy update. Concurrent callers cannot publish a newer config ahead
+of an older runtime application. Validation and save failures retain the old
+running rules. Its regression blocks the real policy write and observes only
+config-file size during concurrent saves, avoiding Windows reader sharing that
+would itself prevent replacement.
+
 Tray pause toggles hold the privacy-manager lock through the capture update and config save. A failed save keeps the requested session state, emits `privacy-pause-changed`, and opens a non-blocking native warning that explains the restart risk even with the main window hidden. Settings-command toggles use the same lock ordering but retain the previous state on save failure. The tray warning's English/Chinese strings intentionally live in Rust rather than the WebView catalog; they follow `general.language` and the OS locale for `system`. Native dialog appearance still needs runtime verification.
 
 `storage/resource_publication.rs` shares a process-local writer count and generation across `Database` connections keyed by the canonical database path. Capture (including icons), JSON/PPaste/portable-backup import, record duplication, sync/materialization and thumbnail jobs hold a publication guard from before resource lookup/reuse through the DB commit; repository save/preview methods also register publication. Orphan cleanup snapshots the generation before resolving references, holds no publication mutex during scans, and checks it under a short mutex for each unlink. Active writers or any intervening publication defer the remaining cleanup. The ten-minute mtime grace still retains fresh/interrupted files but is not the concurrency guarantee. This mechanism coordinates this application's threads; it is not an interprocess lock for independent applications sharing a data directory.
