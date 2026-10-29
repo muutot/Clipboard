@@ -872,6 +872,13 @@ mod storage_cleanup_tests {
             } else {
                 fs::remove_file(config.path()).unwrap();
             }
+            let configuration_files = || {
+                fs::read_dir(config.path().parent().unwrap())
+                    .unwrap()
+                    .map(|entry| entry.unwrap().file_name())
+                    .collect::<std::collections::BTreeSet<_>>()
+            };
+            let original_files = configuration_files();
             let worker = CleanupWorker::start_with_interval(
                 paths.project.clone(),
                 Database::open(&paths.database).unwrap(),
@@ -894,18 +901,17 @@ mod storage_cleanup_tests {
             );
             if corrupt {
                 assert_eq!(fs::read(config.path()).unwrap(), b"{truncated");
-                assert_eq!(
-                    fs::read_dir(config.path().parent().unwrap())
-                        .unwrap()
-                        .count(),
-                    1
-                );
             } else {
                 assert!(
                     !config.path().exists(),
                     "background reader must not recreate defaults"
                 );
             }
+            assert_eq!(
+                configuration_files(),
+                original_files,
+                "the background reader must not create or quarantine configuration files"
+            );
             // A valid replacement lets a fresh tick enforce the explicitly saved policy.
             fs::write(config.path(), original).unwrap();
             config.set_retention_days(30).unwrap();

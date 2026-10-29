@@ -11,6 +11,13 @@ Do not update this table from UI labels alone. Verify the type, default, normali
 
 Desktop edits persist as nested field patches rather than whole snapshots, preserving unrelated changes from other windows. Arrays replace as a unit; optional clears use `null`. Failed saves retain newer pending edits, and `flush()` includes changes arriving during post-save refresh. See `services.md` and `data-contracts.md` for the queue and IPC contracts.
 
+Separate Clipboard instances coordinate complete configuration saves with an OS
+file lock and loaded-file revision. A stale instance's save fails with a restart
+instruction instead of overwriting another instance's privacy/storage preferences.
+Its local setting/runtime state remains at the last accepted value; reopening a
+WebView panel alone does not reload the backend store. See the configuration
+write-concurrency contract in `data-contracts.md`.
+
 Turning `windowOpacityAffectsText` off restores the main window's native alpha to 100%, while retaining `windowTransparency` for CSS background opacity. Saving another setting while text opacity was already off does not enable native layered alpha. The transition decision and opacity bounds have unit coverage; Windows/macOS/Linux use their respective native adapters, with macOS/Linux execution and visual composition still requiring platform verification.
 
 ## Contents

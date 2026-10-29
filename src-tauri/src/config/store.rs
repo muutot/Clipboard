@@ -6,6 +6,7 @@ use std::{
 };
 
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 
 use crate::storage::StorageError;
 
@@ -19,11 +20,13 @@ impl ConfigStore {
         let path = project_directory
             .join(CONFIG_DIRECTORY_NAME)
             .join(CONFIG_FILE_NAME);
-        let (config, general_settings_present) = Self::parse_saved_config(&fs::read(&path)?)?;
+        let bytes = fs::read(&path)?;
+        let (config, general_settings_present) = Self::parse_saved_config(&bytes)?;
         Ok(Self {
             path,
             config,
             general_settings_present,
+            saved_revision: Some(Sha256::digest(&bytes).into()),
         })
     }
 
@@ -31,10 +34,13 @@ impl ConfigStore {
         let config_directory = project_directory.join(CONFIG_DIRECTORY_NAME);
         fs::create_dir_all(&config_directory)?;
         let path = config_directory.join(CONFIG_FILE_NAME);
-        let (config, general_settings_present) = if path.exists() {
+        // Serialize initial creation and corruption quarantine with writes from
+        // every Clipboard instance. The strict background loader stays read-only.
+        let _write_lock = config_write_lock(&path)?;
+        let (config, general_settings_present, saved_revision) = if path.exists() {
             let bytes = fs::read(&path)?;
             match Self::parse_saved_config(&bytes) {
-                Ok(parsed) => parsed,
+                Ok((config, present)) => (config, present, Some(Sha256::digest(&bytes).into())),
                 Err(error) => {
                     // Preserve each damaged generation before using defaults.
                     // A failed quarantine must not silently discard paths or
@@ -49,20 +55,21 @@ impl ConfigStore {
                         path.display(),
                         quarantined.display()
                     );
-                    (AppConfig::default(), true)
+                    (AppConfig::default(), true, None)
                 }
             }
         } else {
-            (AppConfig::default(), true)
+            (AppConfig::default(), true, None)
         };
-        let store = Self {
+        let mut store = Self {
             path,
             config,
             general_settings_present,
+            saved_revision,
         };
 
         if !store.path.exists() {
-            store.save()?;
+            store.save_locked()?;
         }
 
         Ok(store)
@@ -715,15 +722,50 @@ impl ConfigStore {
         })
     }
 
-    fn save(&self) -> Result<(), StorageError> {
+    fn save(&mut self) -> Result<(), StorageError> {
+        let _write_lock = config_write_lock(&self.path)?;
+        self.save_locked()
+    }
+
+    /// Caller holds the shared path's exclusive OS lock through comparison and
+    /// atomic replacement. Do not merge a stale complete config: its other
+    /// fields may include obsolete privacy, retention or storage policies.
+    fn save_locked(&mut self) -> Result<(), StorageError> {
+        let current_revision = match fs::read(&self.path) {
+            Ok(bytes) => Some(Sha256::digest(&bytes).into()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+            Err(error) => return Err(error.into()),
+        };
+        if current_revision != self.saved_revision {
+            return Err(StorageError::Io(std::io::Error::other(
+                "configuration changed since this instance loaded it; restart Clipboard before saving",
+            )));
+        }
         let mut value = serde_json::to_value(&self.config)?;
         if !self.general_settings_present {
             if let Value::Object(object) = &mut value {
                 object.remove("general");
             }
         }
-        atomic_write_json(&self.path, serde_json::to_vec_pretty(&value)?)
+        let contents = serde_json::to_vec_pretty(&value)?;
+        let revision = Sha256::digest(&contents).into();
+        atomic_write_json(&self.path, contents)?;
+        self.saved_revision = Some(revision);
+        Ok(())
     }
+}
+
+fn config_write_lock(path: &Path) -> Result<fs::File, StorageError> {
+    let mut name = path.as_os_str().to_os_string();
+    name.push(".lock");
+    let lock = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(Path::new(&name))?;
+    lock.lock()?;
+    Ok(lock)
 }
 
 /// Decrypts one stored sync secret for in-memory use. Legacy plaintext values

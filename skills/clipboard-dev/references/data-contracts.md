@@ -2,6 +2,20 @@
 
 Use this reference whenever a value crosses TypeScript, Tauri, Rust, SQLite, JSON config, the filesystem, or a WebviewWindow boundary.
 
+## Configuration write concurrency
+
+`ConfigStore` tracks a SHA-256 revision of the exact loaded/saved bytes. Startup
+creation/quarantine and every save hold an exclusive OS lock on `conf.json.lock`.
+A save compares the on-disk revision while holding that lock, then atomically
+replaces the file and advances the revision only on success. Another instance's
+save, external edit or deletion rejects a stale writer; existing setter rollback
+preserves its prior local state. The error instructs the user to restart Clipboard
+before saving again. The store does not merge or silently adopt other instances'
+runtime privacy/storage settings. `load_existing` remains strictly read-only and
+creates no lock file. No JSON/IPC fields changed. Advisory locking coordinates
+Clipboard instances; an external editor that bypasses the lock can still race a
+save. Matching platform CI is required beyond the Windows UTs.
+
 ## Clipboard record contract
 
 Frontend `ClipboardItem.ocrBlocks?: OcrTextBlock[]` comes from the existing

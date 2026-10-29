@@ -5,6 +5,78 @@ use serde_json::{json, Value};
 use crate::config::ConfigStore;
 
 #[test]
+fn stale_config_save_cannot_remove_another_instances_privacy_changes() {
+    let project = temporary_test_directory("stale-store-save");
+    let mut first = ConfigStore::load(&project).unwrap();
+    let mut stale = ConfigStore::load(&project).unwrap();
+    first
+        .set_ignored_applications(vec!["Protected Application".into()])
+        .unwrap();
+    let saved = fs::read(first.path()).unwrap();
+    let previous = stale.close_to_tray();
+    let result = stale.set_close_to_tray(!previous);
+    assert!(
+        result.is_err(),
+        "a stale instance must not silently replace the newer configuration"
+    );
+    assert_eq!(stale.close_to_tray(), previous);
+    assert_eq!(fs::read(first.path()).unwrap(), saved);
+    assert_eq!(
+        ConfigStore::load_existing(&project)
+            .unwrap()
+            .ignored_applications(),
+        &["Protected Application"]
+    );
+    assert!(
+        stale.set_max_items(50_000).is_err(),
+        "retrying another setter must also preserve external changes"
+    );
+    assert_eq!(fs::read(first.path()).unwrap(), saved);
+    let mut refreshed = ConfigStore::load(&project).unwrap();
+    refreshed.set_close_to_tray(!previous).unwrap();
+    assert_eq!(refreshed.ignored_applications(), &["Protected Application"]);
+    fs::remove_dir_all(project).unwrap();
+}
+
+#[test]
+fn concurrent_config_stores_commit_only_one_write_from_the_same_revision() {
+    use std::sync::{Arc, Barrier};
+    let project = temporary_test_directory("concurrent-store-save");
+    let first = ConfigStore::load(&project).unwrap();
+    let second = ConfigStore::load(&project).unwrap();
+    let barrier = Arc::new(Barrier::new(2));
+    let handles: Vec<_> = [(first, 365), (second, 366)]
+        .into_iter()
+        .map(|(mut store, retention)| {
+            let barrier = barrier.clone();
+            std::thread::spawn(move || {
+                barrier.wait();
+                let success = store.set_retention_days(retention).is_ok();
+                (success, store.retention_days(), retention)
+            })
+        })
+        .collect();
+    let outcomes: Vec<_> = handles
+        .into_iter()
+        .map(|handle| handle.join().unwrap())
+        .collect();
+    assert_eq!(
+        outcomes.iter().filter(|(success, _, _)| *success).count(),
+        1
+    );
+    let winner = outcomes.iter().find(|(success, _, _)| *success).unwrap();
+    assert_eq!(
+        ConfigStore::load_existing(&project)
+            .unwrap()
+            .retention_days(),
+        winner.2
+    );
+    let loser = outcomes.iter().find(|(success, _, _)| !*success).unwrap();
+    assert_eq!(loser.1, 30);
+    fs::remove_dir_all(project).unwrap();
+}
+
+#[test]
 fn existing_policy_load_never_creates_missing_configuration() {
     let project = temporary_test_directory("missing-policy");
     assert!(ConfigStore::load_existing(&project).is_err());

@@ -547,4 +547,6 @@ pub struct ConfigStore {
     pub(crate) path: PathBuf,
     pub(crate) config: AppConfig,
     pub(crate) general_settings_present: bool,
+    /// Exact last-loaded/saved file revision for optimistic concurrency.
+    pub(crate) saved_revision: Option<[u8; 32]>,
 }
