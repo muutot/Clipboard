@@ -72,6 +72,38 @@ mod tests {
     use crate::storage::StorageError;
 
     #[test]
+    fn stale_keyboard_instance_cannot_restore_a_disabled_global_shortcut() {
+        let project = temporary_directory();
+        let mut first = KeyboardManager::load(&project).unwrap();
+        let mut stale = KeyboardManager::load(&project).unwrap();
+        let before = stale.config();
+        first.delete_action("toggleWindow".into()).unwrap();
+        let committed = fs::read(first.path()).unwrap();
+
+        let result = stale.set_action_shortcuts("focusSearch".into(), vec!["Ctrl+F12".into()]);
+        assert!(stale.delete_action("focusSearch".into()).is_err());
+        assert!(stale.reset_to_defaults().is_err());
+        let retained = fs::read(first.path()).unwrap();
+        let stale_config = stale.config();
+        let stale_match = stale.match_chord([Modifier::Alt], "C").to_vec();
+        let mut reopened = KeyboardManager::load(&project).unwrap();
+        let disabled = reopened.config().shortcuts["toggleWindow"].is_empty();
+        reopened
+            .set_action_shortcuts("focusSearch".into(), vec!["Ctrl+F12".into()])
+            .unwrap();
+        fs::remove_dir_all(project).unwrap();
+
+        assert!(
+            result.is_err(),
+            "stale save must reject rather than restore a disabled shortcut"
+        );
+        assert_eq!(retained, committed);
+        assert_eq!(stale_config.shortcuts, before.shortcuts);
+        assert_eq!(stale_match, vec!["toggleWindow"]);
+        assert!(disabled);
+    }
+
+    #[test]
     fn saved_bindings_replace_the_active_runtime_matcher() {
         let project = temporary_directory();
         let mut manager = KeyboardManager::load(&project).unwrap();

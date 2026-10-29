@@ -7,6 +7,7 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 
 use crate::storage::StorageError;
 
@@ -61,6 +62,7 @@ impl KeyboardConfig {
 pub struct KeyboardConfigStore {
     path: PathBuf,
     config: KeyboardConfig,
+    saved_revision: Option<[u8; 32]>,
 }
 
 impl KeyboardConfigStore {
@@ -68,31 +70,39 @@ impl KeyboardConfigStore {
         let config_directory = project_directory.join(CONFIG_DIRECTORY_NAME);
         fs::create_dir_all(&config_directory)?;
         let path = config_directory.join(KEYBOARD_CONFIG_FILE_NAME);
-        let (config, merged_defaults) = if path.exists() {
-            match Self::load_and_validate(&path) {
-                Ok(parsed) => parsed,
+        // Creation, quarantine, default merging and saves use the same OS lock
+        // across instances. Never replace a newer keyboard snapshot with ours.
+        let _write_lock = keyboard_write_lock(&path)?;
+        let (config, merged_defaults, saved_revision) = if path.exists() {
+            let bytes = fs::read(&path)?;
+            match Self::load_and_validate(&bytes) {
+                Ok((config, merged)) => (config, merged, Some(Sha256::digest(&bytes).into())),
                 Err(error) => {
                     // Preserve the damaged generation before using defaults,
                     // matching `ConfigStore::load`. A failed quarantine must
                     // keep the original and surface the recovery failure.
                     Self::quarantine_corrupt(&config_directory, &path, &error)?;
-                    (KeyboardConfig::default(), false)
+                    (KeyboardConfig::default(), false, None)
                 }
             }
         } else {
-            (KeyboardConfig::default(), false)
+            (KeyboardConfig::default(), false, None)
         };
-        let store = Self { path, config };
+        let mut store = Self {
+            path,
+            config,
+            saved_revision,
+        };
 
         if !store.path.exists() || merged_defaults {
-            store.save()?;
+            store.save_locked()?;
         }
 
         Ok(store)
     }
 
-    fn load_and_validate(path: &Path) -> Result<(KeyboardConfig, bool), StorageError> {
-        let loaded: KeyboardConfig = serde_json::from_slice(&fs::read(path)?)?;
+    fn load_and_validate(bytes: &[u8]) -> Result<(KeyboardConfig, bool), StorageError> {
+        let loaded: KeyboardConfig = serde_json::from_slice(bytes)?;
         let (mut config, merged_defaults) = merge_missing_default_actions(loaded);
         normalize_and_validate(&mut config)?;
         Ok((config, merged_defaults))
@@ -178,9 +188,25 @@ impl KeyboardConfigStore {
         Ok(())
     }
 
-    fn save(&self) -> Result<(), StorageError> {
+    fn save(&mut self) -> Result<(), StorageError> {
+        let _write_lock = keyboard_write_lock(&self.path)?;
+        self.save_locked()
+    }
+
+    /// Caller holds the lock through revision comparison and atomic publish.
+    fn save_locked(&mut self) -> Result<(), StorageError> {
         use std::io::Write;
 
+        let current_revision = match fs::read(&self.path) {
+            Ok(bytes) => Some(Sha256::digest(&bytes).into()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+            Err(error) => return Err(error.into()),
+        };
+        if current_revision != self.saved_revision {
+            return Err(StorageError::Io(std::io::Error::other(
+                "keyboard configuration changed since this instance loaded it; restart Clipboard before saving",
+            )));
+        }
         let directory = self.path.parent().ok_or_else(|| {
             StorageError::Io(std::io::Error::other(
                 "keyboard config has no parent directory",
@@ -188,6 +214,7 @@ impl KeyboardConfigStore {
         })?;
         let temporary_path = directory.join(".keyboard.json.tmp");
         let contents = serde_json::to_vec_pretty(&self.config)?;
+        let revision = Sha256::digest(&contents).into();
 
         let result = (|| -> Result<(), StorageError> {
             let mut file = fs::File::create(&temporary_path)?;
@@ -200,9 +227,24 @@ impl KeyboardConfigStore {
 
         if result.is_err() {
             let _ = fs::remove_file(&temporary_path);
+        } else {
+            self.saved_revision = Some(revision);
         }
         result
     }
+}
+
+fn keyboard_write_lock(path: &Path) -> Result<fs::File, StorageError> {
+    let mut name = path.as_os_str().to_os_string();
+    name.push(".lock");
+    let lock = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(Path::new(&name))?;
+    lock.lock()?;
+    Ok(lock)
 }
 
 /// Backfills bundled defaults for actions that are absent from a loaded
@@ -316,6 +358,76 @@ mod tests {
 
     use super::KeyboardConfigStore;
     use crate::storage::StorageError;
+
+    #[test]
+    fn concurrent_keyboard_saves_from_one_revision_have_one_winner() {
+        let project = temporary_directory("concurrent-save");
+        let first = KeyboardConfigStore::load(&project).unwrap();
+        let second = KeyboardConfigStore::load(&project).unwrap();
+        let barrier = std::sync::Arc::new(std::sync::Barrier::new(2));
+        let workers = [first, second]
+            .into_iter()
+            .enumerate()
+            .map(|(index, mut store)| {
+                let barrier = barrier.clone();
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    store
+                        .set_action_shortcuts(
+                            format!("customAction{index}"),
+                            vec![format!("Ctrl+F{}", index + 10)],
+                        )
+                        .is_ok()
+                })
+            })
+            .collect::<Vec<_>>();
+        let winners = workers
+            .into_iter()
+            .map(|worker| worker.join().unwrap())
+            .filter(|won| *won)
+            .count();
+        let reopened = KeyboardConfigStore::load(&project).unwrap();
+        let committed = reopened
+            .config()
+            .shortcuts
+            .keys()
+            .filter(|action| action.starts_with("customAction"))
+            .count();
+        fs::remove_dir_all(project).unwrap();
+        assert_eq!(winners, 1);
+        assert_eq!(committed, 1);
+    }
+
+    #[test]
+    fn concurrent_keyboard_initialization_publishes_one_valid_default_file() {
+        let project = temporary_directory("concurrent-load");
+        let barrier = std::sync::Arc::new(std::sync::Barrier::new(4));
+        let workers = (0..4)
+            .map(|_| {
+                let project = project.clone();
+                let barrier = barrier.clone();
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    KeyboardConfigStore::load(&project)
+                        .unwrap()
+                        .config()
+                        .shortcuts
+                        .clone()
+                })
+            })
+            .collect::<Vec<_>>();
+        let configs = workers
+            .into_iter()
+            .map(|worker| worker.join().unwrap())
+            .collect::<Vec<_>>();
+        let saved: Value =
+            serde_json::from_slice(&fs::read(project.join("conf/keyboard.json")).unwrap()).unwrap();
+        assert_eq!(saved["shortcuts"]["toggleWindow"], json!(["Alt+C"]));
+        assert!(configs.iter().all(|config| config == &configs[0]));
+        assert_eq!(quarantine_count(&project.join("conf")), 0);
+        assert!(!project.join("conf/.keyboard.json.tmp").exists());
+        fs::remove_dir_all(project).unwrap();
+    }
 
     #[test]
     fn creates_a_separate_keyboard_configuration_file() {

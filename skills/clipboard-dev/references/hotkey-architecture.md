@@ -111,6 +111,16 @@ Window-only (main window focused):
   unrelated save. The manager regressions use real isolated config files and
   a failed atomic replacement, then verify a later save and reopened matcher.
 
+- Keyboard creation, quarantine, default merging and saves hold an exclusive
+  OS lock on `keyboard.json.lock`. A store records the SHA-256 revision of bytes
+  loaded or successfully saved; `save` compares it while holding the lock and
+  rejects a stale instance before replacing the file. Save/delete/reset retain
+  their config and matcher rollback and request a restart before retrying.
+  Rejected saves do not adopt another instance's runtime bindings. The lock also
+  serializes the fixed temporary file across participating Clipboard processes;
+  external editors that bypass it remain outside the protocol. UTs use real
+  independent stores/managers, concurrent creation and one-winner saves.
+
 - One shared message loop for all global actions; `stop()` before every
   rebuild tears down the previous message window so re-registration never
   leaks hotkeys. Startup and refresh both go through a single plan apply
