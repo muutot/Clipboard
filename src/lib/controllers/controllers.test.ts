@@ -224,6 +224,34 @@ it("ignores a bulk paste request while another run is still in flight", async ()
   await settle();
   expect(vi.mocked(service.pasteClipboardItem).mock.calls.map((c) => c[0].id)).toEqual(["a", "b"]);
 });
+it.each(["pasted", "copied", "failed"] as const)(
+  "retains selections added during a pending bulk paste (%s)",
+  async (outcome) => {
+    const gate = deferred<service.PasteOutcome>();
+    vi.mocked(service.pasteClipboardItem).mockImplementationOnce(() => gate.promise);
+    out.bulk!.selectedIds = new Set(["initial"]);
+    const run = out.bulk!.bulkPasteAll();
+    out.store!.current = appendItems(out.store!.current, [item("arrived")], "history");
+    out.bulk!.selectedIds = new Set(["initial", "arrived"]);
+    gate.resolve(outcome);
+    await run;
+    expect([...out.bulk!.selectedIds]).toEqual(
+      outcome === "pasted" ? ["arrived"] : ["initial", "arrived"],
+    );
+  },
+);
+it("retains selections added while a bulk favorite is saving", async () => {
+  const gate = deferred<boolean>();
+  vi.mocked(service.persistBatchFavorite).mockImplementationOnce(() => gate.promise);
+  out.bulk!.selectedIds = new Set(["initial"]);
+  out.bulk!.bulkFavorite();
+  out.store!.current = appendItems(out.store!.current, [item("arrived")], "history");
+  out.bulk!.selectedIds = new Set(["initial", "arrived"]);
+  gate.resolve(true);
+  await settle();
+  expect([...out.bulk!.selectedIds]).toEqual(["arrived"]);
+  expect(service.persistBatchFavorite).toHaveBeenLastCalledWith(["initial"], true);
+});
 it("disposes late native listener registrations exactly once", async () => {
   const scope = createListenerScope(),
     late = deferred<() => void>(),

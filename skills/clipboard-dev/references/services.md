@@ -71,6 +71,11 @@ their toast behavior. Bulk paste counts only `pasted` and keeps undelivered rows
 selected for retry; a caught service error must not become batch success. Mounted
 controller tests use the real paste service with synthetic clipboard/target failures.
 
+Async bulk paste/favorite completion clears only its own processed IDs from the
+current selection. A different row selected while IPC is pending remains selected;
+undelivered paste rows remain only if the user still has them selected. The mounted
+controller tests cover successful/copied/failed paste and delayed favorite saves.
+
 Keep frontend mapping aligned with Rust serde names and `metadata_json`. `loadDeletedClipboardHistory` is the current deleted-list API name. A copy/write path must register a compatible self-trigger hash before touching the system clipboard. `readClipboardText()` is the read counterpart (`read_clipboard_text` command, fallback `navigator.clipboard.readText()` outside Tauri) used by the shared editor context menu; it never writes, so it registers no self-trigger.
 
 ## Invoke-wrapper services

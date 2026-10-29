@@ -91,11 +91,16 @@ export function createBulkController(deps: BulkDependencies) {
       }
       // Failed rows stay selected so they can be retried without re-picking;
       // a silent all-clear would hide exactly which rows never pasted.
+      const undeliveredIds = new Set(failedIds);
+      const deliveredIds = new Set(
+        items.filter((item) => !undeliveredIds.has(item.id)).map((item) => item.id),
+      );
+      // User selection can change while IPC is pending. Remove only the rows
+      // this run delivered, retaining failures and newly selected other rows.
+      selectedIds = new Set([...selectedIds].filter((id) => !deliveredIds.has(id)));
       if (failedIds.length > 0) {
-        selectedIds = new Set([...selectedIds].filter((id) => failedIds.includes(id)));
         showToast(deps.translate("toast.pasteFailed"), "error");
       } else {
-        selectedIds = new Set();
         showToast(deps.translate("toast.bulkPasteSuccess", { count: succeeded }), "success");
       }
     } finally {
@@ -122,7 +127,7 @@ export function createBulkController(deps: BulkDependencies) {
             : deps.translate("toast.bulkFavoriteSuccess", { count: ids.length }),
           "success",
         );
-        selectedIds = new Set();
+        selectedIds = new Set([...selectedIds].filter((id) => !idSet.has(id)));
       })
       .catch((error) => {
         console.error("Bulk favorite failed", error);
