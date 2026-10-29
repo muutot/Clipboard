@@ -161,6 +161,100 @@ fn chunked_snapshot_pack_round_trips_without_a_whole_pack_buffer() {
     let _ = fs::remove_dir(&directory);
 }
 
+fn assert_terminal_chunk_header_is_rejected<T: Decode<()>>(
+    encoded: &EncodedFile,
+    kind: LargePackKind,
+    key: Option<&SessionKey>,
+) {
+    let original = fs::read(encoded.path()).unwrap();
+    for tail_size in 1..=PACK_CHUNK_HEADER_LEN {
+        let mut bytes = original.clone();
+        // The last case has a full, invalid chunk header. All other cases
+        // exercise a partial read at EOF, which must not look like completion.
+        bytes.extend(std::iter::repeat_n(0xa5, tail_size));
+        fs::write(encoded.path(), bytes).unwrap();
+        let mut reader = LargePackReader::<T>::open(encoded.path(), kind, key).unwrap();
+        assert_eq!(reader.next().unwrap().unwrap(), sample_segment().mutations);
+        let error = reader
+            .next()
+            .expect("trailing bytes are not a clean EOF")
+            .unwrap_err();
+        if tail_size < PACK_CHUNK_HEADER_LEN {
+            assert!(error.contains("chunk header is truncated"), "{error}");
+        }
+        assert!(!reader.is_complete(), "a failed reader cannot be complete");
+        assert!(
+            reader.finish().is_err(),
+            "finishing after an error must not succeed"
+        );
+    }
+}
+
+#[test]
+fn snapshot_reader_rejects_terminal_chunk_header_errors() {
+    let directory =
+        std::env::temp_dir().join(format!("sync-snapshot-tail-{}", uuid::Uuid::new_v4()));
+    let session_key = SessionKey::derive("password", "remote-a").unwrap();
+    for key in [None, Some(&session_key)] {
+        let header = SnapshotPackHeader {
+            device_id: sample_segment().device_id,
+            epoch: sample_segment().epoch,
+            through_sequence: 1,
+        };
+        let encoded =
+            encode_snapshot_pack(&directory, &header, [sample_segment().mutations], key).unwrap();
+        assert_terminal_chunk_header_is_rejected::<SnapshotPackHeader>(
+            &encoded,
+            LargePackKind::Snapshot,
+            key,
+        );
+    }
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn checkpoint_reader_rejects_terminal_chunk_header_errors() {
+    let directory =
+        std::env::temp_dir().join(format!("sync-checkpoint-tail-{}", uuid::Uuid::new_v4()));
+    let session_key = SessionKey::derive("password", "remote-a").unwrap();
+    for key in [None, Some(&session_key)] {
+        let header = CheckpointPackHeader {
+            generation: 1,
+            vector: vec![],
+        };
+        let encoded =
+            encode_checkpoint_pack(&directory, &header, [sample_segment().mutations], key).unwrap();
+        assert_terminal_chunk_header_is_rejected::<CheckpointPackHeader>(
+            &encoded,
+            LargePackKind::Checkpoint,
+            key,
+        );
+    }
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn failed_pack_reader_cannot_be_finished_successfully() {
+    let directory = std::env::temp_dir().join(format!("sync-pack-failed-{}", uuid::Uuid::new_v4()));
+    let header = SnapshotPackHeader {
+        device_id: sample_segment().device_id,
+        epoch: sample_segment().epoch,
+        through_sequence: 1,
+    };
+    let encoded =
+        encode_snapshot_pack(&directory, &header, [sample_segment().mutations], None).unwrap();
+    let mut bytes = fs::read(encoded.path()).unwrap();
+    bytes.extend([0xa5; PACK_CHUNK_HEADER_LEN]);
+    fs::write(encoded.path(), bytes).unwrap();
+    let mut reader = open_snapshot_pack(encoded.path(), None).unwrap();
+    reader.next().unwrap().unwrap();
+    assert!(reader.next().unwrap().is_err());
+    assert!(!reader.is_complete());
+    assert!(reader.finish().is_err());
+    drop(encoded);
+    fs::remove_dir_all(directory).unwrap();
+}
+
 /// Writes a byte-exact unencrypted snapshot pack by hand so a test can lie
 /// about the chunk sizes the real writer would never emit.
 ///

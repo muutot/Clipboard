@@ -9,7 +9,7 @@
 
 use std::{
     fs::{self, File, OpenOptions},
-    io::{BufRead, BufReader, BufWriter, Cursor, ErrorKind, Read, Seek, SeekFrom, Write},
+    io::{BufReader, BufWriter, Cursor, ErrorKind, Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
 };
 

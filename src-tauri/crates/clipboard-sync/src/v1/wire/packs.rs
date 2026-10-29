@@ -436,6 +436,7 @@ pub struct LargePackReader<'a, T> {
     decoded_record_count: u64,
     next_chunk_index: u64,
     finished: bool,
+    failed: bool,
     /// Total on-disk size of the pack, captured once in `open`.
     total_stored_bytes: u64,
     /// Bytes of the pack already read, so `next` can require a declared chunk
@@ -526,6 +527,7 @@ impl<'a, T: Decode<()>> LargePackReader<'a, T> {
             decoded_record_count: 0,
             next_chunk_index: 0,
             finished: false,
+            failed: false,
             total_stored_bytes,
             // The envelope header, the metadata length prefix, and the protected
             // metadata itself are already off the wire.
@@ -543,11 +545,15 @@ impl<'a, T: Decode<()>> LargePackReader<'a, T> {
 
     pub fn is_complete(&self) -> bool {
         self.finished
+            && !self.failed
             && self.decoded_uncompressed_size_bytes == self.expected_uncompressed_size_bytes
     }
 
     pub fn finish(mut self) -> Result<u64, String> {
         while self.next().transpose()?.is_some() {}
+        if self.failed {
+            return Err("sync v1 pack reader previously failed validation".to_string());
+        }
         if self.decoded_uncompressed_size_bytes != self.expected_uncompressed_size_bytes {
             return Err("sync v1 pack uncompressed size does not match its header".to_string());
         }
@@ -563,27 +569,31 @@ impl<T> Iterator for LargePackReader<'_, T> {
             return None;
         }
         let mut chunk_header = [0u8; PACK_CHUNK_HEADER_LEN];
-        match self.reader.read_exact(&mut chunk_header) {
+        // Read one byte first so only EOF at a chunk boundary is completion.
+        // read_exact over the whole header consumes a partial tail before
+        // returning UnexpectedEof, leaving fill_buf empty in both cases.
+        match self.reader.read_exact(&mut chunk_header[..1]) {
             Ok(()) => {}
             Err(error) if error.kind() == ErrorKind::UnexpectedEof => {
-                let read = self
-                    .reader
-                    .fill_buf()
-                    .map(|buffer| buffer.len())
-                    .unwrap_or(0);
-                if read == 0 {
-                    self.finished = true;
-                    return None;
-                }
                 self.finished = true;
-                return Some(Err("sync v1 pack chunk header is truncated".to_string()));
+                return None;
             }
             Err(error) => {
                 self.finished = true;
+                self.failed = true;
                 return Some(Err(format!(
                     "failed to read sync pack chunk header: {error}"
                 )));
             }
+        }
+        if let Err(error) = self.reader.read_exact(&mut chunk_header[1..]) {
+            self.finished = true;
+            self.failed = true;
+            return Some(Err(if error.kind() == ErrorKind::UnexpectedEof {
+                "sync v1 pack chunk header is truncated".to_string()
+            } else {
+                format!("failed to read sync pack chunk header: {error}")
+            }));
         }
         self.consumed_bytes += PACK_CHUNK_HEADER_LEN as u64;
         let result = (|| {
@@ -686,6 +696,7 @@ impl<T> Iterator for LargePackReader<'_, T> {
         })();
         if result.is_err() {
             self.finished = true;
+            self.failed = true;
         }
         Some(result)
     }

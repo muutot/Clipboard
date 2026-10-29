@@ -3,6 +3,81 @@
 use super::*;
 
 #[test]
+fn malformed_checkpoint_tail_rolls_back_rows_and_cursors_then_allows_retry() {
+    let store = MemoryStore::default();
+    let peer = "11111111-1111-4111-8111-111111111111";
+    let epoch = "22222222-2222-4222-8222-222222222222";
+    let checkpoint = CheckpointFixture {
+        generation: 1,
+        vector: vec![DeviceCursor {
+            device_id: peer.to_owned(),
+            epoch: epoch.to_owned(),
+            sequence: 1,
+            last_segment_key: None,
+        }],
+        mutations: MutationBatch {
+            upserts: vec![replicated_text(
+                "incomplete-peer-item",
+                "peer body",
+                100,
+                peer,
+            )],
+            tombstones: vec![],
+        },
+    };
+    let valid_reference = insert_checkpoint(&store, &checkpoint);
+    let mut bytes = store.objects.lock().unwrap()[&valid_reference.key].clone();
+    bytes.extend([0xa5; 7]);
+    // A broken publisher can supply a checksum-valid object with incomplete
+    // framing. The transport digest check cannot validate its pack structure.
+    let digest = hex::encode(Sha256::digest(&bytes));
+    let malformed_reference = ObjectRef {
+        key: checkpoint_object_key(1, &digest).unwrap(),
+        sha256: digest,
+        stored_size_bytes: bytes.len() as u64,
+        record_count: valid_reference.record_count,
+    };
+    store
+        .objects
+        .lock()
+        .unwrap()
+        .insert(malformed_reference.key.clone(), bytes);
+    insert_checkpoint_head(&store, &checkpoint, malformed_reference, None);
+    let paths = temp_paths("checkpoint-partial-tail");
+    let database = Database::open(&paths.database).unwrap();
+    database
+        .save_item(&text_item("local-existing", "local body"))
+        .unwrap();
+    let result = sync_database(&store, &database, &paths, REMOTE_SCOPE, None, options());
+    assert!(
+        result.is_err(),
+        "an incomplete checkpoint must fail: {result:?}"
+    );
+    assert!(database.get_item("incomplete-peer-item").unwrap().is_none());
+    assert!(database.get_item("local-existing").unwrap().is_some());
+    assert!(database
+        .get_sync_cursor(REMOTE_SCOPE, peer)
+        .unwrap()
+        .is_none());
+    assert!(database
+        .get_sync_checkpoint_state(REMOTE_SCOPE)
+        .unwrap()
+        .is_none());
+
+    insert_checkpoint_head(&store, &checkpoint, valid_reference, None);
+    let retried = sync_database(&store, &database, &paths, REMOTE_SCOPE, None, options()).unwrap();
+    assert!(retried.applied_entries >= 1);
+    assert!(database.get_item("incomplete-peer-item").unwrap().is_some());
+    assert!(database.get_item("local-existing").unwrap().is_some());
+    assert!(database
+        .get_sync_cursor(REMOTE_SCOPE, peer)
+        .unwrap()
+        .is_some());
+    drop(database);
+    fs::remove_dir_all(paths.project).unwrap();
+}
+
+#[test]
 fn corrupt_peer_head_does_not_block_other_devices() {
     let store = MemoryStore::default();
     let source_paths = temp_paths("isolated-source");
