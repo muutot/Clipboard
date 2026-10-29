@@ -141,12 +141,16 @@
   );
   const items = $derived(itemStore.history);
 
-  function updateItem(id: string, mutator: (item: ClipboardItem) => Partial<ClipboardItem>) {
+  function updateItem(
+    id: string,
+    mutator: (item: ClipboardItem) => Partial<ClipboardItem>,
+    expected?: ClipboardItem,
+  ) {
     // Resolve through the store, not `items`: a search result can be displayed
     // only by the indexed view or the spare cache, and looking in `items` alone
     // silently no-ops every action on such a row.
     const original = findLoadedItem(id);
-    if (!original) return false;
+    if (!original || (expected && original !== expected)) return false;
     itemStore.current = applyItemPatches(itemStore.current, new Map([[id, mutator(original)]]));
     return true;
   }
@@ -1602,19 +1606,24 @@
         // the detail panel all read the mapped metadata, so patching only
         // title/resourcePath would leave stale names until the next reload.
         const mapped = toClipboardItem(updated);
-        updateItem(id, () => ({
-          title: mapped.title,
-          preview: mapped.preview,
-          resourcePath: mapped.resourcePath,
-          previewPath: mapped.previewPath,
-          metadataJson: mapped.metadataJson,
-          fileName: mapped.fileName,
-          fileMeta: mapped.fileMeta,
-          resourceMetadata: mapped.resourceMetadata,
-          mimeType: mapped.mimeType,
-          imageMeta: mapped.imageMeta,
-          searchableText: mapped.searchableText,
-        }));
+        // A newer content event already carries authoritative paths/metadata.
+        updateItem(
+          id,
+          () => ({
+            title: mapped.title,
+            preview: mapped.preview,
+            resourcePath: mapped.resourcePath,
+            previewPath: mapped.previewPath,
+            metadataJson: mapped.metadataJson,
+            fileName: mapped.fileName,
+            fileMeta: mapped.fileMeta,
+            resourceMetadata: mapped.resourceMetadata,
+            mimeType: mapped.mimeType,
+            imageMeta: mapped.imageMeta,
+            searchableText: mapped.searchableText,
+          }),
+          item,
+        );
         endEdit(editorRequest);
         showToast(_t("toast.editSaved"), "success");
         return true;
@@ -1643,13 +1652,20 @@
       }
     }
 
-    updateItem(id, (item) => ({
-      textContent: newTextContent,
-      preview: newPreview,
-      sizeBytes: newSizeBytes,
-      sizeLabel: newSizeLabel,
-      ...(item.customTitle ? {} : { title: newTitle }),
-    }));
+    // Keep a later saved record's body and hash together. Desktop commands
+    // broadcast their canonical record; the reply is only a fallback while
+    // the original immutable row is still current.
+    updateItem(
+      id,
+      (item) => ({
+        textContent: newTextContent,
+        preview: newPreview,
+        sizeBytes: newSizeBytes,
+        sizeLabel: newSizeLabel,
+        ...(item.customTitle ? {} : { title: newTitle }),
+      }),
+      item,
+    );
     endEdit(editorRequest);
     showToast(_t("toast.editSaved"), "success");
     return true;

@@ -35,6 +35,7 @@ afterEach(async () => {
   bridge.listeners.clear();
   bridge.hydrate.mockReset();
   bridge.invoke.mockReset().mockResolvedValue(true);
+  Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
   vi.unstubAllGlobals();
 });
 
@@ -54,6 +55,114 @@ function buttonByLabel(root: ParentNode, scope: string, label: string): HTMLButt
 }
 
 describe("main window inline editing", () => {
+  it.each(["text", "image", "file"] as const)(
+    "does not overwrite a later %s edit event when an earlier save returns",
+    async (kind) => {
+      vi.stubGlobal(
+        "ResizeObserver",
+        class {
+          observe() {}
+          unobserve() {}
+          disconnect() {}
+        },
+      );
+      const target = document.createElement("div");
+      document.body.append(target);
+      const app = mount(MainPage, { target });
+      cleanups.push(async () => {
+        await unmount(app);
+        target.remove();
+      });
+      flushSync();
+      const record = {
+        id: `delayed-save-${kind}`,
+        kind,
+        title: "Initial record",
+        textContent: kind === "text" ? "INITIAL BODY" : null,
+        contentHash: "initial-hash",
+        resourcePath: kind === "text" ? null : "C:/fixture/initial.png",
+        sourceApp: "test",
+        sizeBytes: 20,
+        createdAtMs: 1,
+        lastUsedAtMs: 1,
+        isFavorite: false,
+      } as PersistedClipboardItem;
+      bridge.listeners.get("clipboard-item-added")?.({ payload: record });
+      flushSync();
+      target
+        .querySelector<HTMLElement>(`[data-id="${record.id}"]`)!
+        .dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 12, clientY: 12 }));
+      flushSync();
+      buttonByLabel(
+        target,
+        ".context-menu button",
+        t(kind === "text" ? "card.edit" : "edit.editFileName"),
+      ).click();
+      await settle();
+      const draft = target.querySelector<HTMLTextAreaElement>(`[data-id="${record.id}"] textarea`)!;
+      draft.value = "OLDER SAVE";
+      draft.dispatchEvent(new Event("input", { bubbles: true }));
+      flushSync();
+      // Enable only the save's IPC branch after mounting the browser fixture;
+      // the native startup/list/clipboard boundaries are never exercised.
+      Object.defineProperty(window, "__TAURI_INTERNALS__", { configurable: true, value: {} });
+      let finish!: (value: unknown) => void;
+      bridge.invoke.mockImplementation((command: string) =>
+        command === (kind === "text" ? "update_clipboard_text" : "rename_item")
+          ? new Promise((resolve) => (finish = resolve))
+          : Promise.resolve(true),
+      );
+      target.querySelector<HTMLButtonElement>(`[data-id="${record.id}"] .edit-save`)!.click();
+      await settle();
+      expect(bridge.invoke).toHaveBeenCalledWith(
+        kind === "text" ? "update_clipboard_text" : "rename_item",
+        expect.objectContaining({ id: record.id }),
+      );
+      // The original command has committed; a later edit in another window has
+      // also committed and broadcast its newer record before the old IPC reply.
+      bridge.listeners.get("clipboard-items-changed")?.({
+        payload: {
+          items: [
+            {
+              ...record,
+              title: "LATEST COMMITTED TITLE",
+              textContent: kind === "text" ? "LATEST COMMITTED BODY" : null,
+              contentHash: "latest-hash",
+              resourcePath: kind === "text" ? null : "C:/fixture/latest.png",
+            },
+          ],
+        },
+      });
+      flushSync();
+      finish(
+        kind === "text"
+          ? true
+          : { ...record, title: "OLDER SAVE", resourcePath: "C:/fixture/older.png" },
+      );
+      await settle();
+      const card = target.querySelector(`[data-id="${record.id}"]`)!;
+      expect(card.querySelector("textarea")).toBeNull();
+      if (kind === "text") {
+        expect(card.textContent).toContain("LATEST COMMITTED TITLE");
+        expect(card.textContent).toContain("LATEST COMMITTED BODY");
+      } else {
+        Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
+        card.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true }));
+        await settle();
+        expect(target.querySelector(".detail-panel")?.textContent).toContain(
+          "LATEST COMMITTED TITLE",
+        );
+        if (kind === "image") {
+          buttonByLabel(target, ".detail-panel button", t("detail.details")).click();
+          flushSync();
+          expect(target.querySelector(".detail-panel")?.textContent).toContain(
+            "C:/fixture/latest.png",
+          );
+        } else expect(card.textContent).toContain("latest.png");
+      }
+      expect(card.textContent).not.toContain("OLDER SAVE");
+    },
+  );
   it("does not close a newer editor when an earlier media save completes", async () => {
     vi.stubGlobal(
       "ResizeObserver",

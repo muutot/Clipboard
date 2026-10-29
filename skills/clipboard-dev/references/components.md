@@ -30,6 +30,10 @@ Key contracts:
   a newer editor/draft or reopen one after cancel/unmount. Save completion closes
   only the editor generation it started with, retaining a newer draft while still
   applying the successful saved record's own update.
+  Save replies patch the record only while the immutable row captured at save
+  entry remains current. A later content event or saved edit owns its body/hash
+  and media paths; the older reply must not replace them. Desktop save commands
+  broadcast the canonical record, including changes skipped by this reply guard.
 - `onheightchange` plus `heightMeasurementKey` feed virtual scrolling. Re-measure whenever visible content, card layout metrics, action/meta visibility, title state, or line limits can alter height.
 - Resource previews use `convertFileSrc`; source app icons are resolved from the managed `iconsDir` store using the icon key, not an arbitrary full path.
 - Card action order and context-menu behavior must stay aligned. Reuse the same callback path rather than creating a second implementation. Exception: while the card is in inline-edit mode and the editor has a text selection, the context-menu `copy` writes that selection to the clipboard (`writeClipboardText` + toast) instead of emitting `oncopy(item.id)`; with no selection it still emits `oncopy`.
