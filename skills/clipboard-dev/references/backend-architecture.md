@@ -254,6 +254,12 @@ all future sync runs, so returning cancellation before saving the new prefix wou
 strand the device. Cancellation resumes before old-object deletion; persistent
 local save failure still reports the new prefix and manual recovery guidance.
 
+The registered rotation runs through `run_rotation_operation`: scope all work to
+the background operation's child token and pass that same token to the engine and
+rotation checks. Cancelling one task must not cancel its privacy parent or be lost
+by running on that parent. Finish the operation with its result so success is
+reported as `Succeeded`; dropping an unfinished guard records failure/cancellation.
+
 Sync interruption recovery uses
 `SyncRepository::sync_outbox_range_matches_mutations(remote_scope, after, through, mutations)`.
 The SQLite adapter reads pending IDs and their current mutations in one WAL snapshot,

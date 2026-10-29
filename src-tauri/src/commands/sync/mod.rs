@@ -1002,6 +1002,19 @@ pub async fn rotate_sync_namespace(
         .map_err(|error| format!("rotation task join failed: {error}"))?
 }
 
+fn run_rotation_operation<T>(
+    operation: crate::background_operations::Operation,
+    work: impl FnOnce(
+        &clipboard_sync::cancellation::CancellationToken,
+        &crate::background_operations::Operation,
+    ) -> Result<T, String>,
+) -> Result<T, String> {
+    let outcome = operation
+        .token()
+        .run(|| work(operation.token(), &operation));
+    operation.finish(outcome)
+}
+
 fn run_namespace_rotation(app: &tauri::AppHandle, new_password: String) -> Result<(), String> {
     use crate::background_operations::{BackgroundOperations, OperationKind, OperationPhase};
     let cancellation = app.state::<SyncCancellation>().0.child_token();
@@ -1030,18 +1043,16 @@ fn run_namespace_rotation(app: &tauri::AppHandle, new_password: String) -> Resul
         crate::log_warn!("[sync] rotation clears the namespace encryption password");
     }
 
-    let (operation, token) = {
+    let operation = {
         let guard = lock_state(&config, "configuration lock is poisoned")?;
         let token = app
             .state::<SyncCancellation>()
             .register(guard.privacy_local_only(), &cancellation)?;
-        let operation = app
-            .state::<BackgroundOperations>()
-            .start(OperationKind::Sync, &token)?;
-        (operation, token)
+        app.state::<BackgroundOperations>()
+            .start(OperationKind::Sync, &token)?
     };
     let mut config_committed = false;
-    let outcome = token.run(|| {
+    let outcome = run_rotation_operation(operation, |token, operation| {
         let old_store = old_settings.object_store()?;
         let new_store = new_settings.object_store()?;
         perform_namespace_rotation(
@@ -1052,7 +1063,7 @@ fn run_namespace_rotation(app: &tauri::AppHandle, new_password: String) -> Resul
             &old_settings,
             &new_settings,
             new_settings.sync_password.as_deref(),
-            &token,
+            token,
             &mut || {
                 // Invoked right after the tombstone is durable: the old prefix
                 // now answers "rotated" to every run, so the local
@@ -2478,6 +2489,72 @@ mod tests {
     #[test]
     fn rotation_retries_config_when_cancelled_during_commit() {
         rotation_cancellation_commit_scenario(false);
+    }
+
+    fn registered_rotation_scenario(cancel_before_run: bool) {
+        use crate::background_operations::{BackgroundOperations, OperationKind, OperationStatus};
+        let paths = temporary_paths("registered-rotation");
+        let database = Database::open(&paths.database).unwrap();
+        let settings = SyncSettings::from_sync_config(&configured_sync()).unwrap();
+        let new_settings = settings.with_rotated_scope("clipboard-rotated-registered".into(), None);
+        let old_store = RotationStore::default();
+        let new_store = RotationStore::default();
+        let registry = BackgroundOperations::default();
+        let root = clipboard_sync::cancellation::CancellationToken::default();
+        let operation = registry.start(OperationKind::Sync, &root).unwrap();
+        if cancel_before_run {
+            let id = registry.snapshot(OperationKind::Sync).unwrap().id;
+            assert!(registry.cancel(OperationKind::Sync, &id));
+        }
+        let mut committed = false;
+        let result = run_rotation_operation(operation, |token, operation| {
+            perform_namespace_rotation(
+                &old_store,
+                &new_store,
+                &database,
+                &paths,
+                &settings,
+                &new_settings,
+                None,
+                token,
+                &mut || {
+                    committed = true;
+                    Ok(())
+                },
+                &mut |_| {
+                    let _ = operation.progress(
+                        crate::background_operations::OperationPhase::Preparing,
+                        0,
+                        None,
+                    );
+                },
+            )
+        });
+        let status = registry.snapshot(OperationKind::Sync).unwrap().status;
+        let writes = new_store.puts.load(Ordering::Relaxed);
+        drop(database);
+        fs::remove_dir_all(paths.project).unwrap();
+        assert!(!root.is_cancelled(), "task cancellation must stay scoped");
+        if cancel_before_run {
+            assert_eq!(result.unwrap_err(), clipboard_sync::cancellation::CANCELLED);
+            assert_eq!(writes, 0, "cancelled rotation must not publish new objects");
+            assert!(!committed);
+            assert_eq!(status, OperationStatus::Cancelled);
+        } else {
+            result.unwrap();
+            assert!(committed);
+            assert_eq!(status, OperationStatus::Succeeded);
+        }
+    }
+
+    #[test]
+    fn registered_rotation_honors_task_cancellation() {
+        registered_rotation_scenario(true);
+    }
+
+    #[test]
+    fn registered_rotation_reports_successful_completion() {
+        registered_rotation_scenario(false);
     }
 
     /// A local configuration commit that keeps failing after the tombstone is

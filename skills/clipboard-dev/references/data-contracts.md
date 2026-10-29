@@ -372,6 +372,11 @@ change; config-save failure can leave a reset publication state for safe retry.
 
 ## Event contract
 
+Namespace rotation uses the Sync background-operation slot. Its registered child
+token governs transport, engine and explicit cancellation checks; the privacy
+parent is not a substitute for task cancellation. `run_rotation_operation` finishes
+the slot with the rotation result, preserving success/cancelled/failed status.
+
 Long operations use polling rather than payload-bearing events:
 `get_background_operation(kind)` returns null or
 `{id, kind, status, phase, completed, total}`; `cancel_background_operation(kind, id)`
