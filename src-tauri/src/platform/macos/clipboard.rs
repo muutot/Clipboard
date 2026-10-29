@@ -279,11 +279,7 @@ pub fn write_clipboard_text_with_self_trigger(text: &str) -> Result<(), String> 
             .map_err(|e| format!("failed to write to pbcopy stdin: {e}"))?;
     }
 
-    child
-        .wait()
-        .map_err(|e| format!("pbcopy wait failed: {e}"))?;
-
-    Ok(())
+    crate::platform::bounded_command::wait_for_success(&mut child, "pbcopy")
 }
 
 #[cfg(not(target_os = "macos"))]

@@ -208,11 +208,7 @@ pub fn write_clipboard_text_with_self_trigger(text: &str) -> Result<(), String> 
             .map_err(|e| format!("failed to write to wl-copy stdin: {e}"))?;
     }
 
-    child
-        .wait()
-        .map_err(|e| format!("wl-copy wait failed: {e}"))?;
-
-    Ok(())
+    crate::platform::bounded_command::wait_for_success(&mut child, "wl-copy")
 }
 
 #[cfg(not(target_os = "linux"))]

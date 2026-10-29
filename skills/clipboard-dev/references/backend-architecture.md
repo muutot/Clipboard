@@ -277,6 +277,8 @@ Privacy pause, ignored applications, and sensitive-source checks happen before p
 
 ## Platform adapters
 
+Manual text-copy adapters (`pbcopy`, `xclip`, `wl-copy`) call `bounded_command::wait_for_success` after writing stdin. Spawn/write/wait failures and non-zero or signal exits propagate to the copy caller; a completed failing helper cannot report successful copying. The shared fixture consumes stdin and exits 0/7 without touching a native clipboard. This status check adds no timeout, and macOS/Linux native compilation/runtime remain platform gates.
+
 macOS capture tools (`pngpaste`, `imgpaste`, `osascript`, `sips`, and `plutil`)
 use `bounded_command`: 600 ms per subprocess, a shared 3 s capture budget, output
 caps and cancellation. Snapshot publication rejects an aborted budget.

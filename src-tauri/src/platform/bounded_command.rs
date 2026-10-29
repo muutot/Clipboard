@@ -56,6 +56,18 @@ pub(super) fn fail_capture() {
     });
 }
 
+/// Waits for a manual clipboard writer and propagates non-zero/signal exits.
+/// This checks completion status; it does not add a subprocess deadline.
+pub fn wait_for_success(child: &mut Child, helper: &str) -> Result<(), String> {
+    let status = child
+        .wait()
+        .map_err(|error| format!("{helper} wait failed: {error}"))?;
+    if !status.success() {
+        return Err(format!("{helper} failed: {status}"));
+    }
+    Ok(())
+}
+
 struct RunningChild(Child);
 impl Drop for RunningChild {
     fn drop(&mut self) {
@@ -217,6 +229,11 @@ mod tests {
     #[ignore = "subprocess fixture, invoked by bounded-command tests"]
     fn child_fixture() {
         match std::env::var("CLIPBOARD_HELPER_FIXTURE").as_deref() {
+            Ok(mode @ ("exit0" | "exit7")) => {
+                let mut input = Vec::new();
+                std::io::stdin().read_to_end(&mut input).unwrap();
+                std::process::exit(if mode == "exit0" { 0 } else { 7 });
+            }
             Ok("stall") => std::thread::sleep(Duration::from_secs(5)),
             Ok("large") => {
                 let _ = std::io::stdout().write_all(&vec![b'x'; 1024 * 1024]);
@@ -236,6 +253,36 @@ mod tests {
             .env("CLIPBOARD_HELPER_FIXTURE", mode);
         command
     }
+    #[test]
+    fn clipboard_writers_require_a_successful_exit_after_consuming_stdin() {
+        for mode in ["exit0", "exit7"] {
+            let mut command = fixture(mode);
+            command
+                .stdin(Stdio::piped())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null());
+            #[cfg(windows)]
+            {
+                use std::os::windows::process::CommandExt;
+                command.creation_flags(0x08000000);
+            }
+            let mut child = command.spawn().unwrap();
+            child
+                .stdin
+                .as_mut()
+                .unwrap()
+                .write_all(b"synthetic clipboard text")
+                .unwrap();
+            let result = wait_for_success(&mut child, "clipboard writer fixture");
+            if mode == "exit0" {
+                assert!(result.is_ok());
+            } else {
+                let error = result.unwrap_err();
+                assert!(error.contains("clipboard writer fixture") && error.contains('7'));
+            }
+        }
+    }
+
     #[test]
     fn output_success_overflow_timeout_and_stop_are_bounded() {
         let result = fixture("normal").bounded_output(4096).unwrap();
