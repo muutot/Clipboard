@@ -47,6 +47,34 @@ fn sample_segment() -> Segment {
 }
 
 #[test]
+fn tiny_bincode_envelopes_cannot_claim_large_string_allocations() {
+    // Modest claims keep the pre-fix regression safe to run. The same length
+    // prefix can otherwise request almost the entire 1 GiB decoder ceiling
+    // before SliceReader discovers that there are no actual string bytes.
+    let raw = bincode::encode_to_vec(2 * 1024 * 1024_u64, bincode::config::standard()).unwrap();
+    let mut envelope = header(ObjectKind::Segment, 0, raw.len() as u64).to_vec();
+    envelope.extend(zstd::stream::encode_all(Cursor::new(&raw), ZSTD_LEVEL).unwrap());
+    let error = decode_segment(&envelope, None).unwrap_err();
+    assert!(error.contains("LimitExceeded"), "{error}");
+}
+
+#[test]
+fn highly_compressed_large_records_use_the_verified_raw_decode_budget() {
+    let mut segment = sample_segment();
+    segment.mutations.upserts[0].item.text_content = Some("portable-content".repeat(20_000));
+    let plain = encode_segment(&segment, None).unwrap();
+    assert!(plain.bytes.len() < BINCODE_MIN_DECODE_BUDGET);
+    assert!(plain.uncompressed_size_bytes > BINCODE_MIN_DECODE_BUDGET as u64);
+    assert_eq!(decode_segment(&plain.bytes, None).unwrap(), segment);
+    let key = SessionKey::derive("test-password", "raw-decode-budget").unwrap();
+    let encrypted = encode_segment(&segment, Some(&key)).unwrap();
+    assert_eq!(
+        decode_segment(&encrypted.bytes, Some(&key)).unwrap(),
+        segment
+    );
+}
+
+#[test]
 fn plaintext_segment_round_trips_and_is_compressed() {
     let segment = sample_segment();
     let raw = bincode::encode_to_vec(&segment, bincode::config::standard()).unwrap();

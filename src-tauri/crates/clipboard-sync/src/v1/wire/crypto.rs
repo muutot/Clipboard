@@ -366,11 +366,8 @@ pub(super) fn decode_value<T: Decode<()>>(
     if raw.len() as u64 != uncompressed_size {
         return Err("sync v1 uncompressed size does not match its header".to_string());
     }
-    let (value, consumed): (T, usize) = bincode::decode_from_slice(
-        &raw,
-        bincode::config::standard().with_limit::<BINCODE_LIMIT_BYTES>(),
-    )
-    .map_err(|error| format!("failed to decode sync v1 object: {error}"))?;
+    let (value, consumed): (T, usize) = decode_bounded_bincode(&raw, false)
+        .map_err(|error| format!("failed to decode sync v1 object: {error}"))?;
     if consumed != raw.len() {
         return Err("sync v1 object has trailing decoded bytes".to_string());
     }

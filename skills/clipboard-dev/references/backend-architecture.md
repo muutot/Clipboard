@@ -152,6 +152,19 @@ transport SHA-256 is valid. Any read/decode failure stays terminal and prevents
 wire UTs cover every partial header length; a real SQLite checkpoint UT covers
 rollback and retry after the remote reference is repaired.
 
+Metadata bincode readers also limit reservations against actual verified raw
+input bytes. `wire/mod.rs::decode_bounded_bincode` selects a power-of-two budget
+above 32 times the raw length, with a 64 KiB floor and the existing 1 GiB ceiling.
+The expansion accounts for Rust DTO footprints and varint decoder accounting;
+the budget uses decoded bytes, never compressed size or a claimed string/Vec
+length. Standard metadata envelopes, pack chunks and fixed-integer pack headers
+all use it. Bincode otherwise reserves a container before detecting a missing
+body, allowing a tiny remote object to request almost the global ceiling.
+Dense minimum-field records and highly compressed large plaintext/encrypted
+records retain round-trip coverage. Wire layout and writer limits are unchanged;
+valid large inputs can still consume substantial memory within protocol limits.
+Tests use modest 2 MiB string/4096-entry vector claims, not a real OOM experiment.
+
 Sync resource materialization publishes a verified sibling staging file with
 atomic rename replacement, retaining regular-file/symlink checks. It never
 unlinks the destination before rename: another process may already have

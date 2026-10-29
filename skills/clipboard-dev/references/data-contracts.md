@@ -322,6 +322,20 @@ Every S3 request is issued through `s3::send_with_retry`, which allows four atte
 
 A direct `invoke` in a component is still a public cross-layer contract and receives the same audit.
 
+### Bincode decode allocation bounds
+
+Metadata bincode decoding uses verified raw input length to limit container
+reservations before a truncated String/Vec can allocate from its untrusted count.
+The configured limit is the next power of two above 32 times that length, with
+a 64 KiB floor and the existing 1 GiB ceiling; expansion allows for Rust DTO
+representation and varint read accounting. Envelope/chunk/header paths share
+this helper, including fixed-integer pack headers. Decompression length must
+first agree with the authenticated/validated envelope or chunk; compressed
+length is not a decode allocation budget. This preserves wire layout, metadata
+writer limits and the separate binary-resource limits. Large valid inputs can
+still use substantial memory; dense-record and highly compressed plaintext/
+encrypted round trips are covered by focused UTs.
+
 ### Memory diagnostics
 
 `get_memory_diagnostics` returns camelCase `MemoryDiagnostics` with the current process,

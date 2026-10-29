@@ -107,6 +107,14 @@ counts documented below; local materialization reads the cache without that GET.
   prevent external changes after comparison. No wire DTO layout or database schema changes.
 - Fixed-width sequence numbers preserve lexical and numeric order for S3 `start-after` listing.
 
+Metadata bincode decoding bounds String/Vec reservations using the verified raw input length:
+the next power of two above 32 times that length, with a 64 KiB floor and the existing 1 GiB
+ceiling. The expansion accommodates Rust DTO footprint and varint accounting. This applies to
+metadata envelopes, pack chunks and fixed-integer pack headers, and never uses an untrusted
+container count or compressed size as the budget. Tiny malformed inputs cannot reserve near
+the global ceiling before reporting truncation. Valid large/dense records retain their wire
+layout and writer limits; they can still use substantial memory within the protocol bounds.
+
 Normal discovery performs one paginated `v1/heads/` listing, which is O(device count). The client
 retains a disposable per-scope/device head cache only after that head has been fully validated and
 its advertised state has been published or applied. A later listing can skip the head body GET only

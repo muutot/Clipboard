@@ -44,11 +44,8 @@ fn encode_bincode<T: Encode>(value: &T, label: &str) -> Result<Vec<u8>, String> 
 }
 
 fn decode_bincode<T: Decode<()>>(bytes: &[u8], label: &str) -> Result<T, String> {
-    let (value, consumed): (T, usize) = bincode::decode_from_slice(
-        bytes,
-        bincode::config::standard().with_limit::<BINCODE_LIMIT_BYTES>(),
-    )
-    .map_err(|error| format!("failed to decode sync v1 {label}: {error}"))?;
+    let (value, consumed): (T, usize) = decode_bounded_bincode(bytes, false)
+        .map_err(|error| format!("failed to decode sync v1 {label}: {error}"))?;
     if consumed != bytes.len() {
         return Err(format!("sync v1 {label} has trailing decoded bytes"));
     }
@@ -66,13 +63,8 @@ pub(super) fn encode_pack_header<T: Encode>(value: &T) -> Result<Vec<u8>, String
 }
 
 fn decode_pack_header<T: Decode<()>>(bytes: &[u8]) -> Result<T, String> {
-    let (value, consumed): (T, usize) = bincode::decode_from_slice(
-        bytes,
-        bincode::config::standard()
-            .with_fixed_int_encoding()
-            .with_limit::<BINCODE_LIMIT_BYTES>(),
-    )
-    .map_err(|error| format!("failed to decode sync v1 pack header: {error}"))?;
+    let (value, consumed): (T, usize) = decode_bounded_bincode(bytes, true)
+        .map_err(|error| format!("failed to decode sync v1 pack header: {error}"))?;
     if consumed != bytes.len() {
         return Err("sync v1 pack header has trailing decoded bytes".to_string());
     }
@@ -743,4 +735,79 @@ pub fn open_checkpoint_pack<'a>(
     key: Option<&'a SessionKey>,
 ) -> Result<CheckpointPackReader<'a>, String> {
     LargePackReader::open(path, LargePackKind::Checkpoint, key)
+}
+
+#[cfg(test)]
+mod allocation_tests {
+    use super::*;
+
+    #[test]
+    fn tiny_bincode_chunks_cannot_claim_large_vector_allocations() {
+        let raw = bincode::encode_to_vec(4096_u64, bincode::config::standard()).unwrap();
+        let error = decode_bincode::<MutationBatch>(&raw, "pack chunk").unwrap_err();
+        assert!(error.contains("LimitExceeded"), "{error}");
+    }
+
+    #[test]
+    fn tiny_bincode_headers_cannot_claim_large_string_allocations() {
+        let raw = (2 * 1024 * 1024_u64).to_le_bytes();
+        let error = decode_pack_header::<SnapshotPackHeader>(&raw).unwrap_err();
+        assert!(error.contains("LimitExceeded"), "{error}");
+    }
+
+    #[test]
+    fn dense_minimal_records_keep_the_existing_wire_layout_and_round_trip() {
+        let minimal = ReplicatedItem {
+            item: SyncItem {
+                id: String::new(),
+                kind: SyncItemKind::Text,
+                title: String::new(),
+                text_content: None,
+                html_content: None,
+                rtf_content: None,
+                resource_path: None,
+                preview_path: None,
+                content_hash: String::new(),
+                source_app: None,
+                icon_path: None,
+                size_bytes: 0,
+                created_at_ms: 0,
+                last_used_at_ms: None,
+                is_favorite: false,
+                metadata_json: None,
+            },
+            version: RecordVersion {
+                modified_at_ms: 0,
+                writer_device_id: String::new(),
+            },
+        };
+        // Codec-valid empty fields maximize the representation overhead;
+        // stricter application identity validation happens after decoding.
+        let batch = MutationBatch {
+            upserts: vec![minimal; PACK_CHUNK_MAX_ENTRIES],
+            tombstones: Vec::new(),
+        };
+        let raw = encode_bincode(&batch, "dense records").unwrap();
+        assert_eq!(
+            decode_bincode::<MutationBatch>(&raw, "dense records").unwrap(),
+            batch
+        );
+        let header = CheckpointPackHeader {
+            generation: 1,
+            vector: vec![
+                DeviceCursor {
+                    device_id: String::new(),
+                    epoch: String::new(),
+                    sequence: 0,
+                    last_segment_key: None,
+                };
+                PACK_CHUNK_MAX_ENTRIES
+            ],
+        };
+        let raw_header = encode_pack_header(&header).unwrap();
+        assert_eq!(
+            decode_pack_header::<CheckpointPackHeader>(&raw_header).unwrap(),
+            header
+        );
+    }
 }

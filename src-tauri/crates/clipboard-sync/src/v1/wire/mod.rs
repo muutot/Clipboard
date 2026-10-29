@@ -36,6 +36,11 @@ const ZSTD_LEVEL: i32 = 3;
 const MAX_UNCOMPRESSED_BYTES: u64 = 1024 * 1024 * 1024;
 const MAX_STORED_BYTES: usize = 1024 * 1024 * 1024;
 const BINCODE_LIMIT_BYTES: usize = MAX_UNCOMPRESSED_BYTES as usize;
+// Bincode reserves Vec/String capacity before the slice reader can reject a
+// truncated length claim. Tie that reservation budget to verified raw bytes,
+// allowing for Rust DTOs' larger in-memory footprint and varint accounting.
+const BINCODE_DECODE_EXPANSION: usize = 32;
+const BINCODE_MIN_DECODE_BUDGET: usize = 64 * 1024;
 const PACK_FLAG_CHUNKED: u8 = 0x02;
 const PACK_KNOWN_FLAGS: u8 = FLAG_ENCRYPTED | PACK_FLAG_CHUNKED;
 const PACK_CHUNK_HEADER_LEN: usize = 24;
@@ -57,6 +62,53 @@ const MAX_RESOURCE_PLAINTEXT_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 mod crypto;
 mod packs;
 mod types;
+
+fn decode_bounded_bincode<T: Decode<()>>(
+    bytes: &[u8],
+    fixed_int_encoding: bool,
+) -> Result<(T, usize), bincode::error::DecodeError> {
+    let budget = bytes
+        .len()
+        .saturating_mul(BINCODE_DECODE_EXPANSION)
+        .clamp(BINCODE_MIN_DECODE_BUDGET, BINCODE_LIMIT_BYTES);
+    // Bincode's configured limit is const-generic. Select the next power-of-two
+    // budget, bounded by the existing protocol ceiling; never base it on an
+    // untrusted container length or compressed frame size.
+    macro_rules! decode {
+        ($limit:expr) => {
+            if fixed_int_encoding {
+                bincode::decode_from_slice(
+                    bytes,
+                    bincode::config::standard()
+                        .with_fixed_int_encoding()
+                        .with_limit::<$limit>(),
+                )
+            } else {
+                bincode::decode_from_slice(
+                    bytes,
+                    bincode::config::standard().with_limit::<$limit>(),
+                )
+            }
+        };
+    }
+    match budget {
+        0..=65_536 => decode!(65_536),
+        65_537..=131_072 => decode!(131_072),
+        131_073..=262_144 => decode!(262_144),
+        262_145..=524_288 => decode!(524_288),
+        524_289..=1_048_576 => decode!(1_048_576),
+        1_048_577..=2_097_152 => decode!(2_097_152),
+        2_097_153..=4_194_304 => decode!(4_194_304),
+        4_194_305..=8_388_608 => decode!(8_388_608),
+        8_388_609..=16_777_216 => decode!(16_777_216),
+        16_777_217..=33_554_432 => decode!(33_554_432),
+        33_554_433..=67_108_864 => decode!(67_108_864),
+        67_108_865..=134_217_728 => decode!(134_217_728),
+        134_217_729..=268_435_456 => decode!(268_435_456),
+        268_435_457..=536_870_912 => decode!(536_870_912),
+        _ => decode!(BINCODE_LIMIT_BYTES),
+    }
+}
 
 #[cfg(test)]
 mod tests;
