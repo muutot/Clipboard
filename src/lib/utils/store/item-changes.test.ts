@@ -50,6 +50,41 @@ function shared() {
 }
 
 describe("applyItemsChangedEvent", () => {
+  it.each([false, true])(
+    "retains recycle-bin membership after a content event (summary=%s)",
+    (summary) => {
+      const empty: ClipboardItemsChangedPayload = {
+        items: [],
+        deletedIds: [],
+        restoredIds: [],
+        removedIds: [],
+        usedIds: [],
+      };
+      const deleted = applyItemsChangedEvent(shared(), { ...empty, deletedIds: ["a"] });
+      const opened = setDetailItem(deleted, deleted.byId.get("a")!);
+      const next = applyItemsChangedEvent(opened, {
+        ...empty,
+        items: [
+          persisted("a", {
+            metadataJson: JSON.stringify({ tags: ["updated"] }),
+            contentLoaded: !summary,
+          }),
+        ],
+      });
+      for (const view of ["history", "indexed", "cache"] as const) {
+        expect(getItems(next, view).find((entry) => entry.id === "a")?.deleted).toBe(true);
+      }
+      expect(getDetailItem(next)?.deleted).toBe(true);
+      expect(getDetailItem(next)?.tags).toEqual(["updated"]);
+      const restored = applyItemsChangedEvent(next, {
+        ...empty,
+        items: [persisted("a", { metadataJson: JSON.stringify({ tags: ["restored"] }) })],
+        restoredIds: ["a"],
+      });
+      expect(restored.byId.get("a")?.deleted).toBe(false);
+      expect(restored.byId.get("a")?.tags).toEqual(["restored"]);
+    },
+  );
   it("updates persisted usage in every view while keeping promotion optional", () => {
     const payload = {
       usedIds: ["b"],

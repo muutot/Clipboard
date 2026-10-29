@@ -362,6 +362,11 @@ read-back records (`items`) and the three membership transitions as ids
 (`deletedIds`, `restoredIds`, `removedIds`) — broadcasting a soft delete as "an
 updated row" would show a deleted row as still active in the other window.
 
+Replacing an `items` record preserves its current receiver-owned `deleted` flag.
+For example, `set_clipboard_item_tags` accepts recycled rows and broadcasts a full
+record without membership; its content update must keep the row in the recycle
+bin. Explicit `deletedIds`/`restoredIds` take precedence after content replacement.
+
 `usedIds` identifies reused rows; `usageUpdates` carries `{id, lastUsedAtMs}` read back from SQLite without record bodies. Receivers patch timestamps in every loaded view and, when `general.pinCopiedToTop` is enabled, order history by timestamp/id. Search results are refreshed according to their configured rules instead of directly promoted. Disabling immediate promotion does not suppress timestamp persistence or reload-time ordering. Background index commits emit `search-index-changed` after clearing the result cache, so a displayed query refreshes after indexing catches up.
 
 `utils/store/item-changes.ts::applyItemsChangedEvent` is the only consumer shape both

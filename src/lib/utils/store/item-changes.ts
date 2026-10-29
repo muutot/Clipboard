@@ -43,7 +43,10 @@ export function applyItemsChanged(
     // Only rows this window actually displays are replaced. An id it never
     // loaded is not its business, and writing it in would resurrect a row the
     // user cannot see (or one trimmed out of the loaded window).
-    if (next.byId.has(item.id)) next = replaceItem(next, item);
+    const current = next.byId.get(item.id);
+    // Content payloads do not carry query membership. Only deleted/restored IDs
+    // can change that receiver-owned flag; a tag update must keep a bin row there.
+    if (current) next = replaceItem(next, { ...item, deleted: current.deleted });
   }
   return next;
 }

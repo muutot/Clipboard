@@ -30,6 +30,63 @@ afterEach(async () => {
 });
 
 describe("main window detail requests", () => {
+  it("keeps a recycled row visible after its saved tags arrive", async () => {
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      },
+    );
+    const target = document.createElement("div");
+    document.body.append(target);
+    const app = mount(MainPage, { target });
+    cleanups.push(async () => {
+      await unmount(app);
+      target.remove();
+    });
+    flushSync();
+    const record = {
+      id: "recycled-tags",
+      kind: "text",
+      title: "Recycled content",
+      textContent: "Recycled content",
+      sourceApp: "test",
+      sizeBytes: 16,
+      contentHash: "recycled-hash",
+      createdAtMs: 1,
+      lastUsedAtMs: 1,
+      isFavorite: false,
+    } as PersistedClipboardItem;
+    bridge.listeners.get("clipboard-item-added")?.({ payload: record });
+    bridge.listeners.get("clipboard-items-changed")?.({ payload: { deletedIds: [record.id] } });
+    flushSync();
+    const tab = [...target.querySelectorAll<HTMLButtonElement>('.filters [role="tab"]')].find(
+      (button) => button.textContent?.trim() === t("filter.deleted"),
+    );
+    tab!.click();
+    flushSync();
+    expect(target.querySelector(`[data-id="${record.id}"]`)).not.toBeNull();
+    bridge.listeners.get("clipboard-items-changed")?.({
+      payload: {
+        items: [{ ...record, metadataJson: JSON.stringify({ tags: ["saved-bin-tag"] }) }],
+      },
+    });
+    for (let i = 0; i < 12; i++) {
+      await Promise.resolve();
+      flushSync();
+    }
+    expect(target.querySelector(`[data-id="${record.id}"]`)?.textContent).toContain(
+      "saved-bin-tag",
+    );
+    const active = [...target.querySelectorAll<HTMLButtonElement>('.filters [role="tab"]')].find(
+      (button) => button.textContent?.trim() === t("filter.all"),
+    );
+    active!.click();
+    flushSync();
+    expect(target.querySelector(`[data-id="${record.id}"]`)).toBeNull();
+  });
   it.each(["rename", "favorite"])(
     "preserves a later %s while media materialization is in flight",
     async (change) => {

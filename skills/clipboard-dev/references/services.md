@@ -139,6 +139,11 @@ Paste logic lives in `clipboard.ts` (`pasteClipboardItem`), not the route. When 
 
 Double-click paste (`doubleClickPasteItem`, enabled by the `doubleClickPaste` setting which defaults on) resolves the loaded item and delegates to `pasteClipboardItem(item, "auto")`: text/link items prefer the HTML representation when the item has `htmlContent`, otherwise plain; image/file items first materialize (the same wrapper used by copy, detail, fullscreen and save), then image items re-fetch the verified local image via `convertFileSrc` and file items use the multi-file `textContent` JSON list or primary `resourcePath`. When `doubleClickPaste` is off, the card's double click falls back to `ondetail`.
 
+Content rows in `clipboard-items-changed` omit `deleted`; the shared event folder
+retains each loaded record's current recycle-bin flag while replacing content.
+Only `deletedIds` and `restoredIds` change that membership, and `removedIds` drop
+the record. Editing tags on a recycled record must not move it into active history.
+
 Events currently crossing windows/runtime include:
 
 - `clipboard-item-added`
