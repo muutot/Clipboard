@@ -4,7 +4,8 @@ use std::{
 };
 
 use super::types::{
-    ResourceRootRole, StoragePaths, RESOURCE_ROOT_MARKER, RESOURCE_ROOT_MARKER_HEADER,
+    ResourceRootRole, StoragePaths, RESOURCE_ROOT_LOCK, RESOURCE_ROOT_MARKER,
+    RESOURCE_ROOT_MARKER_HEADER,
 };
 use crate::storage::StorageError;
 
@@ -201,16 +202,17 @@ impl StoragePaths {
     /// Writes this project's ownership marker into one resource root so orphan
     /// cleanup may scan it. This backs the explicit settings action that lets a
     /// user claim a directory the app already uses (for example a custom data
-    /// directory created before marker support). It overwrites a missing or
-    /// foreign marker but never touches the directory's contents, and it does
-    /// not delete anything itself; cleanup still only removes files that are
-    /// not referenced by the database, and only after the next startup.
+    /// directory created before marker support). It may replace a missing or
+    /// foreign marker under the persistent root coordination lock. Resource
+    /// contents are untouched; enabling cleanup still requires a later startup.
     pub fn claim_resource_root(&self, role: ResourceRootRole) -> Result<(), StorageError> {
         let path = match role {
             ResourceRootRole::Image => &self.images,
             ResourceRootRole::File => &self.files,
         };
         fs::create_dir_all(path)?;
+        let lock = resource_root_lock_file(path)?;
+        lock.lock()?;
         fs::write(
             path.join(RESOURCE_ROOT_MARKER),
             resource_root_marker_content(&self.project, role.as_str()),
@@ -218,20 +220,50 @@ impl StoragePaths {
         Ok(())
     }
 
-    /// Removes one resource root's ownership marker so orphan cleanup stops
-    /// scanning it after the next startup. Callers only reach this for a root
-    /// whose marker is currently valid (cleanup enabled), so it cannot delete a
-    /// foreign marker that was never recognized as ours.
+    /// Removes our marker under the root lock. Custom-root cleanup immediately
+    /// defers deletion after revocation, and a stale request never removes a
+    /// new owner's marker. The coordination lock file remains for reuse.
     pub fn remove_resource_root_marker(&self, role: ResourceRootRole) -> Result<(), StorageError> {
         let path = match role {
             ResourceRootRole::Image => &self.images,
             ResourceRootRole::File => &self.files,
         };
+        let lock = resource_root_lock_file(path)?;
+        lock.lock()?;
+        // The ownership action's earlier UI check may precede a transfer.
+        // Never remove another project's marker after waiting for the lock.
+        if !self.resource_root_marker_valid(role) {
+            return Ok(());
+        }
         let marker = path.join(RESOURCE_ROOT_MARKER);
         if marker.is_file() {
             fs::remove_file(&marker)?;
         }
         Ok(())
+    }
+
+    /// Fence each custom-root unlink against an ownership action. Cleanup never
+    /// waits for a busy or unreadable root and validates the marker under lock.
+    pub(crate) fn resource_root_cleanup_lock(&self, role: ResourceRootRole) -> Option<fs::File> {
+        let path = match role {
+            ResourceRootRole::Image => &self.images,
+            ResourceRootRole::File => &self.files,
+        };
+        let result = resource_root_lock_file(path).and_then(|lock| {
+            lock.try_lock().map_err(std::io::Error::from)?;
+            Ok(lock)
+        });
+        match result {
+            Ok(lock) if self.resource_root_marker_valid(role) => Some(lock),
+            Ok(_) => None,
+            Err(error) => {
+                crate::log_warn!(
+                    "[cleanup] resource ownership unavailable; skipping {}: {error}",
+                    path.display()
+                );
+                None
+            }
+        }
     }
 
     /// Whether a resource root currently carries this project's valid ownership
@@ -251,7 +283,8 @@ impl StoragePaths {
     /// Whether the on-disk ownership markers still match the cleanup flags
     /// captured at startup. A settings change that leaves them matching (for
     /// example a marker removed and re-added in the same session) does not
-    /// change what the running cleanup workers will do, so it needs no restart.
+    /// change startup eligibility, so it needs no restart. Cleanup additionally
+    /// validates current ownership before each custom-root unlink.
     pub fn cleanup_flags_match_markers(&self) -> bool {
         let image_owned =
             !self.image_marker_required || self.resource_root_marker_valid(ResourceRootRole::Image);
@@ -324,6 +357,30 @@ fn resource_root_cleanup_enabled(
 ) -> Result<bool, StorageError> {
     let marker = path.join(RESOURCE_ROOT_MARKER);
     let expected = resource_root_marker_content(project, role);
+    if claim
+        && !marker.is_file()
+        && path.is_dir()
+        && fs::read_dir(path)?.any(|entry| {
+            entry
+                .map(|entry| entry.file_name() != RESOURCE_ROOT_LOCK)
+                .unwrap_or(true)
+        })
+    {
+        return Err(StorageError::ResourceDirectoryMustBeEmptyOrOwned {
+            field,
+            path: path.to_path_buf(),
+        });
+    }
+    // Startup only reads. Explicit configuration serializes claims, including
+    // the empty-root check, with transfers/revocation and per-file cleanup.
+    let _ownership = if claim {
+        fs::create_dir_all(path)?;
+        let lock = resource_root_lock_file(path)?;
+        lock.lock()?;
+        Some(lock)
+    } else {
+        None
+    };
     if marker.is_file() {
         let valid = fs::read(&marker)
             .map(|content| content == expected)
@@ -347,7 +404,11 @@ fn resource_root_cleanup_enabled(
     if !path.exists() {
         fs::create_dir_all(path)?;
     }
-    let has_entries = fs::read_dir(path)?.next().is_some();
+    let has_entries = fs::read_dir(path)?.any(|entry| {
+        entry
+            .map(|entry| entry.file_name() != RESOURCE_ROOT_LOCK)
+            .unwrap_or(true)
+    });
     if has_entries {
         return Err(StorageError::ResourceDirectoryMustBeEmptyOrOwned {
             field,
@@ -357,6 +418,21 @@ fn resource_root_cleanup_enabled(
 
     fs::write(marker, expected)?;
     Ok(true)
+}
+
+fn resource_root_lock_file(root: &Path) -> std::io::Result<fs::File> {
+    let path = root.join(RESOURCE_ROOT_LOCK);
+    if fs::symlink_metadata(&path).is_ok_and(|metadata| !metadata.file_type().is_file()) {
+        return Err(std::io::Error::other(
+            "resource ownership lock must be a regular file",
+        ));
+    }
+    fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(path)
 }
 
 pub(super) fn resource_root_marker_content(project: &Path, role: &str) -> Vec<u8> {

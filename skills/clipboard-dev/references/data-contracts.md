@@ -387,6 +387,16 @@ backoff. These siblings are coordination state, not portable-backup resources;
 temporary sync database snapshots remove them along with SQLite sidecars.
 Memory databases use only the existing local generation protocol.
 
+Custom roots also retain `.clipboard-resource-root.lock` to coordinate
+ownership actions and deletion across projects. Each custom-root unlink takes a
+nonblocking exclusive lock and checks the current project/role marker under it.
+Revocation/transfer, unavailable locks or invalid markers defer cleanup; previews
+use their image root's lock. Claims/revokes use the same lock, and stale revokes
+retain foreign markers. Startup eligibility remains required for enabling cleanup.
+The lock is never an orphan or rename source, and the marker's v1 bytes are unchanged.
+Different databases sharing one matching project/role root remain outside the
+per-database publication guarantee and require separate investigation.
+
 `content/resource_metadata.rs` and frontend `ResourceMetadata`/`ResourceFileMetadata` carry schema version, MIME/extension, size, storage/original paths, hashes, image dimensions, and per-file entries.
 
 - Treat metadata JSON as untrusted/optional at the frontend boundary.

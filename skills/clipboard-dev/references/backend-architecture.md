@@ -164,9 +164,9 @@ Resource-root safety is mandatory:
 - startup may use an unmarked custom root but must not auto-claim it;
 - the Windows uninstaller resolves the storage root plus custom image/file roots, and deletes a custom root only when its marker matches the project key and role; an invalid/missing marker is retained even when "delete clipboard data" is checked;
 - explicit settings may claim only a safe empty root or validate a matching marker;
-- the `set_resource_ownership(owned)` command is the explicit recovery action for an already-used unmarked root: it writes or removes only the marker (never deleting or touching file contents), skips roots that do not require a marker (default project data directories), and reports `restartRequired` only when the resulting ownership differs from the cleanup flags captured at startup (an off-and-on round trip in one session needs no restart);
+- the `set_resource_ownership(owned)` command is the explicit recovery action for an already-used unmarked root: it writes or removes the marker under the persistent root coordination lock (never deleting or touching resource contents), skips roots that do not require a marker (default project data directories), and reports `restartRequired` only when the resulting ownership differs from the cleanup flags captured at startup (an off-and-on round trip in one session needs no restart);
 - image and file roots must not overlap each other or reserved project/data/database/index/icon paths;
-- cleanup skips the ownership marker and runs only when the corresponding cleanup flag is true;
+- cleanup skips the ownership marker and `.clipboard-resource-root.lock`; a custom root requires both startup eligibility and current marker validation under the root lock for each unlink;
 - every orphan-cleanup entry point (scheduled `CleanupWorker`, `enforceHistoryCleanup`, `cleanupStorageFiles`), the `renameItem` command, and `permanentlyDeleteStorageKind` (whose in-run orphan cleanup uses zero grace) hold `CaptureState.storage_maintenance_lock` for the run: a rename copies a new body before saving its paths, so cleanup must not reclaim that temporarily unreferenced copy before commit. Commands that pair it with `ingestion_guard` must acquire maintenance first (the storage-root migration order). This lock is deliberately separate from `ingestion_guard` so a long scan never stalls the capture loop.
 
 Changing data directories is a migration workflow, not a path-string edit. Keep managed/external path rewriting, database backup, search-index derivation, and concurrent ingestion/worker coordination in scope. The webview asset protocol's static scope is empty; at startup the app grants the managed storage root plus any configured image/file roots with `asset_protocol_scope().allow_directory`, so previews and thumbnails render even when a custom resource directory lives outside `storage`, and the install directory — where `$EXE`/`$RESOURCE` both resolve on Windows and where `conf/api.token`, `conf/conf.json`, and the database live — is never exposed. Migration must be retryable: `VACUUM INTO` refuses an existing destination, so `migrate_storage_data` first moves the existing database and its `-wal`/`-shm` sidecars into an exclusively created `clipboard.sqlite3.pre-migrate-<uuid>` directory. A partial quarantine failure restores earlier moves; a snapshot, open, or path-rewrite failure preserves the failed database bundle in a separate quarantine before restoring the originals. Rollback refuses conflicting destinations and reports the remaining backup paths on failure. Successful migration retains the old bundle for recovery, and rapid retries cannot overwrite earlier backups. Directory copies and size walks track canonical ancestor paths (`copy_dir_contents`/`dir_size` in `commands/config/storage/migration.rs`) so a junction/reparse cycle cannot recurse until the stack overflows.
@@ -312,6 +312,20 @@ mutex orders same-instance operations; publication fences independent cleaners.
 Real independent-Database UTs interleave duplicate's read/save with rename,
 exercise cleanup during copy and after commit, reject target conflicts, and
 inject copy/save failures without changing the source paths.
+
+Custom-root ownership actions and per-file orphan deletion share an exclusive
+`.clipboard-resource-root.lock` inside that root. Cleanup tries the lock without
+waiting and revalidates the project/role marker while holding it through one
+unlink; revoked, transferred, busy or unreadable ownership defers that root.
+The preview directory uses its image root's lock. Claim/revoke wait for a current
+unlink; a stale revoke does not remove a foreign marker. Enabling a previously
+ineligible root still requires startup, while revocation now prevents subsequent
+custom-root deletion immediately. Configuration checks empty roots again under
+the lock; the coordination file is excluded from that check and orphan/rename
+operations. Marker bytes remain v1, so uninstall validation is unchanged. This
+addresses ownership transfer, not different databases with the same project/role
+marker sharing one root. UTs use independent projects/databases, a held unlink
+guard, stale revoke and busy/invalid coordination; Unix CI remains a separate gate.
 
 `commands/files/replace.rs::replace_icon_file_at` validates the picked image and target name/symlink, then copies into a temporary sibling and uses `content/file_store.rs::store_atomically` to flush and replace it. Selecting the cached target itself or a hard-link alias succeeds without copying onto the source inode; a failed replacement preserves the existing destination and removes staging. The Tauri command and frontend arguments are unchanged. Windows UTs exercise self/alias replacement and a conflicting destination directory; matching Unix CI remains necessary.
 

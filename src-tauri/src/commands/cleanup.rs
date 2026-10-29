@@ -10,7 +10,8 @@ use crate::commands::lock::lock_state;
 use crate::config::ConfigStore;
 use crate::state::CaptureState;
 use crate::storage::{
-    ClipboardRepository, Database, StorageFileReferences, StoragePaths, RESOURCE_ROOT_MARKER,
+    ClipboardRepository, Database, ResourceRootRole, StorageFileReferences, StoragePaths,
+    RESOURCE_ROOT_LOCK, RESOURCE_ROOT_MARKER,
 };
 
 #[derive(Debug, Serialize)]
@@ -121,6 +122,125 @@ pub fn enforce_history_cleanup_with_policy(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cleanup_defers_busy_or_invalid_custom_root_ownership_lock() {
+        for invalid_lock in [false, true] {
+            let root = std::env::temp_dir()
+                .join(format!("clipboard-ownership-busy-{}", uuid::Uuid::new_v4()));
+            let paths = StoragePaths::initialize_with_resource_directories_for_configuration(
+                root.join("project"),
+                None,
+                None,
+                Some(root.join("resources")),
+            )
+            .unwrap();
+            let database = Database::open(&paths.database).unwrap();
+            let orphan = paths.files.join("orphan.txt");
+            std::fs::write(&orphan, b"fixture").unwrap();
+            let lock_path = paths.files.join(RESOURCE_ROOT_LOCK);
+            let held = if invalid_lock {
+                std::fs::remove_file(&lock_path).unwrap();
+                std::fs::create_dir(&lock_path).unwrap();
+                None
+            } else {
+                Some(
+                    paths
+                        .resource_root_cleanup_lock(ResourceRootRole::File)
+                        .unwrap(),
+                )
+            };
+            let result = cleanup_orphan_storage_files(&database, &paths).unwrap();
+            assert_eq!(result.removed_files, 0);
+            assert!(orphan.is_file());
+            drop(held);
+            if invalid_lock {
+                std::fs::remove_dir(&lock_path).unwrap();
+            }
+            let result = cleanup_orphan_storage_files(&database, &paths).unwrap();
+            assert_eq!(result.removed_files, 1);
+            assert!(
+                lock_path.is_file(),
+                "cleanup must retain its coordination lock"
+            );
+            assert!(paths.resource_root_marker_valid(ResourceRootRole::File));
+            drop(database);
+            std::fs::remove_dir_all(root).unwrap();
+        }
+    }
+
+    #[test]
+    fn cleanup_rechecks_custom_root_ownership_after_snapshot() {
+        use crate::domain::{ClipboardItem, ClipboardKind};
+        use crate::storage::ResourceRootRole;
+
+        let root = std::env::temp_dir().join(format!(
+            "clipboard-ownership-transfer-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let shared = root.join("resources");
+        let paths = StoragePaths::initialize_with_resource_directories_for_configuration(
+            root.join("first"),
+            None,
+            None,
+            Some(shared.clone()),
+        )
+        .unwrap();
+        let other = StoragePaths::initialize_with_resource_directories(
+            root.join("second"),
+            None,
+            None,
+            Some(shared.clone()),
+        )
+        .unwrap();
+        let database = Database::open(&paths.database).unwrap();
+        let other_database = Database::open(&other.database).unwrap();
+        let body = shared.join("other-owner.txt");
+        std::fs::write(&body, b"other owner's bytes").unwrap();
+        std::fs::File::options()
+            .write(true)
+            .open(&body)
+            .unwrap()
+            .set_modified(std::time::UNIX_EPOCH + Duration::from_secs(3600))
+            .unwrap();
+        let result = cleanup_orphans_after_snapshot(&database, &paths, ORPHAN_FILE_GRACE, || {
+            // The explicit ownership action can transfer an already-used root.
+            // Its new owner's references belong to an independent database.
+            other.claim_resource_root(ResourceRootRole::File).unwrap();
+            other_database
+                .save_item(&ClipboardItem {
+                    id: "other-owner".into(),
+                    kind: ClipboardKind::File,
+                    title: "fixture".into(),
+                    text_content: None,
+                    html_content: None,
+                    rtf_content: None,
+                    resource_path: Some(body.display().to_string()),
+                    preview_path: None,
+                    content_hash: "fixture".into(),
+                    source_app: None,
+                    size_bytes: 19,
+                    created_at_ms: 1,
+                    last_used_at_ms: None,
+                    is_favorite: false,
+                    icon_path: None,
+                    metadata_json: None,
+                })
+                .unwrap();
+            assert!(!paths.resource_root_marker_valid(ResourceRootRole::File));
+            assert!(other.resource_root_marker_valid(ResourceRootRole::File));
+        })
+        .unwrap();
+        let retained = body.exists();
+        drop(other_database);
+        drop(database);
+        std::fs::remove_dir_all(root).unwrap();
+        assert!(
+            retained,
+            "a stale owner's cleanup must retain the new owner's body"
+        );
+        assert_eq!(result.removed_files, 0);
+    }
 
     fn policy_paths() -> StoragePaths {
         let project = std::env::temp_dir().join(format!(
@@ -447,15 +567,24 @@ fn cleanup_orphans_after_snapshot(
     let mut removed_files = 0u64;
     let mut freed_bytes = 0u64;
 
-    let scan_dirs: &[(&Path, bool)] = &[
-        (&paths.images, paths.image_cleanup_enabled),
-        (&paths.previews, paths.image_cleanup_enabled),
-        (&paths.files, paths.file_cleanup_enabled),
-        (&icons, true),
+    let image_ownership = paths
+        .image_marker_required
+        .then_some(ResourceRootRole::Image);
+    let file_ownership = paths.file_marker_required.then_some(ResourceRootRole::File);
+    let scan_dirs: &[(&Path, bool, Option<ResourceRootRole>)] = &[
+        (&paths.images, paths.image_cleanup_enabled, image_ownership),
+        (
+            &paths.previews,
+            paths.image_cleanup_enabled,
+            image_ownership,
+        ),
+        (&paths.files, paths.file_cleanup_enabled, file_ownership),
+        (&icons, true, None),
     ];
 
-    'roots: for (dir, cleanup_enabled) in scan_dirs {
-        if !cleanup_enabled {
+    'roots: for (dir, cleanup_enabled, ownership) in scan_dirs {
+        if !cleanup_enabled || ownership.is_some_and(|role| !paths.resource_root_marker_valid(role))
+        {
             crate::log_warn!(
                 "[cleanup] skipping unowned resource directory {}",
                 dir.display()
@@ -484,7 +613,7 @@ fn cleanup_orphans_after_snapshot(
             }
             if entry_path
                 .file_name()
-                .is_some_and(|name| name == RESOURCE_ROOT_MARKER)
+                .is_some_and(|name| name == RESOURCE_ROOT_MARKER || name == RESOURCE_ROOT_LOCK)
             {
                 continue;
             }
@@ -503,6 +632,15 @@ fn cleanup_orphans_after_snapshot(
                 }
             }
             let size_bytes = metadata.len();
+            // The marker may change during the scan. Hold the same root lock
+            // used by claim/revoke from validation through this one unlink.
+            let _ownership = match ownership {
+                Some(role) => match paths.resource_root_cleanup_lock(*role) {
+                    Some(lock) => Some(lock),
+                    None => continue 'roots,
+                },
+                None => None,
+            };
             let Some(removal) =
                 publication_snapshot.remove_if_current(|| std::fs::remove_file(&entry_path))
             else {

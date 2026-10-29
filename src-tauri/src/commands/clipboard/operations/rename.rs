@@ -342,10 +342,10 @@ mod tests {
 /// Canonical containment rejects traversal and directory links escaping a root;
 /// symlink metadata rejects a linked leaf and directories themselves.
 pub(super) fn is_owned_rename_source(paths: &StoragePaths, source: &std::path::Path) -> bool {
-    use crate::storage::{ResourceRootRole, RESOURCE_ROOT_MARKER};
+    use crate::storage::{ResourceRootRole, RESOURCE_ROOT_LOCK, RESOURCE_ROOT_MARKER};
     if source
         .file_name()
-        .is_some_and(|name| name == RESOURCE_ROOT_MARKER)
+        .is_some_and(|name| name == RESOURCE_ROOT_MARKER || name == RESOURCE_ROOT_LOCK)
         || !std::fs::symlink_metadata(source).is_ok_and(|meta| meta.file_type().is_file())
     {
         return false;

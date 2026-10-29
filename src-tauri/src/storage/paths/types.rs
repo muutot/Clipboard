@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 pub const RESOURCE_ROOT_MARKER: &str = ".clipboard-resource-root";
+pub const RESOURCE_ROOT_LOCK: &str = ".clipboard-resource-root.lock";
 pub(super) const RESOURCE_ROOT_MARKER_HEADER: &str = "clipboard-resource-root-v1";
 
 /// Which resource root an ownership marker belongs to.

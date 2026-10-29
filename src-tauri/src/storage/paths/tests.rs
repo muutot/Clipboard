@@ -9,6 +9,58 @@ use super::{ResourceRootRole, StoragePaths, RESOURCE_ROOT_MARKER};
 use crate::storage::StorageError;
 
 #[test]
+fn ownership_transfer_waits_for_unlink_guard_and_stale_revoke_keeps_foreign_marker() {
+    let root = temporary_test_directory("transfer-lock");
+    let shared = root.join("resources");
+    let first = StoragePaths::initialize_with_resource_directories_for_configuration(
+        root.join("first"),
+        None,
+        None,
+        Some(shared.clone()),
+    )
+    .unwrap();
+    let second = StoragePaths::initialize_with_resource_directories(
+        root.join("second"),
+        None,
+        None,
+        Some(shared.clone()),
+    )
+    .unwrap();
+    let ownership = first
+        .resource_root_cleanup_lock(ResourceRootRole::File)
+        .unwrap();
+    let (started_tx, started_rx) = std::sync::mpsc::channel();
+    let (finished_tx, finished_rx) = std::sync::mpsc::channel();
+    let transfer = std::thread::spawn(move || {
+        started_tx.send(()).unwrap();
+        second.claim_resource_root(ResourceRootRole::File).unwrap();
+        finished_tx.send(()).unwrap();
+        second
+    });
+    started_rx
+        .recv_timeout(std::time::Duration::from_secs(2))
+        .unwrap();
+    assert!(matches!(
+        finished_rx.recv_timeout(std::time::Duration::from_millis(25)),
+        Err(std::sync::mpsc::RecvTimeoutError::Timeout),
+    ));
+    assert!(first.resource_root_marker_valid(ResourceRootRole::File));
+    drop(ownership);
+    finished_rx
+        .recv_timeout(std::time::Duration::from_secs(2))
+        .unwrap();
+    let second = transfer.join().unwrap();
+    assert!(first
+        .resource_root_cleanup_lock(ResourceRootRole::File)
+        .is_none());
+    first
+        .remove_resource_root_marker(ResourceRootRole::File)
+        .unwrap();
+    assert!(second.resource_root_marker_valid(ResourceRootRole::File));
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn creates_the_project_storage_layout() {
     let unique = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
@@ -315,7 +367,7 @@ fn claiming_an_unowned_resource_root_enables_cleanup_on_the_next_startup() {
     assert!(!paths.resource_root_marker_valid(ResourceRootRole::Image));
     assert!(!image_directory.join(RESOURCE_ROOT_MARKER).exists());
 
-    // The explicit claim writes only the marker, never touching file contents.
+    // The explicit claim writes coordination metadata, never resource contents.
     paths.claim_resource_root(ResourceRootRole::Image).unwrap();
     assert!(paths.resource_root_marker_valid(ResourceRootRole::Image));
     assert_eq!(
