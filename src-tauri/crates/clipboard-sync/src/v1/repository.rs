@@ -139,17 +139,17 @@ pub trait SyncRepository {
         last_segment_key: &str,
         through_sequence: u64,
     ) -> Result<SyncRemoteState, String>;
-    /// Distinct item ids referenced by outbox rows within
-    /// `(after_sequence, through_sequence]`, ordered ascending. Lets the
-    /// engine verify that a published segment was encoded from the still
-    /// pending outbox rows (a publish that crashed before its local commit)
-    /// instead of coincidentally matching newer local rows (a database
-    /// restored from an older backup).
-    fn sync_outbox_range_item_ids(
+    /// Verify the exact pending mutations for `(after_sequence, through_sequence]`
+    /// in one read snapshot. Compare versions, payloads, tombstones and canonical
+    /// resource identities; item IDs alone cannot distinguish edits after restore.
+    /// A later edit may conservatively decline adoption and be republished.
+    fn sync_outbox_range_matches_mutations(
         &self,
+        remote_scope: &str,
         after_sequence: u64,
         through_sequence: u64,
-    ) -> Result<Vec<String>, String>;
+        mutations: &MutationBatch,
+    ) -> Result<bool, String>;
     fn get_sync_cursor(
         &self,
         remote_scope: &str,

@@ -3,6 +3,218 @@
 use super::*;
 
 #[test]
+fn restored_same_item_edit_is_not_acknowledged_by_an_old_orphan() {
+    assert_restored_edit_survives_interrupted_publication(false, None);
+}
+
+#[test]
+fn restored_same_item_edit_is_not_acknowledged_by_an_old_published_head() {
+    assert_restored_edit_survives_interrupted_publication(true, None);
+}
+
+#[test]
+fn encrypted_restored_same_item_edits_survive_both_interruption_windows() {
+    let key = SessionKey::derive("fixture password", REMOTE_SCOPE).unwrap();
+    for publish_head in [false, true] {
+        assert_restored_edit_survives_interrupted_publication(publish_head, Some(&key));
+    }
+}
+
+fn assert_restored_edit_survives_interrupted_publication(
+    publish_head: bool,
+    session_key: Option<&SessionKey>,
+) {
+    use crate::storage::TextItemUpdate;
+    let store = MemoryStore::default();
+    let paths = temp_paths("same-item-restored-source");
+    let peer_paths = temp_paths("same-item-restored-peer");
+    let source = Database::open(&paths.database).unwrap();
+    source.save_item(&text_item("editable", "initial")).unwrap();
+    sync_database(
+        &store,
+        &source,
+        &paths,
+        REMOTE_SCOPE,
+        session_key,
+        options(),
+    )
+    .unwrap();
+    let backup = paths.project.join("backup.sqlite3");
+    source.vacuum_into(&backup).unwrap();
+    let edit = |database: &Database, text: &str, hash: &str| {
+        assert!(database
+            .update_text_item(&TextItemUpdate {
+                id: "editable",
+                kind: ClipboardKind::Text,
+                title: text,
+                text_content: text,
+                content_hash: hash,
+                size_bytes: text.len() as u64,
+                metadata_json: None,
+            })
+            .unwrap());
+    };
+    edit(&source, "interrupted remote edit", "remote-edit-hash");
+    let device = source.get_sync_device_id().unwrap();
+    let state = source
+        .get_or_create_sync_remote_state(REMOTE_SCOPE)
+        .unwrap();
+    let batch = source
+        .get_sync_outbox_batch_for_scope(REMOTE_SCOPE, 100)
+        .unwrap()
+        .unwrap();
+    let segment = Segment {
+        device_id: device.clone(),
+        epoch: state.epoch.clone(),
+        first_sequence: batch.first_sequence,
+        last_sequence: batch.last_sequence,
+        mutations: batch.mutations,
+    };
+    let encoded = encode_segment(&segment, session_key).unwrap();
+    let segment_key = segment_object_key(
+        &device,
+        &state.epoch,
+        segment.first_sequence,
+        segment.last_sequence,
+        &encoded.sha256,
+    )
+    .unwrap();
+    store
+        .put(&segment_key, encoded.bytes, PutCondition::IfAbsent)
+        .unwrap();
+    if publish_head {
+        let mut remote = state.clone();
+        remote.published_sequence = segment.last_sequence;
+        remote.last_segment_key = Some(segment_key.clone());
+        let encoded =
+            encode_device_head(&remote.device_head(&device).unwrap(), session_key).unwrap();
+        store
+            .put(
+                &head_object_key(&device).unwrap(),
+                encoded.bytes,
+                PutCondition::Unconditional,
+            )
+            .unwrap();
+    }
+    drop(source);
+    let restored = Database::open(&backup).unwrap();
+    edit(
+        &restored,
+        "new local edit after restore",
+        "restored-edit-hash",
+    );
+    let restored_batch = restored
+        .get_sync_outbox_batch_for_scope(REMOTE_SCOPE, 100)
+        .unwrap()
+        .unwrap();
+    assert_eq!(restored_batch.first_sequence, segment.first_sequence);
+    assert_eq!(restored_batch.last_sequence, segment.last_sequence);
+    assert_eq!(
+        restored_batch.mutations.upserts[0].item.id,
+        segment.mutations.upserts[0].item.id
+    );
+    assert_ne!(restored_batch.mutations, segment.mutations);
+    sync_database(
+        &store,
+        &restored,
+        &paths,
+        REMOTE_SCOPE,
+        session_key,
+        options(),
+    )
+    .unwrap();
+    let peer = Database::open(&peer_paths.database).unwrap();
+    sync_database(
+        &store,
+        &peer,
+        &peer_paths,
+        REMOTE_SCOPE,
+        session_key,
+        options(),
+    )
+    .unwrap();
+    let local_text = restored.get_item("editable").unwrap().unwrap().text_content;
+    let peer_text = peer.get_item("editable").unwrap().unwrap().text_content;
+    let pending = restored.count_sync_outbox().unwrap();
+    drop(restored);
+    drop(peer);
+    fs::remove_dir_all(paths.project).unwrap();
+    fs::remove_dir_all(peer_paths.project).unwrap();
+    assert_eq!(local_text.as_deref(), Some("new local edit after restore"));
+    assert_eq!(
+        peer_text, local_text,
+        "acknowledging an old segment must not drop an unrelated edit of the same item ID"
+    );
+    assert_eq!(pending, 0);
+}
+
+#[test]
+fn interrupted_media_segment_remains_adoptable_with_canonical_resource_comparison() {
+    use clipboard_sync::cancellation::CancellationToken;
+    let encrypted_key = SessionKey::derive("fixture password", REMOTE_SCOPE).unwrap();
+    for key in [None, Some(&encrypted_key)] {
+        let store = MemoryStore::default();
+        let paths = temp_paths("media-orphan-source");
+        let peer_paths = temp_paths("media-orphan-peer");
+        let source = Database::open(&paths.database).unwrap();
+        source.save_item(&text_item("initial", "initial")).unwrap();
+        sync_database(&store, &source, &paths, REMOTE_SCOPE, key, options()).unwrap();
+        let previous = source
+            .get_or_create_sync_remote_state(REMOTE_SCOPE)
+            .unwrap();
+        let image = paths.images.join("fixture.png");
+        fs::write(&image, b"fixture image").unwrap();
+        source.save_item(&image_item("media", &image)).unwrap();
+        let token = CancellationToken::default();
+        *store.cancel_after_key_fragment.lock().unwrap() =
+            Some(("/segments/".into(), token.clone()));
+        assert_eq!(
+            engine::sync_database_cancellable(
+                &store,
+                &source,
+                &engine_paths(&paths),
+                REMOTE_SCOPE,
+                key,
+                options(),
+                &token,
+            )
+            .unwrap_err(),
+            "sync cancelled"
+        );
+        *store.cancel_after_key_fragment.lock().unwrap() = None;
+        let orphan = store
+            .objects
+            .lock()
+            .unwrap()
+            .keys()
+            .find(|key| key.contains("/segments/"))
+            .unwrap()
+            .clone();
+        sync_database(&store, &source, &paths, REMOTE_SCOPE, key, options()).unwrap();
+        let recovered = source
+            .get_or_create_sync_remote_state(REMOTE_SCOPE)
+            .unwrap();
+        assert_eq!(recovered.epoch, previous.epoch);
+        assert_eq!(recovered.last_segment_key.as_deref(), Some(orphan.as_str()));
+        assert!(store.objects.lock().unwrap().contains_key(&orphan));
+        assert_eq!(source.count_sync_outbox().unwrap(), 0);
+        let peer = Database::open(&peer_paths.database).unwrap();
+        sync_database(&store, &peer, &peer_paths, REMOTE_SCOPE, key, options()).unwrap();
+        assert!(peer.get_item("media").unwrap().is_some());
+        assert_eq!(
+            peer.get_sync_resource_refs(REMOTE_SCOPE, "media").unwrap(),
+            source
+                .get_sync_resource_refs(REMOTE_SCOPE, "media")
+                .unwrap()
+        );
+        drop(source);
+        drop(peer);
+        fs::remove_dir_all(paths.project).unwrap();
+        fs::remove_dir_all(peer_paths.project).unwrap();
+    }
+}
+
+#[test]
 fn interrupted_segment_upload_orphan_is_adopted_without_breaking_peers() {
     let store = MemoryStore::default();
     let source_paths = temp_paths("orphan-source");

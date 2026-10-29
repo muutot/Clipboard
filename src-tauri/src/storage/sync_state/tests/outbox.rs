@@ -3,6 +3,120 @@
 use super::*;
 
 #[test]
+fn recovery_range_matches_payload_versions_and_tombstones() {
+    let database = Database::open_in_memory().unwrap();
+    database.initialize_sync().unwrap();
+    database
+        .save_item(&item("editable", "hash", "fixture"))
+        .unwrap();
+    let batch = database
+        .get_sync_outbox_batch_for_scope(REMOTE_SCOPE, 100)
+        .unwrap()
+        .unwrap();
+    let matches = |expected: &MutationBatch| {
+        database
+            .sync_outbox_range_matches_mutations(REMOTE_SCOPE, 0, batch.last_sequence, expected)
+            .unwrap()
+    };
+    assert!(matches(&batch.mutations));
+    let mut changed = batch.mutations.clone();
+    changed.upserts[0].item.title = "different title at the same version".into();
+    assert!(!matches(&changed));
+    let mut changed = batch.mutations.clone();
+    changed.upserts[0].version.modified_at_ms += 1;
+    assert!(!matches(&changed));
+    assert!(database.soft_delete("editable").unwrap());
+    assert!(!matches(&batch.mutations));
+    let deleted = database
+        .get_sync_outbox_batch_for_scope(REMOTE_SCOPE, 100)
+        .unwrap()
+        .unwrap();
+    assert_eq!(deleted.mutations.tombstones.len(), 1);
+    assert!(database
+        .sync_outbox_range_matches_mutations(
+            REMOTE_SCOPE,
+            0,
+            deleted.last_sequence,
+            &deleted.mutations,
+        )
+        .unwrap());
+    let mut changed = deleted.mutations.clone();
+    changed.tombstones[0].deleted_at_ms += 1;
+    assert!(!database
+        .sync_outbox_range_matches_mutations(REMOTE_SCOPE, 0, deleted.last_sequence, &changed,)
+        .unwrap());
+    assert!(!database
+        .sync_outbox_range_matches_mutations(
+            REMOTE_SCOPE,
+            deleted.last_sequence,
+            deleted.last_sequence,
+            &deleted.mutations,
+        )
+        .unwrap());
+}
+
+#[test]
+fn recovery_range_keeps_canonical_resource_identity_and_ignores_local_previews() {
+    use crate::sync::v1::{ResourceCategory, SyncResourceRef};
+    let database = Database::open_in_memory().unwrap();
+    database.initialize_sync().unwrap();
+    let mut original = item("image", "image-hash", "fixture");
+    original.kind = ClipboardKind::Image;
+    original.text_content = None;
+    original.resource_path = Some("local-image.png".into());
+    original.preview_path = Some("local-preview.png".into());
+    original.metadata_json =
+        Some(r#"{"storagePath":"local-image.png","previewPath":"local-preview.png"}"#.into());
+    database.save_item(&original).unwrap();
+    let mut batch = database
+        .get_sync_outbox_batch_for_scope(REMOTE_SCOPE, 100)
+        .unwrap()
+        .unwrap();
+    let key = crate::sync::v1::resource_object_key(ResourceCategory::Image, &"a".repeat(64), "png")
+        .unwrap();
+    batch.mutations.upserts[0].item.resource_path = Some(key.clone());
+    batch.mutations.upserts[0].item.metadata_json =
+        Some(serde_json::json!({"resourcePath":key,"storagePath":key}).to_string());
+    let refs = BTreeMap::from([(
+        "image".into(),
+        vec![SyncResourceRef {
+            slot: "image".into(),
+            ordinal: 0,
+            object_key: key.clone(),
+        }],
+    )]);
+    database
+        .record_sync_resource_refs(REMOTE_SCOPE, &batch.mutations, &refs)
+        .unwrap();
+    assert!(
+        database
+            .sync_outbox_range_matches_mutations(
+                REMOTE_SCOPE,
+                0,
+                batch.last_sequence,
+                &batch.mutations,
+            )
+            .unwrap()
+    );
+    let other =
+        crate::sync::v1::resource_object_key(ResourceCategory::Image, &"b".repeat(64), "png")
+            .unwrap();
+    batch.mutations.upserts[0].item.resource_path = Some(other.clone());
+    batch.mutations.upserts[0].item.metadata_json =
+        Some(serde_json::json!({"resourcePath":other,"storagePath":other}).to_string());
+    assert!(
+        !database
+            .sync_outbox_range_matches_mutations(
+                REMOTE_SCOPE,
+                0,
+                batch.last_sequence,
+                &batch.mutations,
+            )
+            .unwrap()
+    );
+}
+
+#[test]
 fn outbox_batch_coalesces_repeated_changes_to_current_state() {
     let database = Database::open_in_memory().unwrap();
     database.initialize_sync().unwrap();

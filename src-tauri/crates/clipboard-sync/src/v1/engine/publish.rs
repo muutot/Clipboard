@@ -140,8 +140,8 @@ fn local_publication_matches_remote(state: &SyncRemoteState, head: &DeviceHead) 
 ///
 /// This is the crash-window signature: the gap segment was uploaded from this
 /// device's outbox and only the local publication commit is missing. A
-/// restored database instead fills the sequence range with unrelated newer
-/// rows, whose item ids cannot collide with the published mutations. Any
+/// restored database can fill the same sequence range with different edits of
+/// the same item IDs. Compare complete versions, payloads and resource identities. Any
 /// verification failure must return `false` so the caller falls back to the
 /// pull-and-reset recovery.
 #[allow(clippy::too_many_arguments)]
@@ -188,34 +188,15 @@ fn published_segment_matches_outbox(
     {
         return false;
     }
-    let segment_item_ids = segment_item_ids(&segment);
-    match database.sync_outbox_range_item_ids(state.published_sequence, head.published_sequence) {
-        Ok(outbox_item_ids) => outbox_item_ids == segment_item_ids,
+    match database.sync_outbox_range_matches_mutations(
+        &state.remote_scope,
+        state.published_sequence,
+        head.published_sequence,
+        &segment.mutations,
+    ) {
+        Ok(matches) => matches,
         Err(_) => false,
     }
-}
-
-/// The item identities a segment carries, sorted and de-duplicated.
-///
-/// The outbox batch encodes at most one mutation per item id, so this is the
-/// shape the pending outbox range is compared against.
-fn segment_item_ids(segment: &Segment) -> Vec<String> {
-    let mut ids = segment
-        .mutations
-        .upserts
-        .iter()
-        .map(|upsert| upsert.item.id.clone())
-        .chain(
-            segment
-                .mutations
-                .tombstones
-                .iter()
-                .map(|tombstone| tombstone.item_id.clone()),
-        )
-        .collect::<Vec<_>>();
-    ids.sort();
-    ids.dedup();
-    ids
 }
 
 fn listed_head_identity(info: &ObjectInfo) -> Option<(&str, u64)> {
@@ -456,10 +437,13 @@ pub(super) fn adopt_orphan_segments(
         // the restored database), and adopting the orphan would then delete
         // rows that were never encoded — the local change would be dropped
         // instead of published. `published_segment_matches_outbox` applies
-        // the same identity check to the other half of the crash window.
-        let outbox_item_ids =
-            database.sync_outbox_range_item_ids(state.published_sequence, segment.last_sequence)?;
-        if outbox_item_ids != segment_item_ids(&segment) {
+        // the same full-mutation check to the other half of the crash window.
+        if !database.sync_outbox_range_matches_mutations(
+            remote_scope,
+            state.published_sequence,
+            segment.last_sequence,
+            &segment.mutations,
+        )? {
             // Not our pending work: drop the stale object and let the caller
             // publish the live outbox instead.
             store.delete(&key)?;

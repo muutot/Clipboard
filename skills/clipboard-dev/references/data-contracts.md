@@ -120,6 +120,16 @@ Core invariants:
 
 Schema changes require a deliberate new schema marker, one registered adjacent migration, row mapping, migration and repository tests, recovery/backup consideration, derived-data behavior, and an update to this reference. Pre-v1 historical readers remain intentionally out of scope; that one-time reset boundary must not be reused for changes after v1.
 
+Sync interruption acknowledgement must use
+`SyncRepository::sync_outbox_range_matches_mutations(remote_scope, after, through, mutations)`.
+One read snapshot compares the range's affected IDs plus current complete mutations,
+versions, tombstones and canonical resource references. Deferred normalization removes
+local-only previews/cache paths without I/O; resource refs are compared separately.
+Equal IDs/count/range are insufficient after backup restore. A mismatch preserves work
+through live orphan republish or published-head pull/reset/bootstrap recovery. Later
+same-item edits may conservatively prevent adoption. No SQLite schema, v1 bincode field
+order or desktop IPC change accompanies this repository-boundary update.
+
 ## Configuration contracts
 
 `privacy.localOnly` gates every desktop S3 entry (manual/automatic sync, connection

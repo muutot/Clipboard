@@ -319,15 +319,19 @@ impl SyncRepository for MeasuredRepository<'_> {
         )
     }
 
-    fn sync_outbox_range_item_ids(
+    fn sync_outbox_range_matches_mutations(
         &self,
+        remote_scope: &str,
         after_sequence: u64,
         through_sequence: u64,
-    ) -> Result<Vec<String>, String> {
-        <Database as SyncRepository>::sync_outbox_range_item_ids(
+        mutations: &MutationBatch,
+    ) -> Result<bool, String> {
+        <Database as SyncRepository>::sync_outbox_range_matches_mutations(
             self.database,
+            remote_scope,
             after_sequence,
             through_sequence,
+            mutations,
         )
     }
 

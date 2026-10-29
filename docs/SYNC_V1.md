@@ -234,9 +234,17 @@ For each push:
 5. overwrite only the local device head with the new published sequence and segment key;
 6. advance the local published cursor and purge acknowledged outbox rows in one transaction.
 
-If a crash occurs before step 5, the orphan immutable segment is unreachable and harmless. If it
-occurs after step 5 but before step 6, deterministic immutable encoding republishes the same
-logical range under the same content-addressed name; receivers remain idempotent.
+Interrupted segments can be adopted before step 5, and an already published head can be
+adopted between steps 5 and 6, only when the pending range still represents the complete
+uploaded mutations. `SyncRepository::sync_outbox_range_matches_mutations` reads one SQLite
+snapshot and compares item IDs, versions, payloads, tombstones and canonical resource references.
+An old backup can reuse the same sequence numbers and item IDs for different edits; IDs alone
+must never authorize acknowledgement. Local previews and materialized paths are normalized
+without network I/O, while remote resource identities remain part of the comparison.
+An unmatched orphan is discarded and live work is published; an unmatched published head takes
+the pull/reset/bootstrap recovery path. Later edits can conservatively prevent adoption and cost
+a republish or bootstrap, preserving pending work. The v1 wire format and database schema are
+unchanged; receivers remain idempotent.
 
 ## Incremental pull
 

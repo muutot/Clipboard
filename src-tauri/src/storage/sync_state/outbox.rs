@@ -74,21 +74,19 @@ impl Database {
         })
     }
 
-    /// Distinct item ids referenced by outbox rows within
-    /// `(after_sequence, through_sequence]`, ordered ascending.
-    ///
-    /// A publish that crashed between `publish_head` and its local commit
-    /// leaves exactly the gap rows behind, so this set equals the published
-    /// segment's mutation ids. A database restored from an older backup can
-    /// still fill the sequence range with unrelated newer rows, so the caller
-    /// must compare identities, not just counts.
-    pub fn sync_outbox_range_item_ids(
+    /// Verify pending IDs and their current canonical mutations in one WAL
+    /// snapshot. A restored backup can reuse both sequence numbers and item IDs
+    /// for different edits, so neither IDs nor range/count prove publication.
+    pub fn sync_outbox_range_matches_mutations(
         &self,
+        remote_scope: &str,
         after_sequence: u64,
         through_sequence: u64,
-    ) -> Result<Vec<String>, StorageError> {
-        if through_sequence <= after_sequence {
-            return Ok(Vec::new());
+        expected: &MutationBatch,
+    ) -> Result<bool, StorageError> {
+        validate_remote_scope(remote_scope)?;
+        if through_sequence <= after_sequence || expected.is_empty() {
+            return Ok(false);
         }
         if through_sequence > i64::MAX as u64 || after_sequence > i64::MAX as u64 {
             return Err(StorageError::ValueOutOfRange {
@@ -96,18 +94,48 @@ impl Database {
             });
         }
         self.with_connection(|connection| {
-            let mut statement = connection.prepare(
-                "SELECT DISTINCT item_id
+            let transaction = connection.transaction()?;
+            let rows = {
+                let mut statement = transaction.prepare(
+                    "SELECT DISTINCT item_id
                    FROM sync_outbox
                   WHERE sequence > ?1 AND sequence <= ?2
-                  ORDER BY item_id ASC",
-            )?;
-            let rows = statement
-                .query_map([after_sequence as i64, through_sequence as i64], |row| {
-                    row.get::<_, String>(0)
-                })?
-                .collect::<Result<Vec<_>, _>>()?;
-            Ok(rows)
+                  ORDER BY item_id ASC LIMIT ?3",
+                )?;
+                let limit = i64::try_from(expected.len())
+                    .ok()
+                    .and_then(|len| len.checked_add(1))
+                    .ok_or(StorageError::ValueOutOfRange {
+                        field: "sync mutation count",
+                    })?;
+                let rows = statement.query_map(
+                    [after_sequence as i64, through_sequence as i64, limit],
+                    |row| row.get::<_, String>(0),
+                )?;
+                rows.collect::<Result<Vec<_>, _>>()?
+            };
+            if rows.len() != expected.len() {
+                return Ok(false);
+            }
+            let mut pending = load_mutations(&transaction, Some(remote_scope), Some(&rows))?;
+            let mut expected = expected.clone();
+            // Restore/export retains portable keys for already prepared local
+            // resources. Deferred normalization removes local-only previews and
+            // paths without I/O; compare resource refs separately so clearing
+            // paths cannot make different objects appear equal.
+            let Ok(pending_refs) = crate::sync::v1::defer_mutation_resources(&mut pending) else {
+                return Ok(false);
+            };
+            let Ok(expected_refs) = crate::sync::v1::defer_mutation_resources(&mut expected) else {
+                return Ok(false);
+            };
+            pending.upserts.sort_by(|a, b| a.item.id.cmp(&b.item.id));
+            expected.upserts.sort_by(|a, b| a.item.id.cmp(&b.item.id));
+            pending.tombstones.sort_by(|a, b| a.item_id.cmp(&b.item_id));
+            expected
+                .tombstones
+                .sort_by(|a, b| a.item_id.cmp(&b.item_id));
+            Ok(pending == expected && pending_refs == expected_refs)
         })
     }
 
