@@ -248,6 +248,12 @@ the old prefix and password configured; a tombstone that already exists refuses 
 The engine stays unaware of rotation — the command owns the two stores and the deletion
 boundary.
 
+Once the rotation tombstone PUT succeeds, the bounded local config commit/retries
+finish despite late cancellation. That durable marker makes the old prefix refuse
+all future sync runs, so returning cancellation before saving the new prefix would
+strand the device. Cancellation resumes before old-object deletion; persistent
+local save failure still reports the new prefix and manual recovery guidance.
+
 Sync interruption recovery uses
 `SyncRepository::sync_outbox_range_matches_mutations(remote_scope, after, through, mutations)`.
 The SQLite adapter reads pending IDs and their current mutations in one WAL snapshot,

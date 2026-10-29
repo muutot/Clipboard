@@ -354,6 +354,12 @@ variant. `ocr.installedVariants` lists the variants that pass the same install c
 
 ## Sync target publication reset
 
+After a successful rotation tombstone write, late cancellation must not bypass
+the bounded local config commit/retry loop. Save the usable new prefix/password
+before honoring cancellation again at the old-object cleanup boundary. Persistent
+commit failure retains explicit recovery guidance; cancelled cleanup leaves old
+objects intact.
+
 The sync outbox is shared locally across targets. `set_sync_config` delegates
 publication reset and persistence to `commands/sync::persist_sync_config`. Enabling
 a valid S3 target after Off or switching between different stable target identities

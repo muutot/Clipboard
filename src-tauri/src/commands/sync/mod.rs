@@ -934,9 +934,11 @@ pub(crate) fn perform_namespace_rotation(
     // refuses every retry — so transient failures are retried here and a
     // persistent failure surfaces manual recovery guidance instead of leaving
     // the next run to die on a bare rotated-prefix refusal.
+    // After a successful tombstone write, finish this bounded local commit even
+    // if cancellation arrives. No more remote I/O is needed to make the device
+    // usable; resume cancellation checks before old-namespace cleanup.
     let mut commit_error = String::new();
     for attempt in 0..3u32 {
-        cancellation.check()?;
         match commit_local_config() {
             Ok(()) => {
                 commit_error.clear();
@@ -1928,6 +1930,7 @@ mod tests {
         gets: AtomicU64,
         /// Injects a deletion failure to model an interrupted cleanup.
         fail_deletes: AtomicBool,
+        cancel_after_tombstone: Mutex<Option<clipboard_sync::cancellation::CancellationToken>>,
     }
 
     fn fake_etag(bytes: &[u8]) -> String {
@@ -2032,6 +2035,11 @@ mod tests {
             let etag = fake_etag(&bytes);
             objects.insert(key.to_string(), (bytes, etag.clone()));
             self.puts.fetch_add(1, Ordering::Relaxed);
+            if key == ROTATED_TO_KEY {
+                if let Some(token) = self.cancel_after_tombstone.lock().unwrap().as_ref() {
+                    token.cancel();
+                }
+            }
             Ok(PutOutcome::Stored { etag: Some(etag) })
         }
 
@@ -2395,6 +2403,81 @@ mod tests {
 
         drop(database);
         fs::remove_dir_all(paths.project).unwrap();
+    }
+
+    fn rotation_cancellation_commit_scenario(cancel_after_put: bool) {
+        let paths = temporary_paths("rotation-cancel-commit");
+        let database = Database::open(&paths.database).unwrap();
+        let mut config = ConfigStore::load(&paths.project).unwrap();
+        config.set_sync_config(configured_sync()).unwrap();
+        let settings = SyncSettings::from_sync_config(&config.sync_config()).unwrap();
+        let new_settings = settings.with_rotated_scope("clipboard-rotated-cancelled".into(), None);
+        let old_store = RotationStore::default();
+        let new_store = RotationStore::default();
+        let token = clipboard_sync::cancellation::CancellationToken::default();
+        if cancel_after_put {
+            *old_store.cancel_after_tombstone.lock().unwrap() = Some(token.clone());
+        }
+        let mut attempts = 0;
+        let outcome = token.run(|| {
+            perform_namespace_rotation(
+                &old_store,
+                &new_store,
+                &database,
+                &paths,
+                &settings,
+                &new_settings,
+                None,
+                &token,
+                &mut || {
+                    attempts += 1;
+                    if !cancel_after_put && attempts == 1 {
+                        token.cancel();
+                        return Err("injected transient config failure".into());
+                    }
+                    let mut next = config.sync_config();
+                    next.remote_path = Some(new_settings.remote_path.clone());
+                    config
+                        .set_sync_config(next)
+                        .map_err(|error| error.to_string())
+                },
+                &mut |_| {},
+            )
+        });
+        assert!(old_store
+            .objects
+            .lock()
+            .unwrap()
+            .contains_key(ROTATED_TO_KEY));
+        let saved = ConfigStore::load(&paths.project).unwrap().sync_config();
+        let deletes = old_store.deletes.load(Ordering::Relaxed);
+        drop(database);
+        drop(config);
+        fs::remove_dir_all(paths.project).unwrap();
+        assert_eq!(
+            outcome.unwrap_err(),
+            clipboard_sync::cancellation::CANCELLED
+        );
+        assert_eq!(
+            deletes, 0,
+            "cancellation must leave old objects for later cleanup"
+        );
+        assert_eq!(
+            saved.remote_path.as_deref(),
+            Some(new_settings.remote_path.as_str()),
+            "durable tombstone requires committing the usable new prefix despite cancellation"
+        );
+        assert_eq!(attempts, if cancel_after_put { 1 } else { 2 });
+    }
+
+    #[test]
+    fn rotation_commits_config_when_cancelled_after_tombstone() {
+        rotation_cancellation_commit_scenario(true);
+    }
+
+    #[test]
+    fn rotation_retries_config_when_cancelled_during_commit() {
+        rotation_cancellation_commit_scenario(false);
     }
 
     /// A local configuration commit that keeps failing after the tombstone is
