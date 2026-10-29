@@ -31,10 +31,10 @@ function remove() {
   host.querySelector<HTMLButtonElement>(".tag-delete")!.click();
   flushSync();
 }
-function color() {
+function color(value = "#e5484d") {
   host.querySelector<HTMLButtonElement>(".tag-color-trigger")!.click();
   flushSync();
-  host.querySelector<HTMLButtonElement>('.tag-swatch-option[aria-label="#e5484d"]')!.click();
+  host.querySelector<HTMLButtonElement>(`.tag-swatch-option[aria-label="${value}"]`)!.click();
   flushSync();
 }
 const actions = { rename_tag: rename, delete_tag: remove, set_tag_color: color };
@@ -219,4 +219,68 @@ it("keeps loading while the newest tag snapshot is still pending", async () => {
   current.resolve([{ ...alpha, name: "beta" }]);
   await settle();
   expect(host.querySelector<HTMLInputElement>(".tag-name-input")?.value).toBe("beta");
+});
+
+it.each(["rename_tag", "delete_tag", "set_tag_color"] as const)(
+  "blocks overlapping tag mutations while %s is pending and releases the guard on failure",
+  async (command) => {
+    const first = deferred<unknown>();
+    vi.mocked(invoke).mockReturnValueOnce(first.promise);
+    actions[command]();
+    await settle();
+    try {
+      if (command === "rename_tag") {
+        const input = host.querySelector<HTMLInputElement>(".tag-name-input")!;
+        input.value = "gamma";
+        // Exercise the handler guard as well as the disabled UI contract.
+        input.dispatchEvent(new Event("blur"));
+      } else if (command === "delete_tag") {
+        host.querySelector<HTMLButtonElement>(".tag-delete")!.click();
+      } else {
+        host.querySelector<HTMLButtonElement>(".tag-color-trigger")!.click();
+        flushSync();
+        host.querySelector<HTMLButtonElement>('.tag-swatch-option[aria-label="#f76b15"]')?.click();
+        flushSync();
+      }
+      await settle();
+      expect(vi.mocked(invoke).mock.calls.filter(([name]) => name === command)).toHaveLength(1);
+      expect(host.querySelector<HTMLInputElement>(".tag-name-input")?.disabled).toBe(true);
+      expect(host.querySelector<HTMLButtonElement>(".tag-color-trigger")?.disabled).toBe(true);
+      expect(host.querySelector<HTMLButtonElement>(".tag-delete")?.disabled).toBe(true);
+    } finally {
+      first.reject(new Error("synthetic pending write failure"));
+      await settle();
+    }
+    expect(host.querySelector<HTMLInputElement>(".tag-name-input")?.disabled).toBe(false);
+    expect(emit).not.toHaveBeenCalled();
+    if (command === "delete_tag") host.querySelector<HTMLButtonElement>(".tag-delete")!.click();
+    else actions[command]();
+    await settle();
+    expect(emit).toHaveBeenCalledTimes(1);
+  },
+);
+
+it("keeps the displayed tag color consistent with writes accepted by the backend", async () => {
+  const first = deferred<unknown>();
+  let storedColor = alpha.color;
+  let writes = 0;
+  vi.mocked(invoke).mockImplementation(async (command, args) => {
+    if (command === "list_all_tags") return [{ ...alpha, color: storedColor }];
+    if (command === "set_tag_color") {
+      storedColor = args!.color as string;
+      return writes++ === 0 ? first.promise : true;
+    }
+    return 0;
+  });
+  color();
+  await settle();
+  // The first write is committed but its reply is delayed; a second accepted
+  // write must not leave the UI overwritten by that first reply.
+  host.querySelector<HTMLButtonElement>(".tag-color-trigger")!.click();
+  flushSync();
+  host.querySelector<HTMLButtonElement>('.tag-swatch-option[aria-label="#f76b15"]')?.click();
+  await settle();
+  first.resolve(true);
+  await settle();
+  expect(host.querySelector(".tag-color-trigger")?.getAttribute("style")).toContain(storedColor);
 });

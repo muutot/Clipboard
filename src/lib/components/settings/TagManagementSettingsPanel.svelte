@@ -51,6 +51,7 @@
   let tags = $state<TagInfo[]>([]);
   let loading = $state(true);
   let loadFailed = $state(false);
+  let mutationPending = $state(false);
   let feedback = $state<{ message: string; kind: "success" | "error" } | null>(null);
   let confirmDelete = $state<Record<string, boolean>>({});
   let feedbackTimer: ReturnType<typeof setTimeout> | undefined;
@@ -120,6 +121,8 @@
   }
 
   async function saveColor(tag: TagInfo, color: string) {
+    if (disposed || mutationPending) return;
+    mutationPending = true;
     colorPopover = null;
     try {
       const ok = await setTagColor(tag.name, color);
@@ -133,10 +136,13 @@
       emitTagsChanged({});
     } catch {
       notify(_t("toast.saveFailed"), "error");
+    } finally {
+      if (!disposed) mutationPending = false;
     }
   }
 
   function toggleColorPopover(name: string, event: MouseEvent) {
+    if (disposed || mutationPending) return;
     if (colorPopover === name) {
       colorPopover = null;
       return;
@@ -184,6 +190,7 @@
   });
 
   async function commitRename(tag: TagInfo, draft: string) {
+    if (disposed || mutationPending) return;
     const name = draft.trim();
     if (!name || name === tag.name) {
       if (!name) load();
@@ -194,6 +201,7 @@
       load();
       return;
     }
+    mutationPending = true;
     try {
       const updated = await renameTag(tag.name, name);
       if (updated === null) {
@@ -205,14 +213,18 @@
       void load();
     } catch {
       notify(_t("toast.saveFailed"), "error");
+    } finally {
+      if (!disposed) mutationPending = false;
     }
   }
 
   async function commitDelete(tag: TagInfo) {
+    if (disposed || mutationPending) return;
     if (!confirmDelete[tag.name]) {
       confirmDelete = { ...confirmDelete, [tag.name]: true };
       return;
     }
+    mutationPending = true;
     try {
       const updated = await deleteTag(tag.name);
       if (updated === null) {
@@ -224,6 +236,8 @@
       void load();
     } catch {
       notify(_t("toast.saveFailed"), "error");
+    } finally {
+      if (!disposed) mutationPending = false;
     }
   }
 </script>
@@ -272,6 +286,7 @@
     {#each filteredTags as tag (tag.name)}
       <TagRow
         {tag}
+        busy={mutationPending}
         confirmDelete={confirmDelete[tag.name]}
         colorPopoverOpen={colorPopover === tag.name}
         ontoggleColorPopover={toggleColorPopover}

@@ -7,6 +7,7 @@
 
   interface Props {
     tag: TagInfo;
+    busy?: boolean;
     confirmDelete: boolean;
     colorPopoverOpen: boolean;
     ontoggleColorPopover: (name: string, event: MouseEvent) => void;
@@ -17,6 +18,7 @@
 
   let {
     tag,
+    busy = false,
     confirmDelete,
     colorPopoverOpen,
     ontoggleColorPopover,
@@ -26,9 +28,10 @@
   }: Props = $props();
 </script>
 
-<section class="setting-card tag-row">
+<section class="setting-card tag-row" aria-busy={busy}>
   <button
     type="button"
+    disabled={busy}
     class="tag-color-trigger"
     style={tag.color ? `--tag-accent: ${tag.color}` : undefined}
     aria-haspopup="dialog"
@@ -39,6 +42,7 @@
   ></button>
   <input
     class="tag-name-input"
+    disabled={busy}
     value={tag.name}
     aria-label={_t("tags.renamePlaceholder")}
     onblur={(e) => {
@@ -65,6 +69,7 @@
   <button
     type="button"
     class="tag-delete"
+    disabled={busy}
     class:confirm={confirmDelete}
     onclick={() => oncommitDelete(tag)}
   >
