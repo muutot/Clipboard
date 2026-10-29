@@ -36,6 +36,12 @@ const LAST_ACTIVITY_SQL: &str = "MAX(created_at_ms, COALESCE(last_used_at_ms, cr
 
 impl ClipboardRepository for Database {
     fn save_item(&self, item: &ClipboardItem) -> Result<String, StorageError> {
+        super::validate_clipboard_text(
+            &item.title,
+            item.text_content.as_deref(),
+            item.html_content.as_deref(),
+            item.rtf_content.as_deref(),
+        )?;
         let _resource_publication = self.begin_resource_write();
         let size_bytes =
             i64::try_from(item.size_bytes).map_err(|_| StorageError::ValueOutOfRange {
@@ -62,6 +68,7 @@ impl ClipboardRepository for Database {
     }
 
     fn update_text_item(&self, update: &TextItemUpdate<'_>) -> Result<bool, StorageError> {
+        super::validate_clipboard_text(update.title, Some(update.text_content), None, None)?;
         let size_bytes =
             i64::try_from(update.size_bytes).map_err(|_| StorageError::ValueOutOfRange {
                 field: "size_bytes",

@@ -82,6 +82,8 @@ pub fn save_clipboard_item_as_new_record(
     new_title: &str,
     new_text_content: &str,
 ) -> Result<ClipboardItem, String> {
+    crate::storage::validate_clipboard_text(new_title, Some(new_text_content), None, None)
+        .map_err(|error| error.to_string())?;
     if new_text_content.trim().is_empty() {
         return Err("text content cannot be empty".to_owned());
     }

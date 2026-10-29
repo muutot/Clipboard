@@ -140,7 +140,7 @@ impl Database {
 /// that a saturated version clock is still far away.
 const MAX_IMPORT_FUTURE_SKEW_MS: i64 = 24 * 60 * 60 * 1000;
 
-/// Hard ceiling for one imported text payload.
+/// Shared ceiling for one persisted/imported/archive text payload.
 ///
 /// `ConfigStore::max_text_capture_bytes` clamps to 10 MB, so an import is never
 /// stricter than what capture itself would have accepted, and the capture limit
@@ -150,6 +150,45 @@ const MAX_IMPORT_TEXT_BYTES: usize = 10_000_000;
 /// Hard ceiling for an imported title. Titles are rendered in list rows, card
 /// headers, and the search index, and never approach this size legitimately.
 const MAX_IMPORT_TITLE_BYTES: usize = 4_096;
+
+/// Keep manual edits and ordinary saves within the portable archive bounds.
+/// Limits count UTF-8 bytes, independently of the reported `size_bytes`.
+pub(crate) fn validate_clipboard_text(
+    title: &str,
+    text: Option<&str>,
+    html: Option<&str>,
+    rtf: Option<&str>,
+) -> Result<(), StorageError> {
+    for (field, value, limit) in [
+        ("title", title, MAX_IMPORT_TITLE_BYTES),
+        (
+            "text_content",
+            text.unwrap_or_default(),
+            MAX_IMPORT_TEXT_BYTES,
+        ),
+        (
+            "html_content",
+            html.unwrap_or_default(),
+            MAX_IMPORT_TEXT_BYTES,
+        ),
+        (
+            "rtf_content",
+            rtf.unwrap_or_default(),
+            MAX_IMPORT_TEXT_BYTES,
+        ),
+    ] {
+        if value.len() > limit {
+            return Err(StorageError::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!(
+                    "{field} is {} bytes, over the {limit} byte limit",
+                    value.len()
+                ),
+            )));
+        }
+    }
+    Ok(())
+}
 
 /// Rejects an imported row that would poison the version clock or the search
 /// index. The bounds are intentionally independent of the replication version:
@@ -164,33 +203,11 @@ fn validate_imported_item(item: &ClipboardItem, upper_bound_ms: i64) -> Result<(
             item.created_at_ms
         ));
     }
-    for (field, value) in [
-        ("title", item.title.as_str()),
-        (
-            "text_content",
-            item.text_content.as_deref().unwrap_or_default(),
-        ),
-        (
-            "html_content",
-            item.html_content.as_deref().unwrap_or_default(),
-        ),
-        (
-            "rtf_content",
-            item.rtf_content.as_deref().unwrap_or_default(),
-        ),
-    ] {
-        if value.len() > MAX_IMPORT_TEXT_BYTES {
-            return Err(format!(
-                "{field} is {} bytes, over the {MAX_IMPORT_TEXT_BYTES} byte import limit",
-                value.len()
-            ));
-        }
-    }
-    if item.title.len() > MAX_IMPORT_TITLE_BYTES {
-        return Err(format!(
-            "title is {} bytes, over the {MAX_IMPORT_TITLE_BYTES} byte import limit",
-            item.title.len()
-        ));
-    }
-    Ok(())
+    validate_clipboard_text(
+        &item.title,
+        item.text_content.as_deref(),
+        item.html_content.as_deref(),
+        item.rtf_content.as_deref(),
+    )
+    .map_err(|error| error.to_string())
 }

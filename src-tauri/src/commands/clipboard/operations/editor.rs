@@ -11,6 +11,8 @@ pub fn update_clipboard_text(
     new_title: String,
     new_text_content: String,
 ) -> Result<bool, String> {
+    crate::storage::validate_clipboard_text(&new_title, Some(&new_text_content), None, None)
+        .map_err(|error| error.to_string())?;
     if new_text_content.trim().is_empty() {
         return Err("text content cannot be empty".to_owned());
     }

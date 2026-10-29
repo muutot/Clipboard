@@ -57,6 +57,8 @@ Short repository read-modify-write transactions (`save_item`, `save_items_transa
 
 ## SQLite schema
 
+`storage/repository/transactions.rs::validate_clipboard_text` owns the shared UTF-8 byte bounds: title ≤4,096; text, HTML and RTF each ≤10,000,000. `save_item`, `update_text_item`, imports and portable archive validation use it. Both editor commands validate before hashing or constructing a new record; oversized inputs return an error without changing rows, metadata or the search outbox. The reported `size_bytes` is not trusted for this validation. Boundary tests cover multi-byte payloads and a successful `.clipbackup` creation/preview after an edit at the limits.
+
 `src-tauri/src/storage/schema.rs::initialize` is authoritative. Schema v1 is the clean baseline:
 `PRAGMA user_version = 0`/pre-v1 input is transactionally reset only for this redesign. From v1
 forward, every schema bump must register exactly one adjacent migration in

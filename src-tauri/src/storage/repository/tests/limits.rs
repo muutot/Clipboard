@@ -2,6 +2,82 @@
 
 use super::*;
 
+#[test]
+fn text_writes_reject_archive_limit_violations_without_mutation() {
+    let database = Database::open_in_memory().unwrap();
+    database
+        .save_item(&text_item("original", "original-hash", 100))
+        .unwrap();
+    let original = database.get_item("original").unwrap().unwrap();
+    let oversized = "é".repeat(5_000_001);
+    let oversized_title = "汉".repeat(1_366);
+
+    for (title, text) in [
+        ("edited", oversized.as_str()),
+        (oversized_title.as_str(), "edited body"),
+    ] {
+        assert!(database
+            .update_text_item(&TextItemUpdate {
+                id: "original",
+                kind: ClipboardKind::Text,
+                title,
+                text_content: text,
+                content_hash: "edited-hash",
+                size_bytes: 1, // A forged size cannot bypass the byte validation.
+                metadata_json: Some(r#"{"customTitle":true}"#),
+            })
+            .is_err());
+        assert_eq!(database.get_item("original").unwrap().unwrap(), original);
+    }
+    for field in ["title", "text_content", "html_content", "rtf_content"] {
+        let mut candidate = original.clone();
+        candidate.id = format!("oversized-{field}");
+        candidate.content_hash = candidate.id.clone();
+        match field {
+            "title" => candidate.title = oversized_title.clone(),
+            "text_content" => candidate.text_content = Some(oversized.clone()),
+            "html_content" => candidate.html_content = Some(oversized.clone()),
+            "rtf_content" => candidate.rtf_content = Some(oversized.clone()),
+            _ => unreachable!(),
+        }
+        assert!(database.save_item(&candidate).is_err());
+    }
+    assert_eq!(database.item_count().unwrap(), 1);
+    assert_eq!(database.read_search_outbox(20).unwrap().len(), 1);
+}
+
+#[test]
+fn an_edit_at_the_utf8_byte_boundaries_still_creates_a_valid_backup() {
+    let database = Database::open_in_memory().unwrap();
+    database
+        .save_item(&text_item("editable", "original-hash", 100))
+        .unwrap();
+    let text = "é".repeat(5_000_000);
+    let title = format!("{}x", "汉".repeat(1_365));
+    assert_eq!(text.len(), 10_000_000);
+    assert_eq!(title.len(), 4_096);
+    assert!(database
+        .update_text_item(&TextItemUpdate {
+            id: "editable",
+            kind: ClipboardKind::Text,
+            title: &title,
+            text_content: &text,
+            content_hash: "boundary-hash",
+            size_bytes: text.len() as u64,
+            metadata_json: None,
+        })
+        .unwrap());
+    let root = std::env::temp_dir().join(format!("clipboard-edit-backup-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir(&root).unwrap();
+    let target = root.join("boundary.clipbackup");
+    assert!(crate::export::backup::create(&database, &target).unwrap() > 0);
+    let preview =
+        crate::export::backup::preview(&target, &Database::open_in_memory().unwrap()).unwrap();
+    assert_eq!(preview.item_count, 1);
+    assert_eq!(preview.duplicate_count, 0);
+    std::fs::remove_dir_all(root).unwrap();
+}
+
 /// An import may not hand the replication version clock a saturated value.
 ///
 /// `created_at_ms` is copied straight into `modified_at_ms` by the insert

@@ -25,6 +25,7 @@ pub use recovery::{
     recover_database_if_needed, refresh_database_backup, reset_search_index,
     DatabaseRecoveryReport,
 };
+pub(crate) use repository::validate_clipboard_text;
 pub use repository::{
     AutoTagHistoryPreview, AutoTagPhase, AutoTagProgress, ClipboardRepository, HistoryCursor,
     HistoryFilter, KindDeleteResult, KindDeleteScope, KindStorageStats, StorageFileReferences,

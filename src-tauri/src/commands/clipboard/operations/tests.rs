@@ -186,6 +186,23 @@ fn save_as_new_rejects_empty_text_and_media_kinds() {
 }
 
 #[test]
+fn save_as_new_rejects_oversized_edits_without_creating_a_record() {
+    let database = Database::open_in_memory().unwrap();
+    database.save_item(&item("source", "source title")).unwrap();
+    let before = database.get_item("source").unwrap().unwrap();
+    for text in ["a".repeat(10_000_001), "é".repeat(5_000_001)] {
+        let error =
+            save_clipboard_item_as_new_record(&database, "source", "title", &text).unwrap_err();
+        assert!(error.contains("text_content") && error.contains("10000000"));
+    }
+    assert!(
+        save_clipboard_item_as_new_record(&database, "source", &"t".repeat(4_097), "body").is_err()
+    );
+    assert_eq!(database.item_count().unwrap(), 1);
+    assert_eq!(database.get_item("source").unwrap().unwrap(), before);
+}
+
+#[test]
 fn replaces_path_separators_and_windows_specials() {
     // Separators become underscores, so the name can never traverse out
     // of the managed directory; leading dots are harmless (same dir).
