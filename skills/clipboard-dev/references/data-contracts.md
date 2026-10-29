@@ -382,6 +382,7 @@ Memory databases use only the existing local generation protocol.
 `content/resource_metadata.rs` and frontend `ResourceMetadata`/`ResourceFileMetadata` carry schema version, MIME/extension, size, storage/original paths, hashes, image dimensions, and per-file entries.
 
 - Treat metadata JSON as untrusted/optional at the frontend boundary.
+- Managed-body reuse requires exact bytes, not only the expected size. FileStore compares existing content with immutable staging or supplied bytes using bounded buffers, repairs equal-length corruption atomically, and leaves verified identical cache hits untouched.
 - Preserve external original paths separately from managed storage paths.
 - `rename_item` receives managed `StoragePaths`; physical rename requires a regular, non-symlink file canonically inside an owned image/file root, with any required marker still valid. External originals, directories, unclaimed roots and shared files receive a display-title change only; metadata such as `copied` does not establish ownership.
 - The rename helper holds one publication guard across row lookup, path commit, file move and failure rollback; `save_item`'s nested guard does not cover the filesystem step. Independent cleanup connections therefore defer deletion of the temporarily unreferenced old path.

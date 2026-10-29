@@ -1,7 +1,7 @@
 use std::{
     ffi::OsStr,
     fs,
-    io::{Read, Write},
+    io::{BufRead, BufReader, Read, Write},
     path::Path,
     sync::atomic::{AtomicU64, Ordering},
 };
@@ -117,22 +117,25 @@ impl FileStore {
         let storage_path =
             file_storage_dir.join(storage_file_name(&content_hash, source_path.extension()));
 
-        if storage_path.exists() {
-            // Content-addressed names imply their payload, so a shorter
-            // existing file is a leftover truncation from a pre-atomic writer
-            // and must be repaired from the staged bytes instead of keeping
-            // the corruption forever (mirrors `save_bytes_atomically`). A
-            // same-size file is the same payload: drop the staging copy.
-            let repair = fs::metadata(&storage_path)
-                .map(|metadata| metadata.len() != staged_size)
-                .unwrap_or(false);
-            if repair {
-                sync_and_replace(&staging, &storage_path)?;
-            } else {
+        // Length alone cannot establish content identity after corruption or
+        // an edit. Compare against the immutable staged source, using bounded
+        // buffers, before reusing an existing content-addressed body.
+        let identical = (|| {
+            file_contents_match(
+                &storage_path,
+                BufReader::new(fs::File::open(&staging)?),
+                staged_size,
+            )
+        })();
+        match identical {
+            Ok(true) => {
                 let _ = fs::remove_file(&staging);
             }
-        } else {
-            sync_and_replace(&staging, &storage_path)?;
+            Ok(false) => sync_and_replace(&staging, &storage_path)?,
+            Err(error) => {
+                let _ = fs::remove_file(&staging);
+                return Err(error.into());
+            }
         }
         Ok(FileStorageInfo {
             storage_path: storage_path.display().to_string(),
@@ -183,15 +186,7 @@ impl FileStore {
         fs::create_dir_all(screenshot_storage_dir)?;
         let storage_path = screenshot_storage_dir.join(format!("{}.{}", content_hash, ext));
 
-        // A shorter existing file is a leftover truncation from a pre-atomic
-        // writer and is repaired by rewriting (same policy as `save_file`);
-        // an equal-size file is the same payload and needs no write.
-        let repair = fs::metadata(&storage_path)
-            .map(|metadata| metadata.len() != size_bytes)
-            .unwrap_or(true);
-        if repair {
-            store_atomically(&storage_path, |temporary| fs::write(temporary, data))?;
-        }
+        Self::save_bytes_atomically(&storage_path, data)?;
 
         Ok(FileStorageInfo {
             storage_path: storage_path.display().to_string(),
@@ -213,20 +208,45 @@ impl FileStore {
     }
 
     /// Writes in-memory `data` to `target` atomically, skipping the write
-    /// when a same-size file already exists. Callers store bytes whose
-    /// identity implies their contents (content-hash names, or a stable
-    /// producer such as the icon cache), so an existing same-size file is
-    /// the same payload and rewriting it only wastes I/O. A shorter file is
-    /// a leftover truncation from a pre-atomic writer and is repaired by
-    /// rewriting through a temporary file plus rename.
+    /// only when the existing file has identical bytes. Size is a fast reject,
+    /// not proof of identity; equal-length corruption must also be repaired.
     pub fn save_bytes_atomically(target: &Path, data: &[u8]) -> Result<(), StorageError> {
-        if let Ok(metadata) = fs::metadata(target) {
-            if metadata.len() == data.len() as u64 {
-                return Ok(());
-            }
+        if file_contents_match(target, data, data.len() as u64)? {
+            return Ok(());
         }
         store_atomically(target, |temporary| fs::write(temporary, data))?;
         Ok(())
+    }
+}
+
+/// Compare existing content with a stable expected stream. Reading is bounded
+/// by the expected bytes plus one buffer even if the actual file grows.
+fn file_contents_match(
+    path: &Path,
+    mut expected: impl BufRead,
+    expected_length: u64,
+) -> std::io::Result<bool> {
+    let file = match fs::File::open(path) {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(error) => return Err(error),
+    };
+    if file.metadata()?.len() != expected_length {
+        return Ok(false);
+    }
+    let mut actual = BufReader::new(file);
+    loop {
+        let left = actual.fill_buf()?;
+        let right = expected.fill_buf()?;
+        let count = left.len().min(right.len());
+        if count == 0 {
+            return Ok(left.is_empty() && right.is_empty());
+        }
+        if left[..count] != right[..count] {
+            return Ok(false);
+        }
+        actual.consume(count);
+        expected.consume(count);
     }
 }
 
@@ -546,7 +566,7 @@ mod tests {
         FileStore::save_bytes_atomically(&target, b"image-bytes").unwrap();
         assert_eq!(fs::read(&target).unwrap(), b"image-bytes");
 
-        // Same-size content is not rewritten.
+        // Identical content is not rewritten.
         FileStore::save_bytes_atomically(&target, b"image-bytes").unwrap();
         assert_eq!(fs::read(&target).unwrap(), b"image-bytes");
 
@@ -563,6 +583,73 @@ mod tests {
         assert!(leftovers.is_empty(), "leftover temp files: {leftovers:?}");
 
         let _ = fs::remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn recapture_repairs_same_length_corruption_in_managed_file_and_image_bodies() {
+        let temporary = std::env::temp_dir().join(format!(
+            "clipboard-same-length-repair-{}",
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir(&temporary).unwrap();
+        let original = b"original-body";
+        let corrupted = b"corrupt--body";
+        assert_eq!(original.len(), corrupted.len());
+        let source = temporary.join("source.txt");
+        fs::write(&source, original).unwrap();
+        let stored = FileStore::save_file(&source, &temporary.join("files"), 0).unwrap();
+        fs::write(&stored.storage_path, corrupted).unwrap();
+        let recaptured = FileStore::save_file(&source, &temporary.join("files"), 0).unwrap();
+        assert_eq!(recaptured.storage_path, stored.storage_path);
+        assert_eq!(recaptured.content_hash, stored.content_hash);
+        assert_eq!(
+            fs::read(&stored.storage_path).unwrap(),
+            original,
+            "equal file lengths do not prove equal content"
+        );
+
+        let screenshot =
+            FileStore::save_screenshot(original, &temporary.join("images"), 0).unwrap();
+        fs::write(&screenshot.storage_path, corrupted).unwrap();
+        FileStore::save_screenshot(original, &temporary.join("images"), 0).unwrap();
+        assert_eq!(fs::read(&screenshot.storage_path).unwrap(), original);
+        fs::write(&screenshot.storage_path, corrupted).unwrap();
+        FileStore::save_bytes_atomically(Path::new(&screenshot.storage_path), original).unwrap();
+        assert_eq!(fs::read(&screenshot.storage_path).unwrap(), original);
+        fs::remove_dir_all(temporary).unwrap();
+    }
+
+    #[test]
+    fn verified_cache_hits_preserve_mtime_and_check_bytes_across_buffer_boundaries() {
+        let directory =
+            std::env::temp_dir().join(format!("clipboard-cache-hit-{}", uuid::Uuid::new_v4()));
+        fs::create_dir(&directory).unwrap();
+        let old = std::time::UNIX_EPOCH + std::time::Duration::from_secs(3600);
+        for length in [0, 8191, 8192, 8193, 32768] {
+            let bytes: Vec<_> = (0..length).map(|index| (index % 251) as u8).collect();
+            let target = directory.join(format!("{length}.png"));
+            FileStore::save_bytes_atomically(&target, &bytes).unwrap();
+            fs::File::options()
+                .write(true)
+                .open(&target)
+                .unwrap()
+                .set_modified(old)
+                .unwrap();
+            FileStore::save_bytes_atomically(&target, &bytes).unwrap();
+            assert_eq!(
+                fs::metadata(&target).unwrap().modified().unwrap(),
+                old,
+                "verified cache hits must not rewrite the body"
+            );
+            if length > 0 {
+                let mut corrupt = bytes.clone();
+                *corrupt.last_mut().unwrap() ^= 0x80;
+                fs::write(&target, corrupt).unwrap();
+                FileStore::save_bytes_atomically(&target, &bytes).unwrap();
+                assert_eq!(fs::read(&target).unwrap(), bytes);
+            }
+        }
+        fs::remove_dir_all(directory).unwrap();
     }
 }
 #[test]

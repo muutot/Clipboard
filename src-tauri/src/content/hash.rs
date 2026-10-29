@@ -172,8 +172,8 @@ impl AppIconStore {
 
         // Atomic write: concurrent extractions of the same app icon must not
         // interleave into a truncated file, and a crash mid-write must not
-        // leave one behind (same-size files are skipped, shorter leftovers
-        // are repaired).
+        // leave one behind. Only byte-identical files are reused; even
+        // equal-length corruption is repaired.
         FileStore::save_bytes_atomically(&path, data)?;
 
         Ok(path)
