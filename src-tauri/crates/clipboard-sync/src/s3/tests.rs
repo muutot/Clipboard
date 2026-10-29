@@ -85,6 +85,118 @@ fn s3_endpoint_parses_scheme_and_host() {
 }
 
 #[test]
+fn signed_requests_preserve_literal_s3_object_keys() {
+    let client = Client::new();
+    for (key, encoded) in [
+        (
+            "clipboard#team/v1/head.json",
+            "clipboard%23team/v1/head.json",
+        ),
+        (
+            "clipboard?team/v1/head.json",
+            "clipboard%3Fteam/v1/head.json",
+        ),
+        (
+            "clipboard%2Fteam/v1/head.json",
+            "clipboard%252Fteam/v1/head.json",
+        ),
+        (
+            "clipboard space/+/v1/head.json",
+            "clipboard%20space/%2B/v1/head.json",
+        ),
+        (
+            "剪贴板/v1/head.json",
+            "%E5%89%AA%E8%B4%B4%E6%9D%BF/v1/head.json",
+        ),
+    ] {
+        for method in ["GET", "HEAD", "PUT", "DELETE"] {
+            let req = S3Request {
+                method,
+                scheme: "https",
+                endpoint_host: "s3.example.test",
+                bucket: "clipboard",
+                key,
+                query: None,
+                payload: None,
+                access_key: AKID,
+                secret_key: SECRET,
+                region: "us-east-1",
+                extra_headers: &[],
+            };
+            let request = signed_request(&client, &req).unwrap().build().unwrap();
+            assert_eq!(
+                request.url().path(),
+                format!("/clipboard/{encoded}"),
+                "{method} {key}"
+            );
+            assert!(request.url().query().is_none(), "{method} {key}");
+            assert!(request.url().fragment().is_none(), "{method} {key}");
+        }
+    }
+}
+
+#[test]
+fn object_store_get_preserves_reserved_prefixes_on_the_wire() {
+    use crate::v1::{ObjectStore, S3ObjectStore};
+    use std::{io::ErrorKind, net::TcpListener, time::Instant};
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let endpoint = format!("http://{}", listener.local_addr().unwrap());
+    let server = std::thread::spawn(move || {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let mut received = Vec::new();
+        while received.len() < 2 && Instant::now() < deadline {
+            let mut stream = match listener.accept() {
+                Ok((stream, _)) => stream,
+                Err(error) if error.kind() == ErrorKind::WouldBlock => {
+                    std::thread::sleep(Duration::from_millis(10));
+                    continue;
+                }
+                Err(error) => panic!("accept fixture request: {error}"),
+            };
+            stream
+                .set_read_timeout(Some(Duration::from_secs(2)))
+                .unwrap();
+            let mut header = Vec::new();
+            let mut byte = [0];
+            while !header.ends_with(b"\r\n\r\n") && header.len() < 8192 {
+                if stream.read(&mut byte).unwrap() == 0 {
+                    break;
+                }
+                header.push(byte[0]);
+            }
+            received.push(
+                String::from_utf8(header)
+                    .unwrap()
+                    .lines()
+                    .next()
+                    .unwrap()
+                    .to_owned(),
+            );
+            stream
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 4\r\nConnection: close\r\n\r\nbody")
+                .unwrap();
+        }
+        received
+    });
+    for prefix in ["clipboard#team", "clipboard?team"] {
+        let store =
+            S3ObjectStore::new(&endpoint, "us-east-1", "clipboard", AKID, SECRET, prefix).unwrap();
+        assert_eq!(
+            store.get("v1/namespace.json").unwrap().unwrap().bytes,
+            b"body"
+        );
+    }
+    assert_eq!(
+        server.join().unwrap(),
+        [
+            "GET /clipboard/clipboard%23team/v1/namespace.json HTTP/1.1",
+            "GET /clipboard/clipboard%3Fteam/v1/namespace.json HTTP/1.1",
+        ]
+    );
+}
+
+#[test]
 fn list_query_uses_percent_encoded_prefix() {
     let q = build_list_query(Some("clipboard-backup/"), None, None);
     assert_eq!(q, "list-type=2&prefix=clipboard-backup%2F");

@@ -123,6 +123,15 @@ fn s3_url(
     key: &str,
     query: Option<String>,
 ) -> String {
+    // S3 keys are literal names. Escaping each path component preserves their
+    // slash hierarchy without interpreting #, ? or existing % escapes as URL
+    // syntax (which could alias distinct keys or leave the configured prefix).
+    let bucket = percent_encode(bucket);
+    let key = key
+        .split('/')
+        .map(percent_encode)
+        .collect::<Vec<_>>()
+        .join("/");
     let mut url = format!("{scheme}://{endpoint_host}/{bucket}/{key}");
     if let Some(q) = query {
         url.push('?');
@@ -188,8 +197,8 @@ pub(super) fn signed_request_with_payload_hash(
         _ => host.to_string(),
     };
 
-    // Build canonical URI/query. For S3 the canonical path is the URL path
-    // (already percent-free) and the query is the raw query string.
+    // Sign the same percent-encoded path sent on the wire. S3 does not apply
+    // another round of path encoding during SigV4 canonicalization.
     let canonical_uri = url_parsed.path().to_string();
     let canonical_query = req.query.clone().unwrap_or_default();
 

@@ -108,6 +108,13 @@ interrupted by the privacy policy.
 
 There is no WebDAV transport, baseline/oplog archive implementation, legacy resource pool, fallback encryption path, or historical wire reader in the source tree.
 
+S3 request construction encodes bucket/key path components separately and preserves
+key `/` separators. Legal remote prefixes containing `#`, `?`, `%`, spaces or Unicode
+must remain literal object names for every HTTP method. SigV4 signs the same encoded
+path sent by reqwest; an existing percent escape in a key is escaped as literal data.
+Request-builder regressions and a temporary loopback HTTP fixture verify reserved
+prefixes through the production S3ObjectStore without touching a real remote bucket.
+
 Desktop sync resolves `clipboard_sync::v1::namespace` before engine work. New
 identities exclude S3 credentials; existing v1 scopes are authenticated and bound
 without rewriting data. A conditional, read-back-verified `v1/namespace.json`
