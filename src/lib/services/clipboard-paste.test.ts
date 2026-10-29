@@ -68,7 +68,7 @@ function invokeMap(transformResult: string | null) {
 describe("format paste with cleaning", () => {
   it("reports the cleaned plain-text downgrade instead of claiming the format", async () => {
     bridge.invoke.mockImplementation(invokeMap("hello world"));
-    await pasteClipboardItem(item, "format");
+    expect(await pasteClipboardItem(item, "format")).toBe("pasted");
     expect(bridge.writeText).toHaveBeenCalledWith("hello world");
     expect(bridge.write).not.toHaveBeenCalled();
     expect(bridge.toast).toHaveBeenCalledWith(t("toast.formatPasteCleanedSuccess"), "success");
@@ -76,7 +76,7 @@ describe("format paste with cleaning", () => {
 
   it("keeps rich HTML when cleaning does not change the text", async () => {
     bridge.invoke.mockImplementation(invokeMap(item.textContent ?? null));
-    await pasteClipboardItem(item, "format");
+    expect(await pasteClipboardItem(item, "format")).toBe("pasted");
     expect(bridge.write).toHaveBeenCalledTimes(1);
     expect(bridge.writeText).not.toHaveBeenCalled();
     expect(bridge.toast).toHaveBeenCalledWith(t("toast.formatPasteSuccess"), "success");
@@ -85,9 +85,45 @@ describe("format paste with cleaning", () => {
   it("writes rich HTML when cleaning is disabled", async () => {
     bridge.cleaning = false;
     bridge.invoke.mockImplementation(invokeMap("hello world"));
-    await pasteClipboardItem(item, "format");
+    expect(await pasteClipboardItem(item, "format")).toBe("pasted");
     expect(bridge.write).toHaveBeenCalledTimes(1);
     expect(bridge.writeText).not.toHaveBeenCalled();
     expect(bridge.toast).toHaveBeenCalledWith(t("toast.formatPasteSuccess"), "success");
+  });
+});
+
+describe("paste outcomes", () => {
+  it.each(["plain", "clean", "format", "auto"] as const)(
+    "propagates a copied-only result through %s mode",
+    async (mode) => {
+      bridge.cleaning = false;
+      bridge.invoke.mockImplementation(async (command: string) =>
+        command === "paste_to_previous_application" ? false : true,
+      );
+      expect(await pasteClipboardItem(item, mode)).toBe("copied");
+    },
+  );
+  it.each(["plain", "clean", "format", "auto"] as const)(
+    "returns failure after a write rejection in %s mode",
+    async (mode) => {
+      bridge.cleaning = false;
+      bridge.writeText.mockRejectedValue(new Error("fixture busy clipboard"));
+      bridge.write.mockRejectedValue(new Error("fixture busy clipboard"));
+      expect(await pasteClipboardItem(item, mode)).toBe("failed");
+      expect(bridge.invoke).not.toHaveBeenCalledWith("paste_to_previous_application", undefined);
+    },
+  );
+  it("retains the outcome when format falls back to plain text", async () => {
+    bridge.cleaning = false;
+    bridge.invoke.mockImplementation(async (command: string) =>
+      command === "paste_to_previous_application" ? false : true,
+    );
+    expect(await pasteClipboardItem({ ...item, htmlContent: null }, "format")).toBe("copied");
+  });
+  it("reports hydration failure as an explicit outcome", async () => {
+    bridge.invoke.mockResolvedValue(null);
+    expect(await pasteClipboardItem({ ...item, contentLoaded: false })).toBe("failed");
+    expect(bridge.writeText).not.toHaveBeenCalled();
+    expect(bridge.write).not.toHaveBeenCalled();
   });
 });

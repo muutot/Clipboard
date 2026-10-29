@@ -64,6 +64,13 @@ Owns the record boundary and list operations:
 - Text "Save as new" (`saveAsNew` on the main route) invokes `save_clipboard_item_as_new` once — do not reintroduce a frontend `duplicate_clipboard_item` + `update_clipboard_text` pair for that flow (it was non-atomic and collided with `UNIQUE (kind, content_hash)`).
 - `pasteClipboardItem(item, mode, hooks?)` is the shared paste-to-previous-app path. `mode` is `plain` | `format` | `clean` | `auto`; `auto` picks the richest representation by kind (text/link prefer HTML, image/file materialize first). It reads `pasteCleaningEnabled`/`pinCopiedToTop` from `generalSettings`, calls `persistLastUsed`, and shows the mode/kind-specific success or failure toast. Route wrappers (`plainPaste`, `formatPaste`, `cleanPaste`, `doubleClickPasteItem`) only resolve the item and pass `moveToTop`.
 
+Paste returns `PasteOutcome` (`pasted`, `copied`, `failed`) through every mode and
+fallback. A successful OS write with unavailable target/browser preview is `copied`;
+hydration, write or target errors are `failed`. Existing single-row callers retain
+their toast behavior. Bulk paste counts only `pasted` and keeps undelivered rows
+selected for retry; a caught service error must not become batch success. Mounted
+controller tests use the real paste service with synthetic clipboard/target failures.
+
 Keep frontend mapping aligned with Rust serde names and `metadata_json`. `loadDeletedClipboardHistory` is the current deleted-list API name. A copy/write path must register a compatible self-trigger hash before touching the system clipboard. `readClipboardText()` is the read counterpart (`read_clipboard_text` command, fallback `navigator.clipboard.readText()` outside Tauri) used by the shared editor context menu; it never writes, so it registers no self-trigger.
 
 ## Invoke-wrapper services

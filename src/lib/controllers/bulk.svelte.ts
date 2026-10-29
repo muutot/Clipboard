@@ -81,8 +81,9 @@ export function createBulkController(deps: BulkDependencies) {
       let succeeded = 0;
       for (const item of items) {
         try {
-          await pasteClipboardItem(item);
-          succeeded++;
+          const outcome = await pasteClipboardItem(item);
+          if (outcome === "pasted") succeeded++;
+          else failedIds.push(item.id);
         } catch (error) {
           console.error("Bulk paste failed", error);
           failedIds.push(item.id);

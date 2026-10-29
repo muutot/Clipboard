@@ -688,6 +688,9 @@ export interface TextTransformResult {
 
 export type PasteMode = "plain" | "format" | "clean" | "auto";
 
+/** Clipboard staging alone does not confirm delivery to the previous app. */
+export type PasteOutcome = "pasted" | "copied" | "failed";
+
 export interface PasteItemHooks {
   /** Reorder callback (the main list pins the pasted entry to the top). */
   moveToTop?: (id: string) => void;
@@ -721,7 +724,7 @@ async function pasteToPreviousApp(
   // downgrade of an explicit format paste), so the toast stays truthful.
   write: () => Promise<PasteMessageKeys | void>,
   hooks: PasteItemHooks = {},
-): Promise<void> {
+): Promise<PasteOutcome> {
   const locale = getLocale();
   const messages = locales[locale] ?? locales.en;
   const t = (path: string, params?: Record<string, string | number>) =>
@@ -738,21 +741,23 @@ async function pasteToPreviousApp(
       t(isFilesCopySourceMissing(error) ? "toast.copySourceMissing" : resolvedKeys.failed),
       "error",
     );
-    return;
+    return "failed";
   }
   await recordSuccessfulUsage(item, hooks);
 
   if (!isTauriRuntime()) {
     showToast(t(resolvedKeys.copy), "success");
-    return;
+    return "copied";
   }
 
   try {
     const pasted = await invokeTauri<boolean>("paste_to_previous_application");
     showToast(t(pasted ? resolvedKeys.paste : resolvedKeys.copy), pasted ? "success" : "info");
+    return pasted ? "pasted" : "copied";
   } catch (error) {
     console.error("Unable to restore the previous application and paste", error);
     showToast(t(resolvedKeys.failed), "error");
+    return "failed";
   }
 }
 
@@ -765,7 +770,7 @@ export async function pasteClipboardItem(
   item: ClipboardItem,
   mode: PasteMode = "auto",
   hooks: PasteItemHooks = {},
-): Promise<void> {
+): Promise<PasteOutcome> {
   const locale = getLocale();
   const messages = locales[locale] ?? locales.en;
   const t = (path: string, params?: Record<string, string | number>) =>
@@ -776,12 +781,12 @@ export async function pasteClipboardItem(
   } catch (error) {
     logFrontendError("hydrate clipboard item for paste", error);
     showToast(t("toast.copyFailed"), "error");
-    return;
+    return "failed";
   }
 
   if (mode === "plain") {
     const text = item.textContent || item.title;
-    await pasteToPreviousApp(
+    return await pasteToPreviousApp(
       item,
       {
         paste: "toast.plainPasteSuccess",
@@ -794,12 +799,11 @@ export async function pasteClipboardItem(
       },
       hooks,
     );
-    return;
   }
 
   if (mode === "clean") {
     const text = item.textContent || item.title;
-    await pasteToPreviousApp(
+    return await pasteToPreviousApp(
       item,
       {
         paste: "toast.cleanPasteSuccess",
@@ -815,19 +819,17 @@ export async function pasteClipboardItem(
       },
       hooks,
     );
-    return;
   }
 
   if (mode === "format") {
     if (!item.htmlContent) {
       // No rich content to paste as formatted; degrade to plain text so the
       // user's action still has a result instead of silently doing nothing.
-      await pasteClipboardItem(item, "plain", hooks);
-      return;
+      return await pasteClipboardItem(item, "plain", hooks);
     }
     const htmlContent = item.htmlContent;
     const plainText = item.textContent || undefined;
-    await pasteToPreviousApp(
+    return await pasteToPreviousApp(
       item,
       {
         paste: "toast.formatPasteSuccess",
@@ -853,17 +855,15 @@ export async function pasteClipboardItem(
       },
       hooks,
     );
-    return;
   }
 
   // auto: richest representation by kind.
   if (item.kind === "text" || item.kind === "link") {
     if (item.htmlContent) {
-      await pasteClipboardItem(item, "format", hooks);
+      return await pasteClipboardItem(item, "format", hooks);
     } else {
-      await pasteClipboardItem(item, "plain", hooks);
+      return await pasteClipboardItem(item, "plain", hooks);
     }
-    return;
   }
 
   if (item.kind === "image" || item.kind === "file") {
@@ -876,10 +876,10 @@ export async function pasteClipboardItem(
         t(item.kind === "image" ? "toast.imagePasteFailed" : "toast.filePasteFailed"),
         "error",
       );
-      return;
+      return "failed";
     }
     if (item.kind === "image") {
-      await pasteToPreviousApp(
+      return await pasteToPreviousApp(
         media,
         {
           paste: "toast.imagePasteSuccess",
@@ -894,9 +894,8 @@ export async function pasteClipboardItem(
         },
         hooks,
       );
-      return;
     }
-    await pasteToPreviousApp(
+    return await pasteToPreviousApp(
       media,
       {
         paste: "toast.filePasteSuccess",
@@ -918,4 +917,5 @@ export async function pasteClipboardItem(
       hooks,
     );
   }
+  return "failed";
 }

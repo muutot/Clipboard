@@ -16,7 +16,7 @@ vi.mock("$lib/services/clipboard", async (original) => ({
   loadDeletedClipboardHistory: vi.fn(async () => []),
   searchClipboardHistory: vi.fn(),
   persistBatchFavorite: vi.fn(),
-  pasteClipboardItem: vi.fn(),
+  pasteClipboardItem: vi.fn(async () => "pasted" as const),
 }));
 vi.mock("$lib/services/toast", () => ({ showToast: vi.fn() }));
 const item = (id: string): ClipboardItem => ({
@@ -215,11 +215,11 @@ it("keeps failed rows selected and reports the failure on a partial bulk paste",
 it("ignores a bulk paste request while another run is still in flight", async () => {
   out.store!.current = appendItems(out.store!.current, [item("a"), item("b")], "history");
   out.bulk!.selectedIds = new Set(["a", "b"]);
-  const gate = deferred<void>();
+  const gate = deferred<service.PasteOutcome>();
   vi.mocked(service.pasteClipboardItem).mockImplementationOnce(() => gate.promise);
   const first = out.bulk!.bulkPasteAll();
   const second = out.bulk!.bulkPasteAll();
-  gate.resolve();
+  gate.resolve("pasted");
   await Promise.all([first, second]);
   await settle();
   expect(vi.mocked(service.pasteClipboardItem).mock.calls.map((c) => c[0].id)).toEqual(["a", "b"]);

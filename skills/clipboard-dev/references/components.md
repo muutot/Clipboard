@@ -160,6 +160,12 @@ Mounted once by the root `+layout.svelte`, so every window (main, settings, floa
 
 ### `BulkBar.svelte`
 
+Bulk-paste completion consumes the shared service's explicit `PasteOutcome`.
+Only delivery confirmed as `pasted` counts toward success; clipboard-only fallback
+and failures retain their rows for retry. Single-row copy fallback still has its
+existing feedback. The real-service mounted controller regression covers write
+rejection, target rejection/unavailability, and successful delivery in selection order.
+
 Multiselection action bar extracted from the main route. Renders nothing when `selectedCount` is 0. Props: `selectedCount`, `allSelectedFavorites`, plus `ondeselect`/`oncopy`/`onpasteall`/`ondelete`/`onfavorite` callbacks. Renders a "共 {count} 项" / "{count} items total" lead line followed by four static actions: copy, paste-all, delete, and favorite/unfavorite (button text has no per-button count). Owns its `.bulk-bar` scoped styles (moved verbatim from the route; no parent selectors or page-scope element rules touch it). The route keeps the selection and bulk-operation implementations; the bar only presents them. Its copy action runs the route's `bulkCopy`, which builds the payload through `planBulkCopy` (`utils/bulk-actions.ts`): text/link rows contribute their full content and image/file rows contribute their source path or multi-file path list, never the display title alone, and the success toast counts only rows that actually contributed. The `onpasteall` button drives the route's `bulkPasteAll`: pastes every selected item through the shared `pasteClipboardItem` path in selection order, then clears the selection and reports how many were delivered. i18n labels resolve internally via `messages`/`resolvePath`, matching other panels.
 
 ### `StatusBar.svelte`
