@@ -2,7 +2,7 @@
 // calls, plus the shared `windowConfig` store loaded once at module scope so
 // startup/tray toggles are populated before any settings panel mounts.
 
-import { get, writable } from "svelte/store";
+import { writable } from "svelte/store";
 import { invokeTauri } from "$lib/services/runtime";
 import type { WindowConfig, WindowPosition } from "$lib/types/clipboard";
 
@@ -32,15 +32,26 @@ export async function setWindowConfig(settings: Partial<WindowConfig>): Promise<
  */
 function createWindowConfigStore() {
   const store = writable<WindowConfig>({ ...DEFAULT_WINDOW_CONFIG });
+  let confirmed = { ...DEFAULT_WINDOW_CONFIG };
+  const pending = new Map<number, Partial<WindowConfig>>();
+  let revision = 0;
+  let writeQueue = Promise.resolve();
   let loaded = false;
   let loading: Promise<void> | undefined;
+
+  function publish() {
+    let visible = { ...confirmed };
+    for (const edit of pending.values()) visible = { ...visible, ...edit };
+    store.set(visible);
+  }
 
   function ensureLoaded(): Promise<void> {
     if (loaded) return Promise.resolve();
     if (!loading) {
       loading = getWindowConfig()
         .then((config) => {
-          store.set(config);
+          confirmed = { ...config };
+          publish();
           loaded = true;
         })
         .catch((error) => {
@@ -53,16 +64,25 @@ function createWindowConfigStore() {
     return loading;
   }
 
-  async function update(partial: Partial<WindowConfig>): Promise<void> {
-    const previous = get(store);
-    const next = { ...previous, ...partial };
-    store.set(next);
-    try {
-      await setWindowConfig(partial);
-    } catch (error) {
-      store.set(previous);
-      throw error;
-    }
+  function update(partial: Partial<WindowConfig>): Promise<void> {
+    const id = ++revision;
+    const edit = { ...partial };
+    pending.set(id, edit);
+    publish();
+    // Keep optimistic edits above the last confirmed backend state. Removing
+    // a failed operation cannot revert a later edit or restore a failed value.
+    const write = writeQueue
+      .then(async () => {
+        await ensureLoaded();
+        await setWindowConfig(edit);
+        confirmed = { ...confirmed, ...edit };
+      })
+      .finally(() => {
+        pending.delete(id);
+        publish();
+      });
+    writeQueue = write.catch(() => {});
+    return write;
   }
 
   void ensureLoaded();

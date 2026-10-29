@@ -8,6 +8,13 @@ Frontend services are the preferred Tauri boundary. Keep direct `invoke` calls i
 
 Desktop flow:
 
+Window-config writes use their own ordered queue and project pending field edits
+over the last confirmed backend value. A failed operation removes only its own
+pending edit; it cannot restore an older snapshot over later writes. Hydration
+also overlays pending edits, and writes await that initial baseline. The focused
+`services/settings/window.test.ts` covers different-field rollback, same-value
+reaffirmation, successive failures, and edits during hydration.
+
 1. start from normalized defaults;
 2. subscribe to `general-settings-changed` before hydration;
 3. read `get_general_settings` from Rust;
