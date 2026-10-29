@@ -30,6 +30,67 @@ afterEach(async () => {
 });
 
 describe("main window detail requests", () => {
+  it.each(["image", "file"] as const)(
+    "keeps a recycled %s in the recycle bin after opening its materialized detail",
+    async (kind) => {
+      vi.stubGlobal(
+        "ResizeObserver",
+        class {
+          observe() {}
+          unobserve() {}
+          disconnect() {}
+        },
+      );
+      const target = document.createElement("div");
+      document.body.append(target);
+      const app = mount(MainPage, { target });
+      cleanups.push(async () => {
+        await unmount(app);
+        target.remove();
+      });
+      flushSync();
+      const record = {
+        id: `recycled-${kind}`,
+        kind,
+        title: "Recycled media",
+        sourceApp: "test",
+        sizeBytes: 10,
+        contentHash: "media-hash",
+        createdAtMs: 1,
+        lastUsedAtMs: 1,
+        isFavorite: false,
+      } as PersistedClipboardItem;
+      bridge.listeners.get("clipboard-item-added")?.({ payload: record });
+      bridge.listeners.get("clipboard-items-changed")?.({ payload: { deletedIds: [record.id] } });
+      flushSync();
+      const selectFilter = (key: string) => {
+        const tab = [...target.querySelectorAll<HTMLButtonElement>('.filters [role="tab"]')].find(
+          (button) => button.textContent?.trim() === t(key),
+        );
+        tab!.click();
+        flushSync();
+      };
+      selectFilter("filter.deleted");
+      expect(target.querySelector(`[data-id="${record.id}"]`)).not.toBeNull();
+      // The materialization command returns the regular persisted DTO, which
+      // omits recycle-bin membership even for an already deleted record.
+      bridge.materialize.mockResolvedValue(
+        toClipboardItem({ ...record, resourcePath: `C:/fixture/${kind}.png` }),
+      );
+      target
+        .querySelector<HTMLElement>(`[data-id="${record.id}"]`)!
+        .dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true }));
+      for (let i = 0; i < 16; i++) {
+        await Promise.resolve();
+        flushSync();
+      }
+      expect(bridge.materialize).toHaveBeenCalledWith(expect.objectContaining({ deleted: true }));
+      expect(target.querySelector(".detail-panel")?.textContent).toContain("Recycled media");
+      expect(target.querySelector(`[data-id="${record.id}"]`)).not.toBeNull();
+      selectFilter("filter.all");
+      expect(target.querySelector(`[data-id="${record.id}"]`)).toBeNull();
+    },
+  );
   it("keeps a recycled row visible after its saved tags arrive", async () => {
     vi.stubGlobal(
       "ResizeObserver",

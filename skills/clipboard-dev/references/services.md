@@ -190,6 +190,9 @@ metadata or an already loaded body. Float-only pending requests track item/tag/c
 updates and delete invalidations separately until entering the detail view. Late
 materialization may replace the whole row only if the original immutable store
 object is still current; stale completion is discarded and can be retried.
+Accepted media materialization retains the current record's `deleted` flag:
+the returned persisted DTO contains body/path data but omits recycle-bin membership.
+Opening image/file details in the recycle bin must not promote the row into active history.
 
 ## Search interaction diagnostics
 

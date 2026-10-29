@@ -194,7 +194,8 @@
     // instead of being replaced by that older database read.
     if (!expected || findLoadedItem(item.id) !== expected)
       throw new Error("Clipboard record changed while loading");
-    return replaceMaterializedItem(materialized);
+    // The persisted DTO carries body/path updates, not recycle-bin membership.
+    return replaceMaterializedItem({ ...materialized, deleted: expected.deleted });
   }
 
   function mergeHydratedItem(current: ClipboardItem, full: ClipboardItem): ClipboardItem {
