@@ -126,6 +126,15 @@ transport SHA-256 is valid. Any read/decode failure stays terminal and prevents
 wire UTs cover every partial header length; a real SQLite checkpoint UT covers
 rollback and retry after the remote reference is repaired.
 
+Sync resource materialization publishes a verified sibling staging file with
+atomic rename replacement, retaining regular-file/symlink checks. It never
+unlinks the destination before rename: another process may already have
+downloaded and committed that same body while the current request was in flight.
+A failed late publication must preserve the successful cache entry. A Windows
+UT interleaves two production materializers and holds a real staging read handle
+without delete sharing to verify failure preservation; existing resource UTs
+cover normal cache reuse, corruption repair and encrypted downloads.
+
 Desktop sync resolves `clipboard_sync::v1::namespace` before engine work. New
 identities exclude S3 credentials; existing v1 scopes are authenticated and bound
 without rewriting data. A conditional, read-back-verified `v1/namespace.json`

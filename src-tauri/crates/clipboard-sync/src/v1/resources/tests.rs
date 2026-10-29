@@ -394,6 +394,112 @@ fn materialization_reuses_valid_cache_and_repairs_corruption() {
     fs::remove_dir_all(root).unwrap();
 }
 
+#[cfg(windows)]
+#[test]
+fn failed_materialization_preserves_a_concurrent_successful_download() {
+    use std::os::windows::fs::OpenOptionsExt;
+
+    // Interleave another independent materializer after this request began.
+    // A real Windows read handle then models a scanner holding the staging
+    // file without delete sharing, so publishing this request must fail.
+    struct InterleavedStore<'a> {
+        inner: &'a MemoryStore,
+        cache: &'a Path,
+        held_download: RefCell<Option<File>>,
+        winner_path: RefCell<Option<PathBuf>>,
+    }
+
+    impl ObjectStore for InterleavedStore<'_> {
+        fn list(&self, prefix: &str, after: Option<&str>) -> Result<Vec<ObjectInfo>, String> {
+            self.inner.list(prefix, after)
+        }
+        fn get(&self, key: &str) -> Result<Option<DownloadedObject>, String> {
+            self.inner.get(key)
+        }
+        fn head(&self, key: &str) -> Result<Option<ObjectMetadata>, String> {
+            self.inner.head(key)
+        }
+        fn put(
+            &self,
+            key: &str,
+            bytes: Vec<u8>,
+            condition: PutCondition,
+        ) -> Result<PutOutcome, String> {
+            self.inner.put(key, bytes, condition)
+        }
+        fn put_file(
+            &self,
+            key: &str,
+            path: &Path,
+            sha256: &str,
+            size_bytes: u64,
+            condition: PutCondition,
+        ) -> Result<PutOutcome, String> {
+            self.inner
+                .put_file(key, path, sha256, size_bytes, condition)
+        }
+        fn delete(&self, key: &str) -> Result<(), String> {
+            self.inner.delete(key)
+        }
+        fn get_to_file(
+            &self,
+            key: &str,
+            destination: &Path,
+            max_bytes: u64,
+        ) -> Result<Option<DownloadedFile>, String> {
+            let downloaded = self.inner.get_to_file(key, destination, max_bytes)?;
+            let winner = materialize_resource(self.inner, key, self.cache, max_bytes, None)?;
+            assert!(!winner.reused_local_file);
+            *self.winner_path.borrow_mut() = Some(winner.path);
+            *self.held_download.borrow_mut() = Some(
+                fs::OpenOptions::new()
+                    .read(true)
+                    .share_mode(0x1 | 0x2)
+                    .open(destination)
+                    .map_err(|error| error.to_string())?,
+            );
+            Ok(downloaded)
+        }
+    }
+
+    let root = temporary_directory("concurrent-publish-failure");
+    let cache = root.join("cache");
+    let bytes = b"concurrently materialized body".repeat(1024);
+    let key = resource_object_key(
+        ResourceCategory::File,
+        &hex::encode(Sha256::digest(&bytes)),
+        "bin",
+    )
+    .unwrap();
+    let inner = MemoryStore::default();
+    inner
+        .objects
+        .borrow_mut()
+        .insert(key.clone(), bytes.clone());
+    let store = InterleavedStore {
+        inner: &inner,
+        cache: &cache,
+        held_download: RefCell::new(None),
+        winner_path: RefCell::new(None),
+    };
+
+    let result = materialize_resource(&store, &key, &cache, 1024 * 1024, None);
+    assert!(
+        result.is_err(),
+        "the real staging handle must prevent rename"
+    );
+    let winner_path = store.winner_path.borrow().clone().unwrap();
+    let retained = fs::read(&winner_path);
+    // Release the scanner's handle before cleaning up the synthetic directory.
+    drop(store);
+    fs::remove_dir_all(root).unwrap();
+    assert_eq!(
+        retained.unwrap(),
+        bytes,
+        "a failed late request must preserve the successful body"
+    );
+}
+
 #[test]
 fn local_verification_rejects_missing_corrupt_and_oversized_files() {
     let root = temporary_directory("verify-local");

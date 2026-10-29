@@ -443,9 +443,10 @@ fn publish_verified_file(temp_path: &Path, final_path: &Path) -> Result<(), Stri
         if metadata.file_type().is_symlink() || !metadata.is_file() {
             return Err("cached resource path changed to a non-regular file".to_string());
         }
-        fs::remove_file(final_path)
-            .map_err(|error| format!("failed to replace corrupted cached resource: {error}"))?;
     }
+    // Another process may have published a valid body while we downloaded.
+    // Atomic replacement keeps its directory entry intact if rename fails;
+    // unlinking first would discard that successful publication.
     fs::rename(temp_path, final_path)
         .map_err(|error| format!("failed to publish cached resource: {error}"))
 }
