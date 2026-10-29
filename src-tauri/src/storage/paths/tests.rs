@@ -9,6 +9,61 @@ use super::{ResourceRootRole, StoragePaths, RESOURCE_ROOT_MARKER};
 use crate::storage::StorageError;
 
 #[test]
+fn failed_marker_replacement_preserves_existing_entry_and_removes_staging() {
+    let root = temporary_test_directory("failed-marker");
+    let resource = root.join("resources");
+    let paths = StoragePaths::initialize_with_resource_directories(
+        root.join("project"),
+        None,
+        None,
+        Some(resource.clone()),
+    )
+    .unwrap();
+    let marker = resource.join(RESOURCE_ROOT_MARKER);
+    fs::create_dir(&marker).unwrap();
+    fs::write(marker.join("keep.txt"), b"existing contents").unwrap();
+    let result = paths.claim_resource_root(ResourceRootRole::File);
+    let retained = fs::read(marker.join("keep.txt")).unwrap();
+    let leftovers = fs::read_dir(&resource)
+        .unwrap()
+        .map(Result::unwrap)
+        .filter(|entry| {
+            entry
+                .file_name()
+                .to_string_lossy()
+                .starts_with(".clipboard-resource-root.tmp-")
+        })
+        .count();
+    fs::remove_dir_all(root).unwrap();
+    assert!(result.is_err());
+    assert_eq!(retained, b"existing contents");
+    assert_eq!(leftovers, 0);
+}
+
+#[test]
+fn claiming_a_root_preserves_an_external_hard_link_target_of_the_marker() {
+    let root = temporary_test_directory("linked-marker");
+    let resource = root.join("resources");
+    let paths = StoragePaths::initialize_with_resource_directories(
+        root.join("project"),
+        None,
+        None,
+        Some(resource.clone()),
+    )
+    .unwrap();
+    let external = root.join("external-user-file.txt");
+    let original = b"unrelated external contents must remain unchanged";
+    fs::write(&external, original).unwrap();
+    fs::hard_link(&external, resource.join(RESOURCE_ROOT_MARKER)).unwrap();
+    paths.claim_resource_root(ResourceRootRole::File).unwrap();
+    let retained = fs::read(&external).unwrap();
+    let marker_valid = paths.resource_root_marker_valid(ResourceRootRole::File);
+    fs::remove_dir_all(root).unwrap();
+    assert_eq!(retained, original);
+    assert!(marker_valid);
+}
+
+#[test]
 fn ownership_transfer_waits_for_unlink_guard_and_stale_revoke_keeps_foreign_marker() {
     let root = temporary_test_directory("transfer-lock");
     let shared = root.join("resources");

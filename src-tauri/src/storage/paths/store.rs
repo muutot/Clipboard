@@ -213,9 +213,9 @@ impl StoragePaths {
         fs::create_dir_all(path)?;
         let lock = resource_root_lock_file(path)?;
         lock.lock()?;
-        fs::write(
-            path.join(RESOURCE_ROOT_MARKER),
-            resource_root_marker_content(&self.project, role.as_str()),
+        write_resource_root_marker(
+            path,
+            &resource_root_marker_content(&self.project, role.as_str()),
         )?;
         Ok(())
     }
@@ -416,8 +416,33 @@ fn resource_root_cleanup_enabled(
         });
     }
 
-    fs::write(marker, expected)?;
+    write_resource_root_marker(path, &expected)?;
     Ok(true)
+}
+
+/// Replace the marker's directory entry without writing through a link to an
+/// unrelated inode. A failed flush/replace retains the old entry and bytes.
+fn write_resource_root_marker(root: &Path, contents: &[u8]) -> Result<(), StorageError> {
+    use std::io::Write;
+
+    let temporary = root.join(format!(
+        "{RESOURCE_ROOT_MARKER}.tmp-{}",
+        uuid::Uuid::new_v4()
+    ));
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temporary)?;
+    let result = (|| {
+        file.write_all(contents)?;
+        file.sync_all()?;
+        drop(file);
+        crate::storage::replace_file(&temporary, &root.join(RESOURCE_ROOT_MARKER))
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(temporary);
+    }
+    result
 }
 
 fn resource_root_lock_file(root: &Path) -> std::io::Result<fs::File> {

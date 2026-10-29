@@ -397,6 +397,12 @@ The lock is never an orphan or rename source, and the marker's v1 bytes are unch
 Different databases sharing one matching project/role root remain outside the
 per-database publication guarantee and require separate investigation.
 
+Marker writes stage to an exclusively created UUID file, flush and atomically
+replace the directory entry while holding the root lock. An existing marker's
+hard-link/symlink target is not written through; publication failure retains the
+old entry and removes staging. Explicit and empty-root claims share this helper,
+without changing v1 marker bytes or the ownership command payload.
+
 `content/resource_metadata.rs` and frontend `ResourceMetadata`/`ResourceFileMetadata` carry schema version, MIME/extension, size, storage/original paths, hashes, image dimensions, and per-file entries.
 
 - Treat metadata JSON as untrusted/optional at the frontend boundary.

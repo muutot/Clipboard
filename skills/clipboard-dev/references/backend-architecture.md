@@ -327,6 +327,15 @@ addresses ownership transfer, not different databases with the same project/role
 marker sharing one root. UTs use independent projects/databases, a held unlink
 guard, stale revoke and busy/invalid coordination; Unix CI remains a separate gate.
 
+Ownership marker publication uses an exclusively created UUID staging file,
+flushes it, then atomically replaces the marker's directory entry under the root
+lock. It never writes through an existing marker link: a hard-link alias of an
+unrelated external file keeps its original bytes. Failed writes/replacements
+retain the old entry and remove only owned staging. Both explicit claim and
+configuration-time empty-root claims use this helper. Marker v1 bytes and IPC
+remain unchanged. Real hard-link and conflicting-directory UTs cover alias
+preservation, failed publication and staging cleanup.
+
 `commands/files/replace.rs::replace_icon_file_at` validates the picked image and target name/symlink, then copies into a temporary sibling and uses `content/file_store.rs::store_atomically` to flush and replace it. Selecting the cached target itself or a hard-link alias succeeds without copying onto the source inode; a failed replacement preserves the existing destination and removes staging. The Tauri command and frontend arguments are unchanged. Windows UTs exercise self/alias replacement and a conflicting destination directory; matching Unix CI remains necessary.
 
 `FileStore::save_file` verifies an existing body against the immutable staged source before reusing it; `save_screenshot` and `save_bytes_atomically` compare with the supplied bytes. Equal length is only a fast rejection check, never proof of identity. Reads use bounded buffers and stop at the expected stream's end, so growing existing files cannot force unbounded comparison. Missing/changed bodies are atomically replaced, identical cache hits retain their mtime, and comparison failures propagate while removing staging. UTs cover same-length corruption and byte differences across buffer boundaries. Reclamation/publication guards are still the caller's responsibility.
