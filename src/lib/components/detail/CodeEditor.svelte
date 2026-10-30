@@ -170,10 +170,10 @@
 <style>
   .code-editor-shell {
     overflow: hidden;
-    border: 1px solid #3a3a3a;
+    border: 1px solid var(--border-color);
     border-radius: 8px;
-    background: #141414;
-    box-shadow: 0 0 0 1px rgba(74, 168, 255, 0.12);
+    background: var(--input-bg);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--selection-color) 12%, transparent);
   }
 
   .code-editor-toolbar {
@@ -183,15 +183,15 @@
     gap: 12px;
     min-height: 34px;
     padding: 0 10px;
-    border-bottom: 1px solid #2e2e2e;
-    background: #181818;
+    border-bottom: 1px solid var(--border-subtle);
+    background: var(--statusbar-bg);
   }
 
   .language-label {
     padding: 3px 8px;
-    border: 1px solid #3a3a3a;
+    border: 1px solid var(--border-color);
     border-radius: 5px;
-    color: #999;
+    color: var(--text-muted);
     font-size: 10px;
     letter-spacing: 0.05em;
     text-transform: uppercase;
@@ -199,7 +199,7 @@
 
   .editing-label,
   .preview-label {
-    color: #777;
+    color: var(--text-faint);
     font-size: 10px;
   }
 
@@ -236,9 +236,9 @@
     margin: 0;
     padding: 10px 12px;
     outline: none;
-    color: #d4d4d4;
-    background: #141414;
-    caret-color: #8fc7ff;
+    color: var(--text-primary);
+    background: transparent;
+    caret-color: var(--selection-color);
     font:
       13px/1.6 "Cascadia Code",
       Consolas,

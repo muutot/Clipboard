@@ -410,7 +410,7 @@
       Consolas,
       "SFMono-Regular",
       monospace;
-    color: #d4d4d4;
+    color: var(--text-primary);
   }
 
   .code-content code {
@@ -429,29 +429,32 @@
     width: 36px;
     padding-right: 12px;
     text-align: right;
-    color: #555;
+    color: var(--text-faint);
     user-select: none;
     flex-shrink: 0;
   }
 
+  /* Syntax token hues are a fixed niche palette (content-defined rendering);
+     mixing toward --text-primary shifts their luminance with the theme so
+     they stay legible on both dark and light code surfaces. */
   :global(.token-keyword) {
-    color: #c586c0;
+    color: color-mix(in srgb, #c586c0 75%, var(--text-primary));
   }
 
   :global(.token-string) {
-    color: #ce9178;
+    color: color-mix(in srgb, #ce9178 75%, var(--text-primary));
   }
 
   :global(.token-comment) {
-    color: #6a9955;
+    color: color-mix(in srgb, #6a9955 70%, var(--text-primary));
     font-style: italic;
   }
 
   :global(.token-number) {
-    color: #b5cea8;
+    color: color-mix(in srgb, #b5cea8 65%, var(--text-primary));
   }
 
   :global(.token-key) {
-    color: #9cdcfe;
+    color: color-mix(in srgb, #9cdcfe 65%, var(--text-primary));
   }
 </style>
