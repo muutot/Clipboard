@@ -2083,6 +2083,9 @@
       case "tag-add":
         tagAddSignal = { seq: (tagAddSignal?.seq ?? 0) + 1, itemId: selectedId ?? "" };
         break;
+      case "find-in-detail":
+        findSignal = { seq: (findSignal?.seq ?? 0) + 1 };
+        break;
       case "save-item":
         saveItem(action.id);
         break;
