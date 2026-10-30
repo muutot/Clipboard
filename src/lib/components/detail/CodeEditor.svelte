@@ -215,9 +215,9 @@
     flex-direction: column;
     min-width: 38px;
     padding: 10px 0;
-    border-right: 1px solid #292929;
-    color: #555;
-    background: #121212;
+    border-right: 1px solid var(--border-subtle);
+    color: var(--text-faint);
+    background: var(--statusbar-bg);
     font:
       13px/1.6 "Cascadia Code",
       Consolas,
@@ -249,19 +249,19 @@
   }
 
   .code-input:focus {
-    background: #16191d;
+    background: color-mix(in srgb, var(--selection-color) 6%, var(--input-bg));
   }
 
   .code-input:empty::before {
-    color: #555;
+    color: var(--placeholder-color);
     content: attr(data-placeholder);
     pointer-events: none;
   }
 
   .live-preview {
     padding: 9px 10px 10px;
-    border-top: 1px solid #2e2e2e;
-    background: #111;
+    border-top: 1px solid var(--border-subtle);
+    background: var(--statusbar-bg);
   }
 
   .preview-label {
@@ -270,7 +270,7 @@
   }
 
   :global(.live-preview .code-block) {
-    border-color: #292929;
-    background: #121212;
+    border-color: var(--border-subtle);
+    background: var(--input-bg);
   }
 </style>

@@ -374,19 +374,19 @@
 
 <style>
   .code-block {
-    border: 1px solid #2e2e2e;
+    border: 1px solid var(--border-subtle);
     border-radius: 8px;
     overflow: hidden;
-    background: #141414;
+    background: var(--input-bg);
   }
 
   .code-lang-label {
     display: inline-block;
     padding: 3px 10px;
     margin: 8px 10px 0;
-    border: 1px solid #3a3a3a;
+    border: 1px solid var(--border-color);
     border-radius: 5px;
-    color: #888;
+    color: var(--text-muted);
     font-size: 10px;
     text-transform: uppercase;
     letter-spacing: 0.05em;
