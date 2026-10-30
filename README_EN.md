@@ -15,7 +15,7 @@
   <img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="license">
   <img src="https://img.shields.io/badge/Tauri-2.x-ffc131?logo=tauri" alt="tauri">
   <img src="https://img.shields.io/badge/Svelte-5.x-ff3e00?logo=svelte" alt="svelte">
-  <img src="https://img.shields.io/badge/Rust-edition2021-dea584?logo=rust" alt="rust">
+  <img src="https://img.shields.io/badge/Rust-2021%20edition-dea584?logo=rust" alt="rust">
 </p>
 
 ---
