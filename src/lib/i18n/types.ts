@@ -591,6 +591,7 @@ export interface LocaleDefinition {
     copyItemDesc: string;
     deleteItemDesc: string;
     favoriteItemDesc: string;
+    findInDetailDesc: string;
     addTagDesc: string;
     moveSelectionDesc: string;
     switchFilterDesc: string;

@@ -626,6 +626,7 @@ const zhCN: LocaleDefinition = {
     copyItemDesc: "复制当前选中的条目到剪贴板",
     deleteItemDesc: "删除当前选中的条目",
     favoriteItemDesc: "收藏或取消收藏当前条目",
+    findInDetailDesc: "在详情面板中查找当前条目（Ctrl+F）",
     addTagDesc: "为当前选中的条目添加标签",
     moveSelectionDesc: "上下移动选中条目",
     switchFilterDesc: "切换到上一个或下一个分类过滤器",

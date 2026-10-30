@@ -652,6 +652,7 @@ const en: LocaleDefinition = {
     copyItemDesc: "Copy the selected item to clipboard",
     deleteItemDesc: "Delete the selected item",
     favoriteItemDesc: "Favorite or unfavorite the current item",
+    findInDetailDesc: "Find the current item in the detail panel (Ctrl+F)",
     addTagDesc: "Add a tag to the selected item",
     moveSelectionDesc: "Move the selection up or down",
     switchFilterDesc: "Switch to the previous or next category filter",
