@@ -406,22 +406,27 @@
     padding: 8px 0;
     overflow-x: auto;
     font:
-      13px/0.5 "Cascadia Code",
+      13px/1.6 "Cascadia Code",
       Consolas,
       "SFMono-Regular",
       monospace;
     color: var(--text-primary);
   }
 
+  /* Flex column: pure-whitespace text nodes (prettier formatting inside the
+     pre) are ignored as flex items, so no phantom compressed line boxes —
+     the old line-height 0.5 hack painted overlapping selection rects. */
   .code-content code {
-    display: block;
+    display: flex;
+    flex-direction: column;
+    width: max-content;
+    min-width: 100%;
   }
 
   .code-line {
     display: block;
     padding-right: 16px;
     white-space: pre;
-    line-height: 0.5;
   }
 
   .line-number {
