@@ -142,7 +142,7 @@ Key contracts:
 - Async OCR listeners must be unregistered when the item changes, the panel closes, or the component is destroyed.
 - Keep resource metadata parsing consistent with `services/clipboard/mapping.ts` and backend `resource_metadata.rs`.
 - The detail panel tabs are Preview / Details / Tags, plus OCR only for `kind === "image"` rows (OCR is captured from clipboard images, so text/link/file rows have no meaningful OCR state and must not show the tab). The Tags tab (`DetailTagsTab`) is a second-level group of the panel, not a row inside the Details tab: one `TagChip` per row with a remove button plus an inline add input above the list that calls `onsavetags(id, tags)` (full replacement). It reads/writes `item.tags`.
-- The inline Markdown/plain-text `<textarea>` editors open `EditableContextMenu.svelte` on right-click (cut/copy/paste/select-all in the app theme) instead of the OS menu, matching the card editor.
+- All three edit modes (code, Markdown, plain text) use the shared `CodeEditor.svelte` (contenteditable with line numbers, live `CodePreview` pane, and `EditableContextMenu` on right-click); Markdown passes `language="markdown"`, plain text `language="text"` — `CodePreview` maps both to empty keyword sets so plain prose gets no JavaScript keyword fallback highlighting.
 - The preview action row (`.detail-actions`: copy / copy-path / locate / open-folder / copy-filename / plain|format|clean paste) is hidden while `editing`, so the editor plus its save/save-as-new/cancel row are the only controls shown.
 
 ### `TagEditDialog.svelte`

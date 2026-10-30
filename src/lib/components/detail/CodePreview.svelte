@@ -81,6 +81,10 @@
   }
 
   const keywords: Record<string, Set<string>> = {
+    // Plain text and markdown get no keyword highlighting — the tokenizer
+    // falls back to JavaScript keywords for any language missing from this map.
+    markdown: new Set(),
+    text: new Set(),
     JavaScript: new Set([
       "function",
       "var",

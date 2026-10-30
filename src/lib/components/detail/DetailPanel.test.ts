@@ -126,8 +126,8 @@ describe("DetailPanel pending saves", () => {
         change === "cancel-reopen-same" || change === "unchanged"
           ? "original body"
           : "UNSAVED NEW DRAFT";
-      const draft = target.querySelector<HTMLTextAreaElement>("textarea")!;
-      draft.value = expectedDraft;
+      const draft = target.querySelector<HTMLElement>(".code-input")!;
+      draft.textContent = expectedDraft;
       draft.dispatchEvent(new Event("input", { bubbles: true }));
       flushSync();
       finish(true);
@@ -135,8 +135,9 @@ describe("DetailPanel pending saves", () => {
         await Promise.resolve();
         flushSync();
       }
-      if (change === "unchanged") expect(target.querySelector("textarea")).toBeNull();
-      else expect(target.querySelector<HTMLTextAreaElement>("textarea")?.value).toBe(expectedDraft);
+      if (change === "unchanged") expect(target.querySelector(".code-input")).toBeNull();
+      else
+        expect(target.querySelector<HTMLElement>(".code-input")?.textContent).toBe(expectedDraft);
     },
   );
 });

@@ -11,7 +11,6 @@
   import DetailImagePreview from "$lib/components/detail/DetailImagePreview.svelte";
   import CodeEditor from "$lib/components/detail/CodeEditor.svelte";
   import CodePreview from "$lib/components/detail/CodePreview.svelte";
-  import EditableContextMenu from "$lib/components/common/EditableContextMenu.svelte";
   import MarkdownPreview from "$lib/components/detail/MarkdownPreview.svelte";
   import type { ClipboardItem, OcrTextBlock } from "$lib/types/clipboard";
   import { messages, resolvePath } from "$lib/i18n";
@@ -140,16 +139,6 @@
   function endContentEdit() {
     editSession += 1;
     editing = false;
-  }
-  // Themed cut/copy/paste/select-all menu for the inline textarea editors.
-  let editorContextMenu = $state<{ x: number; y: number; target: HTMLElement } | null>(null);
-
-  function openEditorContextMenu(event: MouseEvent) {
-    const element = event.currentTarget;
-    if (!(element instanceof HTMLTextAreaElement)) return;
-    event.preventDefault();
-    event.stopPropagation();
-    editorContextMenu = { x: event.clientX, y: event.clientY, target: element };
   }
   let editTitleContent = $state("");
 
@@ -478,13 +467,14 @@
             {/if}
           {:else if isMarkdown}
             {#if editing}
-              <div class="edit-area">
-                <textarea
-                  bind:value={editContent}
-                  rows={Math.min(20, Math.max(5, editContent.split("\n").length))}
-                  placeholder={_t("edit.placeholder")}
-                  oncontextmenu={openEditorContextMenu}></textarea>
-              </div>
+              <CodeEditor
+                content={editContent}
+                language="markdown"
+                editorLabel={_t("edit.edit")}
+                previewLabel={_t("detail.preview")}
+                placeholder={_t("edit.placeholder")}
+                oncontentchange={(content) => (editContent = content)}
+              />
               <DetailEditActions
                 onsave={saveEdit}
                 onsaveasnew={saveAsNew}
@@ -495,13 +485,14 @@
             {/if}
           {:else}
             {#if editing}
-              <div class="edit-area">
-                <textarea
-                  bind:value={editContent}
-                  rows={Math.min(20, Math.max(5, editContent.split("\n").length))}
-                  placeholder={_t("edit.placeholder")}
-                  oncontextmenu={openEditorContextMenu}></textarea>
-              </div>
+              <CodeEditor
+                content={editContent}
+                language="text"
+                editorLabel={_t("edit.edit")}
+                previewLabel={_t("detail.preview")}
+                placeholder={_t("edit.placeholder")}
+                oncontentchange={(content) => (editContent = content)}
+              />
               <DetailEditActions
                 onsave={saveEdit}
                 onsaveasnew={saveAsNew}
@@ -590,15 +581,6 @@
       {/if}
     </div>
   </div>
-{/if}
-
-{#if editorContextMenu}
-  <EditableContextMenu
-    x={editorContextMenu.x}
-    y={editorContextMenu.y}
-    target={editorContextMenu.target}
-    onclose={() => (editorContextMenu = null)}
-  />
 {/if}
 
 <style>
@@ -836,27 +818,5 @@
     .detail-panel {
       width: 100vw;
     }
-  }
-
-  .edit-area {
-    position: relative;
-    z-index: 4;
-    padding: 4px;
-  }
-
-  .edit-area textarea {
-    width: 100%;
-    box-sizing: border-box;
-    padding: 10px 12px;
-    border: 1px solid var(--selection-color);
-    border-radius: 7px;
-    color: var(--text-primary);
-    background: var(--input-bg);
-    font:
-      12px/1.55 "Cascadia Code",
-      Consolas,
-      monospace;
-    resize: vertical;
-    outline: none;
   }
 </style>
