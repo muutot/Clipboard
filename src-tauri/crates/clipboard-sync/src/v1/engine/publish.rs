@@ -188,15 +188,14 @@ fn published_segment_matches_outbox(
     {
         return false;
     }
-    match database.sync_outbox_range_matches_mutations(
-        &state.remote_scope,
-        state.published_sequence,
-        head.published_sequence,
-        &segment.mutations,
-    ) {
-        Ok(matches) => matches,
-        Err(_) => false,
-    }
+    database
+        .sync_outbox_range_matches_mutations(
+            &state.remote_scope,
+            state.published_sequence,
+            head.published_sequence,
+            &segment.mutations,
+        )
+        .unwrap_or_default()
 }
 
 fn listed_head_identity(info: &ObjectInfo) -> Option<(&str, u64)> {

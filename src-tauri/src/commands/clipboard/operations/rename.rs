@@ -173,6 +173,141 @@ fn copy_rename_resource(from: &std::path::Path, to: &std::path::Path) -> std::io
     result
 }
 
+/// Pass-through originals and unclaimed roots are not ours to rename.
+/// Canonical containment rejects traversal and directory links escaping a root;
+/// symlink metadata rejects a linked leaf and directories themselves.
+pub(super) fn is_owned_rename_source(paths: &StoragePaths, source: &std::path::Path) -> bool {
+    use crate::storage::{
+        ResourceRootRole, RESOURCE_ROOT_DATABASES, RESOURCE_ROOT_LOCK, RESOURCE_ROOT_MARKER,
+    };
+    if source.file_name().is_some_and(|name| {
+        name == RESOURCE_ROOT_MARKER
+            || name == RESOURCE_ROOT_LOCK
+            || name == RESOURCE_ROOT_DATABASES
+    }) || !std::fs::symlink_metadata(source).is_ok_and(|meta| meta.file_type().is_file())
+    {
+        return false;
+    }
+    let Ok(source) = source.canonicalize() else {
+        return false;
+    };
+    [
+        (
+            &paths.images,
+            paths.image_cleanup_enabled,
+            paths.image_marker_required,
+            ResourceRootRole::Image,
+        ),
+        (
+            &paths.files,
+            paths.file_cleanup_enabled,
+            paths.file_marker_required,
+            ResourceRootRole::File,
+        ),
+    ]
+    .into_iter()
+    .any(|(root, enabled, marker_required, role)| {
+        enabled
+            && (!marker_required || paths.resource_root_marker_valid(role))
+            && root
+                .canonicalize()
+                .is_ok_and(|root| source.starts_with(root))
+    })
+}
+
+/// Restricts a webview-provided file name stem to characters that cannot
+/// alter the destination directory (`/`, `\`, `:`) or form a Windows device
+/// name, and strips trailing dots/spaces (illegal on Windows). Returns an
+/// empty string when nothing usable remains.
+pub(super) fn sanitize_file_stem(name: &str) -> String {
+    let sanitized: String = name
+        .chars()
+        .map(|character| match character {
+            '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|' => '_',
+            character if (character as u32) < 0x20 || character == '\u{7f}' => '_',
+            other => other,
+        })
+        .collect();
+    let trimmed = sanitized.trim_end_matches(['.', ' ']);
+    if is_windows_reserved_device_name(trimmed) {
+        return "_".to_owned();
+    }
+    trimmed.to_owned()
+}
+
+fn is_windows_reserved_device_name(stem: &str) -> bool {
+    let upper = stem.to_ascii_uppercase();
+    if matches!(upper.as_str(), "CON" | "PRN" | "AUX" | "NUL") {
+        return true;
+    }
+    ["COM", "LPT"].iter().any(|prefix| {
+        upper.starts_with(prefix)
+            && !upper[prefix.len()..].is_empty()
+            && upper[prefix.len()..]
+                .chars()
+                .all(|character| character.is_ascii_digit())
+    })
+}
+
+/// Rewrites every exact occurrence of `old_path` inside a renamed record's
+/// `metadata_json` and file-list `text_content`. `rename_item` updates
+/// `resource_path`/`preview_path`, but the detail panel and multi-file paste
+/// read the managed path out of those fields first, so a rename that skipped
+/// them would point the UI at a file that no longer exists.
+pub(super) fn rewrite_stored_resource_paths(
+    item: &mut ClipboardItem,
+    old_path: &str,
+    new_path: &str,
+) {
+    if let Some(metadata) = item.metadata_json.as_deref() {
+        if let Ok(mut value) = serde_json::from_str::<serde_json::Value>(metadata) {
+            replace_path_strings(&mut value, old_path, new_path);
+            if let Ok(serialized) = serde_json::to_string(&value) {
+                item.metadata_json = Some(serialized);
+            }
+        }
+    }
+    if let Some(text) = item.text_content.as_deref() {
+        if let Ok(mut paths) = serde_json::from_str::<Vec<String>>(text) {
+            let mut changed = false;
+            for path in &mut paths {
+                if path == old_path {
+                    *path = new_path.to_owned();
+                    changed = true;
+                }
+            }
+            if changed {
+                if let Ok(serialized) = serde_json::to_string(&paths) {
+                    item.text_content = Some(serialized);
+                }
+            }
+        }
+    }
+}
+
+/// Recursively replaces string values equal to `old_path`. Exact matches keep
+/// unrelated paths (e.g. the other files of a multi-file capture) untouched.
+fn replace_path_strings(value: &mut serde_json::Value, old_path: &str, new_path: &str) {
+    match value {
+        serde_json::Value::String(text) => {
+            if text == old_path {
+                *text = new_path.to_owned();
+            }
+        }
+        serde_json::Value::Array(items) => {
+            for item in items {
+                replace_path_strings(item, old_path, new_path);
+            }
+        }
+        serde_json::Value::Object(map) => {
+            for item in map.values_mut() {
+                replace_path_strings(item, old_path, new_path);
+            }
+        }
+        _ => {}
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -335,140 +470,5 @@ mod tests {
             drop(database);
             std::fs::remove_dir_all(root).unwrap();
         }
-    }
-}
-
-/// Pass-through originals and unclaimed roots are not ours to rename.
-/// Canonical containment rejects traversal and directory links escaping a root;
-/// symlink metadata rejects a linked leaf and directories themselves.
-pub(super) fn is_owned_rename_source(paths: &StoragePaths, source: &std::path::Path) -> bool {
-    use crate::storage::{
-        ResourceRootRole, RESOURCE_ROOT_DATABASES, RESOURCE_ROOT_LOCK, RESOURCE_ROOT_MARKER,
-    };
-    if source.file_name().is_some_and(|name| {
-        name == RESOURCE_ROOT_MARKER
-            || name == RESOURCE_ROOT_LOCK
-            || name == RESOURCE_ROOT_DATABASES
-    }) || !std::fs::symlink_metadata(source).is_ok_and(|meta| meta.file_type().is_file())
-    {
-        return false;
-    }
-    let Ok(source) = source.canonicalize() else {
-        return false;
-    };
-    [
-        (
-            &paths.images,
-            paths.image_cleanup_enabled,
-            paths.image_marker_required,
-            ResourceRootRole::Image,
-        ),
-        (
-            &paths.files,
-            paths.file_cleanup_enabled,
-            paths.file_marker_required,
-            ResourceRootRole::File,
-        ),
-    ]
-    .into_iter()
-    .any(|(root, enabled, marker_required, role)| {
-        enabled
-            && (!marker_required || paths.resource_root_marker_valid(role))
-            && root
-                .canonicalize()
-                .is_ok_and(|root| source.starts_with(root))
-    })
-}
-
-/// Restricts a webview-provided file name stem to characters that cannot
-/// alter the destination directory (`/`, `\`, `:`) or form a Windows device
-/// name, and strips trailing dots/spaces (illegal on Windows). Returns an
-/// empty string when nothing usable remains.
-pub(super) fn sanitize_file_stem(name: &str) -> String {
-    let sanitized: String = name
-        .chars()
-        .map(|character| match character {
-            '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|' => '_',
-            character if (character as u32) < 0x20 || character == '\u{7f}' => '_',
-            other => other,
-        })
-        .collect();
-    let trimmed = sanitized.trim_end_matches(['.', ' ']);
-    if is_windows_reserved_device_name(trimmed) {
-        return "_".to_owned();
-    }
-    trimmed.to_owned()
-}
-
-fn is_windows_reserved_device_name(stem: &str) -> bool {
-    let upper = stem.to_ascii_uppercase();
-    if matches!(upper.as_str(), "CON" | "PRN" | "AUX" | "NUL") {
-        return true;
-    }
-    ["COM", "LPT"].iter().any(|prefix| {
-        upper.starts_with(prefix)
-            && !upper[prefix.len()..].is_empty()
-            && upper[prefix.len()..]
-                .chars()
-                .all(|character| character.is_ascii_digit())
-    })
-}
-
-/// Rewrites every exact occurrence of `old_path` inside a renamed record's
-/// `metadata_json` and file-list `text_content`. `rename_item` updates
-/// `resource_path`/`preview_path`, but the detail panel and multi-file paste
-/// read the managed path out of those fields first, so a rename that skipped
-/// them would point the UI at a file that no longer exists.
-pub(super) fn rewrite_stored_resource_paths(
-    item: &mut ClipboardItem,
-    old_path: &str,
-    new_path: &str,
-) {
-    if let Some(metadata) = item.metadata_json.as_deref() {
-        if let Ok(mut value) = serde_json::from_str::<serde_json::Value>(metadata) {
-            replace_path_strings(&mut value, old_path, new_path);
-            if let Ok(serialized) = serde_json::to_string(&value) {
-                item.metadata_json = Some(serialized);
-            }
-        }
-    }
-    if let Some(text) = item.text_content.as_deref() {
-        if let Ok(mut paths) = serde_json::from_str::<Vec<String>>(text) {
-            let mut changed = false;
-            for path in &mut paths {
-                if path == old_path {
-                    *path = new_path.to_owned();
-                    changed = true;
-                }
-            }
-            if changed {
-                if let Ok(serialized) = serde_json::to_string(&paths) {
-                    item.text_content = Some(serialized);
-                }
-            }
-        }
-    }
-}
-
-/// Recursively replaces string values equal to `old_path`. Exact matches keep
-/// unrelated paths (e.g. the other files of a multi-file capture) untouched.
-fn replace_path_strings(value: &mut serde_json::Value, old_path: &str, new_path: &str) {
-    match value {
-        serde_json::Value::String(text) => {
-            if text == old_path {
-                *text = new_path.to_owned();
-            }
-        }
-        serde_json::Value::Array(items) => {
-            for item in items {
-                replace_path_strings(item, old_path, new_path);
-            }
-        }
-        serde_json::Value::Object(map) => {
-            for item in map.values_mut() {
-                replace_path_strings(item, old_path, new_path);
-            }
-        }
-        _ => {}
     }
 }

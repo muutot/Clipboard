@@ -48,7 +48,7 @@ fn migrated_database_and_remaining_old_instance_keep_both_publications_discovera
                 .unwrap();
             sync_database(
                 &*hook_store,
-                &*hook_target,
+                &hook_target,
                 &hook_paths,
                 REMOTE_SCOPE,
                 None,
@@ -141,7 +141,7 @@ fn overlapping_database_connections_cannot_regress_the_published_head() {
                 .unwrap();
             *hook_result.lock().unwrap() = Some(sync_database(
                 &*hook_store,
-                &*hook_other,
+                &hook_other,
                 &hook_paths,
                 REMOTE_SCOPE,
                 None,
@@ -158,7 +158,7 @@ fn overlapping_database_connections_cannot_regress_the_published_head() {
         );
         assert!(first_result.is_ok());
         // The second caller retries after the first run releases its lease.
-        sync_database(&*store, &*other, &paths, REMOTE_SCOPE, None, options()).unwrap();
+        sync_database(&*store, &other, &paths, REMOTE_SCOPE, None, options()).unwrap();
     }
     let state = source
         .get_or_create_sync_remote_state(REMOTE_SCOPE)
