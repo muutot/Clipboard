@@ -39,6 +39,7 @@ export type KeyAction =
   | { type: "bulk-favorite"; prevent: boolean }
   | { type: "toggle-favorite"; id: string; prevent: boolean }
   | { type: "tag-add"; prevent: boolean }
+  | { type: "find-in-detail"; prevent: boolean }
   | { type: "save-item"; id: string; prevent: boolean }
   | { type: "toggle-float"; prevent: boolean }
   | { type: "quick-paste"; id: string; prevent: boolean };
@@ -83,6 +84,11 @@ export interface KeyActionContext {
   switchFilterPrev: string[];
   /** Bindings for the float-panel action (canonical default, empty disables). */
   toggleFloatBindings: string[];
+  /** Bindings for the detail-panel find action (canonical default Ctrl+F,
+   * empty disables). Claimed unconditionally (prevent) so the WebView2
+   * native find bar can never appear while the binding exists; the route
+   * treats the action as a no-op when no detail panel is open. */
+  findInDetailBindings: string[];
   /** Bindings for the hide-window action (canonical default Escape, empty
    * disables). Rebinding away from Escape fires on the custom chord; Escape
    * itself only hides while it is still one of the bound chords. */
@@ -179,6 +185,18 @@ export function resolveKeyAction(event: KeyboardEvent, ctx: KeyActionContext): K
     // precedent, a bare one keeps the `/` precedent so typing is never
     // hijacked. Shift stays excluded: Shift+key types characters.
     return { type: "focus-search", prevent: true };
+  }
+
+  // Detail find claims its chord unconditionally (prevent) so the WebView2
+  // native find bar never appears; the route no-ops it without a detail
+  // panel. Modifier guard matches focus-search: a custom bare chord must not
+  // hijack typing inside editables, while the shipped Ctrl+F keeps working
+  // from any field.
+  if (
+    matchesAny(ctx.findInDetailBindings) &&
+    (!editableTarget || event.ctrlKey || event.metaKey || event.altKey)
+  ) {
+    return { type: "find-in-detail", prevent: true };
   }
 
   if (!editableTarget || ctx.isSearchInput) {

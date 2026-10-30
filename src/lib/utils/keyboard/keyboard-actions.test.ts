@@ -55,6 +55,7 @@ function ctx(overrides: Partial<KeyActionContext> = {}): KeyActionContext {
     switchFilterNext: ["Alt+ArrowRight"],
     switchFilterPrev: ["Alt+ArrowLeft"],
     toggleFloatBindings: defaultShortcutsFor("toggleFloatPanel"),
+    findInDetailBindings: defaultShortcutsFor("findInDetail"),
     hideWindowBindings: defaultShortcutsFor("hideWindow"),
     quickPasteBindings: defaultShortcutsFor("quickPaste"),
     clearSelectionBindings: defaultShortcutsFor("clearSelection"),
@@ -292,6 +293,57 @@ describe("resolveKeyAction — search and quick copy", () => {
   });
 });
 
+describe("resolveKeyAction — find in detail", () => {
+  it("claims Ctrl+F even with no detail panel open (route no-ops)", () => {
+    // The chord is claimed unconditionally so the WebView2 native find bar
+    // can never appear; hiding it when no panel is open is the route's job.
+    expect(resolveKeyAction(keyEvent({ key: "f", ctrlKey: true }), ctx())).toEqual({
+      type: "find-in-detail",
+      prevent: true,
+    });
+  });
+
+  it("fires inside editable targets via its modifier chord (code editor)", () => {
+    const editor = targetOn("div", { contenteditable: "true" });
+    const onEditor = Object.defineProperty(keyEvent({ key: "f", ctrlKey: true }), "target", {
+      value: editor,
+    });
+    expect(resolveKeyAction(onEditor, ctx())).toEqual({
+      type: "find-in-detail",
+      prevent: true,
+    });
+    // A bare letter binding must not steal keys while typing.
+    expect(
+      resolveKeyAction(
+        Object.defineProperty(keyEvent({ key: "f" }), "target", { value: editor }),
+        ctx({ findInDetailBindings: ["F"] }),
+      ).type,
+    ).toBe("none");
+    editor.remove();
+  });
+
+  it("honors rebinding and disabling", () => {
+    // Empty bindings release Ctrl+F back to the browser (native find).
+    expect(
+      resolveKeyAction(keyEvent({ key: "f", ctrlKey: true }), ctx({ findInDetailBindings: [] }))
+        .type,
+    ).toBe("none");
+    // A rebound chord fires on the new key and leaves the old one native.
+    expect(
+      resolveKeyAction(
+        keyEvent({ key: "f", ctrlKey: true, shiftKey: true }),
+        ctx({ findInDetailBindings: ["Ctrl+Shift+F"] }),
+      ),
+    ).toEqual({ type: "find-in-detail", prevent: true });
+    expect(
+      resolveKeyAction(
+        keyEvent({ key: "f", ctrlKey: true }),
+        ctx({ findInDetailBindings: ["Ctrl+Shift+F"] }),
+      ).type,
+    ).toBe("none");
+  });
+});
+
 describe("resolveKeyAction — filters and movement", () => {
   it("resolves filter shortcuts with tab focus only outside editables", () => {
     expect(resolveKeyAction(keyEvent({ key: "2", altKey: true }), ctx())).toMatchObject({
@@ -480,7 +532,7 @@ describe("resolveKeyAction — item shortcuts", () => {
     const bulk = ctx({ selectedCount: 2 });
     expect(resolveKeyAction(keyEvent({ key: "c", ctrlKey: true }), bulk).type).toBe("bulk-copy");
     expect(resolveKeyAction(keyEvent({ key: "d", ctrlKey: true }), bulk).type).toBe("bulk-delete");
-    expect(resolveKeyAction(keyEvent({ key: "f", ctrlKey: true }), bulk).type).toBe(
+    expect(resolveKeyAction(keyEvent({ key: "g", ctrlKey: true }), bulk).type).toBe(
       "bulk-favorite",
     );
   });
@@ -533,7 +585,7 @@ describe("resolveKeyAction — item shortcuts", () => {
     // Disabled delete: Ctrl+D no longer fires.
     expect(resolveKeyAction(keyEvent({ key: "d", ctrlKey: true }), custom).type).toBe("none");
     // Untouched defaults keep working alongside the custom chord.
-    expect(resolveKeyAction(keyEvent({ key: "f", ctrlKey: true }), custom).type).toBe(
+    expect(resolveKeyAction(keyEvent({ key: "g", ctrlKey: true }), custom).type).toBe(
       "toggle-favorite",
     );
   });

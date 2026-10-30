@@ -487,6 +487,13 @@
     resolveActionBindings(keyboardShortcuts, "quickPaste", defaultShortcutsFor("quickPaste")),
   );
 
+  // Detail-find shortcut (canonical default Ctrl+F). Claimed unconditionally
+  // by the decision table (prevent) so the WebView2 native find bar can never
+  // appear; the action is a no-op here unless a text-like detail is open.
+  const findInDetailBindings = $derived(
+    resolveActionBindings(keyboardShortcuts, "findInDetail", defaultShortcutsFor("findInDetail")),
+  );
+
   // Clear-selection shortcut (canonical default Backspace, empty disables);
   // must stay wired here so settings edits take effect in the main window.
   const clearSelectionBindings = $derived(
@@ -1979,6 +1986,11 @@
   // moment it becomes selected.
   let tagAddSignal = $state<{ seq: number; itemId: string } | null>(null);
 
+  // Edge-triggered Ctrl+F signal for the detail panel's find bar. A monotonic
+  // sequence lets DetailPanel treat repeated presses as "open (or refocus)"
+  // without re-rendering the whole panel per keystroke.
+  let findSignal = $state<{ seq: number } | null>(null);
+
   function focusActiveFilterTab() {
     void tick().then(() => {
       const btn = document.querySelector<HTMLElement>(
@@ -2118,6 +2130,7 @@
         switchFilterNext: navigationBindings.switchFilterNext,
         switchFilterPrev: navigationBindings.switchFilterPrev,
         toggleFloatBindings: floatPanelBindings,
+        findInDetailBindings,
         hideWindowBindings,
         quickPasteBindings,
         clearSelectionBindings,
@@ -2422,6 +2435,7 @@
         onimagefullscreen={handleImageFullscreen}
         onsavetags={saveTags}
         {tagColors}
+        findRequest={findSignal}
       />
     {/if}
   </div>
@@ -2475,6 +2489,7 @@
     onimagefullscreen={handleImageFullscreen}
     onsavetags={saveTags}
     {tagColors}
+    findRequest={findSignal}
   />
 {/if}
 

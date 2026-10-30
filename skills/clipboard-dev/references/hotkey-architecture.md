@@ -201,6 +201,21 @@ Window-only (main window focused):
   `escape-hide-window` and `escape-toggle-tag` — a capture-phase clear that let
   the same keystroke reach the hide branch made one press both exit
   multi-select and hide the window.
+- `findInDetail` (default Ctrl+F, window scope) is claimed unconditionally
+  (`prevent: true`) in `resolveKeyAction` whenever its binding exists — even
+  with no detail panel open and inside editable targets via its modifier
+  chord — so the WebView2 native find bar can never appear; the route turns
+  the action into a no-op when no text-like preview is shown. Clearing the
+  binding in settings releases Ctrl+F back to the browser. The
+  `isItemActionShortcut` punch-through letter set therefore excludes `f` (it
+  would re-hijack Ctrl+F inside editable surfaces) and includes `g` for the
+  new favorite default.
+- Legacy default migrations run inside `load_and_validate` **before** the
+  default backfill: `migrate_legacy_favorite_default` rewrites a favoriteItem
+  still equal to the old Ctrl+F default to Ctrl+G (only when Ctrl+G is not
+  taken by another action) so `merge_missing_default_actions` can then
+  backfill the new `findInDetail` action; a customized favorite binding is
+  left untouched and findInDetail stays unbound.
 - Type-to-search is the final `resolveKeyAction` fallback (`focus-search-type`):
   a printable single character typed outside every editable surface focuses the
   search box and appends the character. Because it sits after all bound chords

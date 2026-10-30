@@ -10,7 +10,7 @@ describe("keyboard defaults (single source: keyboard-defaults.json)", () => {
   it("pins the remaining canonical defaults", () => {
     expect(defaultShortcutsFor("copyItem")).toEqual(["Ctrl+C", "Enter"]);
     expect(defaultShortcutsFor("deleteItem")).toEqual(["Ctrl+D"]);
-    expect(defaultShortcutsFor("favoriteItem")).toEqual(["Ctrl+F"]);
+    expect(defaultShortcutsFor("favoriteItem")).toEqual(["Ctrl+G"]);
     expect(defaultShortcutsFor("addTag")).toEqual(["Ctrl+T"]);
     expect(defaultShortcutsFor("moveSelectionUp")).toEqual(["Arrowup"]);
     expect(defaultShortcutsFor("moveSelectionDown")).toEqual(["Arrowdown"]);
@@ -27,6 +27,7 @@ describe("keyboard defaults (single source: keyboard-defaults.json)", () => {
     expect(defaultShortcutsFor("quickCopy9")).toEqual(["Ctrl+9"]);
     expect(defaultShortcutsFor("hideWindow")).toEqual(["Escape"]);
     expect(defaultShortcutsFor("focusSearch")).toEqual(["/", "Ctrl+K"]);
+    expect(defaultShortcutsFor("findInDetail")).toEqual(["Ctrl+F"]);
   });
 
   it("returns copies and empty for unknown actions", () => {

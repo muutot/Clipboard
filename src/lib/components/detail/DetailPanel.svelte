@@ -25,6 +25,8 @@
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { isTauriRuntime } from "$lib/services/runtime";
   import { getDisplayTitle } from "$lib/utils/content/display-text";
+  import FindBar from "$lib/components/detail/FindBar.svelte";
+  import { setCurrentMatch, unwrapMatches, wrapMatches } from "$lib/utils/content/find-highlight";
 
   const MARKDOWN_RE = /^#{1,6}\s|^>\s|^-\s|^\*\*|^\`\`\`|^\[.+\]\(.+\)/m;
   const CODE_PATTERNS: [RegExp, string][] = [
@@ -96,6 +98,8 @@
     onocrupdate: (id: string, patch: Partial<ClipboardItem>) => void;
     tagColors?: Record<string, string>;
     searchQuery?: string;
+    /** Edge-triggered Ctrl+F signal from the main route (monotonic seq). */
+    findRequest?: { seq: number } | null;
   }
 
   let {
@@ -118,6 +122,7 @@
     onocrupdate,
     tagColors = {},
     searchQuery = "",
+    findRequest = null,
   }: Props = $props();
 
   let activeTab = $state<"preview" | "details" | "tags" | "ocr">("preview");
@@ -129,11 +134,81 @@
   function beginContentEdit() {
     if (!item) return;
     editSession += 1;
+    closeFind();
     editContent =
       item.kind === "image" || item.kind === "file"
         ? getDisplayTitle(item.title)
         : item.textContent || item.title;
     editing = true;
+  }
+
+  // --- Find in detail (Ctrl+F) ---
+  // Highlight marks live only inside this panel's preview DOM; the main list
+  // behind the panel is never touched. Only the text-like previews (plain
+  // text, code, markdown) participate — images already highlight OCR blocks
+  // via the main search query and files have no text preview here.
+  let findOpen = $state(false);
+  let findQuery = $state("");
+  let findCount = $state(0);
+  let findCurrent = $state(0);
+  let previewEl = $state<HTMLElement | null>(null);
+  let findBarRef = $state<{ focusInput: () => void } | null>(null);
+  let lastFindSeq = 0;
+
+  const findSupported = $derived(item?.kind === "text" || item?.kind === "link");
+
+  function closeFind() {
+    if (previewEl) unwrapMatches(previewEl);
+    findCount = 0;
+    findCurrent = 0;
+    findOpen = false;
+  }
+
+  // Consume the route's Ctrl+F signal — see the effect below, which must run
+  // AFTER the item-switch reset effect (on first mount both fire, and the
+  // reset would otherwise close the bar the signal just opened).
+
+  // Apply/refresh marks. Order matters: unwrap first, then re-wrap after the
+  // DOM settles — the preview content may re-render for the same query
+  // (item patch, tab switch). `findSupported`/`currentItemId` are `$derived`
+  // values, so OCR polling patches (which replace the item object without
+  // changing id/kind) never rebuild the marks.
+  $effect(() => {
+    if (!findOpen || editing || activeTab !== "preview" || !findSupported) {
+      return;
+    }
+    const container = previewEl;
+    const query = findQuery;
+    const itemId = currentItemId;
+    if (!container || itemId === null) return;
+    unwrapMatches(container);
+    void tick().then(() => {
+      if (!findOpen || !previewEl || previewEl !== container) return;
+      findCount = wrapMatches(container, query);
+      if (findCount === 0) {
+        findCurrent = 0;
+      } else {
+        findCurrent = Math.min(findCurrent, findCount - 1);
+        setCurrentMatch(container, findCurrent);
+      }
+    });
+  });
+
+  function handleFindQueryChange(next: string) {
+    findQuery = next;
+    findCurrent = 0;
+  }
+
+  function handleFindNext() {
+    if (findCount === 0) return;
+    findCurrent = (findCurrent + 1) % findCount;
+    if (previewEl) setCurrentMatch(previewEl, findCurrent);
+  }
+
+  function handleFindPrev() {
+    if (findCount === 0) return;
+    findCurrent = (findCurrent - 1 + findCount) % findCount;
+    if (previewEl) setCurrentMatch(previewEl, findCurrent);
   }
 
   function endContentEdit() {
@@ -152,12 +227,32 @@
     if (itemId !== null) {
       activeTab = "preview";
       endContentEdit();
+      // The find draft belongs to the previous item's preview; marks would
+      // point at stale text after the switch.
+      closeFind();
       // The title rename draft belongs to the previous item. Keeping it
       // open across an item switch would save the old title onto the new
       // item when the pending input commits (blur/Enter).
       editingTitle = false;
       editTitleContent = "";
     }
+  });
+
+  // Consume the route's Ctrl+F signal: open (or refocus) the find bar only
+  // when a text-like preview is actually shown. Consumed via untrack so the
+  // effect never re-fires from findQuery/open state changes. This effect is
+  // deliberately created AFTER the reset effect above: on first mount both
+  // fire in creation order, and the reset's closeFind() would otherwise close
+  // the bar this signal just opened.
+  $effect(() => {
+    const request = findRequest;
+    if (!request || request.seq === lastFindSeq) return;
+    lastFindSeq = request.seq;
+    untrack(() => {
+      if (!item || editing || activeTab !== "preview" || !findSupported) return;
+      findOpen = true;
+      tick().then(() => findBarRef?.focusInput());
+    });
   });
 
   // Modal focus management (only in overlay mode; split mode has no
@@ -286,6 +381,16 @@
 
   function handleKeydown(event: KeyboardEvent) {
     if (!item || event.key !== "Escape" || event.defaultPrevented) return;
+
+    // An open find bar owns the first Escape, before the editor guard (the
+    // find input would otherwise hit editorTarget and be misread as an
+    // in-progress content edit). preventDefault also stops the route's
+    // Escape chain (bulk-clear / hide-window) behind this handler.
+    if (findOpen) {
+      event.preventDefault();
+      closeFind();
+      return;
+    }
 
     const editorTarget =
       isEditableKeyboardTarget(event.target) &&
@@ -442,7 +547,24 @@
 
     <div class="detail-body">
       {#if activeTab === "preview"}
-        <div class="preview-section">
+        <div class="preview-section" bind:this={previewEl}>
+          {#if findOpen && findSupported && !editing}
+            <FindBar
+              bind:this={findBarRef}
+              query={findQuery}
+              count={findCount}
+              current={findCurrent}
+              placeholder={_t("detail.findPlaceholder")}
+              label={_t("detail.findLabel")}
+              prevTitle={_t("detail.findPrev")}
+              nextTitle={_t("detail.findNext")}
+              closeTitle={_t("detail.findClose")}
+              onquerychange={handleFindQueryChange}
+              onprev={handleFindPrev}
+              onnext={handleFindNext}
+              onclose={closeFind}
+            />
+          {/if}
           {#if item.kind === "image"}
             <DetailImagePreview {item} {onimagefullscreen} query={searchQuery} />
           {:else if item.kind === "file"}
@@ -759,9 +881,22 @@
   }
 
   .preview-section {
+    position: relative;
     display: flex;
     flex-direction: column;
     gap: 16px;
+  }
+
+  /* Find-in-detail marks are inserted at runtime (DOM walker), so they must
+   * be styled via :global. Same warning-color mix as the OCR match boxes. */
+  .preview-section :global(mark[data-find-match]) {
+    background: color-mix(in srgb, var(--warning-color) 24%, transparent);
+    color: inherit;
+  }
+
+  .preview-section :global(mark[data-find-match].find-current) {
+    border: 1px solid var(--warning-color);
+    border-radius: 2px;
   }
 
   .content-full {

@@ -103,9 +103,15 @@ impl KeyboardConfigStore {
 
     fn load_and_validate(bytes: &[u8]) -> Result<(KeyboardConfig, bool), StorageError> {
         let loaded: KeyboardConfig = serde_json::from_slice(bytes)?;
-        let (mut config, merged_defaults) = merge_missing_default_actions(loaded);
+        // Migration must run before the default merge: it frees `Ctrl+F` from
+        // `favoriteItem`, and the merge then backfills the new `findInDetail`
+        // action with that chord. Running the merge first would see `Ctrl+F`
+        // still owned, skip the backfill, and leave `findInDetail` unbound.
+        let mut config = loaded;
+        let migrated = migrate_legacy_favorite_default(&mut config);
+        let (mut config, merged) = merge_missing_default_actions(config);
         normalize_and_validate(&mut config)?;
-        Ok((config, merged_defaults))
+        Ok((config, migrated || merged))
     }
 
     fn quarantine_corrupt(
@@ -245,6 +251,53 @@ fn keyboard_write_lock(path: &Path) -> Result<fs::File, StorageError> {
         .open(Path::new(&name))?;
     lock.lock()?;
     Ok(lock)
+}
+
+/// One-time default migration: `favoriteItem` shipped as `Ctrl+F` until the
+/// detail-panel find action (`findInDetail`) claimed that chord. A config
+/// that still carries exactly the old default moves to the new `Ctrl+G`
+/// default; any other value is a deliberate user customization and stays
+/// untouched (this cannot distinguish a manual rebind back to exactly the
+/// old default). The move is skipped when `Ctrl+G` is already owned by
+/// another action, so the result can never fail `normalize_and_validate`.
+fn migrate_legacy_favorite_default(config: &mut KeyboardConfig) -> bool {
+    const LEGACY_FAVORITE: &str = "Ctrl+F";
+    const NEW_FAVORITE: &str = "Ctrl+G";
+
+    let Some(chords) = config.shortcuts.get("favoriteItem") else {
+        return false;
+    };
+    let is_legacy = chords.len() == 1
+        && ShortcutBinding::from_str(chords[0].as_str())
+            .is_ok_and(|binding| binding.canonical() == LEGACY_FAVORITE);
+    if !is_legacy {
+        return false;
+    }
+
+    let Some(new_identity) = ShortcutBinding::from_str(NEW_FAVORITE)
+        .ok()
+        .and_then(|binding| crate::platform::hotkey_common::hotkey_registration_identity(&binding))
+    else {
+        return false;
+    };
+    let taken_elsewhere = config
+        .shortcuts
+        .iter()
+        .filter(|(action, _)| action.as_str() != "favoriteItem")
+        .flat_map(|(_, chords)| chords.iter())
+        .filter_map(|shortcut| ShortcutBinding::from_str(shortcut).ok())
+        .filter_map(|binding| {
+            crate::platform::hotkey_common::hotkey_registration_identity(&binding)
+        })
+        .any(|identity| identity == new_identity);
+    if taken_elsewhere {
+        return false;
+    }
+
+    config
+        .shortcuts
+        .insert("favoriteItem".to_owned(), vec![NEW_FAVORITE.to_owned()]);
+    true
 }
 
 /// Backfills bundled defaults for actions that are absent from a loaded
@@ -441,7 +494,8 @@ mod tests {
         assert_eq!(saved["shortcuts"]["toggleFloatPanel"], json!(["Alt+V"]));
         assert_eq!(saved["shortcuts"]["copyItem"], json!(["Ctrl+C", "Enter"]));
         assert_eq!(saved["shortcuts"]["deleteItem"], json!(["Ctrl+D"]));
-        assert_eq!(saved["shortcuts"]["favoriteItem"], json!(["Ctrl+F"]));
+        assert_eq!(saved["shortcuts"]["favoriteItem"], json!(["Ctrl+G"]));
+        assert_eq!(saved["shortcuts"]["findInDetail"], json!(["Ctrl+F"]));
         assert_eq!(saved["shortcuts"]["addTag"], json!(["Ctrl+T"]));
         assert_eq!(saved["shortcuts"]["openDetail"], json!(["Space", "Ctrl+E"]));
         assert_eq!(saved["shortcuts"]["selectAll"], json!(["Ctrl+A"]));
@@ -605,6 +659,85 @@ mod tests {
 
         assert_eq!(store.config().shortcuts["toggleWindow"], vec!["Alt+V"]);
         assert!(!store.config().shortcuts.contains_key("toggleFloatPanel"));
+        fs::remove_dir_all(project).unwrap();
+    }
+
+    #[test]
+    fn migrates_the_legacy_favorite_default_and_backfills_find_in_detail() {
+        let project = temporary_directory("migrate-favorite");
+        let config_directory = project.join("conf");
+        fs::create_dir_all(&config_directory).unwrap();
+        // A pre-findInDetail file: favoriteItem still carries the exact old
+        // shipped default `Ctrl+F`.
+        fs::write(
+            config_directory.join("keyboard.json"),
+            serde_json::to_vec_pretty(&json!({
+                "shortcuts": { "favoriteItem": ["Ctrl+F"], "toggleWindow": ["Alt+C"] }
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let store = KeyboardConfigStore::load(&project).unwrap();
+
+        assert_eq!(store.config().shortcuts["favoriteItem"], vec!["Ctrl+G"]);
+        // The freed chord is picked up by the default merge right after the
+        // migration (merge runs second by design).
+        assert_eq!(store.config().shortcuts["findInDetail"], vec!["Ctrl+F"]);
+        let saved: Value = serde_json::from_slice(&fs::read(store.path()).unwrap()).unwrap();
+        assert_eq!(saved["shortcuts"]["favoriteItem"], json!(["Ctrl+G"]));
+        assert_eq!(saved["shortcuts"]["findInDetail"], json!(["Ctrl+F"]));
+        fs::remove_dir_all(project).unwrap();
+    }
+
+    #[test]
+    fn keeps_a_customized_favorite_binding_untouched() {
+        let project = temporary_directory("migrate-favorite-custom");
+        let config_directory = project.join("conf");
+        fs::create_dir_all(&config_directory).unwrap();
+        fs::write(
+            config_directory.join("keyboard.json"),
+            serde_json::to_vec_pretty(&json!({
+                "shortcuts": { "favoriteItem": ["Ctrl+Shift+F"], "toggleWindow": ["Alt+C"] }
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let store = KeyboardConfigStore::load(&project).unwrap();
+
+        assert_eq!(
+            store.config().shortcuts["favoriteItem"],
+            vec!["Ctrl+Shift+F"]
+        );
+        assert_eq!(store.config().shortcuts["findInDetail"], vec!["Ctrl+F"]);
+        fs::remove_dir_all(project).unwrap();
+    }
+
+    #[test]
+    fn skips_the_favorite_migration_when_the_new_chord_is_taken() {
+        let project = temporary_directory("migrate-favorite-taken");
+        let config_directory = project.join("conf");
+        fs::create_dir_all(&config_directory).unwrap();
+        // `Ctrl+G` is already owned by another action: migrating would trade
+        // one conflict for another, so favoriteItem keeps `Ctrl+F` and the
+        // merge must also skip the `findInDetail` backfill (chord still owned).
+        fs::write(
+            config_directory.join("keyboard.json"),
+            serde_json::to_vec_pretty(&json!({
+                "shortcuts": {
+                    "favoriteItem": ["Ctrl+F"],
+                    "toggleWindow": ["Ctrl+G"]
+                }
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let store = KeyboardConfigStore::load(&project).unwrap();
+
+        assert_eq!(store.config().shortcuts["favoriteItem"], vec!["Ctrl+F"]);
+        assert!(!store.config().shortcuts.contains_key("findInDetail"));
         fs::remove_dir_all(project).unwrap();
     }
 

@@ -87,6 +87,15 @@ export const HOTKEY_ACTIONS: HotkeyActionDef[] = [
     searchId: "keyboard.favorite-item",
   },
   {
+    id: "findInDetail",
+    scope: "window",
+    category: "item",
+    icon: "search",
+    labelKey: "keyboard.findInDetail",
+    descKey: "keyboard.findInDetailDesc",
+    searchId: "keyboard.find-in-detail",
+  },
+  {
     id: "addTag",
     scope: "window",
     category: "item",

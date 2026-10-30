@@ -105,7 +105,7 @@ describe("shortcutMatchesEvent", () => {
 
 describe("isItemActionShortcut", () => {
   it("matches the Ctrl/⌘ letter set that operates on the selected entry", () => {
-    for (const key of ["c", "d", "f", "e", "t", "s"]) {
+    for (const key of ["c", "d", "g", "e", "t", "s"]) {
       expect(isItemActionShortcut(keyEvent({ key, ctrlKey: true }))).toBe(true);
       expect(isItemActionShortcut(keyEvent({ key: key.toUpperCase(), metaKey: true }))).toBe(true);
     }

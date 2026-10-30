@@ -535,6 +535,7 @@ export interface LocaleDefinition {
     copyItem: string;
     deleteItem: string;
     favoriteItem: string;
+    findInDetail: string;
     addTag: string;
     moveSelectionUp: string;
     moveSelectionDown: string;
@@ -792,6 +793,11 @@ export interface LocaleDefinition {
     filePreviewUnavailable: string;
     filePreviewFailed: string;
     filePreviewTruncated: string;
+    findPlaceholder: string;
+    findLabel: string;
+    findPrev: string;
+    findNext: string;
+    findClose: string;
   };
   edit: {
     edit: string;

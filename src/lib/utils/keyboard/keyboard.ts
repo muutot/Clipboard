@@ -24,7 +24,10 @@ export function isItemActionShortcut(
 ): boolean {
   if (extraBindings.some((binding) => shortcutMatchesEvent(binding, event))) return true;
   if (!(event.ctrlKey || event.metaKey) || event.shiftKey) return false;
-  return ["c", "d", "f", "e", "t", "s"].includes(event.key.toLowerCase());
+  // "f" is excluded: favoriteItem's old default moved to Ctrl+G and Ctrl+F
+  // now belongs to the detail find action (findInDetail). A custom Ctrl+F
+  // favorite binding still punches through via `extraBindings`.
+  return ["c", "d", "g", "e", "t", "s"].includes(event.key.toLowerCase());
 }
 
 /**

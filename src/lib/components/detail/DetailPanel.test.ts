@@ -1,5 +1,5 @@
 import { flushSync, mount, unmount } from "svelte";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import DetailPanel from "./DetailPanel.svelte";
 import { t } from "$lib/i18n";
 import type { ClipboardItem } from "$lib/types/clipboard";
@@ -30,13 +30,14 @@ function item(overrides: Partial<ClipboardItem>): ClipboardItem {
   };
 }
 
-function mountPanel(record: ClipboardItem): HTMLElement {
+function mountPanel(record: ClipboardItem, props: Record<string, unknown> = {}): HTMLElement {
   const target = document.createElement("div");
   document.body.append(target);
   const app = mount(DetailPanel, {
     target,
     props: {
       item: record,
+      ...props,
       onclose: () => {},
       oncopy: () => {},
       onedit: () => {},
@@ -65,6 +66,90 @@ const tabLabels = (target: HTMLElement) =>
   [...target.querySelectorAll<HTMLButtonElement>(".detail-tabs button")].map((button) =>
     button.textContent?.trim(),
   );
+
+/** Drains the microtask queue so the find signal/highlight tick chains settle. */
+async function settle(): Promise<void> {
+  for (let i = 0; i < 12; i++) {
+    await Promise.resolve();
+    flushSync();
+  }
+}
+
+const navButton = (bar: Element, title: string) =>
+  bar.querySelector<HTMLButtonElement>(`button[title="${title}"]`)!;
+
+// jsdom does not implement scrollIntoView (used by the current-match marker).
+beforeAll(() => {
+  Element.prototype.scrollIntoView = () => {};
+});
+
+/** Types a find query into the bar and waits for the marks to settle. */
+async function typeQuery(target: HTMLElement, query: string): Promise<HTMLElement> {
+  const input = target.querySelector<HTMLInputElement>(".find-bar input")!;
+  input.value = query;
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  await settle();
+  return target.querySelector(".find-bar")!;
+}
+
+describe("DetailPanel find in detail", () => {
+  it("opens from the Ctrl+F signal, counts matches, and navigates with wrap-around", async () => {
+    const target = mountPanel(item({ textContent: "alpha beta alpha gamma alpha" }), {
+      findRequest: { seq: 1 },
+    });
+    await settle();
+    const bar = await typeQuery(target, "alpha");
+    expect(target.querySelectorAll("mark[data-find-match]")).toHaveLength(3);
+    expect(bar.querySelector(".match-count")?.textContent).toBe("1/3");
+    const next = navButton(bar, t("detail.findNext"));
+    next.click();
+    flushSync();
+    expect(bar.querySelector(".match-count")?.textContent).toBe("2/3");
+    next.click();
+    flushSync();
+    expect(bar.querySelector(".match-count")?.textContent).toBe("3/3");
+    next.click();
+    flushSync();
+    expect(bar.querySelector(".match-count")?.textContent).toBe("1/3");
+    navButton(bar, t("detail.findPrev")).click();
+    flushSync();
+    expect(bar.querySelector(".match-count")?.textContent).toBe("3/3");
+  });
+
+  it("recounts matches when the query changes", async () => {
+    const target = mountPanel(item({ textContent: "alpha beta alpha gamma alpha" }), {
+      findRequest: { seq: 1 },
+    });
+    await settle();
+    const input = target.querySelector<HTMLInputElement>(".find-bar input")!;
+    input.value = "gamma";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    await settle();
+    expect(target.querySelectorAll("mark[data-find-match]")).toHaveLength(1);
+    expect(target.querySelector(".find-bar .match-count")?.textContent).toBe("1/1");
+  });
+
+  it("closes on Escape without closing the panel and unwraps the marks", async () => {
+    const target = mountPanel(item({ textContent: "alpha beta alpha" }), {
+      findRequest: { seq: 1 },
+    });
+    await settle();
+    await typeQuery(target, "alpha");
+    expect(target.querySelectorAll("mark[data-find-match]")).toHaveLength(2);
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", cancelable: true }));
+    await settle();
+    expect(target.querySelector(".find-bar")).toBeNull();
+    expect(target.querySelectorAll("mark[data-find-match]")).toHaveLength(0);
+    expect(target.querySelector(".detail-panel")).not.toBeNull();
+  });
+
+  it("ignores the find signal for kinds without a text preview", async () => {
+    const target = mountPanel(item({ kind: "image" }), { findRequest: { seq: 1 } });
+    await settle();
+    expect(target.querySelector(".find-bar")).toBeNull();
+    expect(target.querySelectorAll("mark[data-find-match]")).toHaveLength(0);
+  });
+});
 
 describe("DetailPanel OCR tab applicability", () => {
   it("hides the OCR tab for text records", () => {
