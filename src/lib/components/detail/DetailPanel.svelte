@@ -452,6 +452,11 @@
     editingTitle = false;
   }
 
+  function autofocus(node: HTMLInputElement) {
+    node.focus();
+    node.select();
+  }
+
   function saveAsNew() {
     if (!item || !editContent.trim()) return;
     onsaveasnew(item.id, item.title, editContent.trim());
@@ -487,6 +492,7 @@
             <input
               class="header-title-input"
               bind:value={editTitleContent}
+              use:autofocus
               onkeydown={(e) => {
                 if (e.key === "Enter") {
                   saveTitleEdit();
@@ -564,7 +570,7 @@
 
     <div class="detail-body">
       {#if activeTab === "preview"}
-        <div class="preview-section" bind:this={previewEl}>
+        <div class="preview-section" class:edit-fill={editing} bind:this={previewEl}>
           {#if findOpen && findSupported && !editing}
             <FindBar
               bind:this={findBarRef}
@@ -592,7 +598,6 @@
                 content={editContent}
                 language={detectCodeLanguage(editContent)}
                 editorLabel={_t("edit.edit")}
-                previewLabel={_t("detail.preview")}
                 placeholder={_t("edit.placeholder")}
                 oncontentchange={(content) => (editContent = content)}
               />
@@ -610,7 +615,6 @@
                 content={editContent}
                 language="markdown"
                 editorLabel={_t("edit.edit")}
-                previewLabel={_t("detail.preview")}
                 placeholder={_t("edit.placeholder")}
                 oncontentchange={(content) => (editContent = content)}
               />
@@ -628,7 +632,6 @@
                 content={editContent}
                 language="text"
                 editorLabel={_t("edit.edit")}
-                previewLabel={_t("detail.preview")}
                 placeholder={_t("edit.placeholder")}
                 oncontentchange={(content) => (editContent = content)}
               />
@@ -683,7 +686,13 @@
               </button>
             {/if}
             {#if !editing && (item.kind === "image" || item.kind === "file") && (!item.fileMeta || item.fileMeta.length <= 1)}
-              <button type="button" onclick={beginContentEdit}>
+              <button
+                type="button"
+                onclick={() => {
+                  editTitleContent = item.title;
+                  editingTitle = true;
+                }}
+              >
                 <AppIcon name="edit" size={15} />
                 {_t("edit.editFileName")}
               </button>
@@ -902,6 +911,12 @@
     display: flex;
     flex-direction: column;
     gap: 16px;
+  }
+
+  /* While editing, the code editor fills the whole body height instead of
+     sizing to its content. */
+  .preview-section.edit-fill {
+    height: 100%;
   }
 
   /* Find-in-detail marks are inserted at runtime (DOM walker), so they must

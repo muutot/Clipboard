@@ -1,6 +1,5 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import CodePreview from "$lib/components/detail/CodePreview.svelte";
   import EditableContextMenu from "$lib/components/common/EditableContextMenu.svelte";
   import { detectCodeLang, tokenizeCode } from "$lib/utils/content/code-tokenize";
   import { FILE_PREVIEW_LIMIT } from "$lib/utils/content/file-preview";
@@ -9,7 +8,6 @@
     content: string;
     language?: string | null;
     editorLabel: string;
-    previewLabel: string;
     placeholder?: string;
     oncontentchange: (content: string) => void;
   }
@@ -18,7 +16,6 @@
     content,
     language = null,
     editorLabel,
-    previewLabel,
     placeholder = "",
     oncontentchange,
   }: Props = $props();
@@ -262,11 +259,6 @@
       ></div>
     </div>
   </div>
-
-  <div class="live-preview">
-    <div class="preview-label">{previewLabel}</div>
-    <CodePreview {content} {language} />
-  </div>
 </div>
 
 {#if contextMenu && editor}
@@ -280,6 +272,10 @@
 
 <style>
   .code-editor-shell {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
     overflow: hidden;
     border: 1px solid var(--border-color);
     border-radius: 8px;
@@ -316,8 +312,9 @@
 
   .code-source-pane {
     display: grid;
+    flex: 1;
     grid-template-columns: auto minmax(0, 1fr);
-    max-height: 320px;
+    min-height: 16em;
     overflow: auto;
   }
 
@@ -437,21 +434,5 @@
     color: var(--placeholder-color);
     content: attr(data-placeholder);
     pointer-events: none;
-  }
-
-  .live-preview {
-    padding: 9px 10px 10px;
-    border-top: 1px solid var(--border-subtle);
-    background: var(--statusbar-bg);
-  }
-
-  .preview-label {
-    display: block;
-    margin: 0 0 7px 2px;
-  }
-
-  :global(.live-preview .code-block) {
-    border-color: var(--border-subtle);
-    background: var(--input-bg);
   }
 </style>
