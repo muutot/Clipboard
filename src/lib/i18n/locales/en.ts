@@ -881,6 +881,12 @@ const en: LocaleDefinition = {
     paste: "Paste",
     selectAll: "Select All",
   },
+  confirm: {
+    title: "Please confirm",
+    confirm: "Confirm",
+    cancel: "Cancel",
+    delete: "Delete",
+  },
   copy: {
     plainText: "Paste as plain text",
     withFormat: "Paste with formatting",

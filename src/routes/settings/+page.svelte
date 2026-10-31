@@ -3,6 +3,7 @@
   import { onMount } from "svelte";
   import { get } from "svelte/store";
   import StorageSettingsDialog from "$lib/components/settings/StorageSettingsDialog.svelte";
+  import ConfirmDialog from "$lib/components/common/ConfirmDialog.svelte";
   import { generalSettings } from "$lib/services/settings";
   import { applyGeneralSettingsToDocument } from "$lib/services/settings-bootstrap";
   import { isTauriRuntime } from "$lib/services/runtime";
@@ -46,6 +47,7 @@
 
 <div class="settings-shell">
   <StorageSettingsDialog open={true} onclose={handleClose} standalone={true} />
+  <ConfirmDialog />
 </div>
 
 <style>

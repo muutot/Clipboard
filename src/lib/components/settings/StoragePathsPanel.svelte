@@ -3,6 +3,7 @@
   import { invoke } from "@tauri-apps/api/core";
   import AppIcon from "$lib/components/card/AppIcon.svelte";
   import { messages, resolvePath } from "$lib/i18n";
+  import { confirmDialog } from "$lib/services/ui/confirm.svelte";
   import {
     configureStorageDirectory,
     getStorageConfig,
@@ -158,7 +159,14 @@
 
   async function toggleOwnership(next: boolean) {
     if (!status?.resourceOwnershipRequired || togglingOwnership) return;
-    if (next && !window.confirm(_t("storage.ownershipMarkerEnableConfirm"))) return;
+    if (
+      next &&
+      !(await confirmDialog({
+        title: _t("confirm.title"),
+        message: _t("storage.ownershipMarkerEnableConfirm"),
+      }))
+    )
+      return;
     togglingOwnership = true;
     try {
       const result = await setResourceOwnership(next);

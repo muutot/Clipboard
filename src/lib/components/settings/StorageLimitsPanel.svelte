@@ -11,6 +11,7 @@
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
   import { formatBytes } from "$lib/utils/content/format";
+  import { confirmDialog } from "$lib/services/ui/confirm.svelte";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);
@@ -180,13 +181,16 @@
         return;
       }
 
-      const confirmed = window.confirm(
-        _t("storage.deleteKindConfirm", {
+      const confirmed = await confirmDialog({
+        title: _t("confirm.title"),
+        message: _t("storage.deleteKindConfirm", {
           kind: label,
           count: freshStats.itemCount,
           size: formatBytes(freshStats.sizeBytes),
         }),
-      );
+        confirmLabel: _t("confirm.delete"),
+        danger: true,
+      });
       if (!confirmed) return;
 
       const result = await permanentlyDeleteStorageKind(kind, freshStats);

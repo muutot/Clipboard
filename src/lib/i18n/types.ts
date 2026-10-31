@@ -813,6 +813,12 @@ export interface LocaleDefinition {
     paste: string;
     selectAll: string;
   };
+  confirm: {
+    title: string;
+    confirm: string;
+    cancel: string;
+    delete: string;
+  };
   copy: {
     plainText: string;
     withFormat: string;

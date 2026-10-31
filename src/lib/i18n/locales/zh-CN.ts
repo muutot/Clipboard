@@ -851,6 +851,12 @@ const zhCN: LocaleDefinition = {
     paste: "粘贴",
     selectAll: "全选",
   },
+  confirm: {
+    title: "请确认",
+    confirm: "确认",
+    cancel: "取消",
+    delete: "删除",
+  },
   copy: {
     plainText: "纯文本粘贴",
     withFormat: "保留格式复制",
