@@ -158,6 +158,9 @@
   }
 
   function activateSettingsNavTarget(target: SettingsNavTarget): void {
+    // Explicit navigation exits search mode: the user asked for the section's
+    // own content, not the filtered result view.
+    settingsSearch.clear();
     // Reset the font sub-tab only when entering the section, so re-clicking
     // the active tab keeps the user's current sub-tab.
     if (target.section === "font" && activeSection !== "font") activeFontSection = "interface";
@@ -166,6 +169,7 @@
   }
 
   function activateSettingsNavGroup(group: SettingsNavGroup): void {
+    settingsSearch.clear();
     const target = group.tabs[0];
     if (group.preserveTabOnPrimary) {
       activeSection = target.section;
