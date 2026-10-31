@@ -53,7 +53,7 @@
     border: 1px solid var(--border-subtle);
     border-radius: 8px;
     overflow: hidden;
-    background: var(--input-bg);
+    background: var(--code-bg);
   }
 
   .code-lang-label {
@@ -86,7 +86,7 @@
       Consolas,
       "SFMono-Regular",
       monospace;
-    color: var(--text-primary);
+    color: var(--code-fg);
   }
 
   /* Flex column: pure-whitespace text nodes (prettier formatting inside the
@@ -110,32 +110,8 @@
     width: 36px;
     padding-right: 12px;
     text-align: right;
-    color: var(--text-faint);
+    color: var(--code-line-number);
     user-select: none;
     flex-shrink: 0;
-  }
-
-  /* Syntax token hues are a fixed niche palette (content-defined rendering);
-     mixing toward --text-primary shifts their luminance with the theme so
-     they stay legible on both dark and light code surfaces. */
-  :global(.token-keyword) {
-    color: color-mix(in srgb, #c586c0 75%, var(--text-primary));
-  }
-
-  :global(.token-string) {
-    color: color-mix(in srgb, #ce9178 75%, var(--text-primary));
-  }
-
-  :global(.token-comment) {
-    color: color-mix(in srgb, #6a9955 70%, var(--text-primary));
-    font-style: italic;
-  }
-
-  :global(.token-number) {
-    color: color-mix(in srgb, #b5cea8 65%, var(--text-primary));
-  }
-
-  :global(.token-key) {
-    color: color-mix(in srgb, #9cdcfe 65%, var(--text-primary));
   }
 </style>

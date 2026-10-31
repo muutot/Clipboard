@@ -118,6 +118,7 @@ describe("i18n locales", () => {
       "tags.manage",
       "capture.sourceMapping",
       "clipboard.clipbackup",
+      "clipboard.codeEditor.wrap",
     ]);
     const missing: string[] = [];
     for (const [key, files] of collectReferencedKeys()) {

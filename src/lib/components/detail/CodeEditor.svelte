@@ -23,14 +23,24 @@
     oncontentchange,
   }: Props = $props();
 
-  // Languages with dedicated keyword sets in code-tokenize.ts (plus the two
-  // plain modes); anything else would wrongly fall back to JS highlighting.
+  // Manual language overrides — ids are display names, mapped to highlight.js
+  // grammars in code-tokenize.ts. "text"/"markdown" opt out of highlighting.
   const LANGUAGE_OPTIONS = [
     "JavaScript",
     "TypeScript",
     "Python",
     "Rust",
     "SQL",
+    "HTML",
+    "CSS",
+    "JSON",
+    "Shell",
+    "YAML",
+    "Go",
+    "Java",
+    "C",
+    "C++",
+    "C#",
     "markdown",
     "text",
   ];
@@ -387,7 +397,7 @@
     overflow: hidden;
     border: 1px solid var(--border-color);
     border-radius: 8px;
-    background: var(--input-bg);
+    background: var(--code-bg);
     box-shadow: 0 0 0 1px color-mix(in srgb, var(--selection-color) 12%, transparent);
   }
 
@@ -483,8 +493,8 @@
     min-width: 38px;
     padding: 10px 0;
     border-right: 1px solid var(--border-subtle);
-    color: var(--text-faint);
-    background: var(--statusbar-bg);
+    color: var(--code-line-number);
+    background: var(--code-gutter-bg);
     font:
       13px/1.6 "Cascadia Code",
       Consolas,
@@ -515,7 +525,7 @@
     position: absolute;
     inset: 0;
     padding: 10px 12px;
-    color: var(--text-primary);
+    color: var(--code-fg);
     font:
       13px/1.6 "Cascadia Code",
       Consolas,
@@ -526,36 +536,12 @@
     pointer-events: none;
   }
 
-  /* Niche exception: syntax token hues are a fixed palette (content-defined
-     rendering); color-mix with --text-primary shifts luminance with the
-     theme so tokens stay legible on both dark and light surfaces. */
-  .highlight-backdrop :global(.token-keyword) {
-    color: color-mix(in srgb, #c586c0 75%, var(--text-primary));
-  }
-
-  .highlight-backdrop :global(.token-string) {
-    color: color-mix(in srgb, #ce9178 75%, var(--text-primary));
-  }
-
-  .highlight-backdrop :global(.token-comment) {
-    color: color-mix(in srgb, #6a9955 70%, var(--text-primary));
-    font-style: italic;
-  }
-
-  .highlight-backdrop :global(.token-number) {
-    color: color-mix(in srgb, #b5cea8 65%, var(--text-primary));
-  }
-
-  .highlight-backdrop :global(.token-key) {
-    color: color-mix(in srgb, #9cdcfe 65%, var(--text-primary));
-  }
-
   .code-input {
     min-height: 8em;
     margin: 0;
     padding: 10px 12px;
     outline: none;
-    color: var(--text-primary);
+    color: var(--code-fg);
     background: transparent;
     caret-color: var(--selection-color);
     font:
@@ -576,7 +562,7 @@
 
   .code-input.highlighted::selection {
     background: color-mix(in srgb, var(--selection-color) 40%, transparent);
-    color: var(--text-primary);
+    color: var(--code-fg);
   }
 
   /* IME composition text would be invisible over the backdrop — fall back
@@ -586,7 +572,7 @@
   }
 
   .editor-stack.composing .code-input.highlighted {
-    color: var(--text-primary);
+    color: var(--code-fg);
   }
 
   .code-input:focus {

@@ -170,3 +170,185 @@ input:focus-visible {
 [aria-live="polite"] {
   word-wrap: break-word;
 }
+
+/* ==================== Code highlighting themes ==================== */
+/* The bootstrap resolves the "auto" setting to a concrete scope on
+   <html data-code-theme="…">. Fallbacks below mirror the legacy fixed token
+   palette (a recorded niche exception: content-defined rendering colors). */
+:root {
+  --code-bg: var(--input-bg);
+  --code-fg: var(--text-primary);
+  --code-gutter-bg: var(--statusbar-bg);
+  --code-line-number: var(--text-faint);
+  --code-keyword: #c586c0;
+  --code-string: #ce9178;
+  --code-comment: #6a9955;
+  --code-number: #b5cea8;
+  --code-function: #dcdcaa;
+  --code-type: #4ec9b0;
+  --code-variable: #9cdcfe;
+  --code-attr: #9cdcfe;
+  --code-tag: #569cd6;
+  --code-meta: #c586c0;
+  --code-heading: #569cd6;
+}
+
+[data-code-theme="vs-dark"] {
+  --code-bg: #1e1e1e;
+  --code-fg: #d4d4d4;
+  --code-gutter-bg: #252526;
+  --code-line-number: #858585;
+  --code-keyword: #569cd6;
+  --code-string: #ce9178;
+  --code-comment: #6a9955;
+  --code-number: #b5cea8;
+  --code-function: #dcdcaa;
+  --code-type: #4ec9b0;
+  --code-variable: #9cdcfe;
+  --code-attr: #9cdcfe;
+  --code-tag: #569cd6;
+  --code-meta: #c586c0;
+  --code-heading: #569cd6;
+}
+
+[data-code-theme="one-dark"] {
+  --code-bg: #282c34;
+  --code-fg: #abb2bf;
+  --code-gutter-bg: #21252b;
+  --code-line-number: #636d83;
+  --code-keyword: #c678dd;
+  --code-string: #98c379;
+  --code-comment: #5c6370;
+  --code-number: #d19a66;
+  --code-function: #61afef;
+  --code-type: #e5c07b;
+  --code-variable: #e06c75;
+  --code-attr: #d19a66;
+  --code-tag: #e06c75;
+  --code-meta: #61afef;
+  --code-heading: #61afef;
+}
+
+[data-code-theme="github-light"] {
+  --code-bg: #ffffff;
+  --code-fg: #24292f;
+  --code-gutter-bg: #f6f8fa;
+  --code-line-number: #8c959f;
+  --code-keyword: #cf222e;
+  --code-string: #0a3069;
+  --code-comment: #6e7781;
+  --code-number: #0550ae;
+  --code-function: #8250df;
+  --code-type: #953800;
+  --code-variable: #953800;
+  --code-attr: #0550ae;
+  --code-tag: #116329;
+  --code-meta: #cf222e;
+  --code-heading: #0550ae;
+}
+
+[data-code-theme="solarized-light"] {
+  --code-bg: #fdf6e3;
+  --code-fg: #586e75;
+  --code-gutter-bg: #eee8d5;
+  --code-line-number: #93a1a1;
+  --code-keyword: #859900;
+  --code-string: #2aa198;
+  --code-comment: #93a1a1;
+  --code-number: #d33682;
+  --code-function: #268bd2;
+  --code-type: #b58900;
+  --code-variable: #268bd2;
+  --code-attr: #657b83;
+  --code-tag: #268bd2;
+  --code-meta: #cb4b16;
+  --code-heading: #268bd2;
+}
+
+/* highlight.js token classes → theme variables. Kept global because the
+   markup is generated from {@html} inside the detail components. */
+.hljs-comment,
+.hljs-quote {
+  color: var(--code-comment);
+  font-style: italic;
+}
+
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-selector-id,
+.hljs-selector-class,
+.hljs-doctag,
+.hljs-formula {
+  color: var(--code-keyword);
+}
+
+.hljs-string,
+.hljs-regexp,
+.hljs-addition,
+.hljs-link {
+  color: var(--code-string);
+}
+
+.hljs-number,
+.hljs-literal,
+.hljs-symbol,
+.hljs-bullet {
+  color: var(--code-number);
+}
+
+.hljs-title,
+.hljs-title.function_ {
+  color: var(--code-function);
+}
+
+.hljs-title.class_,
+.hljs-type {
+  color: var(--code-type);
+}
+
+.hljs-variable,
+.hljs-template-variable,
+.hljs-selector-attr,
+.hljs-selector-pseudo {
+  color: var(--code-variable);
+}
+
+.hljs-attr,
+.hljs-attribute,
+.hljs-params,
+.hljs-property {
+  color: var(--code-attr);
+}
+
+.hljs-tag,
+.hljs-name {
+  color: var(--code-tag);
+}
+
+.hljs-meta,
+.hljs-meta .hljs-keyword {
+  color: var(--code-meta);
+}
+
+.hljs-section {
+  color: var(--code-heading);
+  font-weight: 600;
+}
+
+.hljs-strong {
+  font-weight: 600;
+}
+
+.hljs-emphasis {
+  font-style: italic;
+}
+
+.hljs-subst,
+.hljs-operator,
+.hljs-punctuation {
+  color: var(--code-fg);
+}
+
+.hljs-deletion {
+  color: var(--code-keyword);
+}

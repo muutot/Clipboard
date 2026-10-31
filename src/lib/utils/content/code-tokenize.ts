@@ -1,15 +1,40 @@
 /**
- * Shared lightweight tokenizer for code detail views.
+ * Shared tokenizer for code detail views, backed by highlight.js.
  *
  * Used by `CodePreview.svelte` (read-only highlight) and `CodeEditor.svelte`
- * (live highlight backdrop while editing). Line-based and regex-only on
- * purpose: it runs synchronously on every keystroke while editing.
+ * (live highlight backdrop while editing). Runs synchronously on every
+ * keystroke while editing, so the `common` language bundle and the per-line
+ * split below avoid any async grammar loading.
  */
+
+import hljs from "highlight.js/lib/common";
 
 export interface CodeToken {
   text: string;
   classes: string;
 }
+
+/** Display-language names (dropdown labels, CODE_PATTERNS hits) → hljs ids. */
+const NAME_TO_HLJS_ID: Record<string, string> = {
+  text: "plaintext",
+  markdown: "markdown",
+  JavaScript: "javascript",
+  TypeScript: "typescript",
+  JSX: "javascript",
+  Python: "python",
+  Rust: "rust",
+  SQL: "sql",
+  HTML: "xml",
+  CSS: "css",
+  JSON: "json",
+  Shell: "bash",
+  YAML: "yaml",
+  Go: "go",
+  Java: "java",
+  C: "c",
+  "C++": "cpp",
+  "C#": "csharp",
+};
 
 export function detectCodeLang(text: string): string {
   const patterns: { name: string; re: RegExp; weight: number }[] = [
@@ -62,276 +87,75 @@ export function detectCodeLang(text: string): string {
   return best.name || "";
 }
 
-const keywords: Record<string, Set<string>> = {
-  // Plain text and markdown get no keyword highlighting — the tokenizer
-  // falls back to JavaScript keywords for any language missing from this map.
-  markdown: new Set(),
-  text: new Set(),
-  JavaScript: new Set([
-    "function",
-    "var",
-    "const",
-    "let",
-    "return",
-    "if",
-    "else",
-    "for",
-    "while",
-    "class",
-    "new",
-    "this",
-    "null",
-    "undefined",
-    "true",
-    "false",
-    "import",
-    "export",
-    "default",
-    "from",
-    "await",
-    "async",
-    "try",
-    "catch",
-    "throw",
-    "typeof",
-    "instanceof",
-    "of",
-    "in",
-  ]),
-  TypeScript: new Set([
-    "function",
-    "var",
-    "const",
-    "let",
-    "return",
-    "if",
-    "else",
-    "for",
-    "while",
-    "class",
-    "new",
-    "this",
-    "null",
-    "undefined",
-    "true",
-    "false",
-    "import",
-    "export",
-    "default",
-    "from",
-    "await",
-    "async",
-    "try",
-    "catch",
-    "throw",
-    "typeof",
-    "instanceof",
-    "of",
-    "in",
-    "interface",
-    "type",
-    "enum",
-    "implements",
-    "extends",
-    "as",
-    "is",
-    "readonly",
-    "private",
-    "public",
-    "protected",
-  ]),
-  Rust: new Set([
-    "fn",
-    "let",
-    "mut",
-    "struct",
-    "impl",
-    "pub",
-    "mod",
-    "use",
-    "match",
-    "if",
-    "else",
-    "for",
-    "while",
-    "loop",
-    "return",
-    "self",
-    "true",
-    "false",
-    "async",
-    "await",
-    "enum",
-    "trait",
-    "where",
-    "ref",
-    "move",
-    "unsafe",
-    "extern",
-    "crate",
-    "super",
-    "in",
-    "const",
-    "static",
-    "type",
-    "as",
-  ]),
-  Python: new Set([
-    "def",
-    "class",
-    "import",
-    "from",
-    "return",
-    "if",
-    "elif",
-    "else",
-    "for",
-    "while",
-    "try",
-    "except",
-    "finally",
-    "with",
-    "as",
-    "pass",
-    "break",
-    "continue",
-    "lambda",
-    "yield",
-    "raise",
-    "True",
-    "False",
-    "None",
-    "and",
-    "or",
-    "not",
-    "in",
-    "is",
-    "print",
-    "self",
-    "global",
-    "nonlocal",
-    "del",
-    "assert",
-  ]),
-  SQL: new Set([
-    "SELECT",
-    "FROM",
-    "WHERE",
-    "INSERT",
-    "UPDATE",
-    "DELETE",
-    "CREATE",
-    "ALTER",
-    "DROP",
-    "TABLE",
-    "INDEX",
-    "JOIN",
-    "INNER",
-    "LEFT",
-    "RIGHT",
-    "OUTER",
-    "ON",
-    "AND",
-    "OR",
-    "NOT",
-    "NULL",
-    "IS",
-    "IN",
-    "BETWEEN",
-    "LIKE",
-    "ORDER",
-    "BY",
-    "GROUP",
-    "HAVING",
-    "LIMIT",
-    "OFFSET",
-    "AS",
-    "SET",
-    "VALUES",
-    "INTO",
-    "DISTINCT",
-    "COUNT",
-    "SUM",
-    "AVG",
-    "MAX",
-    "MIN",
-    "EXISTS",
-    "CASE",
-    "WHEN",
-    "THEN",
-    "ELSE",
-    "END",
-    "UNION",
-    "ALL",
-    "PRIMARY",
-    "KEY",
-    "FOREIGN",
-    "REFERENCES",
-    "CONSTRAINT",
-    "DEFAULT",
-    "CHECK",
-    "UNIQUE",
-    "CASCADE",
-    "BEGIN",
-    "COMMIT",
-    "ROLLBACK",
-  ]),
-};
+function plainLines(text: string): CodeToken[][] {
+  return text.split("\n").map((line) => (line ? [{ text: line, classes: "" }] : []));
+}
+
+/** hljs output is entity-escaped; tokens carry raw text, so decode it back. */
+function decodeEntities(text: string): string {
+  return text
+    .replaceAll("&amp;", "&")
+    .replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">")
+    .replaceAll("&quot;", '"')
+    .replaceAll("&#39;", "'");
+}
+
+/**
+ * Splits hljs HTML output into per-line token arrays. hljs spans routinely
+ * cross line breaks (template literals, block comments), so the splitter
+ * tracks the stack of open span classes and re-opens them on the next line.
+ */
+function splitHtmlLines(html: string): CodeToken[][] {
+  const lines: CodeToken[][] = [];
+  let current: CodeToken[] = [];
+  let buffer = "";
+  const openClasses: string[] = [];
+
+  const flushText = () => {
+    if (buffer) {
+      current.push({ text: buffer, classes: openClasses.join(" ") });
+      buffer = "";
+    }
+  };
+  const pushLine = () => {
+    flushText();
+    lines.push(current);
+    current = [];
+  };
+
+  // split() with a capture group keeps the tag delimiters at odd indices.
+  const parts = html.split(/(<span class="[^"]*">|<\/span>)/);
+  for (const part of parts) {
+    if (!part) continue;
+    if (part === "</span>") {
+      flushText();
+      openClasses.pop();
+    } else if (part.startsWith('<span class="')) {
+      flushText();
+      openClasses.push(part.slice('<span class="'.length, -2));
+    } else {
+      const segments = part.split("\n");
+      for (let index = 0; index < segments.length; index++) {
+        if (index > 0) pushLine();
+        buffer += decodeEntities(segments[index]);
+      }
+    }
+  }
+  flushText();
+  // A trailing newline yields no extra empty line — matches the editor's
+  // lineCount convention (a forced break at the very end creates no line box).
+  return lines;
+}
 
 export function tokenizeCode(text: string, lang: string): CodeToken[][] {
-  const lines = text.split("\n");
-  const kw = lang in keywords ? keywords[lang] : keywords.JavaScript;
+  const id = NAME_TO_HLJS_ID[lang] ?? lang;
+  if (!hljs.getLanguage(id)) return plainLines(text);
 
-  return lines.map((line) => {
-    const tokens: CodeToken[] = [];
-
-    // Comments
-    if (lang === "Python" || lang === "Shell") {
-      const ci = line.indexOf("#");
-      if (ci >= 0) {
-        if (ci > 0) tokens.push({ text: line.slice(0, ci), classes: "" });
-        tokens.push({ text: line.slice(ci), classes: "token-comment" });
-        return tokens;
-      }
-    }
-
-    if (["JavaScript", "TypeScript", "Rust", "CSS"].includes(lang)) {
-      const ci = line.indexOf("//");
-      if (ci >= 0) {
-        if (ci > 0) tokens.push({ text: line.slice(0, ci), classes: "" });
-        tokens.push({ text: line.slice(ci), classes: "token-comment" });
-        return tokens;
-      }
-    }
-
-    if (lang === "SQL") {
-      const ci = line.indexOf("--");
-      if (ci >= 0) {
-        if (ci > 0) tokens.push({ text: line.slice(0, ci), classes: "" });
-        tokens.push({ text: line.slice(ci), classes: "token-comment" });
-        return tokens;
-      }
-    }
-
-    // String matching
-    const re =
-      /("[^"\\]*(?:\\.[^"\\]*)*"|'[^'\\]*(?:\\.[^'\\]*)*'|`[^`\\]*(?:\\.[^`\\]*)*`|[\w]+|[^\w\s]|\s+)/g;
-    let m: RegExpExecArray | null;
-    while ((m = re.exec(line)) !== null) {
-      const part = m[0];
-      if (/^["'`]/.test(part) && /["'`]$/.test(part) && part.length > 1) {
-        tokens.push({ text: part, classes: "token-string" });
-      } else if (kw.has(part)) {
-        tokens.push({ text: part, classes: "token-keyword" });
-      } else if (/^\d+(\.\d+)?$/.test(part)) {
-        tokens.push({ text: part, classes: "token-number" });
-      } else if (lang === "JSON" && /^"[\w-]+"$/.test(part)) {
-        tokens.push({ text: part, classes: "token-key" });
-      } else {
-        tokens.push({ text: part, classes: "" });
-      }
-    }
-
-    return tokens;
-  });
+  try {
+    return splitHtmlLines(hljs.highlight(text, { language: id, ignoreIllegals: true }).value);
+  } catch {
+    // A grammar crash must never take the editor down with it.
+    return plainLines(text);
+  }
 }
