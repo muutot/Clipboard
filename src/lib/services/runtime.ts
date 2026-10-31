@@ -50,3 +50,14 @@ export async function getRuntimeInfo(): Promise<RuntimeInfo | null> {
     return null;
   }
 }
+
+/** Opens the calling window's WebView developer console (About panel, F12). */
+export function openDevtools(): void {
+  if (!isTauriRuntime()) return;
+  invoke("open_devtools").catch((error) => console.warn("open_devtools failed:", error));
+}
+
+/** Whether a keydown event is the app-wide developer-console hotkey. */
+export function isDevtoolsHotkey(event: KeyboardEvent): boolean {
+  return event.key === "F12" && !event.ctrlKey && !event.altKey && !event.metaKey;
+}

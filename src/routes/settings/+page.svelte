@@ -6,7 +6,14 @@
   import ConfirmDialog from "$lib/components/common/ConfirmDialog.svelte";
   import { generalSettings } from "$lib/services/settings";
   import { applyGeneralSettingsToDocument } from "$lib/services/settings-bootstrap";
-  import { isTauriRuntime } from "$lib/services/runtime";
+  import { isTauriRuntime, isDevtoolsHotkey, openDevtools } from "$lib/services/runtime";
+
+  function handleDevtoolsKeydown(event: KeyboardEvent) {
+    if (isDevtoolsHotkey(event)) {
+      event.preventDefault();
+      openDevtools();
+    }
+  }
 
   let s = $state($generalSettings);
   $effect(() => {
@@ -44,6 +51,8 @@
     await getCurrentWindow().close();
   }
 </script>
+
+<svelte:window onkeydown={handleDevtoolsKeydown} />
 
 <div class="settings-shell">
   <StorageSettingsDialog open={true} onclose={handleClose} standalone={true} />

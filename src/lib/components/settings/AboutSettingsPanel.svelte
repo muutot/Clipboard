@@ -4,7 +4,7 @@
   import UpdateDialog from "$lib/components/settings/UpdateDialog.svelte";
   import { messages, resolvePath } from "$lib/i18n";
   import { generalSettings } from "$lib/services/settings";
-  import { isTauriRuntime } from "$lib/services/runtime";
+  import { isTauriRuntime, openDevtools } from "$lib/services/runtime";
   import { checkForUpdate, getRelease, type UpdateInfo } from "$lib/services/update";
   import { invoke } from "@tauri-apps/api/core";
 
@@ -135,6 +135,21 @@
           )}
       >
         GitCode
+      </button>
+    </div>
+  </section>
+
+  <section class="setting-card toggle-card" data-settings-search-id="about.devtools">
+    <div class="setting-heading">
+      <span class="setting-icon"><AppIcon name="code" size={17} /></span>
+      <div>
+        <strong>{_t("about.devtoolsTitle")}</strong>
+        <p>{_t("about.devtoolsDesc")}</p>
+      </div>
+    </div>
+    <div class="about-update-controls">
+      <button type="button" class="settings-action-btn" onclick={openDevtools}>
+        {_t("about.devtoolsButton")}
       </button>
     </div>
   </section>

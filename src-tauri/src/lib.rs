@@ -855,6 +855,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_runtime_info,
             get_os_locale,
+            open_devtools,
             get_storage_status,
             get_storage_kind_stats,
             list_icon_cache,

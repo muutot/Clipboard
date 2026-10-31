@@ -38,7 +38,12 @@
     writeClipboardText,
   } from "$lib/services/clipboard";
   import { toClipboardItem } from "$lib/services/clipboard/mapping";
-  import { getRuntimeInfo, isTauriRuntime } from "$lib/services/runtime";
+  import {
+    getRuntimeInfo,
+    isTauriRuntime,
+    isDevtoolsHotkey,
+    openDevtools,
+  } from "$lib/services/runtime";
   import { showToast } from "$lib/services/toast";
   import { onContextMenuOpenChanged } from "$lib/services/context-menu";
   import { getKeyboardConfig } from "$lib/services/keyboard";
@@ -2128,6 +2133,15 @@
     }
   }
 
+  // F12 opens the developer console in any window, outside the keyboard
+  // routing table so user rebinding can never shadow it.
+  function handleDevtoolsKeydown(event: KeyboardEvent) {
+    if (isDevtoolsHotkey(event)) {
+      event.preventDefault();
+      openDevtools();
+    }
+  }
+
   function handleGlobalKeydown(event: KeyboardEvent) {
     executeKeyAction(
       event,
@@ -2315,7 +2329,12 @@
   });
 </script>
 
-<svelte:window onkeydown={handleGlobalKeydown} />
+<svelte:window
+  onkeydown={(event) => {
+    handleDevtoolsKeydown(event);
+    handleGlobalKeydown(event);
+  }}
+/>
 
 <main
   class="app-shell"

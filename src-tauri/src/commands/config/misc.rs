@@ -29,6 +29,14 @@ pub fn get_os_locale() -> Option<String> {
     platform::os_locale_name()
 }
 
+/// Opens the WebView developer console for the calling window. The tauri
+/// `devtools` feature keeps this available in release builds; the About panel
+/// button and the app-wide F12 handler both route here.
+#[tauri::command]
+pub fn open_devtools(webview: tauri::WebviewWindow) {
+    webview.open_devtools();
+}
+
 #[tauri::command]
 pub fn toggle_privacy_pause(
     app: tauri::AppHandle,

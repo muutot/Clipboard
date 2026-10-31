@@ -10,7 +10,7 @@
   import AppIcon from "$lib/components/card/AppIcon.svelte";
   import Toast from "$lib/components/common/Toast.svelte";
   import { messages, resolvePath } from "$lib/i18n";
-  import { isTauriRuntime } from "$lib/services/runtime";
+  import { isTauriRuntime, isDevtoolsHotkey, openDevtools } from "$lib/services/runtime";
   import {
     copyClipboardItem,
     loadClipboardHistory,
@@ -464,7 +464,16 @@
     window.removeEventListener("pointercancel", endHeaderDrag);
     window.removeEventListener("lostpointercapture", endHeaderDrag);
   }
+
+  function handleDevtoolsKeydown(event: KeyboardEvent) {
+    if (isDevtoolsHotkey(event)) {
+      event.preventDefault();
+      openDevtools();
+    }
+  }
 </script>
+
+<svelte:window onkeydown={handleDevtoolsKeydown} />
 
 <div class="float-shell">
   <!-- svelte-ignore a11y_no_static_element_interactions: header is a window drag handle; inner buttons keep native semantics -->

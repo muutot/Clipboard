@@ -517,6 +517,9 @@ export interface LocaleDefinition {
     checkFailed: string;
     repoTitle: string;
     repoDesc: string;
+    devtoolsTitle: string;
+    devtoolsDesc: string;
+    devtoolsButton: string;
     viewDetails: string;
     updateDialogTitle: string;
     close: string;

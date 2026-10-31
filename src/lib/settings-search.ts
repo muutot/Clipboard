@@ -752,6 +752,13 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
     "location",
     "executable",
   ]),
+  entry(
+    "about.devtools",
+    { section: "about" },
+    i18n("about.devtoolsTitle"),
+    i18n("about.devtoolsDesc"),
+    ["F12", "devtools", "开发者工具", "控制台", "console"],
+  ),
 
   entry(
     "keyboard.config-file",

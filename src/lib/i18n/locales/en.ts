@@ -575,6 +575,10 @@ const en: LocaleDefinition = {
     checkFailed: "Update check failed: {error}",
     repoTitle: "Source Repository",
     repoDesc: "View the source code on GitHub or GitCode",
+    devtoolsTitle: "Developer Tools",
+    devtoolsDesc:
+      "Open the WebView developer console to inspect the UI and troubleshoot. Press F12 anywhere to toggle it as well.",
+    devtoolsButton: "Open Developer Tools",
     viewDetails: "View Details",
     updateDialogTitle: "Update Available",
     close: "Close",

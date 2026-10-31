@@ -101,6 +101,7 @@ describe("i18n locales", () => {
       "navigator.language",
       "about.info",
       "about.update",
+      "about.devtools",
       "font.base",
       "font.secondary",
       "font.tiny",
