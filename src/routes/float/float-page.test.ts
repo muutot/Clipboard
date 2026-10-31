@@ -1,6 +1,10 @@
 import { flushSync, mount, unmount } from "svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ClipboardItem, ClipboardItemsChangedPayload } from "$lib/types/clipboard";
+import type {
+  ClipboardItem,
+  ClipboardItemsChangedPayload,
+  PersistedClipboardItem,
+} from "$lib/types/clipboard";
 import { generalSettings } from "$lib/services/settings";
 import { onToast, type ToastEntry } from "$lib/services/toast";
 import { t } from "$lib/i18n";
@@ -154,13 +158,22 @@ describe("float history reconciliation", () => {
     // The first favorite has committed and emitted. Another window then
     // unfavorites the row before the first command's IPC reply is delivered.
     bridge.load.mockReturnValue(new Promise(() => {}));
-    const record = {
+    const record: PersistedClipboardItem = {
       id: "a",
-      kind: "text" as const,
+      kind: "text",
       title: "a",
+      textContent: "a",
+      htmlContent: null,
+      rtfContent: null,
+      resourcePath: null,
+      previewPath: null,
+      contentHash: "a",
       sourceApp: "test",
+      iconPath: null,
+      metadataJson: null,
       sizeBytes: 1,
       createdAtMs: 0,
+      lastUsedAtMs: null,
       isFavorite: true,
     };
     changed({ items: [record] });

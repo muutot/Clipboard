@@ -51,9 +51,10 @@ export function applyItemsChanged(
   return next;
 }
 
+// Partial: legacy producers may omit lists; every access below guards with ??.
 export function applyItemsChangedEvent(
   store: ItemStore,
-  payload: ClipboardItemsChangedPayload,
+  payload: Partial<ClipboardItemsChangedPayload>,
   options: ApplyItemsChangedOptions = {},
 ): ItemStore {
   let next = applyItemsChanged(store, payload.items ?? []);

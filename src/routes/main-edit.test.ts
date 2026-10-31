@@ -12,7 +12,7 @@ import type { ClipboardItem, PersistedClipboardItem } from "$lib/types/clipboard
 const bridge = vi.hoisted(() => ({
   listeners: new Map<string, (event: { payload: unknown }) => void>(),
   hydrate: vi.fn(),
-  invoke: vi.fn(async () => true),
+  invoke: vi.fn(async (_name: string, _args?: unknown): Promise<unknown> => true),
 }));
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: bridge.invoke,
