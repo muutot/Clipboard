@@ -110,6 +110,12 @@ label.visually-hidden {
   gap: 12px;
 }
 
+/* The toggle-card heading is the card's only stacked content and the card
+   centers it, so the heading-follower gap padding would sit it off center. */
+.toggle-card .setting-heading {
+  padding-bottom: 0;
+}
+
 .setting-heading {
   display: flex;
   align-items: center;
