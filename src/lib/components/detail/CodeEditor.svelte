@@ -40,6 +40,34 @@
   let composing = $state(false);
   let lastEditorValue = "";
 
+  /** 0-based line the caret sits on — drives the active-line highlight. */
+  let caretLine = $state(0);
+  let wrap = $state(localStorage.getItem("clipboard.codeEditor.wrap") === "1");
+
+  function toggleWrap() {
+    wrap = !wrap;
+    try {
+      localStorage.setItem("clipboard.codeEditor.wrap", wrap ? "1" : "0");
+    } catch {
+      // Storage unavailable — the toggle just stays session-scoped.
+    }
+  }
+
+  function updateCaretLine() {
+    if (!editor) return;
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0 || !editor.contains(selection.anchorNode)) return;
+    const caret = selection.getRangeAt(0);
+    const before = document.createRange();
+    before.selectNodeContents(editor);
+    before.setEnd(caret.endContainer, caret.endOffset);
+    const offset = before.toString().length;
+    caretLine = Math.min(
+      content.slice(0, offset).split("\n").length - 1,
+      Math.max(lineCount - 1, 0),
+    );
+  }
+
   function handleContextMenu(event: MouseEvent) {
     if (!editor) return;
     event.preventDefault();
@@ -71,16 +99,19 @@
     if (!highlightEnabled) return "";
     const lang = language || detectCodeLang(content);
     return tokenizeCode(content, lang)
-      .map((line) =>
-        line
+      .map((line, index) => {
+        const html = line
           .map((token) =>
             token.classes
               ? `<span class="${token.classes}">${escapeHtml(token.text)}</span>`
               : escapeHtml(token.text),
           )
-          .join(""),
-      )
-      .join("\n");
+          .join("");
+        const active = index === caretLine ? " code-line-active" : "";
+        // Empty lines get a zero-width space so the block keeps line height.
+        return `<div class="code-line${active}">${line.length === 0 ? "\u200b" : html}</div>`;
+      })
+      .join("");
   });
 
   $effect(() => {
@@ -99,7 +130,10 @@
       if (!editor) return;
       editor.focus();
       moveCaretToEnd(editor);
+      updateCaretLine();
     });
+    document.addEventListener("selectionchange", updateCaretLine);
+    return () => document.removeEventListener("selectionchange", updateCaretLine);
   });
 
   function readEditorContent(element: HTMLElement): string {
@@ -233,7 +267,7 @@
   }
 </script>
 
-<div class="code-editor-shell">
+<div class="code-editor-shell" class:wrap>
   <div class="code-editor-toolbar">
     {#if onlanguagechange}
       <select
@@ -250,6 +284,16 @@
     {:else}
       <span class="language-label">{languageLabel}</span>
     {/if}
+    <button
+      type="button"
+      class="wrap-toggle"
+      class:on={wrap}
+      onclick={toggleWrap}
+      title="Wrap"
+      aria-pressed={wrap}
+    >
+      WRAP
+    </button>
     <span class="editing-label">{editorLabel}</span>
   </div>
 
@@ -354,6 +398,49 @@
   .language-select:focus {
     outline: none;
     border-color: var(--selection-color);
+  }
+
+  .wrap-toggle {
+    margin-left: auto;
+    padding: 2px 6px;
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    color: var(--text-faint);
+    background: var(--input-bg);
+    font: inherit;
+    font-size: 10px;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+  }
+
+  .wrap-toggle.on {
+    color: var(--selection-color);
+    border-color: var(--selection-color);
+  }
+
+  /* Wrap mode: text soft-wraps inside the pane. Line numbers can't track
+     wrapped rows, so the gutter is hidden while wrapping. */
+  .code-editor-shell.wrap .code-input,
+  .code-editor-shell.wrap .highlight-backdrop {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  .code-editor-shell.wrap .editor-stack {
+    width: 100%;
+  }
+
+  .code-editor-shell.wrap .code-source-pane {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .code-editor-shell.wrap .line-numbers {
+    display: none;
+  }
+
+  /* Active-line highlight lives in the {@html} backdrop — :global required. */
+  .highlight-backdrop :global(.code-line-active) {
+    background: color-mix(in srgb, var(--selection-color) 16%, transparent);
   }
 
   .code-source-pane {
@@ -473,7 +560,7 @@
   }
 
   .code-input:focus {
-    background: color-mix(in srgb, var(--selection-color) 6%, var(--input-bg));
+    outline: none;
   }
 
   .code-input:empty::before {
