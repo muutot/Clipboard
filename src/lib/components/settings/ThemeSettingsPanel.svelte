@@ -449,6 +449,13 @@
     gap: 12px;
   }
 
+  /* Centered row: the shared follower gap padding would sit the heading text
+     off center against the preset action buttons; .preset-list keeps its own
+     margin-top as the gap below this row. */
+  .preset-heading-row .setting-heading {
+    padding-bottom: 0;
+  }
+
   .preset-heading-actions {
     display: flex;
     align-items: center;

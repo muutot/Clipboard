@@ -154,6 +154,8 @@ A size control (`SizeEntry`) holds two values: the display number plus unit, and
 
 A select, segmented language control, number input, or compact action group may replace the toggle while preserving the same left/right hierarchy.
 
+`.setting-heading` `padding-bottom: 6px` is the gap to content that follows the heading inside the card. Cards whose heading has no follower — heading-only cards, centered control rows — must neutralize it or the card renders bottom-heavy/off-center. The shared `.toggle-card .setting-heading` and `.setting-card > .setting-heading:last-child` rules cover the standard patterns; a new centered-row or heading-only variant adds its own `padding-bottom: 0` opt-out (see `.transfer-row`, `.stats-metric-heading`, `.preset-heading-row` and the rule text in `css-theming.md`).
+
 ### Slider card
 
 ```svelte
