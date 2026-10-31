@@ -201,8 +201,10 @@
     padding: 0;
     border: 0;
     border-radius: 6px;
-    color: var(--text-muted);
-    background: transparent;
+    /* Solid accent fill so the add action is clearly visible instead of a
+       faint ghost icon inside the input row. */
+    color: #ffffff;
+    background: var(--accent);
     cursor: pointer;
     transition:
       color 120ms ease,
@@ -210,12 +212,11 @@
   }
 
   .tag-add:hover:not(:disabled) {
-    color: var(--text-primary);
-    background: var(--hover-bg);
+    background: color-mix(in srgb, var(--accent) 85%, #000000);
   }
 
   .tag-add:disabled {
-    opacity: 0.4;
+    opacity: 0.35;
     cursor: default;
   }
 </style>
