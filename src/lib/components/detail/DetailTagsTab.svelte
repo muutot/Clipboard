@@ -201,22 +201,21 @@
     padding: 0;
     border: 0;
     border-radius: 6px;
-    /* Solid accent fill so the add action is clearly visible instead of a
-       faint ghost icon inside the input row. */
-    color: #ffffff;
-    background: var(--accent);
+    /* Accent-colored icon keeps the add action noticeable without a filled
+       background inside the input row. */
+    color: var(--accent);
+    background: transparent;
     cursor: pointer;
-    transition:
-      color 120ms ease,
-      background 120ms ease;
+    transition: color 120ms ease;
   }
 
   .tag-add:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--accent) 85%, #000000);
+    color: color-mix(in srgb, var(--accent) 85%, #000000);
   }
 
   .tag-add:disabled {
-    opacity: 0.35;
+    color: var(--text-muted);
+    opacity: 0.5;
     cursor: default;
   }
 </style>
