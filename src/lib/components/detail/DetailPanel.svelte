@@ -220,6 +220,10 @@
     editLanguage = null;
   }
   let editTitleContent = $state("");
+  // Measured from the rendered title span so the rename input keeps the exact
+  // same box — no height/width jump when the header switches to edit mode.
+  let titleBoxWidth = $state(0);
+  let titleBoxHeight = $state(0);
 
   // Depend only on the item id so OCR polling patches (which replace the
   // item object every poll) don't flip the user back to the preview tab or
@@ -229,16 +233,21 @@
   $effect(() => {
     const itemId = currentItemId;
     if (itemId !== null) {
-      activeTab = "preview";
-      endContentEdit();
-      // The find draft belongs to the previous item's preview; marks would
-      // point at stale text after the switch.
-      closeFind();
-      // The title rename draft belongs to the previous item. Keeping it
-      // open across an item switch would save the old title onto the new
-      // item when the pending input commits (blur/Enter).
-      editingTitle = false;
-      editTitleContent = "";
+      // untrack: closeFind() reads `previewEl`, and unmounting the preview
+      // section on a tab switch updates that binding — tracking it here made
+      // every tab click re-run this reset and snap the panel back to preview.
+      untrack(() => {
+        activeTab = "preview";
+        endContentEdit();
+        // The find draft belongs to the previous item's preview; marks would
+        // point at stale text after the switch.
+        closeFind();
+        // The title rename draft belongs to the previous item. Keeping it
+        // open across an item switch would save the old title onto the new
+        // item when the pending input commits (blur/Enter).
+        editingTitle = false;
+        editTitleContent = "";
+      });
     }
   });
 
@@ -497,6 +506,8 @@
               class="header-title-input"
               bind:value={editTitleContent}
               use:autofocus
+              style:width={`${Math.max(titleBoxWidth, 80)}px`}
+              style:height={`${Math.max(titleBoxHeight, 22)}px`}
               onkeydown={(e) => {
                 if (e.key === "Enter") {
                   saveTitleEdit();
@@ -517,6 +528,8 @@
             role="button"
             tabindex="0"
             aria-label={_t("edit.edit")}
+            bind:clientWidth={titleBoxWidth}
+            bind:clientHeight={titleBoxHeight}
             ondblclick={() => {
               editTitleContent = item.title;
               editingTitle = true;
@@ -843,14 +856,16 @@
   }
 
   .header-title-input {
-    flex: 1;
     min-width: 0;
-    padding: 2px 8px;
+    box-sizing: border-box;
+    flex: none;
+    padding: 0 7px;
     border: 1px solid var(--selection-color);
     border-radius: 5px;
     color: var(--text-primary);
     background: var(--input-bg);
-    font-size: 13px;
+    font-size: var(--font-size-base, 13px);
+    font-weight: 540;
     outline: none;
   }
 

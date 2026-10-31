@@ -9,6 +9,20 @@ vi.mock("@tauri-apps/api/window", () => ({
   getCurrentWindow: () => ({ label: "main" }),
 }));
 
+// bind:clientWidth/clientHeight on the header title span requires
+// ResizeObserver, which jsdom does not implement. Measurements stay 0 in
+// tests; the input falls back to its minimum box.
+beforeAll(() => {
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
+});
+
 const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => {
   for (const cleanup of cleanups.splice(0)) await cleanup();
@@ -165,6 +179,18 @@ describe("DetailPanel OCR tab applicability", () => {
   it("keeps the OCR tab for image records", () => {
     const target = mountPanel(item({ kind: "image" }));
     expect(tabLabels(target)).toContain(t("detail.ocr"));
+  });
+});
+
+describe("DetailPanel tab switching", () => {
+  it("switches to the details tab on click", () => {
+    const target = mountPanel(item({ kind: "text", textContent: "hello body" }));
+    const tabs = [...target.querySelectorAll<HTMLButtonElement>(".detail-tabs button")];
+    tabs.find((button) => button.textContent?.trim() === t("detail.details"))!.click();
+    flushSync();
+
+    const active = target.querySelector(".detail-tabs button.active");
+    expect(active?.textContent?.trim()).toBe(t("detail.details"));
   });
 });
 
