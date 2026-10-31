@@ -2,6 +2,8 @@
   import { onMount } from "svelte";
   import CodePreview from "$lib/components/detail/CodePreview.svelte";
   import EditableContextMenu from "$lib/components/common/EditableContextMenu.svelte";
+  import { detectCodeLang, tokenizeCode } from "$lib/utils/content/code-tokenize";
+  import { FILE_PREVIEW_LIMIT } from "$lib/utils/content/file-preview";
 
   interface Props {
     content: string;
@@ -23,6 +25,7 @@
 
   let editor = $state<HTMLElement | null>(null);
   let contextMenu = $state<{ x: number; y: number } | null>(null);
+  let composing = $state(false);
   let lastEditorValue = "";
 
   function handleContextMenu(event: MouseEvent) {
@@ -33,6 +36,36 @@
 
   const lineCount = $derived(Math.max(1, content.split("\n").length));
   const languageLabel = $derived(language || "CODE");
+
+  // Live highlight backdrop: the editor paints its own text transparently on
+  // top of a token-colored mirror, so native caret, IME and undo stay intact.
+  // Oversized content skips the backdrop — tokenizing every keystroke on a
+  // multi-hundred-KB draft would lag the input.
+  const highlightEnabled = $derived(content.length <= FILE_PREVIEW_LIMIT && content.length > 0);
+
+  function escapeHtml(text: string): string {
+    return text
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;");
+  }
+
+  const backdropHtml = $derived.by(() => {
+    if (!highlightEnabled) return "";
+    const lang = language || detectCodeLang(content);
+    return tokenizeCode(content, lang)
+      .map((line) =>
+        line
+          .map((token) =>
+            token.classes
+              ? `<span class="${token.classes}">${escapeHtml(token.text)}</span>`
+              : escapeHtml(token.text),
+          )
+          .join(""),
+      )
+      .join("\n");
+  });
 
   $effect(() => {
     const currentEditor = editor;
@@ -135,21 +168,34 @@
         <span>{index + 1}</span>
       {/each}
     </div>
-    <div
-      bind:this={editor}
-      class="code-input"
-      contenteditable="true"
-      role="textbox"
-      tabindex="0"
-      aria-label={editorLabel}
-      aria-multiline="true"
-      spellcheck="false"
-      data-placeholder={placeholder}
-      oninput={handleInput}
-      onkeydown={handleKeydown}
-      onpaste={handlePaste}
-      oncontextmenu={handleContextMenu}
-    ></div>
+    <div class="editor-stack" class:composing>
+      {#if backdropHtml}
+        <div class="highlight-backdrop" aria-hidden="true">
+          {@html backdropHtml}
+        </div>
+      {/if}
+      <div
+        bind:this={editor}
+        class="code-input"
+        class:highlighted={!!backdropHtml}
+        contenteditable="true"
+        role="textbox"
+        tabindex="0"
+        aria-label={editorLabel}
+        aria-multiline="true"
+        spellcheck="false"
+        data-placeholder={placeholder}
+        oninput={handleInput}
+        onkeydown={handleKeydown}
+        onpaste={handlePaste}
+        oncontextmenu={handleContextMenu}
+        oncompositionstart={() => (composing = true)}
+        oncompositionend={(event) => {
+          composing = false;
+          handleInput(event);
+        }}
+      ></div>
+    </div>
   </div>
 
   <div class="live-preview">
@@ -231,6 +277,54 @@
     padding: 0 9px 0 6px;
   }
 
+  .editor-stack {
+    position: relative;
+    width: max-content;
+    min-width: 100%;
+  }
+
+  /* Token-colored mirror underneath the editor. Geometry must match
+     .code-input exactly (font, padding, white-space, tab-size) so the
+     transparent editor glyphs align with the visible ones. */
+  .highlight-backdrop {
+    position: absolute;
+    inset: 0;
+    padding: 10px 12px;
+    color: var(--text-primary);
+    font:
+      13px/1.6 "Cascadia Code",
+      Consolas,
+      "SFMono-Regular",
+      monospace;
+    tab-size: 2;
+    white-space: pre;
+    pointer-events: none;
+  }
+
+  /* Niche exception: syntax token hues are a fixed palette (content-defined
+     rendering); color-mix with --text-primary shifts luminance with the
+     theme so tokens stay legible on both dark and light surfaces. */
+  .highlight-backdrop :global(.token-keyword) {
+    color: color-mix(in srgb, #c586c0 75%, var(--text-primary));
+  }
+
+  .highlight-backdrop :global(.token-string) {
+    color: color-mix(in srgb, #ce9178 75%, var(--text-primary));
+  }
+
+  .highlight-backdrop :global(.token-comment) {
+    color: color-mix(in srgb, #6a9955 70%, var(--text-primary));
+    font-style: italic;
+  }
+
+  .highlight-backdrop :global(.token-number) {
+    color: color-mix(in srgb, #b5cea8 65%, var(--text-primary));
+  }
+
+  .highlight-backdrop :global(.token-key) {
+    color: color-mix(in srgb, #9cdcfe 65%, var(--text-primary));
+  }
+
   .code-input {
     min-height: 8em;
     margin: 0;
@@ -246,6 +340,28 @@
       monospace;
     tab-size: 2;
     white-space: pre;
+  }
+
+  /* With the backdrop painting the glyphs, the editor text itself becomes
+     transparent; selection restores the color so selected text stays
+     readable above the selection background. */
+  .code-input.highlighted {
+    color: transparent;
+  }
+
+  .code-input.highlighted::selection {
+    background: color-mix(in srgb, var(--selection-color) 40%, transparent);
+    color: var(--text-primary);
+  }
+
+  /* IME composition text would be invisible over the backdrop — fall back
+     to plain opaque text while composing. */
+  .editor-stack.composing .highlight-backdrop {
+    visibility: hidden;
+  }
+
+  .editor-stack.composing .code-input.highlighted {
+    color: var(--text-primary);
   }
 
   .code-input:focus {
