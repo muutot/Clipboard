@@ -64,6 +64,7 @@ Two English UI galleries with colorful icons and compact spacing, rendered in br
 - Smart content detection: email, phone, color values, dates, currency, IP
 - Quick actions: email, dial, open link, view date
 - Rich text (HTML / RTF) capture with **paste with formatting** and **clean & paste** (strips tracking parameters and extra whitespace)
+- **Source mapping**: rename web sources with custom names by domain / title-keyword rules
 - Content-hash deduplication
 - Self-trigger suppression to avoid capturing its own writes
 - 10,000 items / 30 days retention by default (configurable)
@@ -74,6 +75,7 @@ Two English UI galleries with colorful icons and compact spacing, rendered in br
 - Unordered multi-keyword AND matching + BM25 ranking
 - Natural-language date search ("yesterday", "last week")
 - Source application name participates in search
+- In-detail find (Ctrl+F)
 - Search suggestions (dropdown / inline hints)
 - Index query P95 < 0.1ms at 80k items ([measured](docs/SEARCH_OPTIMIZATION_REPORT.md)); the first search may need to drain a large index backlog (batch import/recovery), ~227ms per 10k backlog
 
