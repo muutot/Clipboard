@@ -72,17 +72,21 @@ export function estimateCardHeight(
   // Custom-title cards render the user title plus the FULL content as the
   // clamped preview (not "first line + rest"), so count the visual lines of
   // the whole content; normal cards render the first line as the title and
-  // preview only the remaining lines.
+  // preview only the remaining lines. When the content is identical to the
+  // custom title the preview row is suppressed, so it contributes no height.
   let totalLines = 1;
   if (item.customTitle) {
-    const bodyLines = showSecondaryText
-      ? measureVisualLines(
-          trimTrailingBlankLines(item.textContent) || trimTrailingBlankLines(item.preview),
-          previewFontSize,
-          Math.max(1, contentWidth - 26 - 76),
-          maxTextLines,
-        )
-      : 0;
+    const bodyText =
+      trimTrailingBlankLines(item.textContent) || trimTrailingBlankLines(item.preview);
+    const bodyLines =
+      showSecondaryText && bodyText !== item.title
+        ? measureVisualLines(
+            bodyText,
+            previewFontSize,
+            Math.max(1, contentWidth - 26 - 76),
+            maxTextLines,
+          )
+        : 0;
     totalLines = 1 + bodyLines;
   } else {
     const previewText =

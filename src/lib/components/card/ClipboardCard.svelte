@@ -701,7 +701,7 @@
           {@render tagArea()}
         </div>
         {#if item.customTitle}
-          {#if secondaryPreviewText}
+          {#if secondaryPreviewText && secondaryPreviewText !== item.title}
             <div class="content-preview">{secondaryPreviewText}</div>
           {/if}
         {:else}

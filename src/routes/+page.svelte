@@ -1703,7 +1703,9 @@
 
   function renameTitle(id: string, title: string) {
     const item = findLoadedItem(id);
-    if (!item) return;
+    // A no-op rename must not flip the item into custom-title rendering
+    // (title line + full content preview), which duplicates single-line items.
+    if (!item || item.title === title) return;
     metadataMutations!
       .run(new Map([[id, { title, customTitle: true }]]), () =>
         invoke("rename_item", { id, newName: title }),
