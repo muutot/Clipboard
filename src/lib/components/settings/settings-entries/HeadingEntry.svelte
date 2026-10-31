@@ -11,17 +11,18 @@
 </script>
 
 <section class="setting-card" data-settings-search-id={searchId ?? config.id ?? undefined}>
-  <div class="setting-heading">
-    <EntryHeading icon={config.icon} label={config.label} desc={config.desc} />
-    {#if config.actionLabel}
-      <button
-        type="button"
-        class="settings-action-btn"
-        disabled={config.actionDisabled}
-        onclick={config.onaction}
-      >
-        {config.actionLabel}
-      </button>
-    {/if}
-  </div>
+  <EntryHeading icon={config.icon} label={config.label} desc={config.desc}>
+    {#snippet trailing()}
+      {#if config.actionLabel}
+        <button
+          type="button"
+          class="settings-action-btn"
+          disabled={config.actionDisabled}
+          onclick={config.onaction}
+        >
+          {config.actionLabel}
+        </button>
+      {/if}
+    {/snippet}
+  </EntryHeading>
 </section>

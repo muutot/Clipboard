@@ -2,6 +2,7 @@
   import AppIcon from "$lib/components/card/AppIcon.svelte";
   import CustomSelect from "$lib/components/common/CustomSelect.svelte";
   import UpdateDialog from "$lib/components/settings/UpdateDialog.svelte";
+  import EntryHeading from "$lib/components/settings/settings-entries/EntryHeading.svelte";
   import { messages, resolvePath } from "$lib/i18n";
   import { generalSettings } from "$lib/services/settings";
   import { isTauriRuntime } from "$lib/services/runtime";
@@ -98,23 +99,16 @@
   </section>
 
   <section class="setting-card">
-    <div class="setting-heading">
-      <span class="setting-icon"><AppIcon name="file" size={17} /></span>
-      <div>
-        <strong>{_t("about.executablePathTitle")}</strong>
-        <p class="about-path">{appExecutablePath || _t("about.executablePathEmpty")}</p>
-      </div>
-    </div>
+    <EntryHeading
+      icon="file"
+      label={_t("about.executablePathTitle")}
+      desc={appExecutablePath || _t("about.executablePathEmpty")}
+      descClass="about-path"
+    />
   </section>
 
   <section class="setting-card toggle-card">
-    <div class="setting-heading">
-      <span class="setting-icon"><AppIcon name="code" size={17} /></span>
-      <div>
-        <strong>{_t("about.repoTitle")}</strong>
-        <p>{_t("about.repoDesc")}</p>
-      </div>
-    </div>
+    <EntryHeading icon="code" label={_t("about.repoTitle")} desc={_t("about.repoDesc")} />
     <div class="about-update-controls">
       <button
         type="button"
@@ -140,13 +134,7 @@
   </section>
 
   <section class="setting-card toggle-card" data-settings-search-id="about.devtools">
-    <div class="setting-heading">
-      <span class="setting-icon"><AppIcon name="code" size={17} /></span>
-      <div>
-        <strong>{_t("about.devtoolsTitle")}</strong>
-        <p>{_t("about.devtoolsDesc")}</p>
-      </div>
-    </div>
+    <EntryHeading icon="code" label={_t("about.devtoolsTitle")} desc={_t("about.devtoolsDesc")} />
     <button
       type="button"
       class="toggle-switch"
@@ -209,7 +197,8 @@
     height: 28px;
   }
 
-  .about-path {
+  /* The <p> renders inside EntryHeading, so the panel class needs :global(). */
+  .setting-card :global(.about-path) {
     overflow-wrap: anywhere;
     word-break: break-all;
   }

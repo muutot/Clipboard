@@ -5,6 +5,7 @@
   import { getAutoTagRules, setAutoTagRules, type AutoTagRule } from "$lib/services/clipboard";
   import { createFeedback } from "$lib/utils/settings/feedback.svelte";
   import CustomSelect from "$lib/components/common/CustomSelect.svelte";
+  import EntryHeading from "$lib/components/settings/settings-entries/EntryHeading.svelte";
   import {
     previewAutoTagRules,
     previewAutoTagHistory,
@@ -144,12 +145,7 @@
 
 <div class="settings-scroll">
   <section class="setting-card">
-    <div class="setting-heading">
-      <div>
-        <strong>{_t("tags.autoTagTitle")}</strong>
-        <p>{_t("tags.autoTagDescription")}</p>
-      </div>
-    </div>
+    <EntryHeading label={_t("tags.autoTagTitle")} desc={_t("tags.autoTagDescription")} />
     {#if loading}
       <p class="settings-state">{_t("storage.readingConfig")}</p>
     {:else}
@@ -216,12 +212,7 @@
 
   {#if !loading}
     <section class="setting-card" data-settings-search-id="tags.auto-tag-preview">
-      <div class="setting-heading">
-        <div>
-          <strong>{_t("autoTags.previewTitle")}</strong>
-          <p>{_t("autoTags.conditionsHint")}</p>
-        </div>
-      </div>
+      <EntryHeading label={_t("autoTags.previewTitle")} desc={_t("autoTags.conditionsHint")} />
       <textarea
         disabled={busy}
         class="settings-text-input sample-text"
@@ -258,12 +249,7 @@
         </p>{/if}
     </section>
     <section class="setting-card" data-settings-search-id="tags.auto-tag-history">
-      <div class="setting-heading">
-        <div>
-          <strong>{_t("autoTags.historyTitle")}</strong>
-          <p>{_t("autoTags.historyHint")}</p>
-        </div>
-      </div>
+      <EntryHeading label={_t("autoTags.historyTitle")} desc={_t("autoTags.historyHint")} />
       <div class="autotag-actions">
         <button
           class="settings-action-btn"

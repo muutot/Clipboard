@@ -16,14 +16,12 @@
 </script>
 
 <section class="setting-card" data-settings-search-id={searchId ?? config.id ?? undefined}>
-  <div class="setting-heading">
-    {#snippet children()}
-      <span class="value-label"
-        >{config.display ? config.display(config.get()) : config.get()}{config.suffix}</span
-      >
-    {/snippet}
-    <EntryHeading icon={config.icon} label={config.label} desc={config.desc} inline {children} />
-  </div>
+  {#snippet children()}
+    <span class="value-label"
+      >{config.display ? config.display(config.get()) : config.get()}{config.suffix}</span
+    >
+  {/snippet}
+  <EntryHeading icon={config.icon} label={config.label} desc={config.desc} inline {children} />
   <input
     type="range"
     class="transparency-slider"

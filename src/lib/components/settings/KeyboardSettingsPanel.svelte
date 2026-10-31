@@ -5,6 +5,7 @@
   import { listen } from "@tauri-apps/api/event";
   import AppIcon from "$lib/components/card/AppIcon.svelte";
   import type { IconName } from "$lib/types/clipboard";
+  import EntryHeading from "$lib/components/settings/settings-entries/EntryHeading.svelte";
   import {
     configureKeyboardShortcuts,
     getKeyboardConfig,
@@ -329,13 +330,11 @@
   <div class="settings-scroll">
     {#if category === "system"}
       <section class="setting-card toggle-card" data-settings-search-id="keyboard.config-file">
-        <div class="setting-heading">
-          <span class="setting-icon"><AppIcon name="keyboard" size={17} /></span>
-          <div>
-            <strong>{_t("keyboard.shortcutConfigTitle")}</strong>
-            <p>{_t("storage.keyboardConfigNote")}</p>
-          </div>
-        </div>
+        <EntryHeading
+          icon="keyboard"
+          label={_t("keyboard.shortcutConfigTitle")}
+          desc={_t("storage.keyboardConfigNote")}
+        />
         <div class="config-bar-actions">
           <button
             type="button"

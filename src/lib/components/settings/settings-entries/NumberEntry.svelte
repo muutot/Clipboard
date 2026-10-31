@@ -23,18 +23,16 @@
 
 {#if !isRow}
   <section class="setting-card" data-settings-search-id={searchId ?? config.id ?? undefined}>
-    <div class="setting-heading">
-      {#snippet children()}
-        {#if config.suffix}<span class="value-label">{config.get()}{config.suffix}</span>{/if}
-      {/snippet}
-      <EntryHeading
-        icon={config.icon}
-        label={config.label}
-        desc={config.desc}
-        inline={!!config.suffix || !!config.desc}
-        {children}
-      />
-    </div>
+    {#snippet children()}
+      {#if config.suffix}<span class="value-label">{config.get()}{config.suffix}</span>{/if}
+    {/snippet}
+    <EntryHeading
+      icon={config.icon}
+      label={config.label}
+      desc={config.desc}
+      inline={!!config.suffix || !!config.desc}
+      {children}
+    />
     <input
       type="number"
       value={config.get()}

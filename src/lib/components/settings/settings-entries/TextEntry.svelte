@@ -19,16 +19,14 @@
 
 {#if !isRow}
   <section class="setting-card" data-settings-search-id={searchId ?? config.id ?? undefined}>
-    <div class="setting-heading">
-      {#snippet children()}
-        {#if config.actionLabel && (!config.actionVisible || config.actionVisible())}
-          <button type="button" class="settings-action-btn" onclick={config.onaction}
-            >{resolveActionLabel(config.actionLabel)}</button
-          >
-        {/if}
-      {/snippet}
-      <EntryHeading icon={config.icon} label={config.label} desc={config.desc} inline {children} />
-    </div>
+    {#snippet children()}
+      {#if config.actionLabel && (!config.actionVisible || config.actionVisible())}
+        <button type="button" class="settings-action-btn" onclick={config.onaction}
+          >{resolveActionLabel(config.actionLabel)}</button
+        >
+      {/if}
+    {/snippet}
+    <EntryHeading icon={config.icon} label={config.label} desc={config.desc} inline {children} />
     <input
       type={config.inputType ?? "text"}
       class="settings-text-input"

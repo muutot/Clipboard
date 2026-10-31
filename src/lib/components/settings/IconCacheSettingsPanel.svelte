@@ -4,6 +4,7 @@
   import AppIcon from "$lib/components/card/AppIcon.svelte";
   import Checkbox from "$lib/components/common/Checkbox.svelte";
   import { messages, resolvePath } from "$lib/i18n";
+  import EntryHeading from "$lib/components/settings/settings-entries/EntryHeading.svelte";
   import {
     deleteIconFiles,
     listIconCache,
@@ -145,13 +146,11 @@
 
 <div class="settings-scroll">
   <section class="setting-card">
-    <div class="setting-heading">
-      <span class="setting-icon"><AppIcon name="image" size={17} /></span>
-      <div>
-        <strong>{_t("storage.iconCacheTitle")}</strong>
-        <p>{_t("storage.iconCacheDesc")}</p>
-      </div>
-    </div>
+    <EntryHeading
+      icon="image"
+      label={_t("storage.iconCacheTitle")}
+      desc={_t("storage.iconCacheDesc")}
+    />
     {#if loadingIcons}
       <p class="settings-state">{_t("storage.loadingIcons")}</p>
     {:else if iconFiles.length === 0}
