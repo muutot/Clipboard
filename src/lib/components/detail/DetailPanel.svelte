@@ -590,6 +590,81 @@
       {/if}
     </nav>
 
+    {#if activeTab === "preview" && !editing}
+      <div class="detail-actions">
+        <button type="button" onclick={() => oncopy(item.id)}>
+          <AppIcon name="copy" size={15} />
+          {_t("card.copy")}
+        </button>
+        {#if item.kind === "image" || item.kind === "file"}
+          <button type="button" onclick={() => oncopyPath(item.id)}>
+            <AppIcon name="link" size={15} />
+            {_t("card.copyPath")}
+          </button>
+        {/if}
+        {#if (item.kind === "image" || item.kind === "file") && item.resourcePath}
+          <button
+            type="button"
+            onclick={() => {
+              invoke("reveal_in_explorer", { path: item.resourcePath }).catch(() => {});
+            }}
+          >
+            <AppIcon name="file" size={15} />
+            {_t("detail.locateFile")}
+          </button>
+          <button
+            type="button"
+            onclick={() => {
+              const folder = item.resourcePath!.replace(/[^\\/]+$/, "");
+              invoke("reveal_in_explorer", { path: folder }).catch(() => {});
+            }}
+          >
+            <AppIcon name="download" size={15} />
+            {_t("detail.openFolder")}
+          </button>
+        {/if}
+        {#if !editing && (item.kind === "text" || item.kind === "link")}
+          <button type="button" onclick={beginContentEdit}>
+            <AppIcon name="edit" size={15} />
+            {_t("edit.edit")}
+          </button>
+        {/if}
+        {#if !editing && (item.kind === "image" || item.kind === "file") && (!item.fileMeta || item.fileMeta.length <= 1)}
+          <button
+            type="button"
+            onclick={() => {
+              editTitleContent = item.title;
+              editingTitle = true;
+            }}
+          >
+            <AppIcon name="edit" size={15} />
+            {_t("edit.editFileName")}
+          </button>
+        {/if}
+        {#if item.kind === "image" || item.kind === "file"}
+          <button type="button" onclick={() => oncopyfilename(item.id)}>
+            <AppIcon name="file" size={15} />
+            {_t("copy.copyFileName")}
+          </button>
+        {:else}
+          <button type="button" onclick={() => onplainpaste(item.id)}>
+            <AppIcon name="type" size={15} />
+            {_t("copy.plainText")}
+          </button>
+          {#if item.htmlContent}
+            <button type="button" onclick={() => onformatpaste(item.id)}>
+              <AppIcon name="clipboard" size={15} />
+              {_t("card.pasteFormat")}
+            </button>
+          {/if}
+          <button type="button" onclick={() => oncleanpaste(item.id)}>
+            <AppIcon name="scan" size={15} />
+            {_t("card.cleanPaste")}
+          </button>
+        {/if}
+      </div>
+    {/if}
+
     <div class="detail-body">
       {#if activeTab === "preview"}
         <div class="preview-section" class:edit-fill={editing} bind:this={previewEl}>
@@ -682,81 +757,6 @@
             {/if}
           {/if}
         </div>
-
-        {#if !editing}
-          <div class="detail-actions">
-            <button type="button" onclick={() => oncopy(item.id)}>
-              <AppIcon name="copy" size={15} />
-              {_t("card.copy")}
-            </button>
-            {#if item.kind === "image" || item.kind === "file"}
-              <button type="button" onclick={() => oncopyPath(item.id)}>
-                <AppIcon name="link" size={15} />
-                {_t("card.copyPath")}
-              </button>
-            {/if}
-            {#if (item.kind === "image" || item.kind === "file") && item.resourcePath}
-              <button
-                type="button"
-                onclick={() => {
-                  invoke("reveal_in_explorer", { path: item.resourcePath }).catch(() => {});
-                }}
-              >
-                <AppIcon name="file" size={15} />
-                {_t("detail.locateFile")}
-              </button>
-              <button
-                type="button"
-                onclick={() => {
-                  const folder = item.resourcePath!.replace(/[^\\/]+$/, "");
-                  invoke("reveal_in_explorer", { path: folder }).catch(() => {});
-                }}
-              >
-                <AppIcon name="download" size={15} />
-                {_t("detail.openFolder")}
-              </button>
-            {/if}
-            {#if !editing && (item.kind === "text" || item.kind === "link")}
-              <button type="button" onclick={beginContentEdit}>
-                <AppIcon name="edit" size={15} />
-                {_t("edit.edit")}
-              </button>
-            {/if}
-            {#if !editing && (item.kind === "image" || item.kind === "file") && (!item.fileMeta || item.fileMeta.length <= 1)}
-              <button
-                type="button"
-                onclick={() => {
-                  editTitleContent = item.title;
-                  editingTitle = true;
-                }}
-              >
-                <AppIcon name="edit" size={15} />
-                {_t("edit.editFileName")}
-              </button>
-            {/if}
-            {#if item.kind === "image" || item.kind === "file"}
-              <button type="button" onclick={() => oncopyfilename(item.id)}>
-                <AppIcon name="file" size={15} />
-                {_t("copy.copyFileName")}
-              </button>
-            {:else}
-              <button type="button" onclick={() => onplainpaste(item.id)}>
-                <AppIcon name="type" size={15} />
-                {_t("copy.plainText")}
-              </button>
-              {#if item.htmlContent}
-                <button type="button" onclick={() => onformatpaste(item.id)}>
-                  <AppIcon name="clipboard" size={15} />
-                  {_t("card.pasteFormat")}
-                </button>
-              {/if}
-              <button type="button" onclick={() => oncleanpaste(item.id)}>
-                <AppIcon name="scan" size={15} />
-                {_t("card.cleanPaste")}
-              </button>
-            {/if}
-          </div>
-        {/if}
       {:else if activeTab === "details"}
         <DetailDetailsTab {item} kindLabel={getKindLabel(item.kind)} />
       {:else if activeTab === "tags"}
@@ -1013,7 +1013,9 @@
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
-    padding-top: 8px;
+    /* Own row between the tab bar and the scrolling body; horizontal padding
+       matches .detail-body so the buttons align with the content column. */
+    padding: 10px 16px 0;
   }
 
   .detail-actions button {
