@@ -779,7 +779,14 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
     { section: "keyboard_item" },
     i18n("keyboard.favoriteItem"),
     i18n("keyboard.favoriteItemDesc"),
-    ["Ctrl+F", "favorite"],
+    ["Ctrl+G", "favorite"],
+  ),
+  entry(
+    "keyboard.find-in-detail",
+    { section: "keyboard_item" },
+    i18n("keyboard.findInDetail"),
+    i18n("keyboard.findInDetailDesc"),
+    ["Ctrl+F", "find", "查找"],
   ),
   entry(
     "keyboard.open-detail",

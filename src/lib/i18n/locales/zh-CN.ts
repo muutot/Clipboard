@@ -1264,7 +1264,7 @@ const zhCN: LocaleDefinition = {
         desc: "每条记录是一张卡片，选中后即可使用快捷键操作。",
         points: [
           "单击选中，双击直接粘贴（可在设置中关闭）",
-          "Ctrl+C 复制、Ctrl+F 收藏、Ctrl+T 添加标签",
+          "Ctrl+C 复制、Ctrl+G 收藏、Ctrl+T 添加标签",
           "空格键打开详情：编辑、OCR、标签都在这里",
           "Ctrl+1~9 快速复制列表前 9 条",
         ],

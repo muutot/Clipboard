@@ -1314,7 +1314,7 @@ const en: LocaleDefinition = {
         desc: "Every record is a card; select one and use keyboard shortcuts.",
         points: [
           "Click to select, double-click to paste directly (can be turned off)",
-          "Ctrl+C copy, Ctrl+F favorite, Ctrl+T add a tag",
+          "Ctrl+C copy, Ctrl+G favorite, Ctrl+T add a tag",
           "Space opens the detail panel: editing, OCR, and tags live there",
           "Ctrl+1~9 quick-copy the first nine items",
         ],
