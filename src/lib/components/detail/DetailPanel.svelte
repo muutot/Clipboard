@@ -898,7 +898,7 @@
     font-size: var(--font-size-base, 13px);
     font-weight: 540;
     outline: none;
-    box-shadow: inset 0 0 0 2px var(--selection-color);
+    box-shadow: inset 0 0 0 4px var(--selection-color);
   }
 
   .header-save-btn {
