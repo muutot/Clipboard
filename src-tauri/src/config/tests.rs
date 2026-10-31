@@ -45,7 +45,11 @@ fn concurrent_config_stores_commit_only_one_write_from_the_same_revision() {
     let first = ConfigStore::load(&project).unwrap();
     let second = ConfigStore::load(&project).unwrap();
     let barrier = Arc::new(Barrier::new(2));
-    let handles: Vec<_> = [(first, 365), (second, 366)]
+    // Both values must stay inside the setter's 1..=365 clamp: the winner's
+    // requested value is compared against the persisted file byte-for-byte,
+    // so a clamped value (e.g. 366 persisting as 365) would fail depending
+    // on which thread happens to win the race.
+    let handles: Vec<_> = [(first, 300), (second, 301)]
         .into_iter()
         .map(|(mut store, retention)| {
             let barrier = barrier.clone();
