@@ -37,7 +37,6 @@ function mountPanel(record: ClipboardItem, props: Record<string, unknown> = {}):
     target,
     props: {
       item: record,
-      ...props,
       onclose: () => {},
       oncopy: () => {},
       onedit: () => {},
@@ -52,6 +51,7 @@ function mountPanel(record: ClipboardItem, props: Record<string, unknown> = {}):
       oncopyPath: () => {},
       onsavetags: () => {},
       onocrupdate: () => {},
+      ...props,
     },
   });
   cleanups.push(async () => {
@@ -165,6 +165,37 @@ describe("DetailPanel OCR tab applicability", () => {
   it("keeps the OCR tab for image records", () => {
     const target = mountPanel(item({ kind: "image" }));
     expect(tabLabels(target)).toContain(t("detail.ocr"));
+  });
+});
+
+describe("DetailPanel Ctrl+S save", () => {
+  it("saves the content edit on Ctrl+S and exits edit mode", async () => {
+    const onsaveedit = vi.fn(async () => true);
+    const target = mountPanel(item({ kind: "text", textContent: "hello body" }), { onsaveedit });
+    [...target.querySelectorAll<HTMLButtonElement>(".detail-actions button")]
+      .find((button) => button.textContent?.trim() === t("edit.edit"))!
+      .click();
+    flushSync();
+
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "s", ctrlKey: true, cancelable: true }),
+    );
+    await settle();
+
+    expect(onsaveedit).toHaveBeenCalledWith("record", "hello body");
+    expect(target.querySelector(".code-input")).toBeNull();
+  });
+
+  it("ignores Ctrl+S outside edit mode", async () => {
+    const onsaveedit = vi.fn(async () => true);
+    mountPanel(item({ kind: "text", textContent: "hello body" }), { onsaveedit });
+
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "s", ctrlKey: true, cancelable: true }),
+    );
+    await settle();
+
+    expect(onsaveedit).not.toHaveBeenCalled();
   });
 });
 

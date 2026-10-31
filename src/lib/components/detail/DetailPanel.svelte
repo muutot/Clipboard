@@ -380,6 +380,23 @@
   }
 
   function handleKeydown(event: KeyboardEvent) {
+    // Ctrl+S / Cmd+S saves the in-progress content edit. Works while focus is
+    // inside the code editor; blocks the browser/webview save dialog even
+    // when the draft is empty and the save itself is a no-op.
+    if (
+      editing &&
+      !event.isComposing &&
+      !event.altKey &&
+      !event.shiftKey &&
+      (event.ctrlKey || event.metaKey) &&
+      event.key.toLowerCase() === "s" &&
+      !event.defaultPrevented
+    ) {
+      event.preventDefault();
+      saveEdit();
+      return;
+    }
+
     if (!item || event.key !== "Escape" || event.defaultPrevented) return;
 
     // An open find bar owns the first Escape, before the editor guard (the

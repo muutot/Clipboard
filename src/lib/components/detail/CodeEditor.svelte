@@ -101,9 +101,21 @@
   }
 
   function handleKeydown(event: KeyboardEvent) {
+    // Never touch keys while an IME composition is active — Enter confirms
+    // the composition and must reach the IME, not insert a literal newline.
+    if (event.isComposing) return;
+
     if (event.key === "Tab") {
       event.preventDefault();
       insertTextAtSelection("  ");
+      return;
+    }
+
+    if (event.key === "Enter" && event.shiftKey) {
+      // Shift+Enter breaks at the end of the current line wherever the caret
+      // sits mid-line — the same result as pressing Enter at the line end.
+      event.preventDefault();
+      insertLineBreakAtLineEnd();
       return;
     }
 
@@ -111,6 +123,55 @@
       event.preventDefault();
       insertTextAtSelection("\n");
     }
+  }
+
+  function insertLineBreakAtLineEnd() {
+    if (!editor) return;
+
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0 || !editor.contains(selection.anchorNode)) {
+      insertTextAtSelection("\n");
+      return;
+    }
+
+    const range = selection.getRangeAt(0);
+    const before = document.createRange();
+    before.selectNodeContents(editor);
+    before.setEnd(range.startContainer, range.startOffset);
+    const caretOffset = before.toString().length;
+
+    const text = editor.textContent ?? "";
+    const lineEnd = text.indexOf("\n", caretOffset);
+    moveCaretToOffset(editor, lineEnd === -1 ? text.length : lineEnd);
+    insertTextAtSelection("\n");
+  }
+
+  function moveCaretToOffset(element: HTMLElement, target: number) {
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    let remaining = target;
+    let node: Text | null = null;
+    while (walker.nextNode()) {
+      const current = walker.currentNode as Text;
+      if (remaining <= current.data.length) {
+        node = current;
+        break;
+      }
+      remaining -= current.data.length;
+    }
+
+    const selection = window.getSelection();
+    if (!selection) return;
+
+    const range = document.createRange();
+    if (node) {
+      range.setStart(node, remaining);
+    } else {
+      range.selectNodeContents(element);
+      range.collapse(false);
+    }
+    range.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(range);
   }
 
   function handlePaste(event: ClipboardEvent) {
