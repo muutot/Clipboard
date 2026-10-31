@@ -1709,6 +1709,30 @@
       });
   }
 
+  function changeCodeLanguage(id: string, language: string | null) {
+    const item = findLoadedItem(id);
+    if (!item) return;
+    invoke<PersistedClipboardItem>("set_item_code_language", { id, language })
+      .then((updated) => {
+        // Patch the metadata-derived view fields; a content-changed event
+        // carries the same authoritative record for the other windows.
+        const mapped = toClipboardItem(updated);
+        updateItem(
+          id,
+          () => ({
+            metadataJson: mapped.metadataJson,
+            tags: mapped.tags,
+            webSource: mapped.webSource,
+          }),
+          item,
+        );
+      })
+      .catch((err) => {
+        console.error("Save code language failed:", err);
+        showToast(_t("toast.saveFailed"), "error");
+      });
+  }
+
   function toggleTagFilter(tag: string) {
     tagFilter = tagFilter === tag ? null : tag;
     resetHistoryScroll();
@@ -2434,6 +2458,7 @@
         onduplicate={duplicateItem}
         onsaveasnew={saveAsNew}
         onocrupdate={(id, patch) => updateItem(id, () => patch)}
+        oncodelanguagechange={changeCodeLanguage}
         oncopyfilename={copyFilename}
         onimagefullscreen={handleImageFullscreen}
         onsavetags={saveTags}
@@ -2488,6 +2513,7 @@
     onduplicate={duplicateItem}
     onsaveasnew={saveAsNew}
     onocrupdate={(id, patch) => updateItem(id, () => patch)}
+    oncodelanguagechange={changeCodeLanguage}
     oncopyfilename={copyFilename}
     onimagefullscreen={handleImageFullscreen}
     onsavetags={saveTags}

@@ -24,6 +24,7 @@
   import { invoke } from "@tauri-apps/api/core";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { isTauriRuntime } from "$lib/services/runtime";
+  import { parseCodeLanguage } from "$lib/services/clipboard/mapping";
   import { getDisplayTitle } from "$lib/utils/content/display-text";
   import FindBar from "$lib/components/detail/FindBar.svelte";
   import { setCurrentMatch, unwrapMatches, wrapMatches } from "$lib/utils/content/find-highlight";
@@ -96,6 +97,8 @@
     onimagefullscreen?: (id: string) => void;
     onsavetags: (id: string, tags: string[]) => void;
     onocrupdate: (id: string, patch: Partial<ClipboardItem>) => void;
+    /** Persists the manual code-language override for the item (null = auto). */
+    oncodelanguagechange?: (id: string, language: string | null) => void;
     tagColors?: Record<string, string>;
     searchQuery?: string;
     /** Edge-triggered Ctrl+F signal from the main route (monotonic seq). */
@@ -120,6 +123,7 @@
     onimagefullscreen,
     onsavetags,
     onocrupdate,
+    oncodelanguagechange,
     tagColors = {},
     searchQuery = "",
     findRequest = null,
@@ -136,7 +140,9 @@
   function beginContentEdit() {
     if (!item) return;
     editSession += 1;
-    editLanguage = null;
+    // The manual language override belongs to the item, so an edit session
+    // starts from the stored value, not from auto-detect.
+    editLanguage = parseCodeLanguage(item.metadataJson);
     closeFind();
     editContent =
       item.kind === "image" || item.kind === "file"
@@ -615,7 +621,10 @@
                 language={editLanguage ?? detectCodeLanguage(editContent)}
                 editorLabel={_t("edit.edit")}
                 placeholder={_t("edit.placeholder")}
-                onlanguagechange={(lang) => (editLanguage = lang || null)}
+                onlanguagechange={(lang) => {
+                  editLanguage = lang || null;
+                  if (item) oncodelanguagechange?.(item.id, lang || null);
+                }}
                 oncontentchange={(content) => (editContent = content)}
               />
               <DetailEditActions
@@ -624,7 +633,10 @@
                 oncancel={endContentEdit}
               />
             {:else}
-              <CodePreview content={detailContent} />
+              <CodePreview
+                content={detailContent}
+                language={parseCodeLanguage(item.metadataJson)}
+              />
             {/if}
           {:else if isMarkdown}
             {#if editing}

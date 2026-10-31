@@ -36,6 +36,44 @@ pub fn set_clipboard_item_tags(
 }
 
 #[tauri::command]
+pub fn set_item_code_language(
+    app: AppHandle,
+    database: tauri::State<'_, Database>,
+    id: String,
+    language: Option<String>,
+) -> Result<ClipboardItem, String> {
+    // The value flows into `metadata_json` and back into every window, so
+    // constrain it to identifier-shaped language names ("C++", "C#", "Shell").
+    let validated = language
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| {
+            if value.len() > 24
+                || !value
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '#' | '-' | '_' | '.'))
+            {
+                return Err("invalid code language".to_string());
+            }
+            Ok(value.to_owned())
+        })
+        .transpose()?;
+    let updated = database
+        .set_code_language(&id, validated.as_deref())
+        .map_err(|error| error.to_string())?;
+    if updated {
+        broadcast_content_changed(&app, &database, std::slice::from_ref(&id));
+    }
+    // The webview patches its store from the merged metadata, so hand back
+    // the full record instead of a bare boolean.
+    database
+        .get_item(&id)
+        .map_err(|error| error.to_string())?
+        .ok_or_else(|| "item not found".to_string())
+}
+
+#[tauri::command]
 pub fn copy_clipboard_item(
     app: AppHandle,
     database: tauri::State<'_, Database>,

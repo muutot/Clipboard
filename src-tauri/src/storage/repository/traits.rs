@@ -142,6 +142,9 @@ pub trait ClipboardRepository {
     /// Replace the tag list for a record. Tags are stored inside `metadata_json`
     /// under the `tags` key; an empty list removes the key.
     fn set_tags(&self, id: &str, tags: &[String]) -> Result<bool, StorageError>;
+    /// Set or clear the manual code-language override for a record. Stored
+    /// inside `metadata_json` under the `codeLanguage` key; `None` removes it.
+    fn set_code_language(&self, id: &str, language: Option<&str>) -> Result<bool, StorageError>;
     /// Returns every distinct tag name used by active records with its usage
     /// count and any globally assigned color from the `tags` registry.
     fn list_all_tags(&self) -> Result<Vec<TagInfo>, StorageError>;

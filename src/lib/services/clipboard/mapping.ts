@@ -97,6 +97,12 @@ function parseTags(metadataJson: string | null | undefined): string[] {
     .filter(Boolean);
 }
 
+/** Manual code-language override written by `set_item_code_language`; null = auto. */
+export function parseCodeLanguage(metadataJson: string | null | undefined): string | null {
+  const language = optionalString(parseMetadataObject(metadataJson).codeLanguage);
+  return language ?? null;
+}
+
 export function parseResourceMetadata(
   record: PersistedClipboardItem,
 ): ResourceMetadata | undefined {

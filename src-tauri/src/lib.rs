@@ -867,6 +867,7 @@ pub fn run() {
             read_clipboard_text,
             set_clipboard_item_favorite,
             set_clipboard_item_tags,
+            set_item_code_language,
             set_clipboard_item_last_used,
             list_all_tags,
             rename_tag,

@@ -350,6 +350,54 @@ impl ClipboardRepository for Database {
         })
     }
 
+    fn set_code_language(&self, id: &str, language: Option<&str>) -> Result<bool, StorageError> {
+        self.with_connection(|connection| {
+            // Same read-modify-write transaction discipline as `set_tags`: a
+            // concurrent capture upsert owns a different connection and must
+            // not slip between the metadata snapshot and the update.
+            let transaction =
+                connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+            let existing: Option<Option<String>> = transaction
+                .query_row(
+                    "SELECT metadata_json FROM clipboard_items WHERE id = ?1",
+                    [id],
+                    |row| row.get(0),
+                )
+                .optional()?;
+            let Some(metadata_json) = existing else {
+                return Ok(false);
+            };
+
+            let mut object: serde_json::Value = metadata_json
+                .as_deref()
+                .and_then(|json| serde_json::from_str(json).ok())
+                .filter(serde_json::Value::is_object)
+                .unwrap_or_else(|| serde_json::Value::Object(Default::default()));
+
+            if let serde_json::Value::Object(map) = &mut object {
+                match language.map(str::trim).filter(|value| !value.is_empty()) {
+                    None => {
+                        map.remove("codeLanguage");
+                    }
+                    Some(validated) => {
+                        map.insert(
+                            "codeLanguage".to_owned(),
+                            serde_json::Value::String(validated.to_owned()),
+                        );
+                    }
+                }
+            }
+            let updated = object.to_string();
+
+            let changed = transaction.execute(
+                "UPDATE clipboard_items SET metadata_json = ?2 WHERE id = ?1 AND deleted = 0",
+                params![id, updated],
+            )? > 0;
+            transaction.commit()?;
+            Ok(changed)
+        })
+    }
+
     fn list_all_tags(&self) -> Result<Vec<TagInfo>, StorageError> {
         self.with_connection(|connection| {
             let mut statement = connection.prepare(

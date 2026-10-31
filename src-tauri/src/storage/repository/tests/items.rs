@@ -3,6 +3,37 @@
 use super::*;
 
 #[test]
+fn set_code_language_merges_and_clears_without_touching_other_metadata() {
+    let database = Database::open_in_memory().unwrap();
+    let mut item = text_item("coded", "hash-coded", 100);
+    item.metadata_json = Some(r#"{"customTitle":true,"tags":["work"]}"#.to_owned());
+    database.save_item(&item).unwrap();
+
+    // Setting an override must merge into the shared metadata bag.
+    assert!(database.set_code_language("coded", Some("Rust")).unwrap());
+    let stored = database.get_item("coded").unwrap().unwrap();
+    let metadata: serde_json::Value =
+        serde_json::from_str(stored.metadata_json.as_deref().unwrap()).unwrap();
+    assert_eq!(
+        metadata.get("codeLanguage"),
+        Some(&serde_json::json!("Rust"))
+    );
+    assert_eq!(metadata.get("customTitle"), Some(&serde_json::json!(true)));
+    assert_eq!(metadata.get("tags"), Some(&serde_json::json!(["work"])));
+
+    // An empty string means auto-detect: the key is removed, the rest stays.
+    assert!(database.set_code_language("coded", Some("  ")).unwrap());
+    let stored = database.get_item("coded").unwrap().unwrap();
+    let metadata: serde_json::Value =
+        serde_json::from_str(stored.metadata_json.as_deref().unwrap()).unwrap();
+    assert_eq!(metadata.get("codeLanguage"), None);
+    assert_eq!(metadata.get("customTitle"), Some(&serde_json::json!(true)));
+
+    // Unknown ids are a no-op.
+    assert!(!database.set_code_language("missing", Some("Rust")).unwrap());
+}
+
+#[test]
 fn dedup_upsert_preserves_existing_tags() {
     let database = Database::open_in_memory().unwrap();
     let mut item = text_item("tagged", "hash-tagged", 100);

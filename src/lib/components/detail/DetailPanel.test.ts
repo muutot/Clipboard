@@ -283,3 +283,48 @@ describe("DetailPanel pending saves", () => {
     },
   );
 });
+
+describe("DetailPanel code language override", () => {
+  const enterEdit = (target: HTMLElement) => {
+    [...target.querySelectorAll<HTMLButtonElement>(".detail-actions button")]
+      .find((button) => button.textContent?.trim() === t("edit.edit"))!
+      .click();
+    flushSync();
+  };
+  const languageSelect = (target: HTMLElement) =>
+    target.querySelector<HTMLSelectElement>(".language-select")!;
+
+  it("applies the stored language in the preview label and the editor", async () => {
+    const target = mountPanel(
+      // Content itself auto-detects as JavaScript; the stored override wins.
+      item({ textContent: "const value = 1;", metadataJson: '{"codeLanguage":"Python"}' }),
+    );
+    await settle();
+    expect(target.querySelector(".code-lang-label")?.textContent?.trim()).toBe("Python");
+
+    enterEdit(target);
+    expect(languageSelect(target).value).toBe("Python");
+  });
+
+  it("falls back to auto detection when no override is stored", async () => {
+    const target = mountPanel(item({ textContent: "const value = 1;" }));
+    await settle();
+    enterEdit(target);
+    expect(languageSelect(target).value).toBe("JavaScript");
+  });
+
+  it("persists a manual choice through oncodelanguagechange", async () => {
+    const oncodelanguagechange = vi.fn();
+    const target = mountPanel(item({ textContent: "const value = 1;" }), { oncodelanguagechange });
+    await settle();
+    enterEdit(target);
+
+    const select = languageSelect(target);
+    select.value = "Rust";
+    // Svelte 5 delegates `change`, so the synthetic event must bubble.
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    await settle();
+
+    expect(oncodelanguagechange).toHaveBeenCalledWith("record", "Rust");
+  });
+});
