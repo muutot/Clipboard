@@ -42,7 +42,27 @@
 
   /** 0-based line the caret sits on — drives the active-line highlight. */
   let caretLine = $state(0);
+  /** Measured pixel top of each backdrop line — keeps the gutter aligned
+   * even in wrap mode, where soft-wrapped rows shift line positions. */
+  let lineTops = $state<number[]>([]);
   let wrap = $state(localStorage.getItem("clipboard.codeEditor.wrap") === "1");
+
+  const LINE_HEIGHT_PX = 20.8; // 13px * 1.6
+
+  function measureLineTops() {
+    if (!editor) {
+      lineTops = [];
+      return;
+    }
+    const backdrop = editor.parentElement?.querySelector(".highlight-backdrop");
+    if (!backdrop) {
+      lineTops = [];
+      return;
+    }
+    lineTops = Array.from(backdrop.querySelectorAll<HTMLElement>(".code-line")).map(
+      (line) => line.offsetTop,
+    );
+  }
 
   function toggleWrap() {
     wrap = !wrap;
@@ -125,15 +145,30 @@
     lastEditorValue = nextContent;
   });
 
+  $effect(() => {
+    // Re-measure gutter line positions whenever the rendered lines change.
+    // DOM reads below are plain (non-reactive); only these three states are
+    // dependencies.
+    content;
+    wrap;
+    highlightEnabled;
+    queueMicrotask(measureLineTops);
+  });
+
   onMount(() => {
     queueMicrotask(() => {
       if (!editor) return;
       editor.focus();
       moveCaretToEnd(editor);
       updateCaretLine();
+      measureLineTops();
     });
     document.addEventListener("selectionchange", updateCaretLine);
-    return () => document.removeEventListener("selectionchange", updateCaretLine);
+    window.addEventListener("resize", measureLineTops);
+    return () => {
+      document.removeEventListener("selectionchange", updateCaretLine);
+      window.removeEventListener("resize", measureLineTops);
+    };
   });
 
   function readEditorContent(element: HTMLElement): string {
@@ -300,7 +335,7 @@
   <div class="code-source-pane">
     <div class="line-numbers" aria-hidden="true">
       {#each Array(lineCount) as _, index}
-        <span>{index + 1}</span>
+        <span style:top={`${lineTops[index] ?? index * LINE_HEIGHT_PX}px`}>{index + 1}</span>
       {/each}
     </div>
     <div class="editor-stack" class:composing>
@@ -418,8 +453,8 @@
     border-color: var(--selection-color);
   }
 
-  /* Wrap mode: text soft-wraps inside the pane. Line numbers can't track
-     wrapped rows, so the gutter is hidden while wrapping. */
+  /* Wrap mode: text soft-wraps inside the pane. The gutter stays visible —
+     numbers are pixel-positioned from the backdrop's per-line offsets. */
   .code-editor-shell.wrap .code-input,
   .code-editor-shell.wrap .highlight-backdrop {
     white-space: pre-wrap;
@@ -428,14 +463,6 @@
 
   .code-editor-shell.wrap .editor-stack {
     width: 100%;
-  }
-
-  .code-editor-shell.wrap .code-source-pane {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .code-editor-shell.wrap .line-numbers {
-    display: none;
   }
 
   /* Active-line highlight lives in the {@html} backdrop — :global required. */
@@ -452,8 +479,7 @@
   }
 
   .line-numbers {
-    display: flex;
-    flex-direction: column;
+    position: relative;
     min-width: 38px;
     padding: 10px 0;
     border-right: 1px solid var(--border-subtle);
@@ -469,6 +495,10 @@
   }
 
   .line-numbers span {
+    position: absolute;
+    right: 0;
+    height: 20.8px;
+    line-height: 20.8px;
     padding: 0 9px 0 6px;
   }
 

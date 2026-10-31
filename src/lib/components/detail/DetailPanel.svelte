@@ -220,10 +220,6 @@
     editLanguage = null;
   }
   let editTitleContent = $state("");
-  // Measured from the rendered title span so the rename input keeps the exact
-  // same box — no height/width jump when the header switches to edit mode.
-  let titleBoxWidth = $state(0);
-  let titleBoxHeight = $state(0);
 
   // Depend only on the item id so OCR polling patches (which replace the
   // item object every poll) don't flip the user back to the preview tab or
@@ -499,37 +495,40 @@
         <AppIcon name="chevron-left" size={18} strokeWidth={2} />
       </button>
       <div class="header-info">
-        <span class="header-kind">{getKindLabel(item.kind)}</span>
-        {#if editingTitle}
-          <div class="header-edit-row">
-            <input
-              class="header-title-input"
-              bind:value={editTitleContent}
-              use:autofocus
-              style:width={`${Math.max(titleBoxWidth, 80)}px`}
-              style:height={`${Math.max(titleBoxHeight, 22)}px`}
-              onkeydown={(e) => {
-                if (e.key === "Enter") {
-                  saveTitleEdit();
-                }
-                if (e.key === "Escape") {
-                  editingTitle = false;
-                }
-              }}
-              onblur={() => saveTitleEdit()}
-            />
-            <button class="header-save-btn" type="button" onclick={saveTitleEdit}>
-              <AppIcon name="check" size={14} strokeWidth={2.5} />
+        <div class="header-kind-row">
+          <span class="header-kind">{getKindLabel(item.kind)}</span>
+          {#if editingTitle}
+            <button
+              class="header-save-btn"
+              type="button"
+              onclick={saveTitleEdit}
+              aria-label={_t("edit.edit")}
+            >
+              <AppIcon name="check" size={13} strokeWidth={2.5} />
             </button>
-          </div>
+          {/if}
+        </div>
+        {#if editingTitle}
+          <input
+            class="header-title-input"
+            bind:value={editTitleContent}
+            use:autofocus
+            onkeydown={(e) => {
+              if (e.key === "Enter") {
+                saveTitleEdit();
+              }
+              if (e.key === "Escape") {
+                editingTitle = false;
+              }
+            }}
+            onblur={() => saveTitleEdit()}
+          />
         {:else}
           <span
             class="header-title"
             role="button"
             tabindex="0"
             aria-label={_t("edit.edit")}
-            bind:clientWidth={titleBoxWidth}
-            bind:clientHeight={titleBoxHeight}
             ondblclick={() => {
               editTitleContent = item.title;
               editingTitle = true;
@@ -828,7 +827,17 @@
   .header-info {
     display: flex;
     flex-direction: column;
+    gap: 2px;
     min-width: 0;
+  }
+
+  /* Fixed row heights in BOTH modes so toggling the title rename never
+     changes the header layout. */
+  .header-kind-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 16px;
   }
 
   .header-kind {
@@ -839,6 +848,9 @@
   }
 
   .header-title {
+    display: block;
+    height: 22px;
+    line-height: 22px;
     overflow: hidden;
     color: var(--text-primary);
     font-size: var(--font-size-base, 13px);
@@ -847,18 +859,11 @@
     text-overflow: ellipsis;
   }
 
-  .header-edit-row {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    min-width: 0;
-    flex: 1;
-  }
-
   .header-title-input {
+    flex: 1;
     min-width: 0;
+    height: 22px;
     box-sizing: border-box;
-    flex: none;
     padding: 0 7px;
     border: 1px solid var(--selection-color);
     border-radius: 5px;
@@ -873,8 +878,9 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 26px;
-    height: 26px;
+    width: 22px;
+    height: 16px;
+    padding: 0;
     border: 1px solid var(--border-color);
     border-radius: 5px;
     color: var(--text-muted);
