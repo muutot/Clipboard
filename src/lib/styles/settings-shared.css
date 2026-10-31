@@ -1057,9 +1057,10 @@ button {
   align-items: stretch;
 }
 /* The heading's padding-bottom reserves the gap to content that follows it.
-   When the heading is the card's last element, that gap would leave the card
-   bottom-heavy, so drop it. */
-.setting-card-custom-column .setting-heading:last-child {
+   When the heading is the card's last rendered element (heading-only cards,
+   or cards whose follower is conditionally absent), that gap would leave the
+   card bottom-heavy, so drop it. */
+.setting-card > .setting-heading:last-child {
   padding-bottom: 0;
 }
 .parameter-item {

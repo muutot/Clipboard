@@ -577,6 +577,9 @@
   .stats-metric-heading {
     min-width: 0;
     flex: 1 1 auto;
+    /* Centered row: the shared follower gap padding would sit the heading
+       off center against .stats-metric-value. */
+    padding-bottom: 0;
   }
 
   .stats-metric-copy {
