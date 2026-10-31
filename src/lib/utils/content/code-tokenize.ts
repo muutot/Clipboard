@@ -143,8 +143,13 @@ function splitHtmlLines(html: string): CodeToken[][] {
     }
   }
   flushText();
-  // A trailing newline yields no extra empty line — matches the editor's
-  // lineCount convention (a forced break at the very end creates no line box).
+  // The final line never sees a "\n" boundary, so it must be flushed here —
+  // without this, single-line content rendered zero lines and content without
+  // a trailing newline silently lost its last line. A trailing newline still
+  // yields no extra empty line, matching the editor's lineCount convention.
+  if (current.length > 0 || lines.length === 0) {
+    lines.push(current);
+  }
   return lines;
 }
 
