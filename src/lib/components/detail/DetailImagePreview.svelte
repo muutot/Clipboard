@@ -84,10 +84,10 @@
     padding: 0;
     border: 1px solid var(--border-color);
     border-radius: 6px;
-    /* The button floats over the image on a dark scrim, so the icon must stay
-       light regardless of the theme. */
-    color: rgba(255, 255, 255, 0.85);
-    background: rgba(0, 0, 0, 0.55);
+    /* The button floats over the image, so use the card surface with enough
+       opacity to stay readable on any underlying content. */
+    color: var(--text-primary);
+    background: color-mix(in srgb, var(--card-bg) 85%, transparent);
     backdrop-filter: blur(4px);
     cursor: pointer;
     opacity: 0;
@@ -101,7 +101,6 @@
   }
 
   .image-fullscreen-btn:hover {
-    color: #fff;
-    background: rgba(0, 0, 0, 0.75);
+    background: var(--card-bg);
   }
 </style>
