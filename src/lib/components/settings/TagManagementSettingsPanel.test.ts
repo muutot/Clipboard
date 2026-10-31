@@ -268,7 +268,7 @@ it("keeps the displayed tag color consistent with writes accepted by the backend
   vi.mocked(invoke).mockImplementation(async (command, args) => {
     if (command === "list_all_tags") return [{ ...alpha, color: storedColor }];
     if (command === "set_tag_color") {
-      storedColor = args!.color as string;
+      storedColor = (args as { color: string }).color;
       return writes++ === 0 ? first.promise : true;
     }
     return 0;
