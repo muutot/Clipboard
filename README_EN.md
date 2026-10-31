@@ -106,6 +106,7 @@ Two English UI galleries with colorful icons and compact spacing, rendered in br
 - Svelte 5 reactive interface
 - Virtual scrolling for smoothly rendering tens of thousands of items
 - Detail panel: overlay mode and side-by-side mode
+- Code preview: syntax highlighting for 17+ languages (highlight.js) with 5 selectable themes; in-place code editing with word wrap and manual language switching
 - Image fullscreen viewer with zoom and drag
 - Custom theme colors (20 CSS variables), dark / light presets
 - System tray, transparent windows, autostart
