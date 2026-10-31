@@ -17,12 +17,15 @@
 {/if}
 
 <style>
+  /* Theme-facing surface: all colors map to the semantic theme variables and
+     the shared --code-* tokens (which follow the app theme in auto mode), so
+     the preview renders correctly in light and custom themes. */
   .markdown-body {
     padding: 14px;
-    border: 1px solid #2e2e2e;
+    border: 1px solid var(--border-subtle);
     border-radius: 8px;
-    color: #d4d4d4;
-    background: #141414;
+    color: var(--text-primary);
+    background: var(--input-bg);
     font-size: 12.5px;
     line-height: 1.7;
     word-break: break-word;
@@ -31,8 +34,8 @@
   :global(.markdown-body .md-h1) {
     margin: 0 0 10px;
     padding-bottom: 6px;
-    border-bottom: 1px solid #2e2e2e;
-    color: #f0f0f0;
+    border-bottom: 1px solid var(--border-subtle);
+    color: var(--text-primary);
     font-size: 18px;
     font-weight: 620;
   }
@@ -40,15 +43,15 @@
   :global(.markdown-body .md-h2) {
     margin: 12px 0 8px;
     padding-bottom: 4px;
-    border-bottom: 1px solid #282828;
-    color: #e8e8e8;
+    border-bottom: 1px solid var(--border-subtle);
+    color: var(--text-primary);
     font-size: 15px;
     font-weight: 590;
   }
 
   :global(.markdown-body .md-h3) {
     margin: 10px 0 6px;
-    color: #e0e0e0;
+    color: var(--text-primary);
     font-size: 13px;
     font-weight: 570;
   }
@@ -57,7 +60,7 @@
   :global(.markdown-body .md-h5),
   :global(.markdown-body .md-h6) {
     margin: 8px 0 4px;
-    color: #d0d0d0;
+    color: var(--text-primary);
     font-size: 12px;
     font-weight: 550;
   }
@@ -69,8 +72,8 @@
   :global(.markdown-body .md-blockquote) {
     margin: 4px 0 10px;
     padding: 8px 12px;
-    border-left: 3px solid #555;
-    background: rgba(255, 255, 255, 0.03);
+    border-left: 3px solid var(--border-color);
+    background: color-mix(in srgb, var(--text-primary) 4%, transparent);
     border-radius: 0 4px 4px 0;
   }
 
@@ -81,9 +84,10 @@
   :global(.markdown-body .md-code) {
     margin: 8px 0;
     padding: 10px 14px;
-    border: 1px solid #2e2e2e;
+    border: 1px solid var(--border-subtle);
     border-radius: 6px;
-    background: #0d0d0d;
+    background: var(--code-bg);
+    color: var(--code-fg);
     font:
       11px/1.55 "Cascadia Code",
       Consolas,
@@ -93,10 +97,10 @@
 
   :global(.markdown-body .md-inline-code) {
     padding: 2px 5px;
-    border: 1px solid #333;
+    border: 1px solid var(--border-subtle);
     border-radius: 4px;
-    color: #ce9178;
-    background: #1a1a1a;
+    color: var(--code-string);
+    background: var(--code-gutter-bg);
     font:
       11px "Cascadia Code",
       Consolas,
@@ -115,7 +119,7 @@
   }
 
   :global(.markdown-body .md-link) {
-    color: #66bde1;
+    color: var(--selection-color);
     text-decoration: none;
   }
 
@@ -131,16 +135,16 @@
 
   :global(.markdown-body .md-hr) {
     border: 0;
-    border-top: 1px solid #333;
+    border-top: 1px solid var(--border-subtle);
     margin: 12px 0;
   }
 
   :global(.markdown-body strong) {
-    color: #eece99;
+    color: var(--warning-color);
     font-weight: 600;
   }
 
   :global(.markdown-body em) {
-    color: #bcbcbc;
+    color: var(--text-secondary);
   }
 </style>
