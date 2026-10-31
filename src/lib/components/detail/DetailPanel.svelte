@@ -129,11 +129,14 @@
   let editing = $state(false);
   let editingTitle = $state(false);
   let editContent = $state("");
+  // Manual language override for the code editor; null = auto-detect.
+  let editLanguage = $state<string | null>(null);
   let editSession = 0;
 
   function beginContentEdit() {
     if (!item) return;
     editSession += 1;
+    editLanguage = null;
     closeFind();
     editContent =
       item.kind === "image" || item.kind === "file"
@@ -214,6 +217,7 @@
   function endContentEdit() {
     editSession += 1;
     editing = false;
+    editLanguage = null;
   }
   let editTitleContent = $state("");
 
@@ -596,9 +600,10 @@
             {#if editing}
               <CodeEditor
                 content={editContent}
-                language={detectCodeLanguage(editContent)}
+                language={editLanguage ?? detectCodeLanguage(editContent)}
                 editorLabel={_t("edit.edit")}
                 placeholder={_t("edit.placeholder")}
+                onlanguagechange={(lang) => (editLanguage = lang || null)}
                 oncontentchange={(content) => (editContent = content)}
               />
               <DetailEditActions
@@ -913,10 +918,17 @@
     gap: 16px;
   }
 
-  /* While editing, the code editor fills the whole body height instead of
-     sizing to its content. */
+  /* While editing, the editor fills the whole body edge-to-edge: negative
+     margins cancel the body padding, and the actions row re-adds its own
+     spacing so the editor itself spans the full width and height. */
   .preview-section.edit-fill {
-    height: 100%;
+    height: calc(100% + 32px);
+    margin: -16px;
+    padding: 0 0 12px;
+  }
+
+  .preview-section.edit-fill :global(.edit-actions) {
+    margin: 12px 16px 0;
   }
 
   /* Find-in-detail marks are inserted at runtime (DOM walker), so they must

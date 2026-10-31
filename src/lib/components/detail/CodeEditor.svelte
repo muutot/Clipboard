@@ -9,6 +9,8 @@
     language?: string | null;
     editorLabel: string;
     placeholder?: string;
+    /** Provided only in code mode — turns the language chip into a selector. */
+    onlanguagechange?: (lang: string) => void;
     oncontentchange: (content: string) => void;
   }
 
@@ -17,8 +19,21 @@
     language = null,
     editorLabel,
     placeholder = "",
+    onlanguagechange,
     oncontentchange,
   }: Props = $props();
+
+  // Languages with dedicated keyword sets in code-tokenize.ts (plus the two
+  // plain modes); anything else would wrongly fall back to JS highlighting.
+  const LANGUAGE_OPTIONS = [
+    "JavaScript",
+    "TypeScript",
+    "Python",
+    "Rust",
+    "SQL",
+    "markdown",
+    "text",
+  ];
 
   let editor = $state<HTMLElement | null>(null);
   let contextMenu = $state<{ x: number; y: number } | null>(null);
@@ -220,7 +235,21 @@
 
 <div class="code-editor-shell">
   <div class="code-editor-toolbar">
-    <span class="language-label">{languageLabel}</span>
+    {#if onlanguagechange}
+      <select
+        class="language-select"
+        value={language ?? ""}
+        onchange={(event) => onlanguagechange(event.currentTarget.value)}
+        aria-label={editorLabel}
+      >
+        <option value="">AUTO</option>
+        {#each LANGUAGE_OPTIONS as option (option)}
+          <option value={option}>{option}</option>
+        {/each}
+      </select>
+    {:else}
+      <span class="language-label">{languageLabel}</span>
+    {/if}
     <span class="editing-label">{editorLabel}</span>
   </div>
 
@@ -304,10 +333,27 @@
     text-transform: uppercase;
   }
 
-  .editing-label,
-  .preview-label {
+  .editing-label {
     color: var(--text-faint);
     font-size: 10px;
+  }
+
+  .language-select {
+    padding: 2px 4px;
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    color: var(--text-secondary);
+    background: var(--input-bg);
+    font: inherit;
+    font-size: 10px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+
+  .language-select:focus {
+    outline: none;
+    border-color: var(--selection-color);
   }
 
   .code-source-pane {
