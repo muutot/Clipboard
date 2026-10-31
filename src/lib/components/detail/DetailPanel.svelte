@@ -888,8 +888,8 @@
     height: 22px;
     box-sizing: border-box;
     /* No border or horizontal padding: the text keeps the exact position of
-       the static title. The thicker ring is painted with an inset shadow so
-       it never shifts layout. */
+       the static title. The input itself (vs the static span) is the edit
+       indicator — no extra focus ring. */
     padding: 0;
     border: 0;
     border-radius: 3px;
@@ -898,7 +898,6 @@
     font-size: var(--font-size-base, 13px);
     font-weight: 540;
     outline: none;
-    box-shadow: inset 0 0 0 4px var(--selection-color);
   }
 
   .header-save-btn {
