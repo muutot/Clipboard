@@ -34,7 +34,11 @@
     contextMenu = { x: event.clientX, y: event.clientY };
   }
 
-  const lineCount = $derived(Math.max(1, content.split("\n").length));
+  // A single trailing newline renders no extra line box in the editor (a
+  // forced break at the very end creates no empty line), so the gutter must
+  // not count it either — otherwise line 2 appears while the caret stays on
+  // the end of line 1.
+  const lineCount = $derived(Math.max(1, content.replace(/\n$/, "").split("\n").length));
   const languageLabel = $derived(language || "CODE");
 
   // Live highlight backdrop: the editor paints its own text transparently on
