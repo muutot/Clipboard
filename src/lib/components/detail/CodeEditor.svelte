@@ -436,35 +436,35 @@
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    min-height: 34px;
+    min-height: 38px;
     padding: 0 10px;
     border-bottom: 1px solid var(--border-subtle);
     background: var(--statusbar-bg);
   }
 
   .language-label {
-    padding: 3px 8px;
+    padding: 4px 9px;
     border: 1px solid var(--border-color);
     border-radius: 5px;
     color: var(--text-muted);
-    font-size: 10px;
+    font-size: 11px;
     letter-spacing: 0.05em;
     text-transform: uppercase;
   }
 
   .editing-label {
     color: var(--text-faint);
-    font-size: 10px;
+    font-size: 11px;
   }
 
   .language-select {
-    padding: 2px 4px;
+    padding: 4px 6px;
     border: 1px solid var(--border-color);
     border-radius: 5px;
     color: var(--text-secondary);
     background: var(--input-bg);
     font: inherit;
-    font-size: 10px;
+    font-size: 11px;
     letter-spacing: 0.05em;
     text-transform: uppercase;
     cursor: pointer;
@@ -477,13 +477,13 @@
 
   .wrap-toggle {
     margin-left: auto;
-    padding: 2px 6px;
+    padding: 4px 8px;
     border: 1px solid var(--border-color);
     border-radius: 5px;
     color: var(--text-faint);
     background: var(--input-bg);
     font: inherit;
-    font-size: 10px;
+    font-size: 11px;
     letter-spacing: 0.05em;
     cursor: pointer;
   }
