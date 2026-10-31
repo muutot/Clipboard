@@ -763,7 +763,9 @@
     top: 0;
     right: 0;
     bottom: 0;
-    width: min(520px, 100vw);
+    /* Fixed three quarters of the main window: the panel grows and shrinks
+       with the window instead of holding a fixed 520px column. */
+    width: 75%;
     display: flex;
     flex-direction: column;
     border-left: 1px solid var(--border-color);
@@ -826,6 +828,7 @@
 
   .header-info {
     display: flex;
+    flex: 1;
     flex-direction: column;
     gap: 2px;
     min-width: 0;
@@ -860,7 +863,7 @@
   }
 
   .header-title-input {
-    flex: 1;
+    width: 100%;
     min-width: 0;
     height: 22px;
     box-sizing: border-box;
