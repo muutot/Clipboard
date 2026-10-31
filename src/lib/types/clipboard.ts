@@ -433,6 +433,8 @@ export interface GeneralSettings {
   updateSource: "github" | "gitcode";
   /** 使用彩色图标渲染 AppIcon（false = 沿用 currentColor 单色图标） */
   colorIcons: boolean;
+  /** F12 快捷键开关：开启后任意窗口按 F12 打开 WebView 开发者控制台；默认关闭 */
+  devtoolsShortcutEnabled: boolean;
   /** 每个 AppIcon 的可选自定义颜色；缺省时使用 DEFAULT_ICON_COLORS 内置色板 */
   iconColors?: IconColors;
   loadTolerance: number;

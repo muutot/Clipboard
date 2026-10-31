@@ -2134,9 +2134,10 @@
   }
 
   // F12 opens the developer console in any window, outside the keyboard
-  // routing table so user rebinding can never shadow it.
+  // routing table so user rebinding can never shadow it. Gated by the
+  // About-panel toggle (default off).
   function handleDevtoolsKeydown(event: KeyboardEvent) {
-    if (isDevtoolsHotkey(event)) {
+    if (isDevtoolsHotkey(event) && $generalSettings.devtoolsShortcutEnabled) {
       event.preventDefault();
       openDevtools();
     }

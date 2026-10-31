@@ -576,8 +576,7 @@ const en: LocaleDefinition = {
     repoTitle: "Source Repository",
     repoDesc: "View the source code on GitHub or GitCode",
     devtoolsTitle: "Developer Tools",
-    devtoolsDesc:
-      "Open the WebView developer console to inspect the UI and troubleshoot. Press F12 anywhere to toggle it as well.",
+    devtoolsDesc: "When enabled, press F12 in any window to open the WebView developer console.",
     devtoolsButton: "Open Developer Tools",
     viewDetails: "View Details",
     updateDialogTitle: "Update Available",

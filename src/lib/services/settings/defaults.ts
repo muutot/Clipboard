@@ -61,6 +61,7 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   searchIndexSyncMode: "lazy",
   updateSource: "gitcode",
   colorIcons: false,
+  devtoolsShortcutEnabled: false,
   iconColors: {},
   loadTolerance: 100,
   logLevel: "info",

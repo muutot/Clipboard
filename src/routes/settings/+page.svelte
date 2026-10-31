@@ -9,7 +9,7 @@
   import { isTauriRuntime, isDevtoolsHotkey, openDevtools } from "$lib/services/runtime";
 
   function handleDevtoolsKeydown(event: KeyboardEvent) {
-    if (isDevtoolsHotkey(event)) {
+    if (isDevtoolsHotkey(event) && s.devtoolsShortcutEnabled) {
       event.preventDefault();
       openDevtools();
     }

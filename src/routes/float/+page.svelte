@@ -466,7 +466,7 @@
   }
 
   function handleDevtoolsKeydown(event: KeyboardEvent) {
-    if (isDevtoolsHotkey(event)) {
+    if (isDevtoolsHotkey(event) && $generalSettings.devtoolsShortcutEnabled) {
       event.preventDefault();
       openDevtools();
     }

@@ -365,6 +365,10 @@ export function normalizeGeneralSettings(
     source.colorIcons ?? fallback("colorIcons"),
     defaultSettings.colorIcons,
   );
+  result.devtoolsShortcutEnabled = booleanValue(
+    source.devtoolsShortcutEnabled ?? fallback("devtoolsShortcutEnabled"),
+    defaultSettings.devtoolsShortcutEnabled,
+  );
   result.iconColors = normalizeIconColors(
     source.iconColors ?? fallback("iconColors"),
     fallback("iconColors") ?? {},

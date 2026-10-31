@@ -148,6 +148,19 @@
       </div>
     </div>
     <div class="about-update-controls">
+      <button
+        type="button"
+        class="toggle-switch"
+        class:active={$generalSettings.devtoolsShortcutEnabled}
+        role="switch"
+        aria-checked={$generalSettings.devtoolsShortcutEnabled}
+        aria-label={_t("about.devtoolsTitle")}
+        onclick={() =>
+          generalSettings.updateSetting(
+            "devtoolsShortcutEnabled",
+            !$generalSettings.devtoolsShortcutEnabled,
+          )}><span class="toggle-knob"></span></button
+      >
       <button type="button" class="settings-action-btn" onclick={openDevtools}>
         {_t("about.devtoolsButton")}
       </button>

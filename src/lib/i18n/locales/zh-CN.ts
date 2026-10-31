@@ -553,7 +553,7 @@ const zhCN: LocaleDefinition = {
     repoTitle: "代码仓库",
     repoDesc: "在 GitHub 或 GitCode 上查看源代码",
     devtoolsTitle: "开发者工具",
-    devtoolsDesc: "打开 WebView 开发者控制台，调试界面与排查问题。任何界面按 F12 也可打开。",
+    devtoolsDesc: "开启后可在任意窗口按 F12 打开 WebView 开发者控制台，用于调试与排查问题。",
     devtoolsButton: "打开开发者工具",
     viewDetails: "查看详情",
     updateDialogTitle: "发现新版本",
