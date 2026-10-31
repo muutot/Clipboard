@@ -183,9 +183,11 @@
     width: 36px;
     height: 36px;
     padding: 0;
-    border: 1px solid var(--border-color);
+    border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 8px;
-    color: var(--text-secondary);
+    /* Overlay chrome floats on a dark scrim in every theme, so the icon
+     * stays light instead of following --text-secondary. */
+    color: rgba(255, 255, 255, 0.7);
     background: rgba(30, 30, 30, 0.7);
     backdrop-filter: blur(6px);
     cursor: pointer;
@@ -195,17 +197,8 @@
   }
 
   .viewer-close-btn:hover {
-    color: var(--text-primary);
-    background: rgba(60, 60, 60, 0.8);
-  }
-
-  .image-viewer-overlay.desktop .viewer-close-btn {
-    border-color: rgba(255, 255, 255, 0.15);
-    color: rgba(255, 255, 255, 0.7);
-  }
-
-  .image-viewer-overlay.desktop .viewer-close-btn:hover {
     color: rgba(255, 255, 255, 0.95);
+    background: rgba(60, 60, 60, 0.8);
   }
 
   .viewer-zoom-hint {
@@ -216,14 +209,10 @@
     z-index: 201;
     padding: 4px 14px;
     border-radius: 6px;
-    color: var(--text-secondary);
+    color: rgba(255, 255, 255, 0.7);
     background: rgba(30, 30, 30, 0.7);
     backdrop-filter: blur(6px);
     font-size: 12px;
     pointer-events: none;
-  }
-
-  .image-viewer-overlay.desktop .viewer-zoom-hint {
-    color: rgba(255, 255, 255, 0.7);
   }
 </style>

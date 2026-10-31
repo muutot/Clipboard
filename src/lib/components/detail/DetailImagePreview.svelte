@@ -84,7 +84,9 @@
     padding: 0;
     border: 1px solid var(--border-color);
     border-radius: 6px;
-    color: var(--text-secondary);
+    /* The button floats over the image on a dark scrim, so the icon must stay
+       light regardless of the theme. */
+    color: rgba(255, 255, 255, 0.85);
     background: rgba(0, 0, 0, 0.55);
     backdrop-filter: blur(4px);
     cursor: pointer;
@@ -99,7 +101,7 @@
   }
 
   .image-fullscreen-btn:hover {
-    color: var(--text-primary);
+    color: #fff;
     background: rgba(0, 0, 0, 0.75);
   }
 </style>
