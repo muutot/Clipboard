@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import AppIcon from "$lib/components/card/AppIcon.svelte";
   import TransferPanel from "$lib/components/settings/TransferPanel.svelte";
+  import EntryHeading from "$lib/components/settings/settings-entries/EntryHeading.svelte";
   import { messages, resolvePath } from "$lib/i18n";
   import { rebuildSearchIndex, repairDatabase, type RepairResult } from "$lib/services/storage";
   import { invoke } from "@tauri-apps/api/core";
@@ -82,13 +83,11 @@
   <TransferPanel {maxItemCount} {onfeedback} {onadjustlimit} />
 
   <section class="setting-card toggle-card" data-settings-search-id="storage.search-index">
-    <div class="setting-heading">
-      <span class="setting-icon"><AppIcon name="search" size={17} /></span>
-      <div>
-        <strong>{_t("storage.searchIndexTitle")}</strong>
-        <p>{_t("storage.searchIndexDesc")}</p>
-      </div>
-    </div>
+    <EntryHeading
+      icon="search"
+      label={_t("storage.searchIndexTitle")}
+      desc={_t("storage.searchIndexDesc")}
+    />
     <button type="button" class="settings-action-btn" disabled={rebuilding} onclick={rebuildIndex}>
       {rebuilding ? _t("storage.rebuilding") : _t("storage.rebuildIndex")}
     </button>

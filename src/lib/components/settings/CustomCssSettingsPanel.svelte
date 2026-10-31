@@ -5,6 +5,7 @@
   import { messages, resolvePath } from "$lib/i18n";
   import { compileCustomCss, MAX_CUSTOM_CSS_LENGTH } from "$lib/utils/settings/custom-css";
   import { createFeedback } from "$lib/utils/settings/feedback.svelte";
+  import EntryHeading from "$lib/components/settings/settings-entries/EntryHeading.svelte";
 
   let { onclose, showHeader = true }: { onclose: () => void; showHeader?: boolean } = $props();
   const t = (key: string) => resolvePath($messages, "customCss." + key);
@@ -87,12 +88,7 @@
     <p class="settings-state">{resolvePath($messages, "storage.readingConfig")}</p>
   {:else}
     <section class="setting-card toggle-card">
-      <div class="setting-heading">
-        <div>
-          <strong>{t("enabled")}</strong>
-          <p>{t("enabledDescription")}</p>
-        </div>
-      </div>
+      <EntryHeading label={t("enabled")} desc={t("enabledDescription")} />
       <button
         class="toggle-switch"
         class:active={settings.customCssEnabled}
@@ -104,12 +100,7 @@
       >
     </section>
     <section class="setting-card css-card" data-settings-search-id="appearance.custom-css">
-      <div class="setting-heading">
-        <div>
-          <strong>{t("editor")}</strong>
-          <p>{t("editorHint")}</p>
-        </div>
-      </div>
+      <EntryHeading label={t("editor")} desc={t("editorHint")} />
       <textarea
         class="settings-text-input css-editor"
         bind:value={draft}

@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
-  import AppIcon from "$lib/components/card/AppIcon.svelte";
   import ColorField from "$lib/components/common/ColorField.svelte";
   import CustomSelect from "$lib/components/common/CustomSelect.svelte";
+  import EntryHeading from "$lib/components/settings/settings-entries/EntryHeading.svelte";
   import { messages, resolvePath } from "$lib/i18n";
   import type { ThemeColors, ThemeMode, ThemePreset } from "$lib/types/clipboard";
   import { DARK_THEME_COLORS, LIGHT_THEME_COLORS } from "$lib/types/clipboard";
@@ -243,13 +243,11 @@
 
 <div class="settings-scroll">
   <section class="setting-card toggle-card">
-    <div class="setting-heading">
-      <span class="setting-icon"><AppIcon name="palette" size={17} /></span>
-      <div>
-        <strong>{_t("theme.themeMode")}</strong>
-        <p>{_t("theme.themeModeDescription")}</p>
-      </div>
-    </div>
+    <EntryHeading
+      icon="palette"
+      label={_t("theme.themeMode")}
+      desc={_t("theme.themeModeDescription")}
+    />
     <CustomSelect
       value={s.theme}
       ariaLabel={_t("theme.themeMode")}
@@ -267,13 +265,11 @@
   </section>
 
   <section class="setting-card toggle-card">
-    <div class="setting-heading">
-      <span class="setting-icon"><AppIcon name="code" size={17} /></span>
-      <div>
-        <strong>{_t("theme.codeTheme")}</strong>
-        <p>{_t("theme.codeThemeDescription")}</p>
-      </div>
-    </div>
+    <EntryHeading
+      icon="code"
+      label={_t("theme.codeTheme")}
+      desc={_t("theme.codeThemeDescription")}
+    />
     <CustomSelect
       value={s.codeTheme}
       ariaLabel={_t("theme.codeTheme")}
@@ -300,13 +296,12 @@
   {#if !isReadonly}
     <section class="setting-card preset-section">
       <div class="preset-heading-row">
-        <div class="setting-heading">
-          <span class="setting-icon"><AppIcon name="star" size={16} /></span>
-          <div>
-            <strong>{_t("theme.presets")}</strong>
-            <p>{_t("theme.presetsDescription")}</p>
-          </div>
-        </div>
+        <EntryHeading
+          icon="star"
+          iconSize={16}
+          label={_t("theme.presets")}
+          desc={_t("theme.presetsDescription")}
+        />
         {#if (s.customPresets ?? []).length > 0}
           <div class="preset-heading-actions">
             <button class="preset-action-btn" type="button" onclick={resetToDark}>
@@ -447,13 +442,6 @@
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-  }
-
-  /* Centered row: the shared follower gap padding would sit the heading text
-     off center against the preset action buttons; .preset-list keeps its own
-     margin-top as the gap below this row. */
-  .preset-heading-row .setting-heading {
-    padding-bottom: 0;
   }
 
   .preset-heading-actions {

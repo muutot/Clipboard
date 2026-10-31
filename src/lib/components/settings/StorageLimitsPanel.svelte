@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
   import AppIcon from "$lib/components/card/AppIcon.svelte";
+  import EntryHeading from "$lib/components/settings/settings-entries/EntryHeading.svelte";
   import { messages, resolvePath } from "$lib/i18n";
   import {
     getStorageKindStats,
@@ -292,13 +293,11 @@
     class="setting-card storage-kind-delete-card"
     data-settings-search-id="storage.delete-by-kind"
   >
-    <div class="setting-heading">
-      <span class="setting-icon"><AppIcon name="trash" size={17} /></span>
-      <div>
-        <strong>{_t("storage.deleteByKindTitle")}</strong>
-        <p>{_t("storage.deleteByKindDesc")}</p>
-      </div>
-    </div>
+    <EntryHeading
+      icon="trash"
+      label={_t("storage.deleteByKindTitle")}
+      desc={_t("storage.deleteByKindDesc")}
+    />
     <div class="storage-kind-delete-list">
       {#each storageKinds as entry (entry.kind)}
         <div class="storage-kind-delete-row">

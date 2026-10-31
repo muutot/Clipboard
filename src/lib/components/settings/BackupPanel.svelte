@@ -13,6 +13,7 @@
     isOperationCancelled,
   } from "$lib/services/background-operations.svelte";
   import BackgroundOperationStatus from "../layout/BackgroundOperationStatus.svelte";
+  import EntryHeading from "./settings-entries/EntryHeading.svelte";
   let {
     onfeedback,
     onadjustlimit,
@@ -83,12 +84,7 @@
   data-settings-search-id="storage.resource-backup"
   aria-busy={unavailable}
 >
-  <div class="setting-heading">
-    <div>
-      <strong>{_t("backup.title")}</strong>
-      <p>{_t("backup.description")}</p>
-    </div>
-  </div>
+  <EntryHeading label={_t("backup.title")} desc={_t("backup.description")} />
   <div class="setting-actions-row">
     <button
       class="settings-action-btn"

@@ -11,6 +11,7 @@
   import { getMemoryDiagnostics } from "$lib/services/memory";
   import type { MemoryDiagnostics, OcrMemoryDiagnostics } from "$lib/types/memory";
   import type { StatisticsTab } from "$lib/settings-navigation";
+  import EntryHeading from "./settings-entries/EntryHeading.svelte";
   import { formatBytes } from "$lib/utils/content/format";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
@@ -148,46 +149,46 @@
   {#if activeTab === "storage"}
     {#if status}
       <section class="setting-card stats-metric-card">
-        <div class="setting-heading stats-metric-heading">
-          <span class="setting-icon"><AppIcon name="clipboard" size={17} /></span>
-          <div class="stats-metric-copy">
-            <strong>{_t("statistics.totalRecords")}</strong>
-            <p>{_t("storage.totalRecordsDesc")}</p>
-          </div>
-        </div>
+        <EntryHeading
+          class="stats-metric-heading"
+          textClass="stats-metric-copy"
+          icon="clipboard"
+          label={_t("statistics.totalRecords")}
+          desc={_t("storage.totalRecordsDesc")}
+        />
         <span class="stats-metric-value">{status.itemCount}</span>
       </section>
 
       <section class="setting-card stats-metric-card">
-        <div class="setting-heading stats-metric-heading">
-          <span class="setting-icon"><AppIcon name="text" size={17} /></span>
-          <div class="stats-metric-copy">
-            <strong>{_t("statistics.text")}</strong>
-            <p>{_t("storage.textDesc")}</p>
-          </div>
-        </div>
+        <EntryHeading
+          class="stats-metric-heading"
+          textClass="stats-metric-copy"
+          icon="text"
+          label={_t("statistics.text")}
+          desc={_t("storage.textDesc")}
+        />
         <span class="stats-metric-value">{status.textCount}</span>
       </section>
 
       <section class="setting-card stats-metric-card">
-        <div class="setting-heading stats-metric-heading">
-          <span class="setting-icon"><AppIcon name="link" size={17} /></span>
-          <div class="stats-metric-copy">
-            <strong>{_t("statistics.link")}</strong>
-            <p>{_t("storage.linkDesc")}</p>
-          </div>
-        </div>
+        <EntryHeading
+          class="stats-metric-heading"
+          textClass="stats-metric-copy"
+          icon="link"
+          label={_t("statistics.link")}
+          desc={_t("storage.linkDesc")}
+        />
         <span class="stats-metric-value">{status.linkCount}</span>
       </section>
 
       <section class="setting-card stats-metric-card">
-        <div class="setting-heading stats-metric-heading">
-          <span class="setting-icon"><AppIcon name="image" size={17} /></span>
-          <div class="stats-metric-copy">
-            <strong>{_t("statistics.image")}</strong>
-            <p>{_t("storage.imageDesc")}</p>
-          </div>
-        </div>
+        <EntryHeading
+          class="stats-metric-heading"
+          textClass="stats-metric-copy"
+          icon="image"
+          label={_t("statistics.image")}
+          desc={_t("storage.imageDesc")}
+        />
         <span class="stats-metric-value"
           >{status.imageCount}{_t("storage.imageCountUnit")} · {formatBytes(
             status.imageSizeBytes,
@@ -196,13 +197,13 @@
       </section>
 
       <section class="setting-card stats-metric-card">
-        <div class="setting-heading stats-metric-heading">
-          <span class="setting-icon"><AppIcon name="file" size={17} /></span>
-          <div class="stats-metric-copy">
-            <strong>{_t("statistics.file")}</strong>
-            <p>{_t("storage.fileDesc")}</p>
-          </div>
-        </div>
+        <EntryHeading
+          class="stats-metric-heading"
+          textClass="stats-metric-copy"
+          icon="file"
+          label={_t("statistics.file")}
+          desc={_t("storage.fileDesc")}
+        />
         <span class="stats-metric-value"
           >{status.fileCount}{_t("storage.fileCountUnit")} · {formatBytes(
             status.fileSizeBytes,
@@ -214,24 +215,24 @@
         class="setting-card stats-metric-card"
         data-settings-search-id="statistics.storage.database"
       >
-        <div class="setting-heading stats-metric-heading">
-          <span class="setting-icon"><AppIcon name="file" size={17} /></span>
-          <div class="stats-metric-copy">
-            <strong>{_t("statistics.database")}</strong>
-            <p>{_t("storage.dbDesc")}</p>
-          </div>
-        </div>
+        <EntryHeading
+          class="stats-metric-heading"
+          textClass="stats-metric-copy"
+          icon="file"
+          label={_t("statistics.database")}
+          desc={_t("storage.dbDesc")}
+        />
         <span class="stats-metric-value">{formatBytes(status.databaseSizeBytes)}</span>
       </section>
 
       <section class="setting-card stats-metric-card">
-        <div class="setting-heading stats-metric-heading">
-          <span class="setting-icon"><AppIcon name="search" size={17} /></span>
-          <div class="stats-metric-copy">
-            <strong>{_t("statistics.indexSize")}</strong>
-            <p>{_t("storage.searchIndexDesc")}</p>
-          </div>
-        </div>
+        <EntryHeading
+          class="stats-metric-heading"
+          textClass="stats-metric-copy"
+          icon="search"
+          label={_t("statistics.indexSize")}
+          desc={_t("storage.searchIndexDesc")}
+        />
         <span class="stats-metric-value">{formatBytes(status.searchIndexSizeBytes)}</span>
       </section>
     {:else}
@@ -243,57 +244,57 @@
   {:else if activeTab === "performance"}
     {#if perfMetrics}
       <section class="setting-card stats-metric-card">
-        <div class="setting-heading stats-metric-heading">
-          <span class="setting-icon"><AppIcon name="clock" size={17} /></span>
-          <div class="stats-metric-copy">
-            <strong>{_t("storage.startupTime")}</strong>
-            <p>{_t("storage.startupTimeDesc")}</p>
-          </div>
-        </div>
+        <EntryHeading
+          class="stats-metric-heading"
+          textClass="stats-metric-copy"
+          icon="clock"
+          label={_t("storage.startupTime")}
+          desc={_t("storage.startupTimeDesc")}
+        />
         <span class="stats-metric-value">{perfMetrics.startup.totalStartupMs}ms</span>
       </section>
 
       <section class="setting-card stats-metric-card">
-        <div class="setting-heading stats-metric-heading">
-          <span class="setting-icon"><AppIcon name="file" size={17} /></span>
-          <div class="stats-metric-copy">
-            <strong>{_t("storage.dbOpenTime")}</strong>
-            <p>{_t("storage.dbOpenTimeDesc")}</p>
-          </div>
-        </div>
+        <EntryHeading
+          class="stats-metric-heading"
+          textClass="stats-metric-copy"
+          icon="file"
+          label={_t("storage.dbOpenTime")}
+          desc={_t("storage.dbOpenTimeDesc")}
+        />
         <span class="stats-metric-value">{perfMetrics.startup.dbOpenMs}ms</span>
       </section>
 
       <section class="setting-card stats-metric-card">
-        <div class="setting-heading stats-metric-heading">
-          <span class="setting-icon"><AppIcon name="search" size={17} /></span>
-          <div class="stats-metric-copy">
-            <strong>{_t("storage.searchInitTime")}</strong>
-            <p>{_t("storage.searchInitTimeDesc")}</p>
-          </div>
-        </div>
+        <EntryHeading
+          class="stats-metric-heading"
+          textClass="stats-metric-copy"
+          icon="search"
+          label={_t("storage.searchInitTime")}
+          desc={_t("storage.searchInitTimeDesc")}
+        />
         <span class="stats-metric-value">{perfMetrics.startup.searchInitMs}ms</span>
       </section>
 
       <section class="setting-card stats-metric-card">
-        <div class="setting-heading stats-metric-heading">
-          <span class="setting-icon"><AppIcon name="clock" size={17} /></span>
-          <div class="stats-metric-copy">
-            <strong>{_t("storage.uptime")}</strong>
-            <p>{_t("storage.uptimeDesc")}</p>
-          </div>
-        </div>
+        <EntryHeading
+          class="stats-metric-heading"
+          textClass="stats-metric-copy"
+          icon="clock"
+          label={_t("storage.uptime")}
+          desc={_t("storage.uptimeDesc")}
+        />
         <span class="stats-metric-value">{perfMetrics.memory.uptimeSeconds}s</span>
       </section>
 
       <section class="setting-card stats-metric-card">
-        <div class="setting-heading stats-metric-heading">
-          <span class="setting-icon"><AppIcon name="bar-chart" size={17} /></span>
-          <div class="stats-metric-copy">
-            <strong>{_t("storage.memoryPeak")}</strong>
-            <p>{_t("storage.memoryPeakDesc")}</p>
-          </div>
-        </div>
+        <EntryHeading
+          class="stats-metric-heading"
+          textClass="stats-metric-copy"
+          icon="bar-chart"
+          label={_t("storage.memoryPeak")}
+          desc={_t("storage.memoryPeakDesc")}
+        />
         <span class="stats-metric-value"
           >{Math.round(perfMetrics.memory.peakBytes / 1048576)} MB</span
         >
@@ -328,48 +329,48 @@
 
       {#if perfMetrics.searchLatency.searchesRecorded > 0}
         <section class="setting-card stats-metric-card">
-          <div class="setting-heading stats-metric-heading">
-            <span class="setting-icon"><AppIcon name="search" size={17} /></span>
-            <div class="stats-metric-copy">
-              <strong>{_t("storage.searchCount")}</strong>
-              <p>{_t("storage.searchCountDesc")}</p>
-            </div>
-          </div>
+          <EntryHeading
+            class="stats-metric-heading"
+            textClass="stats-metric-copy"
+            icon="search"
+            label={_t("storage.searchCount")}
+            desc={_t("storage.searchCountDesc")}
+          />
           <span class="stats-metric-value">{perfMetrics.searchLatency.searchesRecorded}</span>
         </section>
 
         <section class="setting-card stats-metric-card">
-          <div class="setting-heading stats-metric-heading">
-            <span class="setting-icon"><AppIcon name="clock" size={17} /></span>
-            <div class="stats-metric-copy">
-              <strong>{_t("storage.searchAvgTime")}</strong>
-              <p>{_t("storage.searchAvgTimeDesc")}</p>
-            </div>
-          </div>
+          <EntryHeading
+            class="stats-metric-heading"
+            textClass="stats-metric-copy"
+            icon="clock"
+            label={_t("storage.searchAvgTime")}
+            desc={_t("storage.searchAvgTimeDesc")}
+          />
           <span class="stats-metric-value"
             >{perfMetrics.searchLatency.averageMs?.toFixed(1) ?? "-"}ms</span
           >
         </section>
 
         <section class="setting-card stats-metric-card">
-          <div class="setting-heading stats-metric-heading">
-            <span class="setting-icon"><AppIcon name="clock" size={17} /></span>
-            <div class="stats-metric-copy">
-              <strong>{_t("storage.searchP95Time")}</strong>
-              <p>{_t("storage.searchP95TimeDesc")}</p>
-            </div>
-          </div>
+          <EntryHeading
+            class="stats-metric-heading"
+            textClass="stats-metric-copy"
+            icon="clock"
+            label={_t("storage.searchP95Time")}
+            desc={_t("storage.searchP95TimeDesc")}
+          />
           <span class="stats-metric-value">{perfMetrics.searchLatency.p95Ms ?? "-"}ms</span>
         </section>
 
         <section class="setting-card stats-metric-card">
-          <div class="setting-heading stats-metric-heading">
-            <span class="setting-icon"><AppIcon name="clock" size={17} /></span>
-            <div class="stats-metric-copy">
-              <strong>{_t("storage.searchP99Time")}</strong>
-              <p>{_t("storage.searchP99TimeDesc")}</p>
-            </div>
-          </div>
+          <EntryHeading
+            class="stats-metric-heading"
+            textClass="stats-metric-copy"
+            icon="clock"
+            label={_t("storage.searchP99Time")}
+            desc={_t("storage.searchP99TimeDesc")}
+          />
           <span class="stats-metric-value">{perfMetrics.searchLatency.p99Ms ?? "-"}ms</span>
         </section>
       {/if}
@@ -394,21 +395,17 @@
         class="setting-card stats-metric-card"
         data-settings-search-id="statistics.memory.process-group-private-working-set"
       >
-        <div class="setting-heading stats-metric-heading">
-          <span class="setting-icon"><AppIcon name="grid" size={17} /></span>
-          <div class="stats-metric-copy">
-            <strong>
-              {memoryDiagnostics.processGroup.privateWorkingSetBytes == null
-                ? _t("storage.processGroupWorkingSet")
-                : _t("storage.processGroupPrivateWorkingSet")}
-            </strong>
-            <p>
-              {memoryDiagnostics.processGroup.privateWorkingSetBytes == null
-                ? _t("storage.processGroupWorkingSetDesc")
-                : _t("storage.processGroupPrivateWorkingSetDesc")}
-            </p>
-          </div>
-        </div>
+        <EntryHeading
+          class="stats-metric-heading"
+          textClass="stats-metric-copy"
+          icon="grid"
+          label={memoryDiagnostics.processGroup.privateWorkingSetBytes == null
+            ? _t("storage.processGroupWorkingSet")
+            : _t("storage.processGroupPrivateWorkingSet")}
+          desc={memoryDiagnostics.processGroup.privateWorkingSetBytes == null
+            ? _t("storage.processGroupWorkingSetDesc")
+            : _t("storage.processGroupPrivateWorkingSetDesc")}
+        />
         <span class="stats-metric-value">
           {formatMaybeBytes(
             memoryDiagnostics.processGroup.privateWorkingSetBytes ??
@@ -422,13 +419,13 @@
           class="setting-card stats-metric-card"
           data-settings-search-id="statistics.memory.process-group-working-set"
         >
-          <div class="setting-heading stats-metric-heading">
-            <span class="setting-icon"><AppIcon name="grid" size={17} /></span>
-            <div class="stats-metric-copy">
-              <strong>{_t("storage.processGroupWorkingSet")}</strong>
-              <p>{_t("storage.processGroupWorkingSetDesc")}</p>
-            </div>
-          </div>
+          <EntryHeading
+            class="stats-metric-heading"
+            textClass="stats-metric-copy"
+            icon="grid"
+            label={_t("storage.processGroupWorkingSet")}
+            desc={_t("storage.processGroupWorkingSetDesc")}
+          />
           <span class="stats-metric-value"
             >{formatBytes(memoryDiagnostics.processGroup.workingSetBytes)}</span
           >
@@ -439,13 +436,13 @@
         class="setting-card stats-metric-card"
         data-settings-search-id="statistics.memory.current-working-set"
       >
-        <div class="setting-heading stats-metric-heading">
-          <span class="setting-icon"><AppIcon name="bar-chart" size={17} /></span>
-          <div class="stats-metric-copy">
-            <strong>{_t("storage.processWorkingSet")}</strong>
-            <p>{_t("storage.processWorkingSetDesc")}</p>
-          </div>
-        </div>
+        <EntryHeading
+          class="stats-metric-heading"
+          textClass="stats-metric-copy"
+          icon="bar-chart"
+          label={_t("storage.processWorkingSet")}
+          desc={_t("storage.processWorkingSetDesc")}
+        />
         <span class="stats-metric-value"
           >{formatMaybeBytes(memoryDiagnostics.currentProcess.workingSetBytes)}</span
         >
@@ -455,26 +452,26 @@
         class="setting-card stats-metric-card"
         data-settings-search-id="statistics.memory.current-private-bytes"
       >
-        <div class="setting-heading stats-metric-heading">
-          <span class="setting-icon"><AppIcon name="bar-chart" size={17} /></span>
-          <div class="stats-metric-copy">
-            <strong>{_t("storage.processPrivateMem")}</strong>
-            <p>{_t("storage.processPrivateMemDesc")}</p>
-          </div>
-        </div>
+        <EntryHeading
+          class="stats-metric-heading"
+          textClass="stats-metric-copy"
+          icon="bar-chart"
+          label={_t("storage.processPrivateMem")}
+          desc={_t("storage.processPrivateMemDesc")}
+        />
         <span class="stats-metric-value"
           >{formatMaybeBytes(memoryDiagnostics.currentProcess.privateBytes)}</span
         >
       </section>
 
       <section class="setting-card stats-metric-card">
-        <div class="setting-heading stats-metric-heading">
-          <span class="setting-icon"><AppIcon name="grid" size={17} /></span>
-          <div class="stats-metric-copy">
-            <strong>{_t("storage.systemAvailableMemory")}</strong>
-            <p>{_t("storage.systemAvailableMemoryDesc")}</p>
-          </div>
-        </div>
+        <EntryHeading
+          class="stats-metric-heading"
+          textClass="stats-metric-copy"
+          icon="grid"
+          label={_t("storage.systemAvailableMemory")}
+          desc={_t("storage.systemAvailableMemoryDesc")}
+        />
         <span class="stats-metric-value"
           >{formatMaybeBytes(memoryDiagnostics.system.availableBytes)} / {formatMaybeBytes(
             memoryDiagnostics.system.totalBytes,
@@ -484,13 +481,13 @@
 
       {#if browserMemory}
         <section class="setting-card stats-metric-card">
-          <div class="setting-heading stats-metric-heading">
-            <span class="setting-icon"><AppIcon name="code" size={17} /></span>
-            <div class="stats-metric-copy">
-              <strong>{_t("storage.jsHeapTitle")}</strong>
-              <p>{_t("storage.jsHeapDesc")}</p>
-            </div>
-          </div>
+          <EntryHeading
+            class="stats-metric-heading"
+            textClass="stats-metric-copy"
+            icon="code"
+            label={_t("storage.jsHeapTitle")}
+            desc={_t("storage.jsHeapDesc")}
+          />
           <span class="stats-metric-value"
             >{formatBytes(browserMemory.usedBytes)}{browserMemory.limitBytes
               ? ` / ${formatBytes(browserMemory.limitBytes)}`
@@ -500,13 +497,11 @@
       {/if}
 
       <section class="setting-card memory-process-card">
-        <div class="setting-heading">
-          <span class="setting-icon"><AppIcon name="settings" size={17} /></span>
-          <div>
-            <strong>{_t("storage.processDetail")}</strong>
-            <p>{_t("storage.processDetailDesc")}</p>
-          </div>
-        </div>
+        <EntryHeading
+          icon="settings"
+          label={_t("storage.processDetail")}
+          desc={_t("storage.processDetailDesc")}
+        />
         <div class="memory-process-list">
           <div class="memory-process-row memory-process-header">
             <span>{_t("storage.processColumnProcess")}</span>
@@ -534,13 +529,13 @@
           class="setting-card stats-metric-card"
           data-settings-search-id="statistics.memory.ocr-model"
         >
-          <div class="setting-heading stats-metric-heading">
-            <span class="setting-icon"><AppIcon name="eye" size={17} /></span>
-            <div class="stats-metric-copy">
-              <strong>{_t("storage.ocrModelLabel")}</strong>
-              <p>{ocrModelState(memoryDiagnostics.ocr)}</p>
-            </div>
-          </div>
+          <EntryHeading
+            class="stats-metric-heading"
+            textClass="stats-metric-copy"
+            icon="eye"
+            label={_t("storage.ocrModelLabel")}
+            desc={ocrModelState(memoryDiagnostics.ocr)}
+          />
           <span class="stats-metric-value"
             >{formatBytes(memoryDiagnostics.ocr.modelBytes)} · {memoryDiagnostics.ocr
               .modelFileCount}
@@ -574,20 +569,14 @@
     min-width: 0;
   }
 
-  .stats-metric-heading {
-    min-width: 0;
-    flex: 1 1 auto;
-    /* Centered row: the shared follower gap padding would sit the heading
-       off center against .stats-metric-value. */
-    padding-bottom: 0;
-  }
-
-  .stats-metric-copy {
+  /* The heading wrapper and copy block render inside EntryHeading, so the
+     panel classes need :global() to reach them. */
+  .stats-metric-card :global(.stats-metric-copy) {
     min-width: 0;
   }
 
-  .stats-metric-copy strong,
-  .stats-metric-copy p {
+  .stats-metric-card :global(.stats-metric-copy strong),
+  .stats-metric-card :global(.stats-metric-copy p) {
     overflow-wrap: anywhere;
   }
 

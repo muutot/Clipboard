@@ -18,9 +18,7 @@
   data-settings-search-id={searchId ?? config.id ?? undefined}
 >
   {#if !isRow}
-    <div class="setting-heading">
-      <EntryHeading icon={config.icon} label={config.label} desc={config.desc} />
-    </div>
+    <EntryHeading icon={config.icon} label={config.label} desc={config.desc} />
   {:else}
     {#if config.icon}
       <span class="setting-icon"><AppIcon name={config.icon} size={17} /></span>

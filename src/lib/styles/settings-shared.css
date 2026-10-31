@@ -125,6 +125,24 @@ label.visually-hidden {
   padding-bottom: 6px;
 }
 
+/* Centered-row opt-outs for wrappers that put the heading in a row
+   (see "Canonical card patterns"). These render inside EntryHeading, so they
+   must stay global instead of living in a panel's scoped style. */
+
+/* StatisticsSettingsPanel metric cards: the heading shares the card row with
+   .stats-metric-value, so the follower gap would sit it off center. */
+.stats-metric-heading {
+  min-width: 0;
+  flex: 1 1 auto;
+  padding-bottom: 0;
+}
+
+/* ThemeSettingsPanel preset section: the heading shares .preset-heading-row
+   with .preset-heading-actions; .preset-list keeps its own gap below the row. */
+.preset-heading-row .setting-heading {
+  padding-bottom: 0;
+}
+
 .setting-icon {
   display: inline-flex;
   align-items: center;

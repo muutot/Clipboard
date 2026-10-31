@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import { messages, resolvePath } from "$lib/i18n";
   import { isTauriRuntime } from "$lib/services/runtime";
+  import EntryHeading from "$lib/components/settings/settings-entries/EntryHeading.svelte";
   import {
     getSourceMappingRules,
     setSourceMappingRules,
@@ -85,12 +86,7 @@
 
 <div class="settings-scroll">
   <section class="setting-card" data-settings-search-id="capture.sourceMapping">
-    <div class="setting-heading">
-      <div>
-        <strong>{_t("sourceMapping.title")}</strong>
-        <p>{_t("sourceMapping.description")}</p>
-      </div>
-    </div>
+    <EntryHeading label={_t("sourceMapping.title")} desc={_t("sourceMapping.description")} />
     {#if loading}
       <p class="settings-state">{_t("storage.readingConfig")}</p>
     {:else}

@@ -2,6 +2,7 @@
   import { onDestroy } from "svelte";
   import AppIcon from "$lib/components/card/AppIcon.svelte";
   import ColorField from "$lib/components/common/ColorField.svelte";
+  import EntryHeading from "$lib/components/settings/settings-entries/EntryHeading.svelte";
   import { messages, resolvePath } from "$lib/i18n";
   import {
     ICON_NAMES,
@@ -85,13 +86,11 @@
 
 <div class="settings-scroll">
   <section class="setting-card toggle-card">
-    <div class="setting-heading">
-      <span class="setting-icon"><AppIcon name="palette" size={17} /></span>
-      <div>
-        <strong>{_t("general.colorIcons")}</strong>
-        <p>{_t("general.colorIconsDescription")}</p>
-      </div>
-    </div>
+    <EntryHeading
+      icon="palette"
+      label={_t("general.colorIcons")}
+      desc={_t("general.colorIconsDescription")}
+    />
     <button
       type="button"
       class="toggle-switch"
@@ -106,13 +105,12 @@
   </section>
 
   <section class="setting-card">
-    <div class="setting-heading">
-      <span class="setting-icon"><AppIcon name="grid" size={17} /></span>
-      <div class="heading-inline">
-        <div>
-          <strong>{_t("general.iconColors")}</strong>
-          <p>{_t("general.iconColorsDescription")}</p>
-        </div>
+    <EntryHeading
+      icon="grid"
+      label={_t("general.iconColors")}
+      desc={_t("general.iconColorsDescription")}
+    >
+      {#snippet children()}
         <button
           type="button"
           class="icon-colors-reset-all"
@@ -121,8 +119,8 @@
         >
           {_t("general.iconColorsResetAll")}
         </button>
-      </div>
-    </div>
+      {/snippet}
+    </EntryHeading>
     {#if isReadonly}
       <p class="readonly-hint">{_t("general.iconColorsDisabledHint")}</p>
     {/if}

@@ -137,15 +137,11 @@ A size control (`SizeEntry`) holds two values: the display number plus unit, and
 
 ### Toggle/control card
 
+Card-heading markup is centralized: `EntryHeading.svelte` renders the whole `.setting-heading` (wrapper, optional icon tile with `iconSize` default 17, label, description, optional `descClass`/`textClass`/`class` passthroughs, `children` inline trailing element, `trailing` direct flex child). Do not hand-roll `<div class="setting-heading">` in panels; new headings must go through `EntryHeading` so shared padding/centering rules keep a single DOM source.
+
 ```svelte
 <section class="setting-card toggle-card">
-  <div class="setting-heading">
-    <span class="setting-icon"><AppIcon name="..." size={17} /></span>
-    <div>
-      <strong>{label}</strong>
-      <p>{description}</p>
-    </div>
-  </div>
+  <EntryHeading icon="..." {label} desc={description} />
   <button class="toggle-switch" class:active={enabled} role="switch" aria-checked={enabled}>
     <span class="toggle-knob"></span>
   </button>
@@ -154,22 +150,16 @@ A size control (`SizeEntry`) holds two values: the display number plus unit, and
 
 A select, segmented language control, number input, or compact action group may replace the toggle while preserving the same left/right hierarchy.
 
-`.setting-heading` `padding-bottom: 6px` is the gap to content that follows the heading inside the card. Cards whose heading has no follower — heading-only cards, centered control rows — must neutralize it or the card renders bottom-heavy/off-center. The shared `.toggle-card .setting-heading` and `.setting-card > .setting-heading:last-child` rules cover the standard patterns; a new centered-row or heading-only variant adds its own `padding-bottom: 0` opt-out (see `.transfer-row`, `.stats-metric-heading`, `.preset-heading-row` and the rule text in `css-theming.md`).
+`.setting-heading` `padding-bottom: 6px` is the gap to content that follows the heading inside the card. Cards whose heading has no follower — heading-only cards, centered control rows — must neutralize it or the card renders bottom-heavy/off-center. The shared `.toggle-card .setting-heading` and `.setting-card > .setting-heading:last-child` rules cover the standard patterns; a new centered-row or heading-only variant adds a `padding-bottom: 0` opt-out in `settings-shared.css` (see `.transfer-row`, `.stats-metric-heading`, `.preset-heading-row` and the rule text in `css-theming.md`). Because headings render inside `EntryHeading`, these opt-outs must be global rules, not panel-scoped selectors.
 
 ### Slider card
 
 ```svelte
 <section class="setting-card">
-  <div class="setting-heading">
-    <span class="setting-icon"><AppIcon name="..." size={17} /></span>
-    <div class="heading-inline">
-      <div>
-        <strong>{label}</strong>
-        <p>{description}</p>
-      </div>
-      <span class="value-label">{value}px</span>
-    </div>
-  </div>
+  {#snippet children()}
+    <span class="value-label">{value}px</span>
+  {/snippet}
+  <EntryHeading icon="..." {label} desc={description} inline {children} />
   <input
     type="range"
     class="transparency-slider"

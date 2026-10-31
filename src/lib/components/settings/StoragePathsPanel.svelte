@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import AppIcon from "$lib/components/card/AppIcon.svelte";
+  import EntryHeading from "$lib/components/settings/settings-entries/EntryHeading.svelte";
   import { messages, resolvePath } from "$lib/i18n";
   import { confirmDialog } from "$lib/services/ui/confirm.svelte";
   import {
@@ -255,13 +256,11 @@
   </section>
 
   <section class="setting-card">
-    <div class="setting-heading">
-      <span class="setting-icon"><AppIcon name="file" size={17} /></span>
-      <div>
-        <strong>{_t("storage.resourcePathsTitle")}</strong>
-        <p>{_t("storage.resourcePathsDesc")}</p>
-      </div>
-    </div>
+    <EntryHeading
+      icon="file"
+      label={_t("storage.resourcePathsTitle")}
+      desc={_t("storage.resourcePathsDesc")}
+    />
     {#if resourcePathsLoaded}
       <div class="resource-path-grid">
         <label for="image-storage-path">
@@ -321,19 +320,15 @@
   </section>
 
   <section class="setting-card toggle-card">
-    <div class="setting-heading">
-      <span class="setting-icon"><AppIcon name="lock" size={17} /></span>
-      <div>
-        <strong>{_t("storage.ownershipMarkerTitle")}</strong>
-        <p>
-          {!status?.resourceOwnershipRequired
-            ? _t("storage.ownershipMarkerDefaultDesc")
-            : ownershipEnabled
-              ? _t("storage.ownershipMarkerEnabledDesc")
-              : _t("storage.ownershipMarkerDisabledDesc")}
-        </p>
-      </div>
-    </div>
+    <EntryHeading
+      icon="lock"
+      label={_t("storage.ownershipMarkerTitle")}
+      desc={!status?.resourceOwnershipRequired
+        ? _t("storage.ownershipMarkerDefaultDesc")
+        : ownershipEnabled
+          ? _t("storage.ownershipMarkerEnabledDesc")
+          : _t("storage.ownershipMarkerDisabledDesc")}
+    />
     <div class="ownership-controls">
       {#if markerRestartNeeded}
         <button class="restart-btn danger" type="button" onclick={restartApp}>
@@ -356,13 +351,11 @@
   </section>
 
   <section class="setting-card directory-tree-card">
-    <div class="setting-heading">
-      <span class="setting-icon"><AppIcon name="grid" size={17} /></span>
-      <div>
-        <strong>{_t("storage.directoryTreeTitle")}</strong>
-        <p>{_t("storage.directoryTreeDesc")}</p>
-      </div>
-    </div>
+    <EntryHeading
+      icon="grid"
+      label={_t("storage.directoryTreeTitle")}
+      desc={_t("storage.directoryTreeDesc")}
+    />
     <pre>{_t("storage.directoryTree")}</pre>
   </section>
 </div>

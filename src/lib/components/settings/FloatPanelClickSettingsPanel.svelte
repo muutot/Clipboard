@@ -1,6 +1,6 @@
 <script lang="ts">
-  import AppIcon from "$lib/components/card/AppIcon.svelte";
   import CustomSelect from "$lib/components/common/CustomSelect.svelte";
+  import EntryHeading from "$lib/components/settings/settings-entries/EntryHeading.svelte";
   import { generalSettings } from "$lib/services/settings";
   import type { FloatPanelClickAction } from "$lib/types/clipboard";
   import { messages, resolvePath } from "$lib/i18n";
@@ -73,13 +73,11 @@
 
 <div class="settings-scroll">
   <section class="setting-card toggle-card" data-settings-search-id="keyboard.float-click-left">
-    <div class="setting-heading">
-      <span class="setting-icon"><AppIcon name="clipboard" size={17} /></span>
-      <div>
-        <strong>{_t("floatClick.leftClick")}</strong>
-        <p>{_t("floatClick.leftClickDesc")}</p>
-      </div>
-    </div>
+    <EntryHeading
+      icon="clipboard"
+      label={_t("floatClick.leftClick")}
+      desc={_t("floatClick.leftClickDesc")}
+    />
     <CustomSelect
       value={s.floatPanelLeftClick}
       options={selectOptions("floatPanelLeftClick")}
@@ -88,13 +86,11 @@
   </section>
 
   <section class="setting-card toggle-card" data-settings-search-id="keyboard.float-click-right">
-    <div class="setting-heading">
-      <span class="setting-icon"><AppIcon name="clipboard" size={17} /></span>
-      <div>
-        <strong>{_t("floatClick.rightClick")}</strong>
-        <p>{_t("floatClick.rightClickDesc")}</p>
-      </div>
-    </div>
+    <EntryHeading
+      icon="clipboard"
+      label={_t("floatClick.rightClick")}
+      desc={_t("floatClick.rightClickDesc")}
+    />
     <CustomSelect
       value={s.floatPanelRightClick}
       options={selectOptions("floatPanelRightClick")}
@@ -103,13 +99,11 @@
   </section>
 
   <section class="setting-card toggle-card" data-settings-search-id="keyboard.float-click-middle">
-    <div class="setting-heading">
-      <span class="setting-icon"><AppIcon name="clipboard" size={17} /></span>
-      <div>
-        <strong>{_t("floatClick.middleClick")}</strong>
-        <p>{_t("floatClick.middleClickDesc")}</p>
-      </div>
-    </div>
+    <EntryHeading
+      icon="clipboard"
+      label={_t("floatClick.middleClick")}
+      desc={_t("floatClick.middleClickDesc")}
+    />
     <CustomSelect
       value={s.floatPanelMiddleClick}
       options={selectOptions("floatPanelMiddleClick")}

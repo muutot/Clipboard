@@ -6,6 +6,7 @@
   import NumberEntry from "$lib/components/settings/settings-entries/NumberEntry.svelte";
   import SizeEntry from "$lib/components/settings/settings-entries/SizeEntry.svelte";
   import HeadingEntry from "$lib/components/settings/settings-entries/HeadingEntry.svelte";
+  import EntryHeading from "$lib/components/settings/settings-entries/EntryHeading.svelte";
   import { messages, resolvePath } from "$lib/i18n";
   import { isTauriRuntime } from "$lib/services/runtime";
   import { fromDisplaySize, toDisplaySize } from "$lib/utils/content/size";
@@ -558,12 +559,7 @@
     />
     {#if syncProvider === "s3"}
       <section class="setting-card">
-        <div class="setting-heading">
-          <span class="setting-icon"><AppIcon name="lock" size={17} /></span>
-          <div class="sync-now-info">
-            <strong>{_t("storage.syncRotate")}</strong>
-            <p class="sync-now-desc">{_t("storage.syncRotateDesc")}</p>
-          </div>
+        {#snippet trailing()}
           <button
             type="button"
             class="settings-action-btn"
@@ -572,7 +568,15 @@
           >
             {_t("storage.syncRotate")}
           </button>
-        </div>
+        {/snippet}
+        <EntryHeading
+          icon="lock"
+          label={_t("storage.syncRotate")}
+          desc={_t("storage.syncRotateDesc")}
+          textClass="sync-now-info"
+          descClass="sync-now-desc"
+          {trailing}
+        />
       </section>
     {/if}
   {/if}

@@ -1,7 +1,7 @@
 <script lang="ts">
-  import AppIcon from "$lib/components/card/AppIcon.svelte";
   import type { CustomEntryConfig } from "$lib/types/settings-entry";
   import type { Snippet } from "svelte";
+  import EntryHeading from "./EntryHeading.svelte";
 
   interface Props {
     config: CustomEntryConfig;
@@ -23,15 +23,7 @@
     class="setting-card toggle-card"
     data-settings-search-id={searchId ?? config.id ?? undefined}
   >
-    <div class="setting-heading">
-      {#if config.icon}
-        <span class="setting-icon"><AppIcon name={config.icon} size={17} /></span>
-      {/if}
-      <div>
-        <strong>{config.label}</strong>
-        {#if config.desc}<p>{config.desc}</p>{/if}
-      </div>
-    </div>
+    <EntryHeading icon={config.icon} label={config.label} desc={config.desc} />
     {#if children}{@render children()}{/if}
   </section>
 {:else}
@@ -39,22 +31,20 @@
     class="setting-card setting-card-custom-column"
     data-settings-search-id={searchId ?? config.id ?? undefined}
   >
-    <div class="setting-heading">
-      {#if config.icon}
-        <span class="setting-icon"><AppIcon name={config.icon} size={17} /></span>
+    {#snippet headingAction()}
+      {#if config.actionLabel && (!config.actionVisible || config.actionVisible())}
+        <button type="button" class="settings-action-btn" onclick={config.onaction}
+          >{resolveActionLabel(config.actionLabel)}</button
+        >
       {/if}
-      <div class="heading-inline">
-        <div>
-          <strong>{config.label}</strong>
-          {#if config.desc}<p>{config.desc}</p>{/if}
-        </div>
-        {#if config.actionLabel && (!config.actionVisible || config.actionVisible())}
-          <button type="button" class="settings-action-btn" onclick={config.onaction}
-            >{resolveActionLabel(config.actionLabel)}</button
-          >
-        {/if}
-      </div>
-    </div>
+    {/snippet}
+    <EntryHeading
+      icon={config.icon}
+      label={config.label}
+      desc={config.desc}
+      inline
+      children={headingAction}
+    />
     {#if children}{@render children()}{/if}
   </section>
 {/if}

@@ -6,6 +6,7 @@
   import CustomSelect from "$lib/components/common/CustomSelect.svelte";
   import SelectEntry from "$lib/components/settings/settings-entries/SelectEntry.svelte";
   import SliderEntry from "$lib/components/settings/settings-entries/SliderEntry.svelte";
+  import EntryHeading from "$lib/components/settings/settings-entries/EntryHeading.svelte";
   import { messages, resolvePath } from "$lib/i18n";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
@@ -350,13 +351,11 @@
     </section>
 
     <section class="setting-card">
-      <div class="setting-heading">
-        <span class="setting-icon"><AppIcon name="search" size={17} /></span>
-        <div>
-          <strong>{_t("storage.ocrDetectionTitle")}</strong>
-          <p>{_t("storage.ocrDetectionDesc")}</p>
-        </div>
-      </div>
+      <EntryHeading
+        icon="search"
+        label={_t("storage.ocrDetectionTitle")}
+        desc={_t("storage.ocrDetectionDesc")}
+      />
       <div class="parameter-grid">
         <div class="parameter-item">
           <SliderEntry
@@ -410,13 +409,11 @@
     </section>
 
     <section class="setting-card">
-      <div class="setting-heading">
-        <span class="setting-icon"><AppIcon name="search" size={17} /></span>
-        <div>
-          <strong>{_t("storage.ocrTaskStatus")}</strong>
-          <p>{_t("storage.ocrTaskStatusDesc")}</p>
-        </div>
-      </div>
+      <EntryHeading
+        icon="search"
+        label={_t("storage.ocrTaskStatus")}
+        desc={_t("storage.ocrTaskStatusDesc")}
+      />
       <div class="stats-grid">
         <div class="stat-item">
           <span class="stat-value">{ocrTotal}</span><span class="stat-label"

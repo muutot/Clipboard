@@ -1,9 +1,9 @@
 <script lang="ts">
-  import AppIcon from "$lib/components/card/AppIcon.svelte";
   import BackupPanel from "$lib/components/settings/BackupPanel.svelte";
   import Checkbox from "$lib/components/common/Checkbox.svelte";
   import CustomSelect from "$lib/components/common/CustomSelect.svelte";
   import DatePicker from "$lib/components/common/DatePicker.svelte";
+  import EntryHeading from "$lib/components/settings/settings-entries/EntryHeading.svelte";
   import { messages, resolvePath } from "$lib/i18n";
   import { isTauriRuntime } from "$lib/services/runtime";
   import { formatBytes } from "$lib/utils/content/format";
@@ -196,13 +196,11 @@
 <BackupPanel {onfeedback} {onadjustlimit} />
 <section class="setting-card" data-settings-search-id="storage.import-data">
   <div class="transfer-row">
-    <div class="setting-heading">
-      <span class="setting-icon"><AppIcon name="download" size={17} /></span>
-      <div>
-        <strong>{_t("storage.importTitle")}</strong>
-        <p>{_t("storage.importDesc")}</p>
-      </div>
-    </div>
+    <EntryHeading
+      icon="download"
+      label={_t("storage.importTitle")}
+      desc={_t("storage.importDesc")}
+    />
     <div class="transfer-group">
       <CustomSelect
         value={importFormat}
@@ -241,13 +239,7 @@
 
 <section class="setting-card" data-settings-search-id="storage.export-data">
   <div class="transfer-row">
-    <div class="setting-heading">
-      <span class="setting-icon"><AppIcon name="upload" size={17} /></span>
-      <div>
-        <strong>{_t("storage.exportTitle")}</strong>
-        <p>{_t("storage.exportDesc")}</p>
-      </div>
-    </div>
+    <EntryHeading icon="upload" label={_t("storage.exportTitle")} desc={_t("storage.exportDesc")} />
     <div class="transfer-group">
       <CustomSelect
         value={exportFormat}
