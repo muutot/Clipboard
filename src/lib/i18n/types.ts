@@ -807,6 +807,7 @@ export interface LocaleDefinition {
     cancel: string;
     placeholder: string;
     saveAsNew: string;
+    wrap: string;
     cut: string;
     copy: string;
     paste: string;

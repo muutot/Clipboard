@@ -291,8 +291,19 @@ describe("DetailPanel code language override", () => {
       .click();
     flushSync();
   };
-  const languageSelect = (target: HTMLElement) =>
-    target.querySelector<HTMLSelectElement>(".language-select")!;
+  const languageTrigger = (target: HTMLElement) =>
+    target.querySelector<HTMLButtonElement>(".code-editor-toolbar .custom-select button")!;
+  const languageTriggerLabel = (target: HTMLElement) =>
+    languageTrigger(target).querySelector(".custom-select-value")?.textContent?.trim();
+  const chooseLanguage = async (target: HTMLElement, label: string) => {
+    languageTrigger(target).click();
+    flushSync();
+    [...target.querySelectorAll<HTMLButtonElement>('[role="option"]')]
+      .find((button) => button.textContent?.trim() === label)!
+      .click();
+    flushSync();
+    await settle();
+  };
 
   it("applies the stored language in the preview label and the editor", async () => {
     const target = mountPanel(
@@ -303,14 +314,15 @@ describe("DetailPanel code language override", () => {
     expect(target.querySelector(".code-lang-label")?.textContent?.trim()).toBe("Python");
 
     enterEdit(target);
-    expect(languageSelect(target).value).toBe("Python");
+    expect(languageTriggerLabel(target)).toBe("Python");
   });
 
   it("falls back to auto detection when no override is stored", async () => {
     const target = mountPanel(item({ textContent: "const value = 1;" }));
     await settle();
     enterEdit(target);
-    expect(languageSelect(target).value).toBe("JavaScript");
+    // AUTO resolves to the detected language for the editor session.
+    expect(languageTriggerLabel(target)).toBe("JavaScript");
   });
 
   it("persists a manual choice through oncodelanguagechange", async () => {
@@ -319,12 +331,7 @@ describe("DetailPanel code language override", () => {
     await settle();
     enterEdit(target);
 
-    const select = languageSelect(target);
-    select.value = "Rust";
-    // Svelte 5 delegates `change`, so the synthetic event must bubble.
-    select.dispatchEvent(new Event("change", { bubbles: true }));
-    await settle();
-
+    await chooseLanguage(target, "Rust");
     expect(oncodelanguagechange).toHaveBeenCalledWith("record", "Rust");
   });
 
@@ -334,11 +341,8 @@ describe("DetailPanel code language override", () => {
     await settle();
     enterEdit(target);
 
-    const select = languageSelect(target);
-    expect(select.value).toBe("text");
-    select.value = "Python";
-    select.dispatchEvent(new Event("change", { bubbles: true }));
-    await settle();
+    expect(languageTriggerLabel(target)).toBe("text");
+    await chooseLanguage(target, "Python");
     expect(oncodelanguagechange).toHaveBeenCalledWith("record", "Python");
   });
 });

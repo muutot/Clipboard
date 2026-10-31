@@ -875,6 +875,7 @@ const en: LocaleDefinition = {
     cancel: "Cancel",
     placeholder: "Enter text content...",
     saveAsNew: "Save as new",
+    wrap: "WRAP",
     cut: "Cut",
     copy: "Copy",
     paste: "Paste",

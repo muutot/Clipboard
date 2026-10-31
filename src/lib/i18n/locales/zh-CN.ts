@@ -845,6 +845,7 @@ const zhCN: LocaleDefinition = {
     cancel: "取消",
     placeholder: "输入文本内容...",
     saveAsNew: "另存为新条目",
+    wrap: "自动换行",
     cut: "剪切",
     copy: "复制",
     paste: "粘贴",

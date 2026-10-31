@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import CustomSelect from "$lib/components/common/CustomSelect.svelte";
   import EditableContextMenu from "$lib/components/common/EditableContextMenu.svelte";
+  import { t } from "$lib/i18n";
   import { detectCodeLang, tokenizeCode } from "$lib/utils/content/code-tokenize";
   import { FILE_PREVIEW_LIMIT } from "$lib/utils/content/file-preview";
 
@@ -43,6 +45,12 @@
     "C#",
     "markdown",
     "text",
+  ];
+
+  /** Shared-dropdown options: AUTO (empty value) first, then every grammar. */
+  const LANGUAGE_SELECT_OPTIONS = [
+    { value: "", label: "AUTO" },
+    ...LANGUAGE_OPTIONS.map((option) => ({ value: option, label: option })),
   ];
 
   let editor = $state<HTMLElement | null>(null);
@@ -345,17 +353,12 @@
 <div class="code-editor-shell" class:wrap>
   <div class="code-editor-toolbar">
     {#if onlanguagechange}
-      <select
-        class="language-select"
+      <CustomSelect
         value={language ?? ""}
-        onchange={(event) => onlanguagechange(event.currentTarget.value)}
-        aria-label={editorLabel}
-      >
-        <option value="">AUTO</option>
-        {#each LANGUAGE_OPTIONS as option (option)}
-          <option value={option}>{option}</option>
-        {/each}
-      </select>
+        options={LANGUAGE_SELECT_OPTIONS}
+        onchange={(value) => onlanguagechange(String(value))}
+        ariaLabel={editorLabel}
+      />
     {:else}
       <span class="language-label">{languageLabel}</span>
     {/if}
@@ -364,10 +367,10 @@
       class="wrap-toggle"
       class:on={wrap}
       onclick={toggleWrap}
-      title="Wrap"
+      title={t("edit.wrap")}
       aria-pressed={wrap}
     >
-      WRAP
+      {t("edit.wrap")}
     </button>
     <span class="editing-label">{editorLabel}</span>
   </div>
@@ -455,24 +458,6 @@
   .editing-label {
     color: var(--text-faint);
     font-size: 11px;
-  }
-
-  .language-select {
-    padding: 4px 6px;
-    border: 1px solid var(--border-color);
-    border-radius: 5px;
-    color: var(--text-secondary);
-    background: var(--input-bg);
-    font: inherit;
-    font-size: 11px;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-    cursor: pointer;
-  }
-
-  .language-select:focus {
-    outline: none;
-    border-color: var(--selection-color);
   }
 
   .wrap-toggle {
