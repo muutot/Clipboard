@@ -4,7 +4,7 @@
   import UpdateDialog from "$lib/components/settings/UpdateDialog.svelte";
   import { messages, resolvePath } from "$lib/i18n";
   import { generalSettings } from "$lib/services/settings";
-  import { isTauriRuntime, openDevtools } from "$lib/services/runtime";
+  import { isTauriRuntime } from "$lib/services/runtime";
   import { checkForUpdate, getRelease, type UpdateInfo } from "$lib/services/update";
   import { invoke } from "@tauri-apps/api/core";
 
@@ -147,24 +147,19 @@
         <p>{_t("about.devtoolsDesc")}</p>
       </div>
     </div>
-    <div class="about-update-controls">
-      <button
-        type="button"
-        class="toggle-switch"
-        class:active={$generalSettings.devtoolsShortcutEnabled}
-        role="switch"
-        aria-checked={$generalSettings.devtoolsShortcutEnabled}
-        aria-label={_t("about.devtoolsTitle")}
-        onclick={() =>
-          generalSettings.updateSetting(
-            "devtoolsShortcutEnabled",
-            !$generalSettings.devtoolsShortcutEnabled,
-          )}><span class="toggle-knob"></span></button
-      >
-      <button type="button" class="settings-action-btn" onclick={openDevtools}>
-        {_t("about.devtoolsButton")}
-      </button>
-    </div>
+    <button
+      type="button"
+      class="toggle-switch"
+      class:active={$generalSettings.devtoolsShortcutEnabled}
+      role="switch"
+      aria-checked={$generalSettings.devtoolsShortcutEnabled}
+      aria-label={_t("about.devtoolsTitle")}
+      onclick={() =>
+        generalSettings.updateSetting(
+          "devtoolsShortcutEnabled",
+          !$generalSettings.devtoolsShortcutEnabled,
+        )}><span class="toggle-knob"></span></button
+    >
   </section>
 
   {#if updateResult}

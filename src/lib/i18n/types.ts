@@ -519,7 +519,6 @@ export interface LocaleDefinition {
     repoDesc: string;
     devtoolsTitle: string;
     devtoolsDesc: string;
-    devtoolsButton: string;
     viewDetails: string;
     updateDialogTitle: string;
     close: string;
