@@ -84,7 +84,15 @@ const SECTION_SEARCH_TEXT: Record<SettingsSection, readonly SettingsSearchText[]
     "布局密度",
   ],
   font: [i18n("storage.appearanceTab"), i18n("storage.fontTab"), i18n("general.fontSize"), "显示"],
-  theme: [i18n("storage.appearanceTab"), i18n("storage.themeTab"), i18n("theme.title"), "配色"],
+  theme: [
+    i18n("storage.appearanceTab"),
+    i18n("storage.themeTab"),
+    i18n("theme.title"),
+    i18n("theme.codeTheme"),
+    "配色",
+    "代码高亮",
+    "高亮",
+  ],
   icons: [
     i18n("storage.appearanceTab"),
     i18n("storage.iconsTab"),

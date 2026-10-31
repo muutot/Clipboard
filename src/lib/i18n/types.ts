@@ -1057,6 +1057,9 @@ export interface LocaleDefinition {
     title: string;
     themeMode: string;
     themeModeDescription: string;
+    codeTheme: string;
+    codeThemeDescription: string;
+    codeThemeAuto: string;
     dark: string;
     light: string;
     custom: string;

@@ -34,6 +34,13 @@ Read this file and `css-theming.md` before changing settings markup or CSS.
 
 The left sidebar retains primary categories. The right content pane owns global settings search, item counts, breadcrumb, secondary row, description, and the selected panel.
 
+The Theme panel also carries the code highlight theme selector (`theme.codeTheme`,
+`GeneralSettings.codeTheme`). The value is a frontend-only field (persisted through the
+Rust config's flattened `extra` map, no dedicated Rust struct field) validated and applied by
+`utils/content/code-theme.ts`: "auto" resolves against the app palette (luminance of
+`themeColors.bg` for custom presets) into one of the concrete `[data-code-theme="…"]`
+scopes defined in `app.css`.
+
 Appearance also includes the `custom_css` secondary section, implemented by the lazy
 `CustomCssSettingsPanel`. Its searchable card is `appearance.custom-css`; the parent
 owns its title/breadcrumb, as with other appearance panels.

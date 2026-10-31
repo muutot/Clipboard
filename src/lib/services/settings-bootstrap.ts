@@ -1,6 +1,7 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { applyThemeColors } from "$lib/utils/settings/theme";
 import { applyCustomCss } from "$lib/utils/settings/custom-css";
+import { applyCodeTheme } from "$lib/utils/content/code-theme";
 import { isTauriRuntime } from "$lib/services/runtime";
 import type { FontSizeSettings, GeneralSettings, WindowEffect } from "$lib/types/clipboard";
 
@@ -56,6 +57,7 @@ export function applyGeneralSettingsToDocument(settings: GeneralSettings): void 
 
   applyFontSizesToDocument(settings.fontSizes);
   applyThemeColors(settings.themeColors);
+  applyCodeTheme(settings.codeTheme, settings.theme, settings.themeColors?.bg);
   applyWindowEffectToDocument(settings.windowEffect);
   applyWindowOpacityToDocument(settings.windowTransparency, settings.windowOpacityAffectsText);
   applyCustomCss(settings.customCss, settings.customCssEnabled);

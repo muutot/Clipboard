@@ -18,6 +18,7 @@ import {
   normalizeThemeColors,
   validCardActionsDisplay,
   validCacheEviction,
+  validCodeTheme,
   validDetailDisplayMode,
   validFloatPanelClickAction,
   validFloatPanelPosition,
@@ -236,6 +237,7 @@ export function normalizeGeneralSettings(
     defaultSettings.useSystemTitleBar,
   );
   result.theme = validTheme(source.theme ?? fallback("theme"), "dark");
+  result.codeTheme = validCodeTheme(source.codeTheme ?? fallback("codeTheme"), "auto");
   result.customCssEnabled = booleanValue(
     source.customCssEnabled ?? fallback("customCssEnabled"),
     false,

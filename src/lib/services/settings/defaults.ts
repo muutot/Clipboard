@@ -3,6 +3,7 @@
 
 import type { GeneralSettings } from "$lib/types/clipboard";
 import { DARK_THEME_COLORS } from "$lib/types/clipboard";
+import { DEFAULT_CODE_THEME } from "$lib/utils/content/code-theme";
 
 export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   language: "system",
@@ -30,6 +31,7 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   alwaysOnTop: false,
   useSystemTitleBar: false,
   theme: "dark",
+  codeTheme: DEFAULT_CODE_THEME,
   customCssEnabled: false,
   customCss: "",
   themeColors: { ...DARK_THEME_COLORS },

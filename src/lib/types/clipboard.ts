@@ -393,6 +393,8 @@ export interface GeneralSettings {
   alwaysOnTop: boolean;
   useSystemTitleBar: boolean;
   theme: ThemeMode;
+  /** 代码预览/编辑器的语法高亮主题；"auto" 随应用主题选择亮/暗配色 */
+  codeTheme: import("$lib/utils/content/code-theme").CodeThemeId;
   customCssEnabled: boolean;
   customCss: string;
   themeColors?: ThemeColors;

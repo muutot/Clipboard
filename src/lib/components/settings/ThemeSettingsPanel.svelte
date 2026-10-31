@@ -7,6 +7,7 @@
   import type { ThemeColors, ThemeMode, ThemePreset } from "$lib/types/clipboard";
   import { DARK_THEME_COLORS, LIGHT_THEME_COLORS } from "$lib/types/clipboard";
   import { generalSettings } from "$lib/services/settings";
+  import { validCodeTheme } from "$lib/utils/content/code-theme";
   import { createFeedback } from "$lib/utils/settings/feedback.svelte";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
@@ -260,6 +261,33 @@
       onchange={(val) => {
         if (val === "dark" || val === "light" || val === "custom") {
           changeTheme(val);
+        }
+      }}
+    />
+  </section>
+
+  <section class="setting-card toggle-card">
+    <div class="setting-heading">
+      <span class="setting-icon"><AppIcon name="code" size={17} /></span>
+      <div>
+        <strong>{_t("theme.codeTheme")}</strong>
+        <p>{_t("theme.codeThemeDescription")}</p>
+      </div>
+    </div>
+    <CustomSelect
+      value={s.codeTheme}
+      ariaLabel={_t("theme.codeTheme")}
+      options={[
+        { value: "auto", label: _t("theme.codeThemeAuto") },
+        { value: "vs-dark", label: "VS Code Dark+" },
+        { value: "one-dark", label: "One Dark" },
+        { value: "github-light", label: "GitHub Light" },
+        { value: "solarized-light", label: "Solarized Light" },
+      ]}
+      onchange={(val) => {
+        const theme = validCodeTheme(val, s.codeTheme);
+        if (theme !== s.codeTheme) {
+          generalSettings.updateSetting("codeTheme", theme);
         }
       }}
     />
