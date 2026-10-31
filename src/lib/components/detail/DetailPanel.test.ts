@@ -327,4 +327,18 @@ describe("DetailPanel code language override", () => {
 
     expect(oncodelanguagechange).toHaveBeenCalledWith("record", "Rust");
   });
+
+  it("offers the selector for plain-text edits that miss code detection", async () => {
+    const oncodelanguagechange = vi.fn();
+    const target = mountPanel(item({ textContent: "hello body" }), { oncodelanguagechange });
+    await settle();
+    enterEdit(target);
+
+    const select = languageSelect(target);
+    expect(select.value).toBe("text");
+    select.value = "Python";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    await settle();
+    expect(oncodelanguagechange).toHaveBeenCalledWith("record", "Python");
+  });
 });

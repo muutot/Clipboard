@@ -642,9 +642,13 @@
             {#if editing}
               <CodeEditor
                 content={editContent}
-                language="markdown"
+                language={editLanguage ?? "markdown"}
                 editorLabel={_t("edit.edit")}
                 placeholder={_t("edit.placeholder")}
+                onlanguagechange={(lang) => {
+                  editLanguage = lang || null;
+                  if (item) oncodelanguagechange?.(item.id, lang || null);
+                }}
                 oncontentchange={(content) => (editContent = content)}
               />
               <DetailEditActions
@@ -659,9 +663,13 @@
             {#if editing}
               <CodeEditor
                 content={editContent}
-                language="text"
+                language={editLanguage ?? "text"}
                 editorLabel={_t("edit.edit")}
                 placeholder={_t("edit.placeholder")}
+                onlanguagechange={(lang) => {
+                  editLanguage = lang || null;
+                  if (item) oncodelanguagechange?.(item.id, lang || null);
+                }}
                 oncontentchange={(content) => (editContent = content)}
               />
               <DetailEditActions
