@@ -1056,6 +1056,12 @@ button {
   flex-direction: column;
   align-items: stretch;
 }
+/* The heading's padding-bottom reserves the gap to content that follows it.
+   When the heading is the card's last element, that gap would leave the card
+   bottom-heavy, so drop it. */
+.setting-card-custom-column .setting-heading:last-child {
+  padding-bottom: 0;
+}
 .parameter-item {
   display: grid;
   gap: 4px;
