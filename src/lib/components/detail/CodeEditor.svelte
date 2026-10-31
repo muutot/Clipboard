@@ -104,11 +104,10 @@
     contextMenu = { x: event.clientX, y: event.clientY };
   }
 
-  // A single trailing newline renders no extra line box in the editor (a
-  // forced break at the very end creates no empty line), so the gutter must
-  // not count it either — otherwise line 2 appears while the caret stays on
-  // the end of line 1.
-  const lineCount = $derived(Math.max(1, content.replace(/\n$/, "").split("\n").length));
+  // A trailing newline IS a line box now — the editor mirrors it with a
+  // display-only zero-width space (see normalizeTrailingBreak) — so the
+  // gutter counts it like any other line.
+  const lineCount = $derived(Math.max(1, content.split("\n").length));
   const languageLabel = $derived(language || "CODE");
 
   // Live highlight backdrop: the editor paints its own text transparently on
@@ -128,7 +127,12 @@
   const backdropHtml = $derived.by(() => {
     if (!highlightEnabled) return "";
     const lang = language || detectCodeLang(content);
-    return tokenizeCode(content, lang)
+    const lines = tokenizeCode(content, lang);
+    // The editor renders the trailing break as an empty line box (kept alive
+    // by its zero-width space), so the backdrop mirrors it to keep the gutter
+    // and the active-line highlight aligned.
+    if (content.endsWith("\n")) lines.push([]);
+    return lines
       .map((line, index) => {
         const html = line
           .map((token) =>
@@ -150,7 +154,9 @@
     if (!currentEditor || nextContent === lastEditorValue) return;
 
     if (readEditorContent(currentEditor) !== nextContent) {
-      currentEditor.textContent = nextContent;
+      // Keep the display-only zero-width space in sync so a trailing break
+      // renders its line box here too, not just after user edits.
+      currentEditor.textContent = nextContent.endsWith("\n") ? `${nextContent}\u200b` : nextContent;
     }
     lastEditorValue = nextContent;
   });
@@ -182,10 +188,34 @@
   });
 
   function readEditorContent(element: HTMLElement): string {
-    return (element.textContent ?? "").replace(/\r\n?/g, "\n");
+    return (
+      (element.textContent ?? "")
+        .replace(/\r\n?/g, "\n")
+        // The display-only zero-width space keeps a trailing break visible.
+        .replace(/\u200b$/, "")
+    );
+  }
+
+  /** `pre-wrap` collapses a forced break at the very end into no line box, so
+   * pressing Enter at the bottom looked like a no-op until the second press.
+   * Mirror the break with a zero-width space (stripped by readEditorContent,
+   * never saved) and remove it again once the break is gone. */
+  function normalizeTrailingBreak(element: HTMLElement) {
+    const text = element.textContent ?? "";
+    if (/\n$/.test(text.replace(/\u200b$/, ""))) {
+      if (!text.endsWith("\u200b")) {
+        element.appendChild(document.createTextNode("\u200b"));
+      }
+    } else {
+      const last = element.lastChild;
+      if (last?.nodeType === Node.TEXT_NODE && last.textContent === "\u200b") {
+        last.remove();
+      }
+    }
   }
 
   function syncContent(element: HTMLElement) {
+    normalizeTrailingBreak(element);
     const nextContent = readEditorContent(element);
     lastEditorValue = nextContent;
     oncontentchange(nextContent);

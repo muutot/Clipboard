@@ -342,3 +342,53 @@ describe("DetailPanel code language override", () => {
     expect(oncodelanguagechange).toHaveBeenCalledWith("record", "Python");
   });
 });
+
+describe("DetailPanel editor trailing break", () => {
+  const enterEdit = (target: HTMLElement) => {
+    [...target.querySelectorAll<HTMLButtonElement>(".detail-actions button")]
+      .find((button) => button.textContent?.trim() === t("edit.edit"))!
+      .click();
+    flushSync();
+  };
+
+  it("keeps a trailing break visible with a display-only zero-width space", async () => {
+    const target = mountPanel(item({ textContent: "const a = 1;" }));
+    await settle();
+    enterEdit(target);
+
+    const draft = target.querySelector<HTMLElement>(".code-input")!;
+    // Without the zero-width space, pre-wrap collapses the forced break at
+    // the very end into no line box — Enter looked like a no-op.
+    draft.textContent = "const a = 1;\n";
+    draft.dispatchEvent(new Event("input", { bubbles: true }));
+    flushSync();
+    expect(draft.textContent).toBe("const a = 1;\n\u200b");
+    expect(target.querySelectorAll(".line-numbers span")).toHaveLength(2);
+
+    // Removing the break removes the mirror again.
+    draft.textContent = "const a = 1;";
+    draft.dispatchEvent(new Event("input", { bubbles: true }));
+    flushSync();
+    expect(draft.textContent).toBe("const a = 1;");
+    expect(target.querySelectorAll(".line-numbers span")).toHaveLength(1);
+  });
+
+  it("saves the clean content without the zero-width space", async () => {
+    const onsaveedit = vi.fn(async () => true);
+    const target = mountPanel(item({ textContent: "const a = 1;" }), { onsaveedit });
+    await settle();
+    enterEdit(target);
+
+    const draft = target.querySelector<HTMLElement>(".code-input")!;
+    draft.textContent = "const a = 1;\n";
+    draft.dispatchEvent(new Event("input", { bubbles: true }));
+    flushSync();
+
+    target.querySelector<HTMLButtonElement>(".edit-save")!.click();
+    flushSync();
+    await settle();
+    // String.trim does not strip U+200B, so this fails if the display-only
+    // mirror ever leaks into the saved content.
+    expect(onsaveedit).toHaveBeenCalledWith("record", "const a = 1;");
+  });
+});
