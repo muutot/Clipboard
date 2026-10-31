@@ -887,14 +887,18 @@
     min-width: 0;
     height: 22px;
     box-sizing: border-box;
-    padding: 0 7px;
-    border: 1px solid var(--selection-color);
-    border-radius: 5px;
+    /* No border or horizontal padding: the text keeps the exact position of
+       the static title. The thicker ring is painted with an inset shadow so
+       it never shifts layout. */
+    padding: 0;
+    border: 0;
+    border-radius: 3px;
     color: var(--text-primary);
     background: var(--input-bg);
     font-size: var(--font-size-base, 13px);
     font-weight: 540;
     outline: none;
+    box-shadow: inset 0 0 0 2px var(--selection-color);
   }
 
   .header-save-btn {
