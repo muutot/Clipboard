@@ -644,6 +644,12 @@ and date-only queries use this command even when their records are not loaded in
 
 ### Portable backups
 
+Creation tests the same per-file source that remapping uses: nonempty `storagePath`,
+otherwise `originalPath`. Missing/directory captured bodies are omitted even when
+their old originals still exist, keeping the row and other files without replacing
+the captured bytes with an edited original. Original-only entries remain supported.
+Archive fields, version and restore validation are unchanged.
+
 Portable-backup preview validates rows incrementally and keeps only identities and resource
 metadata across rows. Restore still retains all decoded rows for atomic apply. Both enforce
 the same record, checksum, count, path and duplicate constraints; changing retention must

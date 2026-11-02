@@ -103,6 +103,13 @@ fn is_regular_file(path: &str) -> bool {
             .unwrap_or(false)
 }
 
+fn file_resource_source(file: &serde_json::Value) -> Option<&str> {
+    file["storagePath"]
+        .as_str()
+        .filter(|s| !s.is_empty())
+        .or_else(|| file["originalPath"].as_str())
+}
+
 /// Drop only path references that cannot be archived as regular files while
 /// preserving the record's tags and other metadata. A directory-valued file
 /// capture and an imported media placeholder are valid history rows; they must
@@ -161,13 +168,9 @@ fn sanitize_archivable_media(item: &mut ClipboardItem) {
         .get_mut("files")
         .and_then(|value| value.as_array_mut())
     {
-        files.retain(|file| {
-            ["storagePath", "originalPath"].iter().any(|key| {
-                file.get(key)
-                    .and_then(|value| value.as_str())
-                    .is_some_and(is_regular_file)
-            })
-        });
+        // Match remapping's source priority. A surviving original cannot make
+        // an unavailable captured body archivable, nor prove its old bytes.
+        files.retain(|file| file_resource_source(file).is_some_and(is_regular_file));
         if files.is_empty() {
             object.remove("files");
         }
@@ -205,11 +208,8 @@ fn remap_item(
             }
             if let Some(files) = object.get_mut("files").and_then(|v| v.as_array_mut()) {
                 for file in files {
-                    let source = file["storagePath"]
-                        .as_str()
-                        .filter(|s| !s.is_empty())
-                        .or_else(|| file["originalPath"].as_str())
-                        .ok_or("file entry has no resource path")?;
+                    let source =
+                        file_resource_source(file).ok_or("file entry has no resource path")?;
                     let path = map(source)?;
                     file["storagePath"] = path.clone().into();
                     file["originalPath"] = path.into();
@@ -806,6 +806,147 @@ mod tests {
         let restored = target.get_item("placeholder").unwrap().unwrap();
         assert_eq!(restored.resource_path, None);
         assert!(restored.metadata_json.as_deref().unwrap().contains("keep"));
+    }
+
+    fn assert_backup_keeps_history_with_unavailable_body(directory: bool) {
+        use crate::commands::capture::{captured_file_metadata, store_captured_file_references};
+
+        let root = Scratch::at(&std::env::temp_dir()).unwrap();
+        let paths = StoragePaths::initialize(root.0.join("source")).unwrap();
+        let database = Database::open_in_memory().unwrap();
+        let originals = [root.0.join("original.txt")];
+        for (index, original) in originals.iter().enumerate() {
+            fs::write(original, format!("captured body {index}")).unwrap();
+            let captured = store_captured_file_references(
+                &[original.to_string_lossy().into_owned()],
+                &paths.files,
+                1024,
+            );
+            assert!(captured[0].copied);
+            let mut entry = item(
+                &format!("unavailable-{index}"),
+                ClipboardKind::File,
+                Some(captured[0].storage_path.clone()),
+            );
+            let mut metadata: serde_json::Value =
+                serde_json::from_str(&captured_file_metadata(&captured)).unwrap();
+            metadata["tags"] = serde_json::json!(["keep"]);
+            entry.metadata_json = Some(metadata.to_string());
+            database.save_item(&entry).unwrap();
+            fs::remove_file(&captured[0].storage_path).unwrap();
+            if directory {
+                fs::create_dir(&captured[0].storage_path).unwrap();
+            }
+            fs::write(
+                original,
+                b"changed original must not replace captured bytes",
+            )
+            .unwrap();
+        }
+        database
+            .save_item(&item("text", ClipboardKind::Text, None))
+            .unwrap();
+
+        let archive = root.0.join("bundle.clipbackup");
+        fs::write(&archive, b"previous backup").unwrap();
+        create(&database, &archive).unwrap();
+        let target = Database::open_in_memory().unwrap();
+        let checked = preview(&archive, &target).unwrap();
+        assert_eq!((checked.item_count, checked.resource_count), (2, 0));
+        let target_paths = StoragePaths::initialize(root.0.join("target")).unwrap();
+        assert_eq!(
+            restore(&archive, &checked.fingerprint, &target, &target_paths)
+                .unwrap()
+                .imported_count,
+            2
+        );
+        for index in 0..1 {
+            let restored = target
+                .get_item(&format!("unavailable-{index}"))
+                .unwrap()
+                .unwrap();
+            assert_eq!(restored.resource_path, None);
+            let metadata: serde_json::Value =
+                serde_json::from_str(restored.metadata_json.as_ref().unwrap()).unwrap();
+            assert_eq!(metadata["tags"], serde_json::json!(["keep"]));
+            assert!(metadata.get("files").is_none());
+        }
+    }
+
+    #[test]
+    fn backup_creation_keeps_history_when_captured_file_body_is_missing() {
+        assert_backup_keeps_history_with_unavailable_body(false);
+    }
+
+    #[test]
+    fn backup_creation_keeps_history_when_captured_file_body_is_a_directory() {
+        assert_backup_keeps_history_with_unavailable_body(true);
+    }
+
+    #[test]
+    fn backup_creation_preserves_available_multi_file_bodies_and_original_only_entries() {
+        use crate::commands::capture::{captured_file_metadata, store_captured_file_references};
+
+        let root = Scratch::at(&std::env::temp_dir()).unwrap();
+        let paths = StoragePaths::initialize(root.0.join("source")).unwrap();
+        let database = Database::open_in_memory().unwrap();
+        let missing = root.0.join("missing.txt");
+        let available = root.0.join("available.txt");
+        fs::write(&missing, b"missing captured body").unwrap();
+        fs::write(&available, b"available captured body").unwrap();
+        let captured = store_captured_file_references(
+            &[
+                missing.to_string_lossy().into_owned(),
+                available.to_string_lossy().into_owned(),
+            ],
+            &paths.files,
+            1024,
+        );
+        let mut multi = item(
+            "multi",
+            ClipboardKind::File,
+            Some(captured[0].storage_path.clone()),
+        );
+        multi.text_content = Some(
+            serde_json::json!([captured[0].storage_path, captured[1].storage_path]).to_string(),
+        );
+        multi.metadata_json = Some(captured_file_metadata(&captured));
+        database.save_item(&multi).unwrap();
+        fs::remove_file(&captured[0].storage_path).unwrap();
+        fs::write(&available, b"changed original").unwrap();
+
+        let original_only = root.0.join("original-only.txt");
+        fs::write(&original_only, b"original-only body").unwrap();
+        let mut original_item = item("original-only", ClipboardKind::File, None);
+        original_item.metadata_json =
+            Some(serde_json::json!({"files": [{"originalPath": original_only}]}).to_string());
+        database.save_item(&original_item).unwrap();
+
+        let archive = root.0.join("bundle.clipbackup");
+        create(&database, &archive).unwrap();
+        let target = Database::open_in_memory().unwrap();
+        let checked = preview(&archive, &target).unwrap();
+        assert_eq!((checked.item_count, checked.resource_count), (2, 2));
+        let target_paths = StoragePaths::initialize(root.0.join("target")).unwrap();
+        restore(&archive, &checked.fingerprint, &target, &target_paths).unwrap();
+        let restored = target.get_item("multi").unwrap().unwrap();
+        let metadata: serde_json::Value =
+            serde_json::from_str(restored.metadata_json.as_ref().unwrap()).unwrap();
+        assert_eq!(metadata["files"].as_array().unwrap().len(), 1);
+        assert_eq!(metadata["files"][0]["name"], "available.txt");
+        let body = metadata["files"][0]["storagePath"].as_str().unwrap();
+        assert_eq!(fs::read(body).unwrap(), b"available captured body");
+        assert_eq!(
+            restored.text_content,
+            Some(serde_json::json!([body]).to_string())
+        );
+        let restored = target.get_item("original-only").unwrap().unwrap();
+        let metadata: serde_json::Value =
+            serde_json::from_str(restored.metadata_json.as_ref().unwrap()).unwrap();
+        assert_eq!(
+            fs::read(metadata["files"][0]["storagePath"].as_str().unwrap()).unwrap(),
+            b"original-only body"
+        );
     }
 
     #[test]
