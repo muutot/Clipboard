@@ -26,8 +26,10 @@ export function unwrapMatches(container: HTMLElement): void {
  * Skips existing marks and UI-only subtrees annotated with data-find-ignore.
  */
 export function wrapMatches(container: HTMLElement, query: string): number {
-  const needle = query.toLowerCase();
-  if (!needle) return 0;
+  if (!query) return 0;
+  // Lowercasing can expand characters (İ -> i + combining dot), so indices
+  // from a lowercased copy cannot be used to slice the original DOM text.
+  const pattern = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "giu");
 
   const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
@@ -37,9 +39,7 @@ export function wrapMatches(container: HTMLElement, query: string): number {
       ) {
         return NodeFilter.FILTER_REJECT;
       }
-      return node.nodeValue && node.nodeValue.toLowerCase().includes(needle)
-        ? NodeFilter.FILTER_ACCEPT
-        : NodeFilter.FILTER_SKIP;
+      return node.nodeValue ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
     },
   });
 
@@ -51,21 +51,19 @@ export function wrapMatches(container: HTMLElement, query: string): number {
   let count = 0;
   for (const node of targets) {
     const value = node.nodeValue ?? "";
-    const lower = value.toLowerCase();
     const fragment = document.createDocumentFragment();
     let cursor = 0;
-    let index = lower.indexOf(needle);
-    while (index >= 0) {
+    for (const match of value.matchAll(pattern)) {
+      const index = match.index;
       if (index > cursor) {
         fragment.appendChild(document.createTextNode(value.slice(cursor, index)));
       }
       const mark = document.createElement("mark");
       mark.dataset.findMatch = "";
-      mark.textContent = value.slice(index, index + needle.length);
+      mark.textContent = match[0];
       fragment.appendChild(mark);
       count += 1;
-      cursor = index + needle.length;
-      index = lower.indexOf(needle, cursor);
+      cursor = index + match[0].length;
     }
     if (cursor === 0) continue;
     if (cursor < value.length) {

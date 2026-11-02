@@ -173,6 +173,10 @@ Find-in-detail searches preview text while excluding `data-find-ignore` subtrees
 language and truncation labels. The DOM highlighter must not mutate/count these
 Svelte-owned labels. Mounted tests cover numeric code searches, language labels
 and requerying a digit present only in the previous match counter.
+Literal queries use Unicode case-insensitive matching on original DOM text so
+length-changing lowercase mappings (such as U+0130) cannot shift highlight offsets.
+Regex metacharacters are escaped; queries remain literal. Mounted tests verify
+exact highlighted strings, repeated dotted-I matches and unchanged source text.
 
 ### `TagEditDialog.svelte`
 

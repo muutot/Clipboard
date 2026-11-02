@@ -107,6 +107,25 @@ async function typeQuery(target: HTMLElement, query: string): Promise<HTMLElemen
 }
 
 describe("DetailPanel find in detail", () => {
+  it.each([
+    { body: "İ alpha", query: "alpha", matches: ["alpha"] },
+    { body: "İ alpha İ", query: "İ", matches: ["İ", "İ"] },
+    { body: "𝔸 İ [a.*]+ İ", query: "[a.*]+", matches: ["[a.*]+"] },
+    { body: "literal .* and XX", query: ".*", matches: [".*"] },
+  ])(
+    "highlights original offsets for literal query $query in $body",
+    async ({ body, query, matches }) => {
+      const target = mountPanel(item({ textContent: body }), { findRequest: { seq: 1 } });
+      await settle();
+      const bar = await typeQuery(target, query);
+      expect(
+        [...target.querySelectorAll("mark[data-find-match]")].map((mark) => mark.textContent),
+      ).toEqual(matches);
+      expect(target.querySelector(".content-full")?.textContent).toBe(body);
+      expect(bar.querySelector(".match-count")?.textContent).toBe(`1/${matches.length}`);
+    },
+  );
+
   it("counts code text without counting its line numbers", async () => {
     const target = mountPanel(item({ textContent: "const value = 1;" }), {
       findRequest: { seq: 1 },
