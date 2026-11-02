@@ -36,6 +36,11 @@ Do not reorder recovery, search initialization, worker startup, or managed-state
 
 ## Managed runtime state
 
+Keyboard binding saves in `commands/config/misc.rs` return a tagged
+`KeyboardConfigCommandError`. Duplicate chords retain the exact shortcut and
+both action ids for frontend localization; other failures retain diagnostic
+messages. The underlying manager still rejects conflicts before persistence.
+
 `commands/update.rs::fetch_release` bounds release API response bodies to 2 MiB
 before JSON parsing. Both latest and tagged lookups use this path: reject a larger
 declared length, then check each chunk before retaining it, including responses

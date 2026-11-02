@@ -531,8 +531,8 @@ shared frontend event-consumer tests cover removal from every loaded view.
 
 ## Rejection payloads
 
-Most commands reject with a plain string. `copy_clipboard_item_files` is the
-exception: it rejects with a tagged object, `{ kind, message }`, because its two
+Most commands reject with a plain string. `copy_clipboard_item_files` rejects
+with a tagged object, `{ kind, message }`, because its two
 failure modes need opposite reactions from the user.
 
 | kind               | Meaning                                                      | User action               |
@@ -547,6 +547,15 @@ only reader, and it treats a plain string or any untagged rejection as `failed`,
 so a command that has not been converted keeps working. Both the copy path and
 the file-paste path map the tag onto `toast.copySourceMissing`; every other
 rejection still shows `toast.copyFailed` / `toast.filePasteFailed`.
+
+`configure_keyboard_shortcuts` rejects with `KeyboardConfigCommandError`:
+`{kind: "shortcut-conflict", shortcut, firstAction, secondAction}` for a duplicate
+chord, or `{kind: "failed", message}` for other failures. Conflict fields come from
+`StorageError::ShortcutConflict`, never from parsing its English Display text.
+`services/keyboard.ts::isKeyboardShortcutConflict` validates that payload; the
+settings panel translates the sentence and registry action labels in the current
+UI locale. Unknown custom action identifiers remain literal. Other save failures
+show localized retry feedback and retain the diagnostic in the console.
 
 Event payloads also use camelCase where Rust structs are serialized. Register listeners before fetching state when an update could occur during hydration, and always retain/unregister the returned unlisten function. Producers must not swallow `app.emit` failures silently: log them with `crate::log_event!` (or push a command warning) so a missed UI refresh is diagnosable; do not reintroduce bare `let _ = app.emit(...)` in library code.
 

@@ -130,6 +130,10 @@ Do not silently return `null` from a new wrapper unless the caller can distingui
 
 ## Background operation monitors
 
+`keyboard.ts::isKeyboardShortcutConflict` validates the tagged binding-save
+rejection before the settings panel translates its chord and registry action
+labels. Other failures use localized retry feedback, with diagnostics logged.
+
 `source-mapping.svelte.ts` is the module store behind web-source display names.
 The root `+layout.ts` awaits `ensureSourceMappingRules` before first render;
 `+layout.svelte` calls `destroySourceMappingRules` on teardown. Each window

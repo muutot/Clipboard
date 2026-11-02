@@ -286,6 +286,11 @@ Do not treat its long scoped style block as a copy template. Use `settings-share
 
 ### Child settings panels
 
+`KeyboardSettingsPanel` translates structured shortcut conflicts through the
+current locale and the action registry (including numbered quick-copy labels).
+Rejected saves retain the existing binding chips and allow another recording.
+Its mounted tests cover both languages, custom identifiers and malformed failures.
+
 `StoragePathsPanel` gates resource-path inputs on `getStorageConfig`, using persisted overrides (including changes awaiting restart); `StorageStatus` supplies active-path placeholders only. Saving one input preserves the loaded other value. Explicit restore-defaults sends two nulls, and failed saves retain the draft. Inputs are disabled during save, and late initialization after unmount is ignored.
 
 `CustomCssSettingsPanel.svelte` is the lazy Appearance → Custom CSS section. It waits for

@@ -356,6 +356,46 @@ pub fn get_keyboard_config(
     Ok(lock_state(&keyboard, "keyboard configuration lock is poisoned")?.config())
 }
 
+/// Structured keyboard failures let the WebView localize conflicts without parsing prose.
+#[derive(Debug, serde::Serialize)]
+#[serde(tag = "kind", rename_all = "kebab-case")]
+pub enum KeyboardConfigCommandError {
+    #[serde(rename_all = "camelCase")]
+    ShortcutConflict {
+        shortcut: String,
+        first_action: String,
+        second_action: String,
+    },
+    Failed {
+        message: String,
+    },
+}
+
+impl From<crate::storage::StorageError> for KeyboardConfigCommandError {
+    fn from(error: crate::storage::StorageError) -> Self {
+        match error {
+            crate::storage::StorageError::ShortcutConflict {
+                shortcut,
+                first_action,
+                second_action,
+            } => Self::ShortcutConflict {
+                shortcut,
+                first_action,
+                second_action,
+            },
+            error => Self::Failed {
+                message: error.to_string(),
+            },
+        }
+    }
+}
+
+impl From<String> for KeyboardConfigCommandError {
+    fn from(message: String) -> Self {
+        Self::Failed { message }
+    }
+}
+
 #[tauri::command]
 pub fn configure_keyboard_shortcuts(
     app: tauri::AppHandle,
@@ -363,10 +403,10 @@ pub fn configure_keyboard_shortcuts(
     hotkey_manager: tauri::State<'_, Mutex<HotkeyManager>>,
     action: String,
     shortcuts: Vec<String>,
-) -> Result<Vec<String>, String> {
+) -> Result<Vec<String>, KeyboardConfigCommandError> {
     let normalized = lock_state(&keyboard, "keyboard configuration lock is poisoned")?
         .set_action_shortcuts(action.clone(), shortcuts)
-        .map_err(|error| error.to_string())?;
+        .map_err(KeyboardConfigCommandError::from)?;
 
     if is_global_action(&action) {
         crate::refresh_hotkey_registrations(&keyboard, &hotkey_manager, &app)?;
@@ -526,6 +566,47 @@ mod tests {
     use crate::privacy::PrivacyManager;
     use crate::state::CaptureState;
     use std::fs;
+
+    #[test]
+    fn keyboard_shortcut_conflicts_serialize_for_localized_feedback() {
+        let root = std::env::temp_dir().join(format!(
+            "clipboard-keyboard-feedback-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let mut keyboard = crate::keyboard::KeyboardManager::load(&root).unwrap();
+        let before = keyboard.config();
+        let error = keyboard
+            .set_action_shortcuts("switchFilter1".into(), vec!["Alt+5".into()])
+            .unwrap_err();
+        let payload = serde_json::to_value(super::KeyboardConfigCommandError::from(error)).unwrap();
+        assert_eq!(payload["kind"], "shortcut-conflict");
+        assert_eq!(payload["shortcut"], "Alt+5");
+        let mut actions = vec![
+            payload["firstAction"].as_str().unwrap(),
+            payload["secondAction"].as_str().unwrap(),
+        ];
+        actions.sort_unstable();
+        assert_eq!(actions, vec!["switchFilter1", "switchFilter5"]);
+        assert_eq!(keyboard.config().shortcuts, before.shortcuts);
+        drop(keyboard);
+        assert_eq!(
+            crate::keyboard::KeyboardManager::load(&root)
+                .unwrap()
+                .config()
+                .shortcuts,
+            before.shortcuts
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn keyboard_command_failures_retain_diagnostic_messages() {
+        let error = super::KeyboardConfigCommandError::from("keyboard lock is poisoned".to_owned());
+        assert_eq!(
+            serde_json::to_value(error).unwrap(),
+            serde_json::json!({"kind": "failed", "message": "keyboard lock is poisoned"})
+        );
+    }
 
     fn automatic_tag_rule(tag: &str) -> AutoTagRule {
         AutoTagRule {

@@ -105,6 +105,11 @@ Window-only (main window focused):
 
 ## High-availability constraints
 
+- Binding-save conflicts cross IPC as a tagged `shortcut-conflict` payload with
+  the chord and both action ids. `KeyboardSettingsPanel` localizes that sentence
+  and the registry labels; never display or parse the backend's English error
+  prose as conflict feedback. Other failures retain localized retry feedback.
+
 - `KeyboardConfigStore` restores the previous complete config when binding
   save/delete/reset fails. `KeyboardManager` rebuilds its matcher only after
   persistence succeeds, so rejected edits cannot leak into reads or a later

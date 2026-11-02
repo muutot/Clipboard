@@ -5,6 +5,24 @@ export interface KeyboardConfig {
   [key: string]: unknown;
 }
 
+export interface KeyboardShortcutConflict {
+  kind: "shortcut-conflict";
+  shortcut: string;
+  firstAction: string;
+  secondAction: string;
+}
+
+export function isKeyboardShortcutConflict(error: unknown): error is KeyboardShortcutConflict {
+  if (!error || typeof error !== "object") return false;
+  const value = error as Partial<KeyboardShortcutConflict>;
+  return (
+    value.kind === "shortcut-conflict" &&
+    typeof value.shortcut === "string" &&
+    typeof value.firstAction === "string" &&
+    typeof value.secondAction === "string"
+  );
+}
+
 export async function getKeyboardConfig(): Promise<KeyboardConfig | null> {
   return invokeTauri<KeyboardConfig>("get_keyboard_config");
 }

@@ -598,6 +598,8 @@ const zhCN: LocaleDefinition = {
     chordFormat: "普通组合：Ctrl+Shift+V",
     doubleFormat: "双击修饰键：Shift+Shift",
     noDuplicate: "同一组合不能分配给两个操作",
+    shortcutConflict: "快捷键 {shortcut} 已被「{firstAction}」和「{secondAction}」同时使用",
+    saveFailed: "保存快捷键失败，请重试",
     browserUnavailable: "浏览器预览无法读取桌面端快捷键配置",
     keyboardUnavailable: "桌面端快捷键服务不可用",
     bindingsCount: "{count} 组",

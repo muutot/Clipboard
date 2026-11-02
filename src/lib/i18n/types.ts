@@ -563,6 +563,8 @@ export interface LocaleDefinition {
     chordFormat: string;
     doubleFormat: string;
     noDuplicate: string;
+    shortcutConflict: string;
+    saveFailed: string;
     browserUnavailable: string;
     keyboardUnavailable: string;
     bindingsCount: string;

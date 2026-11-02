@@ -9,6 +9,7 @@
   import {
     configureKeyboardShortcuts,
     getKeyboardConfig,
+    isKeyboardShortcutConflict,
     resetKeyboardConfig,
     type KeyboardConfig,
   } from "$lib/services/keyboard";
@@ -108,6 +109,21 @@
       return _t(action.descKey as keyof typeof $messages);
     }
     return action.description;
+  }
+
+  function bindingErrorMessage(error: unknown): string {
+    if (isKeyboardShortcutConflict(error)) {
+      const labelFor = (id: string) => {
+        const action = SYSTEM_ACTIONS.find((entry) => entry.id === id);
+        return action ? actionLabel(action) : id;
+      };
+      return _t("keyboard.shortcutConflict", {
+        shortcut: error.shortcut,
+        firstAction: labelFor(error.firstAction),
+        secondAction: labelFor(error.secondAction),
+      });
+    }
+    return _t("keyboard.saveFailed");
   }
 
   function bindingsFor(action: string): string[] {
@@ -227,7 +243,8 @@
       config = { ...config, shortcuts: { ...config.shortcuts, [action]: normalized } };
     } catch (error) {
       if (!componentDestroyed) {
-        feedback.show(error instanceof Error ? error.message : String(error), false);
+        console.warn("Unable to save keyboard bindings", error);
+        feedback.show(bindingErrorMessage(error), false);
       }
     }
   }

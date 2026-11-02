@@ -11,6 +11,8 @@
 
 ## 已验证完成（审计债已闭环，不再立项）
 
+- [x] 快捷键冲突提示本地化：后端返回组合及两个操作标识，设置页按当前中英语言显示句子和功能名称；失败不改变已保存绑定，并可重试。证据：`KeyboardSettingsPanel.test.ts` 7 项挂载回归、`locales.test.ts` 字典契约、Rust `keyboard_shortcut_conflicts_serialize_for_localized_feedback` 与诊断序列化回归。
+
 - [x] 外观 → 自定义 CSS：新增二级分组和显式保存编辑器，内置样式优先级覆盖、跨窗口配置持久化、保留草稿及快捷键停用恢复。证据：CSS/面板/设置持久化和 Rust 配置回归，Edge 双窗口及六种主题/宽度布局验证；实现与竞品依据见 `docs/CUSTOM_CSS.md`。原生 WebView 与 macOS/Linux 交互仍待对应环境验证。
 
 - [x] 仓库内审计技能：复制并维护 `skills/fuck-my-shit-mountain/`，接入 Clipboard 审计规则，修正目录遍历与项目识别、增量比较语义、JSON/并发模式校验和诊断脱敏。审计文件统一保存到技能的 `result/`，不进入分发包；根目录 4 份历史报告已迁移并核验 SHA-256 不变。证据：`tests/test_helpers.py` 19 项回归通过，技能结构校验、真实仓库画像与临时 ZIP 打包检查通过；不据此宣称应用审计已完成。

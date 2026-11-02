@@ -623,6 +623,9 @@ const en: LocaleDefinition = {
     chordFormat: "Chord: Ctrl+Shift+V",
     doubleFormat: "Double tap modifier: Shift+Shift",
     noDuplicate: "The same binding cannot be assigned to two actions",
+    shortcutConflict:
+      'Shortcut {shortcut} is assigned to both "{firstAction}" and "{secondAction}"',
+    saveFailed: "Failed to save shortcuts. Please try again.",
     browserUnavailable: "Browser preview cannot read desktop shortcut configuration",
     keyboardUnavailable: "Desktop shortcut service unavailable",
     bindingsCount: "{count} binding(s)",
