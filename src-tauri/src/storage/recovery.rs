@@ -114,6 +114,48 @@ pub fn refresh_database_backup(
     database: &Database,
     database_path: &Path,
 ) -> Result<PathBuf, StorageError> {
+    refresh_database_backup_with_hook(database, database_path, || {})
+}
+
+fn refresh_database_backup_with_hook(
+    database: &Database,
+    database_path: &Path,
+    after_validation: impl FnOnce(),
+) -> Result<PathBuf, StorageError> {
+    // The connection mutex protects VACUUM only. Keep the temporary file and
+    // both generations exclusive through validation, rotation and rollback,
+    // including other connections/processes. Never unlink this lock file.
+    let canonical = fs::canonicalize(database_path)
+        .or_else(|error| {
+            if error.kind() != std::io::ErrorKind::NotFound {
+                return Err(error);
+            }
+            // An in-memory source may use a backup base without a live DB file.
+            let parent = database_path
+                .parent()
+                .filter(|p| !p.as_os_str().is_empty())
+                .unwrap_or(Path::new("."));
+            Ok(fs::canonicalize(parent)?.join(database_path.file_name().ok_or(error)?))
+        })
+        .map_err(|error| backup_error(database_path, error))?;
+    let lock = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(sibling_with_suffix(&canonical, ".backup.lock"))
+        .map_err(|error| backup_error(database_path, error))?;
+    lock.try_lock().map_err(|error| {
+        backup_error(
+            database_path,
+            match error {
+                fs::TryLockError::WouldBlock => {
+                    "database backup refresh is already in progress".to_owned()
+                }
+                fs::TryLockError::Error(error) => format!("lock database backup refresh: {error}"),
+            },
+        )
+    })?;
     let backup = backup_path(database_path);
     let previous = previous_backup_path(database_path);
     let temporary = sibling_with_suffix(database_path, ".backup.tmp");
@@ -130,6 +172,8 @@ pub fn refresh_database_backup(
             format!("generated backup is invalid: {error}"),
         ));
     }
+
+    after_validation();
 
     if previous.exists() {
         fs::remove_file(&previous).map_err(|error| backup_error(database_path, error))?;
@@ -430,6 +474,195 @@ mod tests {
 
         drop(previous);
         drop(backup);
+        drop(database);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    fn overlapping_refresh_preserves_generations(separate_connection: bool) {
+        use std::sync::mpsc;
+        use std::time::Duration;
+
+        let root = temporary_path("overlapping-refresh");
+        let database_path = root.join("clipboard.sqlite3");
+        let database = Database::open(&database_path).unwrap();
+        database.save_item(&item("first")).unwrap();
+        refresh_database_backup(&database, &database_path).unwrap();
+        database.save_item(&item("second")).unwrap();
+        refresh_database_backup(&database, &database_path).unwrap();
+        database.save_item(&item("third")).unwrap();
+        let other = separate_connection.then(|| Database::open(&database_path).unwrap());
+        let (validated_tx, validated_rx) = mpsc::channel();
+        let (resume_tx, resume_rx) = mpsc::channel();
+        let first_result = std::thread::scope(|scope| {
+            let database_ref = &database;
+            let path_ref = &database_path;
+            let first = scope.spawn(move || {
+                super::refresh_database_backup_with_hook(database_ref, path_ref, || {
+                    validated_tx.send(()).unwrap();
+                    resume_rx.recv_timeout(Duration::from_secs(10)).unwrap();
+                })
+            });
+            validated_rx.recv_timeout(Duration::from_secs(10)).unwrap();
+            let second_database = other.as_ref().unwrap_or(&database);
+            second_database.save_item(&item("fourth")).unwrap();
+            let second_result =
+                refresh_database_backup(second_database, &root.join("./clipboard.sqlite3"));
+            assert!(
+                second_result.is_err(),
+                "overlapping refresh should be refused before touching generations"
+            );
+            resume_tx.send(()).unwrap();
+            first.join().unwrap()
+        });
+        assert!(
+            previous_backup_path(&database_path).is_file(),
+            "overlapping refresh discarded the previous recovery generation"
+        );
+        first_result.unwrap();
+        let previous = Database::open(previous_backup_path(&database_path)).unwrap();
+        assert!(previous.get_item("second").unwrap().is_some());
+        assert!(previous.get_item("third").unwrap().is_none());
+        let backup = Database::open(backup_path(&database_path)).unwrap();
+        assert!(backup.get_item("third").unwrap().is_some());
+        assert!(backup.get_item("fourth").unwrap().is_none());
+        drop(backup);
+        drop(previous);
+        // Successful completion released ownership; a later refresh can install
+        // the new row and still rotate the third generation into previous.
+        refresh_database_backup(&database, &database_path).unwrap();
+        let backup = Database::open(backup_path(&database_path)).unwrap();
+        assert!(backup.get_item("fourth").unwrap().is_some());
+        drop(backup);
+        drop(other);
+        drop(database);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn overlapping_refresh_on_one_database_preserves_both_generations() {
+        overlapping_refresh_preserves_generations(false);
+    }
+
+    #[test]
+    fn overlapping_refresh_across_connections_preserves_both_generations() {
+        overlapping_refresh_preserves_generations(true);
+    }
+
+    #[test]
+    fn backup_lock_errors_and_failed_rotation_preserve_generations_and_release_ownership() {
+        let root = temporary_path("backup-lock-failures");
+        let database_path = root.join("clipboard.sqlite3");
+        let database = Database::open(&database_path).unwrap();
+        database.save_item(&item("first")).unwrap();
+        let lock_path = super::sibling_with_suffix(&database_path, ".backup.lock");
+        fs::create_dir(&lock_path).unwrap();
+        assert!(refresh_database_backup(&database, &database_path).is_err());
+        assert!(!super::sibling_with_suffix(&database_path, ".backup.tmp").exists());
+        fs::remove_dir(&lock_path).unwrap();
+        refresh_database_backup(&database, &database_path).unwrap();
+        let backup_before = fs::read(backup_path(&database_path)).unwrap();
+        let previous = previous_backup_path(&database_path);
+        fs::create_dir(&previous).unwrap();
+        fs::write(previous.join("keep"), b"preserve").unwrap();
+        assert!(refresh_database_backup(&database, &database_path).is_err());
+        assert_eq!(
+            fs::read(backup_path(&database_path)).unwrap(),
+            backup_before
+        );
+        assert_eq!(fs::read(previous.join("keep")).unwrap(), b"preserve");
+        // The failed refresh must release the file lock too.
+        fs::remove_file(previous.join("keep")).unwrap();
+        fs::remove_dir(previous).unwrap();
+        refresh_database_backup(&database, &database_path).unwrap();
+        let other_path = root.join("other.sqlite3");
+        let other = Database::open(&other_path).unwrap();
+        super::refresh_database_backup_with_hook(&database, &database_path, || {
+            refresh_database_backup(&other, &other_path).unwrap();
+        })
+        .unwrap();
+        let detached_base = root.join("detached.sqlite3");
+        refresh_database_backup(&database, &detached_base).unwrap();
+        assert!(!detached_base.exists());
+        let detached = Database::open(backup_path(&detached_base)).unwrap();
+        assert!(detached.get_item("first").unwrap().is_some());
+        drop(detached);
+        drop(other);
+        drop(database);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    #[ignore = "child fixture invoked by the cross-process backup refresh test"]
+    fn backup_refresh_child_fixture() {
+        use std::time::{Duration, Instant};
+        let root = PathBuf::from(std::env::var_os("CLIPBOARD_BACKUP_REFRESH_FIXTURE").unwrap());
+        assert_eq!(
+            root.parent().unwrap().canonicalize().unwrap(),
+            std::env::temp_dir().canonicalize().unwrap()
+        );
+        assert_eq!(
+            fs::read(root.join("fixture.marker")).unwrap(),
+            b"isolated backup refresh fixture"
+        );
+        let database_path = root.join("clipboard.sqlite3");
+        let database = Database::open(&database_path).unwrap();
+        super::refresh_database_backup_with_hook(&database, &database_path, || {
+            fs::write(root.join("child.ready"), b"ready").unwrap();
+            let deadline = Instant::now() + Duration::from_secs(10);
+            while !root.join("child.release").is_file() {
+                assert!(
+                    Instant::now() < deadline,
+                    "parent did not release backup fixture"
+                );
+                std::thread::sleep(Duration::from_millis(10));
+            }
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn another_process_refresh_is_refused_without_touching_backup_generations() {
+        use std::time::{Duration, Instant};
+        let root = temporary_path("backup-process");
+        let database_path = root.join("clipboard.sqlite3");
+        let database = Database::open(&database_path).unwrap();
+        fs::write(
+            root.join("fixture.marker"),
+            b"isolated backup refresh fixture",
+        )
+        .unwrap();
+        database.save_item(&item("first")).unwrap();
+        refresh_database_backup(&database, &database_path).unwrap();
+        let backup_before = fs::read(backup_path(&database_path)).unwrap();
+        let mut child = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "storage::recovery::tests::backup_refresh_child_fixture",
+                "--ignored",
+                "--nocapture",
+            ])
+            .env("CLIPBOARD_BACKUP_REFRESH_FIXTURE", &root)
+            .spawn()
+            .unwrap();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !root.join("child.ready").is_file() {
+            assert!(
+                child.try_wait().unwrap().is_none(),
+                "backup fixture exited before validation"
+            );
+            assert!(Instant::now() < deadline, "backup fixture did not validate");
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let overlapping = refresh_database_backup(&database, &database_path);
+        let backup_during = fs::read(backup_path(&database_path)).unwrap();
+        let previous_during = previous_backup_path(&database_path).exists();
+        fs::write(root.join("child.release"), b"release").unwrap();
+        assert!(child.wait().unwrap().success());
+        assert!(overlapping.is_err());
+        assert_eq!(backup_during, backup_before);
+        assert!(!previous_during);
+        assert!(previous_backup_path(&database_path).is_file());
+        refresh_database_backup(&database, &database_path).unwrap();
         drop(database);
         fs::remove_dir_all(root).unwrap();
     }

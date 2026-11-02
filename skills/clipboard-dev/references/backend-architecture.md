@@ -92,6 +92,15 @@ and failure release the guard so subsequent cleanup can reclaim unreferenced fil
 
 `storage/recovery.rs` validates SQLite integrity, rotates current/previous backups, quarantines damaged files, restores the first valid backup, and causes the derived search index to be quarantined/rebuilt after recovery. A deliberate schema reset deletes obsolete backup generations before writing a fresh v1 backup, so discarded rows cannot return through recovery. Persistence changes must preserve atomic config writes, recovery, backup refresh, and rebuildability of derived data.
 
+Backup refresh holds a nonblocking exclusive OS lock on the canonical database's
+`.backup.lock` sibling before touching `.backup.tmp`, through validation, rotation
+and rollback. Other connections/processes receive a backup error before file effects;
+success/failure releases ownership by closing the handle. Never unlink the lock file.
+Different database paths are independent; an absent backup base resolves its parent
+canonically. This lock covers refresh, not startup recovery or schema-reset deletion.
+Focused SQLite regressions control the post-validation interleaving and use a
+gracefully exiting child process to verify cross-process exclusion.
+
 Corrupt configuration is moved to a UUID-suffixed quarantine before defaults are
 loaded. A failed move returns an error with the original untouched; it must not
 delete the only recovery copy or claim that default settings were persisted.

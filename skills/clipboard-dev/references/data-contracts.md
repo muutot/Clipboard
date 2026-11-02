@@ -123,6 +123,13 @@ Short repository read-modify-write transactions (`save_item`, `save_items_transa
 
 ## SQLite schema
 
+Database backup refresh coordinates complete temporary-file/rotation/rollback
+ownership through a persistent `<canonical database path>.backup.lock` sibling.
+Busy or unavailable locks return a backup error before modifying generations.
+The empty lock file contains no clipboard data and is not part of portable
+archives, the SQLite schema or IPC. Refresh never removes it; handle closure
+releases ownership. Startup recovery/schema-reset operations remain separate.
+
 `storage/repository/transactions.rs::validate_clipboard_text` owns the shared UTF-8 byte bounds: title ≤4,096; text, HTML and RTF each ≤10,000,000. `save_item`, `update_text_item`, imports and portable archive validation use it. Both editor commands validate before hashing or constructing a new record; oversized inputs return an error without changing rows, metadata or the search outbox. The reported `size_bytes` is not trusted for this validation. Boundary tests cover multi-byte payloads and a successful `.clipbackup` creation/preview after an edit at the limits.
 
 `src-tauri/src/storage/schema.rs::initialize` is authoritative. Schema v1 is the clean baseline:
