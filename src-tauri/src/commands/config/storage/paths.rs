@@ -57,7 +57,7 @@ pub fn rewrite_database_storage_paths(
             } else {
                 text_content.clone()
             };
-            let rewritten_metadata = rewrite_json_storage_paths(metadata_json.as_deref(), mappings);
+            let rewritten_metadata = rewrite_metadata_storage_paths(metadata_json.as_deref(), mappings);
 
             if rewritten_resource == resource_path
                 && rewritten_preview == preview_path
@@ -114,11 +114,66 @@ pub fn rewrite_json_storage_paths(
     value: Option<&str>,
     mappings: &[(PathBuf, PathBuf)],
 ) -> Option<String> {
+    rewrite_json_paths(value, |json| {
+        let Some(paths) = json.as_array_mut() else {
+            return false;
+        };
+        let mut changed = false;
+        for path in paths {
+            changed |= rewrite_path_value(path, mappings);
+        }
+        changed
+    })
+}
+
+fn rewrite_metadata_storage_paths(
+    value: Option<&str>,
+    mappings: &[(PathBuf, PathBuf)],
+) -> Option<String> {
+    rewrite_json_paths(value, |json| {
+        let Some(object) = json.as_object_mut() else {
+            return false;
+        };
+        // Metadata includes user text (tags, names, web titles and extension
+        // fields). Only the resource contract's known locations are paths.
+        let mut changed = rewrite_path_fields(
+            object,
+            &[
+                "resourcePath",
+                "previewPath",
+                "storagePath",
+                "originalPath",
+                "iconPath",
+            ],
+            mappings,
+        );
+        if let Some(files) = object
+            .get_mut("files")
+            .and_then(serde_json::Value::as_array_mut)
+        {
+            for file in files {
+                if let Some(file) = file.as_object_mut() {
+                    changed |= rewrite_path_fields(
+                        file,
+                        &["storagePath", "path", "originalPath"],
+                        mappings,
+                    );
+                }
+            }
+        }
+        changed
+    })
+}
+
+fn rewrite_json_paths(
+    value: Option<&str>,
+    rewrite: impl FnOnce(&mut serde_json::Value) -> bool,
+) -> Option<String> {
     let value = value?;
     let Ok(mut json) = serde_json::from_str::<serde_json::Value>(value) else {
         return Some(value.to_owned());
     };
-    let changed = rewrite_json_value_paths(&mut json, mappings);
+    let changed = rewrite(&mut json);
     if changed {
         serde_json::to_string(&json)
             .ok()
@@ -128,10 +183,21 @@ pub fn rewrite_json_storage_paths(
     }
 }
 
-pub fn rewrite_json_value_paths(
-    value: &mut serde_json::Value,
+fn rewrite_path_fields(
+    object: &mut serde_json::Map<String, serde_json::Value>,
+    keys: &[&str],
     mappings: &[(PathBuf, PathBuf)],
 ) -> bool {
+    let mut changed = false;
+    for key in keys {
+        if let Some(value) = object.get_mut(*key) {
+            changed |= rewrite_path_value(value, mappings);
+        }
+    }
+    changed
+}
+
+fn rewrite_path_value(value: &mut serde_json::Value, mappings: &[(PathBuf, PathBuf)]) -> bool {
     match value {
         serde_json::Value::String(path) => {
             let rewritten = rewrite_storage_path(path, mappings);
@@ -141,20 +207,6 @@ pub fn rewrite_json_value_paths(
                 *path = rewritten;
                 true
             }
-        }
-        serde_json::Value::Array(values) => {
-            let mut changed = false;
-            for value in values {
-                changed |= rewrite_json_value_paths(value, mappings);
-            }
-            changed
-        }
-        serde_json::Value::Object(values) => {
-            let mut changed = false;
-            for value in values.values_mut() {
-                changed |= rewrite_json_value_paths(value, mappings);
-            }
-            changed
         }
         _ => false,
     }

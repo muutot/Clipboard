@@ -466,6 +466,16 @@ Changing data directories is a migration workflow, not a path-string edit. Keep 
 
 Migration resource copies never overwrite an existing destination. `copy_migration_file` reserves each new file with `create_new`, streams and flushes it, and cleans up only that newly created file on failure. An existing byte-identical file is a valid retry; differing content fails with the destination path so a pre-existing database's resources are preserved. Comparisons use bounded buffers. `copy_dir_contents` compares canonical roots before traversal: aliases of the same root are no-ops, while ancestor/descendant roots are rejected to prevent copying the newly created destination into itself.
 
+Migration path rewriting in `commands/config/storage/paths.rs` treats file
+`text_content` as an ordered array of path strings. Metadata rewriting touches
+only root `resourcePath`, `previewPath`, `storagePath`, `originalPath`, `iconPath`
+and per-file `storagePath`, legacy `path`, `originalPath`. Only mapped managed
+prefixes change; external originals stay intact. Tags, file names, descriptions,
+web titles and unknown nested values are user data, never recursively rewritten.
+This retains `metadata_json.tags` alignment with the copied `item_tags` index.
+Real migration UTs verify copied bytes, root/legacy/multi-file references, retained
+text metadata, tag filtering and the unchanged source database.
+
 Storage migration additionally holds `Database::begin_resource_write_at` for the
 destination before copying any image/file/preview/icon body and until the snapshot's
 rewritten references commit. The source SQLite writer reservation does not fence

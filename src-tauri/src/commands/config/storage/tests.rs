@@ -5,6 +5,134 @@ use super::{
 use std::time::SystemTime;
 
 #[test]
+fn migration_preserves_user_metadata_while_rewriting_resource_references() {
+    use crate::domain::{ClipboardItem, ClipboardKind};
+    use crate::storage::{ClipboardRepository, Database, HistoryFilter, StoragePaths};
+
+    let root = std::env::temp_dir().join(format!(
+        "clipboard-migration-metadata-{}",
+        uuid::Uuid::new_v4()
+    ));
+    let old = StoragePaths::initialize(root.join("project")).unwrap();
+    let new = StoragePaths::initialize_with_resource_directories_for_configuration(
+        old.project.clone(),
+        Some(root.join("target")),
+        None,
+        None,
+    )
+    .unwrap();
+    let source = Database::open(&old.database).unwrap();
+    let first = old.files.join("first.txt");
+    let second = old.files.join("second.txt");
+    let preview = old.previews.join("preview.png");
+    let icon = old.storage.join("icons/fixture.png");
+    let external = root.join("external.txt");
+    std::fs::create_dir_all(icon.parent().unwrap()).unwrap();
+    for path in [&first, &second, &preview, &icon, &external] {
+        std::fs::write(path, b"fixture body").unwrap();
+    }
+    let label = old.storage.join("project-label").display().to_string();
+    let metadata = serde_json::json!({
+        "resourcePath": first, "storagePath": first, "previewPath": preview, "iconPath": icon,
+        "originalPath": external, "tags": [label], "description": label,
+        "web": {"title": label},
+        "custom": {"storagePath": first, "values": [label]},
+        "files": [
+            {"storagePath": first, "originalPath": external, "name": label},
+            {"path": second, "originalPath": first, "name": label, "custom": {"path": first}}
+        ]
+    });
+    let record = ClipboardItem {
+        id: "file-record".into(),
+        kind: ClipboardKind::File,
+        title: label.clone(),
+        text_content: Some(serde_json::json!([first, second]).to_string()),
+        html_content: None,
+        rtf_content: None,
+        resource_path: Some(first.display().to_string()),
+        preview_path: Some(preview.display().to_string()),
+        icon_path: Some(icon.display().to_string()),
+        content_hash: "file-record".into(),
+        source_app: None,
+        size_bytes: 24,
+        created_at_ms: 1,
+        last_used_at_ms: None,
+        is_favorite: false,
+        metadata_json: Some(metadata.to_string()),
+    };
+    source.save_item(&record).unwrap();
+    let text_record = ClipboardItem {
+        id: "text-record".into(),
+        kind: ClipboardKind::Text,
+        content_hash: "text-record".into(),
+        text_content: Some(label.clone()),
+        resource_path: None,
+        preview_path: None,
+        metadata_json: Some(serde_json::json!({"tags": [label], "description": label}).to_string()),
+        ..record.clone()
+    };
+    source.save_item(&text_record).unwrap();
+    super::migration::migrate_and_save_storage(&old, &new, &source, || Ok(())).unwrap();
+    let destination = Database::open(&new.database).unwrap();
+    let migrated = destination.get_item(&record.id).unwrap().unwrap();
+    let migrated_text = destination.get_item(&text_record.id).unwrap().unwrap();
+    let actual: serde_json::Value =
+        serde_json::from_str(migrated.metadata_json.as_deref().unwrap()).unwrap();
+    let mut expected = metadata.clone();
+    expected["resourcePath"] = serde_json::json!(new.files.join("first.txt"));
+    expected["storagePath"] = serde_json::json!(new.files.join("first.txt"));
+    expected["previewPath"] = serde_json::json!(new.previews.join("preview.png"));
+    expected["iconPath"] = serde_json::json!(new.storage.join("icons").join("fixture.png"));
+    expected["files"][0]["storagePath"] = serde_json::json!(new.files.join("first.txt"));
+    expected["files"][1]["path"] = serde_json::json!(new.files.join("second.txt"));
+    expected["files"][1]["originalPath"] = serde_json::json!(new.files.join("first.txt"));
+    let indexed = destination.list_all_tags().unwrap();
+    let filtered = destination
+        .list_recent(
+            20,
+            0,
+            &HistoryFilter {
+                tag: Some(label.clone()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    assert_eq!(indexed.len(), 1);
+    assert_eq!(indexed[0].name, label);
+    assert_eq!(indexed[0].count, 2);
+    assert_eq!(filtered.len(), 2);
+    assert_eq!(migrated.title, label);
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(migrated.text_content.as_deref().unwrap())
+            .unwrap(),
+        serde_json::json!([new.files.join("first.txt"), new.files.join("second.txt")])
+    );
+    for path in [
+        &migrated.resource_path,
+        &migrated.preview_path,
+        &migrated.icon_path,
+    ] {
+        assert_eq!(
+            std::fs::read(path.as_ref().unwrap()).unwrap(),
+            b"fixture body"
+        );
+    }
+    assert_eq!(
+        source.get_item(&record.id).unwrap().unwrap().metadata_json,
+        record.metadata_json
+    );
+    drop(destination);
+    drop(source);
+    std::fs::remove_dir_all(root).unwrap();
+    assert_eq!(
+        actual, expected,
+        "migration must not treat user strings as resource paths"
+    );
+    assert_eq!(migrated_text.metadata_json, text_record.metadata_json);
+    assert_eq!(migrated_text.text_content, text_record.text_content);
+}
+
+#[test]
 fn migration_retains_copied_bodies_during_destination_cleanup() {
     use crate::domain::{ClipboardItem, ClipboardKind};
     use crate::storage::{ClipboardRepository, Database, StoragePaths};
