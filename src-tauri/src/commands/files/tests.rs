@@ -1,7 +1,7 @@
 //! Unit tests for the icon cache, replacement validation, save-as, and shell
 //! commands.
 
-use super::clipboard::managed_source_path;
+use super::clipboard::{managed_source_path, save_clipboard_item_file_blocking};
 use super::icons::{app_icon_file_name, build_icon_cache, icon_reference_matches};
 use super::replace::{replace_icon_file_at, validate_replace_source, REPLACE_MAX_SOURCE_BYTES};
 use super::shell::{open_external_url, openable_scheme};
@@ -187,6 +187,171 @@ fn managed_source_path_rejects_a_missing_file() {
 
     assert!(err.contains("not found"), "{err}");
     let _ = std::fs::remove_dir_all(&project);
+}
+
+fn save_as_fixture() -> (std::path::PathBuf, StoragePaths, Database) {
+    let root = std::env::temp_dir().join(format!("clipboard-save-as-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir(&root).unwrap();
+    let paths = StoragePaths::initialize(root.clone()).unwrap();
+    let database = Database::open(&paths.database).unwrap();
+    let source = paths.files.join("captured.bin");
+    std::fs::write(&source, b"synthetic captured bytes").unwrap();
+    database
+        .save_item(&item(
+            ClipboardKind::File,
+            Some(source.to_string_lossy().into_owned()),
+            None,
+        ))
+        .unwrap();
+    (root, paths, database)
+}
+
+#[test]
+fn save_clipboard_item_file_accepts_existing_source_path_spellings_without_rewriting() {
+    let (root, paths, database) = save_as_fixture();
+    let source = paths.files.join("captured.bin");
+    let old = std::time::UNIX_EPOCH + std::time::Duration::from_secs(3600);
+    std::fs::File::options()
+        .write(true)
+        .open(&source)
+        .unwrap()
+        .set_modified(old)
+        .unwrap();
+    let destinations = vec![
+        source.clone(),
+        paths.files.join("./captured.bin"),
+        source.canonicalize().unwrap(),
+    ];
+    #[cfg(windows)]
+    let destinations = {
+        let mut destinations = destinations;
+        destinations.push(paths.files.join("CAPTURED.BIN"));
+        destinations
+    };
+    // Collect every spelling before checking so a failed no-op still exercises
+    // the canonical control and proves that the captured body stayed intact.
+    let results: Vec<_> = destinations
+        .iter()
+        .map(|dst| {
+            save_clipboard_item_file_blocking(&database, &paths, "id", &dst.to_string_lossy())
+        })
+        .collect();
+    let bytes = std::fs::read(&source).unwrap();
+    let modified = std::fs::metadata(&source).unwrap().modified().unwrap();
+    drop(database);
+    std::fs::remove_dir_all(root).unwrap();
+    assert_eq!(bytes, b"synthetic captured bytes");
+    assert_eq!(modified, old);
+    assert!(
+        results.iter().all(Result::is_ok),
+        "self-save results: {results:?}"
+    );
+}
+
+#[test]
+fn save_clipboard_item_file_copies_to_new_and_existing_other_destinations() {
+    let (root, paths, database) = save_as_fixture();
+    let destination = root.join("saved.bin");
+    save_clipboard_item_file_blocking(&database, &paths, "id", &destination.to_string_lossy())
+        .unwrap();
+    assert_eq!(
+        std::fs::read(&destination).unwrap(),
+        b"synthetic captured bytes"
+    );
+    std::fs::write(&destination, b"previous destination bytes").unwrap();
+    save_clipboard_item_file_blocking(&database, &paths, "id", &destination.to_string_lossy())
+        .unwrap();
+    assert_eq!(
+        std::fs::read(&destination).unwrap(),
+        b"synthetic captured bytes"
+    );
+    assert_eq!(
+        std::fs::read(paths.files.join("captured.bin")).unwrap(),
+        b"synthetic captured bytes"
+    );
+    drop(database);
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn save_clipboard_item_file_preserves_a_hard_linked_source() {
+    let (root, paths, database) = save_as_fixture();
+    let source = paths.files.join("captured.bin");
+    let alias = root.join("saved-alias.bin");
+    std::fs::hard_link(&source, &alias).unwrap();
+    let result =
+        save_clipboard_item_file_blocking(&database, &paths, "id", &alias.to_string_lossy());
+    let source_bytes = std::fs::read(&source).unwrap();
+    let alias_bytes = std::fs::read(&alias).unwrap();
+    drop(database);
+    std::fs::remove_dir_all(root).unwrap();
+    assert_eq!(source_bytes, b"synthetic captured bytes");
+    assert_eq!(alias_bytes, source_bytes);
+    assert!(result.is_ok(), "hard-linked self-save: {result:?}");
+}
+
+#[test]
+#[cfg(windows)]
+fn save_clipboard_item_file_preserves_a_locked_destination_and_removes_staging() {
+    use std::os::windows::fs::OpenOptionsExt;
+    use windows_sys::Win32::Storage::FileSystem::{FILE_SHARE_READ, FILE_SHARE_WRITE};
+
+    let (root, paths, database) = save_as_fixture();
+    let destination = root.join("saved.bin");
+    std::fs::write(&destination, b"previous destination bytes").unwrap();
+    let held = std::fs::OpenOptions::new()
+        .read(true)
+        .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
+        .open(&destination)
+        .unwrap();
+    assert!(save_clipboard_item_file_blocking(
+        &database,
+        &paths,
+        "id",
+        &destination.to_string_lossy()
+    )
+    .is_err());
+    assert_eq!(
+        std::fs::read(&destination).unwrap(),
+        b"previous destination bytes"
+    );
+    assert_eq!(
+        std::fs::read(paths.files.join("captured.bin")).unwrap(),
+        b"synthetic captured bytes"
+    );
+    assert!(!std::fs::read_dir(&root).unwrap().any(|entry| entry
+        .unwrap()
+        .file_name()
+        .to_string_lossy()
+        .contains(".tmp-")));
+    drop(held);
+    drop(database);
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn save_clipboard_item_file_rejects_relative_directory_and_missing_record_destinations() {
+    let (root, paths, database) = save_as_fixture();
+    assert!(save_clipboard_item_file_blocking(&database, &paths, "id", "relative.bin").is_err());
+    assert!(
+        save_clipboard_item_file_blocking(&database, &paths, "id", &root.to_string_lossy())
+            .is_err()
+    );
+    let missing_destination = root.join("not-created.bin");
+    assert!(save_clipboard_item_file_blocking(
+        &database,
+        &paths,
+        "missing",
+        &missing_destination.to_string_lossy()
+    )
+    .is_err());
+    assert!(!missing_destination.exists());
+    assert_eq!(
+        std::fs::read(paths.files.join("captured.bin")).unwrap(),
+        b"synthetic captured bytes"
+    );
+    drop(database);
+    std::fs::remove_dir_all(root).unwrap();
 }
 
 fn item(

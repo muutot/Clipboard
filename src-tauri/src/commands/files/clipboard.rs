@@ -65,7 +65,7 @@ pub async fn save_clipboard_item_file(
     .map_err(|error| format!("save file task join failed: {error}"))?
 }
 
-fn save_clipboard_item_file_blocking(
+pub(super) fn save_clipboard_item_file_blocking(
     database: &Database,
     paths: &StoragePaths,
     id: &str,
@@ -86,11 +86,18 @@ fn save_clipboard_item_file_blocking(
     if destination.is_dir() {
         return Err("destination is a directory".to_string());
     }
-    if destination == source_path {
+    if destination
+        .canonicalize()
+        .is_ok_and(|canonical| canonical == source_path)
+    {
         return Ok(());
     }
-    std::fs::copy(&source_path, destination)
-        .map_err(|error| format!("failed to save file: {error}"))?;
+    // Stage before replacing: a distinct path can still hard-link the source,
+    // and an interrupted copy must not truncate an existing destination.
+    crate::content::file_store::store_atomically(destination, |temporary| {
+        std::fs::copy(&source_path, temporary).map(|_| ())
+    })
+    .map_err(|error| format!("failed to save file: {error}"))?;
     Ok(())
 }
 

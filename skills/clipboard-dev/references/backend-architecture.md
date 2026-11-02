@@ -57,6 +57,13 @@ Use `Mutex`/`Arc` according to existing ownership. Never hold a config or ingest
 
 ## Database and repositories
 
+Save-as in `commands/files/clipboard.rs` canonicalizes an existing destination
+before comparing it with the managed source, so equivalent path spellings are
+successful no-ops. Other destinations use sibling staging, flush and atomic
+replacement; hard-linked source aliases cannot truncate the captured body, and
+copy/publication errors preserve an existing destination and remove staging.
+Windows UTs include a handle that denies deletion; Unix behavior needs its CI gate.
+
 Ordinary text edits pass an optional typed `TextItemUpdate.custom_title`, rather
 than a copied metadata JSON object. `update_text_item` merges only `customTitle`
 into the current stored object in the same SQL update as title/body/hash/size

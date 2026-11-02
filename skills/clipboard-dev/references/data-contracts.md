@@ -357,6 +357,12 @@ desktop invalidation even when preparation fails after a partial cache fill.
 
 `save_clipboard_item_file(id, dst)` is the constrained "Save As" primitive. The webview passes only the item id and a user-chosen absolute destination; the backend resolves the source from the stored record and requires it to live under an owned image/file root, so it cannot copy an arbitrary path. The former unrestricted `copy_file_to(src, dst)` was removed and must not be reintroduced. The command is async and runs the file copy on `tauri::async_runtime::spawn_blocking`, so arbitrarily large transfers never occupy the window event loop.
 
+Existing destinations canonically equal to the source succeed without rewriting
+it. Other saves copy to a sibling temporary file, flush, then atomically replace
+the destination entry. This preserves a hard-linked source and an existing
+destination on failure; replacing a destination symlink replaces its entry.
+The source/id/absolute-destination IPC contract is unchanged.
+
 The CLI `paste` command and the local API `POST /paste` are manual text-ingestion paths that write to the database directly instead of going through the clipboard-worker pipeline, so they enforce the capture privacy rules themselves through `CaptureState::reject_manual_text`: a paused capture, a text above `max_text_capture_bytes`, or a sensitive-pattern match refuses the write (HTTP status 403, or 413 for the size ceiling). Every production entry point must pass the live `CaptureState` — the in-app command and the API server take it from managed state, and the standalone CLI process rebuilds it from the persisted configuration; `None` is only for in-memory test harnesses.
 
 `duplicate_clipboard_item(id)` creates a metadata-only second row that still shares the source's `resource_path`/`preview_path`. Both `id` and `content_hash` are namespaced with a random UUID suffix so `UNIQUE (kind, content_hash)` admits the copy and two rapid duplicates never collapse into one upsert.
