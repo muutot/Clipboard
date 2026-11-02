@@ -52,6 +52,15 @@ Use `Mutex`/`Arc` according to existing ownership. Never hold a config or ingest
 
 ## Database and repositories
 
+Text/link save-as-new prepares the edited record in
+`commands/clipboard/operations/duplicate.rs`, then persists it through
+`repository/transactions.rs::Database::save_item_as_new`. Hash collision checks
+and insertion use the same immediate transaction; a competing capture cannot
+turn a distinct save into an upsert with a nonexistent announced ID. Fresh
+content keeps its canonical hash; collisions use a UUID namespace. The returned
+record retains the inserted ID, and row/tag/outbox failures roll back together.
+The general capture/import upsert behavior is unchanged.
+
 `src-tauri/src/storage/` owns SQLite schema, forward-only migrations, repositories, recovery, and derived-data coordination. `Database::from_connection` enables foreign keys, WAL, normal synchronous mode, memory temp storage, cache/mmap settings, initializes or migrates the current schema, and persists one UUID device identity. Schema v1 is the one-time clean baseline; later versions use the adjacent transactional chain in `storage/migrations.rs`, while newer-than-supported databases are rejected untouched. `crates/clipboard-sync/src/v1/repository.rs` owns the provider-neutral replication DTOs and `SyncRepository` contract; `storage/sync_repository.rs` adapts `Database` to that contract and owns point-in-time SQLite snapshot creation. `storage/sync_state/` remains the compact SQLite implementation: it preserves clipboard rows as first-snapshot input, assigns deterministic `(modified_at_ms, sync_writer_device_id)` versions, maintains the outbox/tombstone/publication/cursor/checkpoint/resource-reference tables, restores remote keys only for scope-aware publication, and applies streamed snapshots, segments, or a full checkpoint atomically with echo suppression. Remote image/file/icon keys never masquerade as local paths in `clipboard_items`; their role/ordinal references commit with the row and cursor so ordinary pull has zero blob downloads. The v1 command orchestrator calls `Database::initialize_sync` through the provider-neutral engine; initialization does not read or convert obsolete sync data.
 
 `storage/recovery.rs` validates SQLite integrity, rotates current/previous backups, quarantines damaged files, restores the first valid backup, and causes the derived search index to be quarantined/rebuilt after recovery. A deliberate schema reset deletes obsolete backup generations before writing a fresh v1 backup, so discarded rows cannot return through recovery. Persistence changes must preserve atomic config writes, recovery, backup refresh, and rebuildability of derived data.

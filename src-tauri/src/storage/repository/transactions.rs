@@ -1,6 +1,6 @@
-//! Bulk transactional write funnels for backup restore and history import.
+//! Transactional write funnels for distinct saves, backup restore and history import.
 //!
-//! Owns `TransactionalSaveSummary`, `Database::validate_restore_items`,
+//! Owns `Database::save_item_as_new`, `TransactionalSaveSummary`, `Database::validate_restore_items`,
 //! `Database::restore_items_transactional(_with_progress)`,
 //! `Database::save_items_transactional`, and the import bounds
 //! (`MAX_IMPORT_*`, `validate_imported_item`) every importer is validated against.
@@ -20,6 +20,43 @@ pub struct TransactionalSaveSummary {
 }
 
 impl Database {
+    /// Persist a separate item, keeping its proposed hash only when unused.
+    /// Collision checks and insertion share the SQLite writer transaction, so
+    /// capture on another connection cannot turn this save into a dedup upsert.
+    pub(crate) fn save_item_as_new(
+        &self,
+        mut item: ClipboardItem,
+    ) -> Result<ClipboardItem, StorageError> {
+        validate_clipboard_text(
+            &item.title,
+            item.text_content.as_deref(),
+            item.html_content.as_deref(),
+            item.rtf_content.as_deref(),
+        )?;
+        let size_bytes =
+            i64::try_from(item.size_bytes).map_err(|_| StorageError::ValueOutOfRange {
+                field: "size_bytes",
+            })?;
+        let _resource_publication = self.begin_resource_write()?;
+        let proposed_hash = item.content_hash.clone();
+        self.with_connection(|connection| {
+            let transaction =
+                connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+            while content_exists_on_connection(&transaction, item.kind, &item.content_hash)? {
+                item.content_hash = format!("{proposed_hash}-{}", uuid::Uuid::new_v4().simple());
+            }
+            let saved_id = insert_item_row(&transaction, &item, size_bytes)?;
+            if saved_id != item.id {
+                return Err(StorageError::Io(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "save-as-new unexpectedly reused another record",
+                )));
+            }
+            transaction.commit()?;
+            Ok(item)
+        })
+    }
+
     pub fn validate_restore_items(entries: &[ClipboardItem]) -> Result<(), StorageError> {
         let upper = current_time_ms().saturating_add(MAX_IMPORT_FUTURE_SKEW_MS);
         for item in entries {

@@ -150,6 +150,119 @@ mod tests {
         drop(database);
         std::fs::remove_dir_all(root).unwrap();
     }
+
+    fn save_as_new_capture_interleave(kind: ClipboardKind, deleted: bool) {
+        let root =
+            std::env::temp_dir().join(format!("clipboard-save-new-{}", uuid::Uuid::new_v4()));
+        let paths = StoragePaths::initialize(root.clone()).unwrap();
+        let database = Database::open(&paths.database).unwrap();
+        let capturing = Database::open(&paths.database).unwrap();
+        let source = ClipboardItem {
+            id: "source".into(),
+            kind,
+            title: "source".into(),
+            text_content: Some("old fixture".into()),
+            html_content: Some("<b>old fixture</b>".into()),
+            rtf_content: Some("old rich text".into()),
+            resource_path: None,
+            preview_path: None,
+            content_hash: "original-fixture".into(),
+            source_app: Some("editor".into()),
+            size_bytes: 11,
+            created_at_ms: 1,
+            last_used_at_ms: Some(1),
+            is_favorite: false,
+            icon_path: None,
+            metadata_json: Some(serde_json::json!({"tags": ["editor-tag"]}).to_string()),
+        };
+        database.save_item(&source).unwrap();
+        let canonical = content::hash::compute_content_hash(
+            if kind == ClipboardKind::Text {
+                "text"
+            } else {
+                "link"
+            },
+            "edited fixture",
+            None,
+        );
+        let mut captured_before = None;
+        let created = save_clipboard_item_as_new_record_with_save(
+            &database,
+            "source",
+            "edited title",
+            "edited fixture",
+            |prepared| {
+                // Another real connection captures the edited content after
+                // command preparation but before its actual persistence.
+                assert_eq!(prepared.content_hash, canonical);
+                let mut capture = prepared.clone();
+                capture.id = "concurrent-capture".into();
+                capture.title = "capture title".into();
+                capture.source_app = Some("capture-app".into());
+                capture.metadata_json =
+                    Some(serde_json::json!({"tags": ["capture-tag"]}).to_string());
+                capturing.save_item(&capture).unwrap();
+                if deleted {
+                    capturing.soft_delete(&capture.id).unwrap();
+                }
+                captured_before = capturing.get_item(&capture.id).unwrap();
+                persist_save_as_new_record(&database, prepared)
+            },
+        )
+        .unwrap();
+        let saved = database.get_item(&created.id).unwrap();
+        let captured_after = capturing.get_item("concurrent-capture").unwrap();
+        let deleted_ids: Vec<_> = database
+            .list_deleted(10, 0)
+            .unwrap()
+            .into_iter()
+            .map(|item| item.id)
+            .collect();
+        let tags = database.list_all_tags().unwrap();
+        drop(capturing);
+        drop(database);
+        std::fs::remove_dir_all(root).unwrap();
+        assert!(
+            saved.is_some(),
+            "save-as-new returned a nonexistent ID: {}",
+            created.id
+        );
+        assert_ne!(created.content_hash, canonical);
+        assert_eq!(saved.unwrap(), created);
+        assert_eq!(
+            captured_after, captured_before,
+            "save-as-new rewrote the competing capture"
+        );
+        assert_eq!(
+            deleted_ids.contains(&"concurrent-capture".to_owned()),
+            deleted
+        );
+        assert!(created.html_content.is_none() && created.rtf_content.is_none());
+        assert!(tags
+            .iter()
+            .any(|tag| tag.name == "editor-tag" && tag.count == 2));
+        assert_eq!(
+            tags.iter()
+                .find(|tag| tag.name == "capture-tag")
+                .map(|tag| tag.count),
+            (!deleted).then_some(1)
+        );
+    }
+
+    #[test]
+    fn save_as_new_keeps_a_distinct_row_after_concurrent_text_capture() {
+        save_as_new_capture_interleave(ClipboardKind::Text, false);
+    }
+
+    #[test]
+    fn save_as_new_keeps_a_distinct_row_after_concurrent_link_capture() {
+        save_as_new_capture_interleave(ClipboardKind::Link, false);
+    }
+
+    #[test]
+    fn save_as_new_does_not_resurrect_a_concurrent_deleted_capture() {
+        save_as_new_capture_interleave(ClipboardKind::Text, true);
+    }
 }
 
 /// Insert a new text/link record from an edited copy of `id` in one step.
@@ -180,6 +293,18 @@ pub fn save_clipboard_item_as_new_record(
     new_title: &str,
     new_text_content: &str,
 ) -> Result<ClipboardItem, String> {
+    save_clipboard_item_as_new_record_with_save(database, id, new_title, new_text_content, |item| {
+        persist_save_as_new_record(database, item)
+    })
+}
+
+fn save_clipboard_item_as_new_record_with_save(
+    database: &Database,
+    id: &str,
+    new_title: &str,
+    new_text_content: &str,
+    save: impl FnOnce(ClipboardItem) -> Result<ClipboardItem, String>,
+) -> Result<ClipboardItem, String> {
     crate::storage::validate_clipboard_text(new_title, Some(new_text_content), None, None)
         .map_err(|error| error.to_string())?;
     if new_text_content.trim().is_empty() {
@@ -205,30 +330,28 @@ pub fn save_clipboard_item_as_new_record(
     let metadata_json = set_custom_title_metadata(source.metadata_json.as_deref(), custom_title)?;
     let proposed_hash = content::hash::compute_content_hash(kind_name, new_text_content, None);
     let unique = uuid::Uuid::new_v4().simple().to_string();
-    let content_hash = if database
-        .content_exists(source.kind, &proposed_hash)
-        .map_err(|e| e.to_string())?
-    {
-        format!("{proposed_hash}-{unique}")
-    } else {
-        proposed_hash
-    };
     let now_ms = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis() as i64;
     let mut item = source;
-    item.id = format!("{content_hash}-{unique}");
+    item.id = format!("{proposed_hash}-{unique}");
     item.title = new_title.to_owned();
     item.text_content = Some(new_text_content.to_owned());
     item.html_content = None;
     item.rtf_content = None;
-    item.content_hash = content_hash;
+    item.content_hash = proposed_hash;
     item.size_bytes = new_text_content.len() as u64;
     item.created_at_ms = now_ms;
     item.last_used_at_ms = Some(now_ms);
     item.is_favorite = false;
     item.metadata_json = Some(metadata_json);
-    database.save_item(&item).map_err(|e| e.to_string())?;
-    Ok(item)
+    save(item)
+}
+
+fn persist_save_as_new_record(
+    database: &Database,
+    item: ClipboardItem,
+) -> Result<ClipboardItem, String> {
+    database.save_item_as_new(item).map_err(|e| e.to_string())
 }

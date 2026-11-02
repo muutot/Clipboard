@@ -172,6 +172,80 @@ fn save_as_new_uses_real_hash_for_fresh_content() {
 }
 
 #[test]
+fn save_as_new_rolls_back_partial_tags_and_outboxes_before_retry() {
+    let database = Database::open_in_memory().unwrap();
+    database.initialize_sync().unwrap();
+    let mut source = item("source", "original title");
+    source.text_content = Some("original fixture".into());
+    source.metadata_json = Some(serde_json::json!({"tags": ["first", "reject"]}).to_string());
+    database.save_item(&source).unwrap();
+    let original = database.get_item("source").unwrap().unwrap();
+    let tags_before = database.list_all_tags().unwrap();
+    let counts = || {
+        database
+            .with_connection(|connection| {
+                Ok((
+                    connection.query_row("SELECT COUNT(*) FROM clipboard_items", [], |row| {
+                        row.get::<_, i64>(0)
+                    })?,
+                    connection.query_row("SELECT COUNT(*) FROM item_tags", [], |row| {
+                        row.get::<_, i64>(0)
+                    })?,
+                    connection.query_row("SELECT COUNT(*) FROM search_outbox", [], |row| {
+                        row.get::<_, i64>(0)
+                    })?,
+                    connection.query_row("SELECT COUNT(*) FROM sync_outbox", [], |row| {
+                        row.get::<_, i64>(0)
+                    })?,
+                ))
+            })
+            .unwrap()
+    };
+    let before = counts();
+    database
+        .with_connection(|connection| {
+            connection.execute_batch(
+                "CREATE TRIGGER reject_new_item_tag BEFORE INSERT ON item_tags
+             WHEN NEW.item_id != 'source' AND NEW.tag = 'reject'
+             BEGIN SELECT RAISE(FAIL, 'fixture rejects second tag'); END;",
+            )?;
+            Ok(())
+        })
+        .unwrap();
+    let failed =
+        save_clipboard_item_as_new_record(&database, "source", "edited title", "edited fixture");
+    assert!(
+        failed
+            .as_ref()
+            .is_err_and(|error| error.contains("fixture rejects second tag")),
+        "{failed:?}"
+    );
+    assert_eq!(
+        counts(),
+        before,
+        "partial new row/tags/outboxes were committed"
+    );
+    assert_eq!(database.get_item("source").unwrap(), Some(original));
+    assert_eq!(database.list_all_tags().unwrap(), tags_before);
+    database
+        .with_connection(|connection| {
+            connection.execute_batch("DROP TRIGGER reject_new_item_tag")?;
+            Ok(())
+        })
+        .unwrap();
+    let retry =
+        save_clipboard_item_as_new_record(&database, "source", "edited title", "edited fixture")
+            .unwrap();
+    assert_eq!(database.get_item(&retry.id).unwrap(), Some(retry));
+    assert_eq!(counts().0, before.0 + 1);
+    assert!(database
+        .list_all_tags()
+        .unwrap()
+        .iter()
+        .all(|tag| tag.count == 2));
+}
+
+#[test]
 fn save_as_new_rejects_empty_text_and_media_kinds() {
     let database = Database::open_in_memory().unwrap();
     let mut source = item("src", "title");
