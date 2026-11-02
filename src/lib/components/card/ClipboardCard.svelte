@@ -897,17 +897,17 @@
 
   .clip-card:hover,
   .clip-card:focus-within {
-    border-color: rgba(255, 255, 255, 0.035);
+    border-color: color-mix(in srgb, var(--text-primary) 3.5%, transparent);
     background: var(--hover-bg);
   }
 
   .clip-card.selected:not(.checked) {
-    border-color: rgba(255, 255, 255, 0.035);
+    border-color: color-mix(in srgb, var(--text-primary) 3.5%, transparent);
     background: var(--hover-bg);
   }
 
   .clip-card.selected.checked {
-    border-color: rgba(255, 255, 255, 0.035);
+    border-color: color-mix(in srgb, var(--text-primary) 3.5%, transparent);
     background: color-mix(in srgb, var(--selection-color) 18%, var(--hover-bg));
   }
 

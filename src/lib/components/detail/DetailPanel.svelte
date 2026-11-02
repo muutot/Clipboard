@@ -773,8 +773,8 @@
     position: fixed;
     z-index: 51;
     inset: 0;
-    background: rgba(0, 0, 0, 0.45);
-    backdrop-filter: blur(3px);
+    background: rgba(0, 0, 0, 0.52);
+    backdrop-filter: blur(2px);
   }
 
   .detail-panel {
