@@ -315,6 +315,16 @@ fn copy_and_hash(
 
 static TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
+/// Copies source bytes into independently writable staging without inheriting
+/// source permissions, then flushes and atomically publishes the complete body.
+pub(crate) fn copy_file_atomically(source: &Path, target: &Path) -> Result<(), StorageError> {
+    store_atomically(target, |temporary| {
+        let mut source = fs::File::open(source)?;
+        let mut staged = fs::OpenOptions::new().write(true).open(temporary)?;
+        std::io::copy(&mut source, &mut staged).map(|_| ())
+    })
+}
+
 /// Exclusively reserves a sibling temporary file before population and atomic
 /// replacement. The callback writes an already-created, empty file. A collision
 /// is rejected before population or cleanup can alter the preexisting entry.

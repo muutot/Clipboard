@@ -63,6 +63,45 @@ fn replacing_an_icon_with_itself_or_a_hard_link_preserves_the_image() {
 }
 
 #[test]
+fn replacing_an_icon_from_a_read_only_source_keeps_source_permissions() {
+    let directory =
+        std::env::temp_dir().join(format!("clipboard-icon-read-only-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir(&directory).unwrap();
+    let source = directory.join("source.png");
+    std::fs::write(&source, TINY_PNG).unwrap();
+    let original_permissions = std::fs::metadata(&source).unwrap().permissions();
+    let mut read_only = original_permissions.clone();
+    read_only.set_readonly(true);
+    std::fs::set_permissions(&source, read_only).unwrap();
+    let result = replace_icon_file_at(&directory, "target.png", &source);
+    let retained_read_only = std::fs::metadata(&source).unwrap().permissions().readonly();
+    let target = std::fs::read(directory.join("target.png"));
+    let leftovers: Vec<_> = std::fs::read_dir(&directory)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| {
+            path.file_name()
+                .unwrap()
+                .to_string_lossy()
+                .contains(".tmp-")
+        })
+        .collect();
+    // Restore the synthetic fixture's attributes even on the pre-fix failure.
+    for path in &leftovers {
+        std::fs::set_permissions(path, original_permissions.clone()).unwrap();
+    }
+    std::fs::set_permissions(&source, original_permissions).unwrap();
+    std::fs::remove_dir_all(&directory).unwrap();
+    assert!(
+        result.is_ok(),
+        "read-only image replacement failed: {result:?}"
+    );
+    assert!(retained_read_only);
+    assert_eq!(target.unwrap(), TINY_PNG);
+    assert!(leftovers.is_empty());
+}
+
+#[test]
 fn failed_icon_replacement_preserves_the_destination_and_removes_staging() {
     let directory = std::env::temp_dir().join(format!(
         "clipboard-icon-failed-replace-{}",

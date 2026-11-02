@@ -94,14 +94,8 @@ pub(super) fn save_clipboard_item_file_blocking(
     }
     // Stage before replacing: a distinct path can still hard-link the source,
     // and an interrupted copy must not truncate an existing destination.
-    crate::content::file_store::store_atomically(destination, |temporary| {
-        let mut source = std::fs::File::open(&source_path)?;
-        let mut staged = std::fs::OpenOptions::new().write(true).open(temporary)?;
-        // Copy bytes without inheriting read-only source permissions, which
-        // would prevent the staged file from being flushed before publication.
-        std::io::copy(&mut source, &mut staged).map(|_| ())
-    })
-    .map_err(|error| format!("failed to save file: {error}"))?;
+    crate::content::file_store::copy_file_atomically(&source_path, destination)
+        .map_err(|error| format!("failed to save file: {error}"))?;
     Ok(())
 }
 

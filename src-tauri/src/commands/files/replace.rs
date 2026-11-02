@@ -44,10 +44,8 @@ pub(super) fn replace_icon_file_at(
     // A cached icon can be selected as its own replacement (including via a
     // hard link). Stage before replacement so we never copy onto the source
     // inode or truncate the previous icon if copying fails partway through.
-    crate::content::file_store::store_atomically(&target, |temporary| {
-        std::fs::copy(source, temporary).map(|_| ())
-    })
-    .map_err(|e| format!("failed to replace icon: {e}"))?;
+    crate::content::file_store::copy_file_atomically(source, &target)
+        .map_err(|e| format!("failed to replace icon: {e}"))?;
     Ok(())
 }
 

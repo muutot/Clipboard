@@ -646,7 +646,7 @@ configuration-time empty-root claims use this helper. Marker v1 bytes and IPC
 remain unchanged. Real hard-link and conflicting-directory UTs cover alias
 preservation, failed publication and staging cleanup.
 
-`commands/files/replace.rs::replace_icon_file_at` validates the picked image and target name/symlink, then copies into a temporary sibling and uses `content/file_store.rs::store_atomically` to flush and replace it. Selecting the cached target itself or a hard-link alias succeeds without copying onto the source inode; a failed replacement preserves the existing destination and removes staging. The Tauri command and frontend arguments are unchanged. Windows UTs exercise self/alias replacement and a conflicting destination directory; matching Unix CI remains necessary.
+`commands/files/replace.rs::replace_icon_file_at` validates the picked image and target name/symlink, then uses `content/file_store.rs::copy_file_atomically` to stream bytes into a writable temporary sibling, flush and replace it. Source permissions are retained on the source without propagating read-only attributes to staging. Selecting the cached target itself or a hard-link alias succeeds without copying onto the source inode; a failed replacement preserves the existing destination and removes staging. Save-as and Linux icon caching use the same byte-copy helper. The Tauri command and frontend arguments are unchanged. Windows UTs exercise read-only sources, self/alias replacement and a conflicting destination directory; matching Unix CI remains necessary.
 
 `FileStore::save_file` verifies an existing body against the immutable staged source before reusing it; `save_screenshot` and `save_bytes_atomically` compare with the supplied bytes. Equal length is only a fast rejection check, never proof of identity. Reads use bounded buffers and stop at the expected stream's end, so growing existing files cannot force unbounded comparison. Missing/changed bodies are atomically replaced, identical cache hits retain their mtime, and comparison failures propagate while removing staging. UTs cover same-length corruption and byte differences across buffer boundaries. Reclamation/publication guards are still the caller's responsibility.
 
@@ -668,7 +668,7 @@ atomic publication. File size limits bound reads, not the helper's temporary dis
 writes before its deadline. Portable fixture tests cover orchestration/cleanup;
 native macOS tools and process-group behavior still require macOS CI/runtime.
 
-Linux icon caching also stages source copies with `store_atomically`; failed
+Linux icon caching also stages source bytes with `copy_file_atomically`; failed
 copies cannot leave a partial final cache file for later lookups to reuse.
 Existing icon-lookup fixtures and shared partial-write regressions cover this path's
 portable contracts. Native theme lookup remains a Linux runtime check.
