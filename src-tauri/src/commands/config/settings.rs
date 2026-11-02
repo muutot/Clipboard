@@ -520,17 +520,9 @@ pub fn set_history_config(
     retention_days: Option<u32>,
     recycle_bin_days: Option<u32>,
 ) -> Result<(), String> {
-    let mut config = lock_state(&config, "configuration lock is poisoned")?;
-    if let Some(v) = max_items {
-        config.set_max_items(v).map_err(|e| e.to_string())?;
-    }
-    if let Some(v) = retention_days {
-        config.set_retention_days(v).map_err(|e| e.to_string())?;
-    }
-    if let Some(v) = recycle_bin_days {
-        config.set_recycle_bin_days(v).map_err(|e| e.to_string())?;
-    }
-    Ok(())
+    lock_state(&config, "configuration lock is poisoned")?
+        .set_history_config(max_items, retention_days, recycle_bin_days)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]

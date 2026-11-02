@@ -1122,6 +1122,188 @@ fn history_limits_clamp_out_of_range_values() {
 }
 
 #[test]
+fn history_config_readers_never_observe_a_partially_saved_request() {
+    use std::sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Barrier,
+    };
+
+    let project = temporary_test_directory("history-atomic-reader");
+    let mut store = ConfigStore::load(&project).unwrap();
+    let original = (
+        store.max_items(),
+        store.retention_days(),
+        store.recycle_bin_days(),
+    );
+    let updated = (42000, 240, 120);
+    let path = store.path().to_path_buf();
+    let finished = Arc::new(AtomicBool::new(false));
+    let barrier = Arc::new(Barrier::new(2));
+    let reader_finished = finished.clone();
+    let reader_barrier = barrier.clone();
+    let reader = std::thread::spawn(move || {
+        let mut partial = None;
+        let mut samples = 0;
+        while !reader_finished.load(Ordering::Acquire) {
+            // The scheduled cleanup loader also reads without the write lock.
+            // Read actual atomically published bytes, never a mock save count.
+            let Ok(bytes) = fs::read(&path) else {
+                continue;
+            };
+            let value: Value = serde_json::from_slice(&bytes).unwrap();
+            let history = &value["history"];
+            let policy = (
+                history["maxItems"].as_u64().unwrap() as u32,
+                history["retentionDays"].as_u64().unwrap() as u32,
+                history["recycleBinDays"].as_u64().unwrap() as u32,
+            );
+            samples += 1;
+            if samples == 1 {
+                // Establish a real sample before releasing the writer, even
+                // when the machine schedules one thread for a long time.
+                reader_barrier.wait();
+            }
+            if policy != original && policy != updated {
+                partial = Some(policy);
+            }
+        }
+        (samples, partial)
+    });
+    barrier.wait();
+    let mut rejected_policy = None;
+    for i in 0..32 {
+        let previous = (
+            store.max_items(),
+            store.retention_days(),
+            store.recycle_bin_days(),
+        );
+        let (max_items, retention, recycle) = if i % 2 == 0 { updated } else { original };
+        // Native file readers can make a replacement fail on Windows. This
+        // must retain the complete previous request, not its first field.
+        if store
+            .set_history_config(Some(max_items), Some(retention), Some(recycle))
+            .is_err()
+        {
+            rejected_policy = Some((
+                (
+                    store.max_items(),
+                    store.retention_days(),
+                    store.recycle_bin_days(),
+                ),
+                previous,
+            ));
+            break;
+        }
+    }
+    finished.store(true, Ordering::Release);
+    let (samples, partial) = reader.join().unwrap();
+    let saved = ConfigStore::load_existing(&project).unwrap();
+    let saved_policy = (
+        saved.max_items(),
+        saved.retention_days(),
+        saved.recycle_bin_days(),
+    );
+    let local_policy = (
+        store.max_items(),
+        store.retention_days(),
+        store.recycle_bin_days(),
+    );
+    fs::remove_dir_all(project).unwrap();
+    assert!(
+        samples > 0,
+        "the concurrent reader must actually inspect saved policies"
+    );
+    assert_eq!(
+        partial, None,
+        "a cleanup reader must see only complete old/new policies"
+    );
+    assert_eq!(
+        saved_policy, local_policy,
+        "disk and memory retain the same policy"
+    );
+    if let Some((policy, previous)) = rejected_policy {
+        assert_eq!(
+            policy, previous,
+            "failed request must retain its entire previous policy"
+        );
+    }
+}
+
+#[test]
+fn history_config_preserves_optional_fields_and_clamps_one_request() {
+    let project = temporary_test_directory("history-request-contract");
+    let mut store = ConfigStore::load(&project).unwrap();
+    let original_recycle = store.recycle_bin_days();
+    store
+        .set_history_config(Some(0), Some(u32::MAX), None)
+        .unwrap();
+    let saved = ConfigStore::load_existing(&project).unwrap();
+    assert_eq!(
+        (
+            saved.max_items(),
+            saved.retention_days(),
+            saved.recycle_bin_days()
+        ),
+        (100, 365, original_recycle)
+    );
+    store
+        .set_history_config(Some(u32::MAX), Some(0), Some(u32::MAX))
+        .unwrap();
+    let saved = ConfigStore::load_existing(&project).unwrap();
+    assert_eq!(
+        (
+            saved.max_items(),
+            saved.retention_days(),
+            saved.recycle_bin_days()
+        ),
+        (1_000_000, 1, 365)
+    );
+    let bytes = fs::read(store.path()).unwrap();
+    store.set_history_config(None, None, None).unwrap();
+    assert_eq!(fs::read(store.path()).unwrap(), bytes);
+    fs::remove_dir_all(project).unwrap();
+}
+
+#[test]
+fn history_config_failed_save_preserves_all_fields_and_allows_retry() {
+    let project = temporary_test_directory("history-request-rollback");
+    let mut store = ConfigStore::load(&project).unwrap();
+    let original = (
+        store.max_items(),
+        store.retention_days(),
+        store.recycle_bin_days(),
+    );
+    let bytes = fs::read(store.path()).unwrap();
+    fs::rename(project.join("conf"), project.join("saved-conf")).unwrap();
+    assert!(store
+        .set_history_config(Some(42000), Some(240), Some(120))
+        .is_err());
+    assert_eq!(
+        (
+            store.max_items(),
+            store.retention_days(),
+            store.recycle_bin_days()
+        ),
+        original
+    );
+    fs::rename(project.join("saved-conf"), project.join("conf")).unwrap();
+    assert_eq!(fs::read(store.path()).unwrap(), bytes);
+    store
+        .set_history_config(Some(42000), Some(240), Some(120))
+        .unwrap();
+    let saved = ConfigStore::load_existing(&project).unwrap();
+    assert_eq!(
+        (
+            saved.max_items(),
+            saved.retention_days(),
+            saved.recycle_bin_days()
+        ),
+        (42000, 240, 120)
+    );
+    fs::remove_dir_all(project).unwrap();
+}
+
+#[test]
 fn loaded_out_of_range_limits_are_clamped_before_use() {
     let project = temporary_test_directory("loaded-limit-clamp");
     fs::create_dir_all(project.join("conf")).unwrap();

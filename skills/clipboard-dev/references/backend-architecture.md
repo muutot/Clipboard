@@ -754,6 +754,13 @@ stage may be removed on failure; replacement failures retain saved bytes and
 setter state. Real-file UTs cover initial creation, later saves, external hard-link
 aliases and Windows sharing failures with retry.
 
+History policy requests use `ConfigStore::set_history_config` for one
+`mutate_and_save`/revision check/replacement across all supplied fields. A failed
+request rolls back the complete policy; omitted fields and all-omitted no-ops
+retain their contracts. Independent cleanup readers cannot observe intermediate
+capacity/retention/recycle settings. Concurrent actual-file UTs verify complete
+old/new snapshots, with optional-field/clamp and write-failure/retry controls.
+
 Privacy pause, ignored applications, and sensitive-source checks happen before persistence, file writes, OCR, or index work. Cleanup reads current config periodically, protects favorites, respects recycle-bin policy, removes database rows through repository rules, and removes only positively owned orphan resources. The retention inputs are snapshotted into a `CleanupPolicy` value (`retention_days`, `max_items`, `recycle_bin_days`) before any work starts: the cleanup walks every resource root and canonicalizes every referenced path, so holding `Mutex<ConfigStore>` across it would stall every other config-reading command and the auto-sync worker's per-tick read. `enforce_history_cleanup_with_policy` therefore takes no `ConfigStore` at all. The scheduled worker uses `ConfigStore::load_existing` per tick: missing, invalid or unreadable config logs a failure and skips the run without creating, quarantining or replacing anything. Only startup uses the recovering loader. This prevents a failed policy read from changing a user's retention/capacity to defaults and deleting records. A later valid policy is applied on the next tick; real-worker UTs cover both invalid/missing policies and resumption.
 
 ## Platform adapters

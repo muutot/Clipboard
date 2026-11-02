@@ -555,6 +555,30 @@ impl ConfigStore {
         })
     }
 
+    /// Save one optional history-policy request as a single replacement. Readers
+    /// must never observe mixed policies, and a failure rolls back every field.
+    pub fn set_history_config(
+        &mut self,
+        max_items: Option<u32>,
+        retention_days: Option<u32>,
+        recycle_bin_days: Option<u32>,
+    ) -> Result<(), StorageError> {
+        if max_items.is_none() && retention_days.is_none() && recycle_bin_days.is_none() {
+            return Ok(());
+        }
+        self.mutate_and_save(|config| {
+            if let Some(value) = max_items {
+                config.history.max_items = value.clamp(100, 1_000_000);
+            }
+            if let Some(value) = retention_days {
+                config.history.retention_days = value.clamp(1, 365);
+            }
+            if let Some(value) = recycle_bin_days {
+                config.history.recycle_bin_days = value.clamp(0, 365);
+            }
+        })
+    }
+
     pub fn set_max_items(&mut self, value: u32) -> Result<(), StorageError> {
         self.mutate_and_save(|config| {
             config.history.max_items = value.clamp(100, 1_000_000);

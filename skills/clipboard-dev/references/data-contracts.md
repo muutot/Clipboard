@@ -269,6 +269,16 @@ re-reads `get_source_mapping_rules` instead of applying an event or save-respons
 snapshot. Root-layout initialization subscribes before hydration and teardown
 discards pending reads/releases listeners, including late registrations.
 
+### History settings
+
+The separate `set_history_config(maxItems?, retentionDays?, recycleBinDays?)`
+command forwards one request to `ConfigStore::set_history_config`. Supplied fields
+are clamped and persisted together through one revision check and atomic file
+replacement; failures restore all previous in-memory fields. Omitted fields remain
+unchanged, and an all-omitted request remains a no-op. Read-only cleanup loaders
+can see the complete old or new policy, never a partly saved request. JSON/IPC
+names, defaults and ranges are unchanged.
+
 ### General settings
 
 `customCssEnabled: boolean` and `customCss: string` default to false/empty and are typed
