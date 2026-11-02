@@ -218,12 +218,18 @@ impl KeyboardConfigStore {
                 "keyboard config has no parent directory",
             ))
         })?;
-        let temporary_path = directory.join(".keyboard.json.tmp");
+        let temporary_path =
+            directory.join(format!(".clipboard-keyboard.tmp-{}", uuid::Uuid::new_v4()));
         let contents = serde_json::to_vec_pretty(&self.config)?;
         let revision = Sha256::digest(&contents).into();
+        // Own staging before writes/cleanup; a fixed path could follow an
+        // unrelated file's preexisting link even while our OS lock is held.
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temporary_path)?;
 
         let result = (|| -> Result<(), StorageError> {
-            let mut file = fs::File::create(&temporary_path)?;
             file.write_all(&contents)?;
             file.sync_all()?;
             drop(file);
@@ -411,6 +417,43 @@ mod tests {
 
     use super::KeyboardConfigStore;
     use crate::storage::StorageError;
+
+    #[test]
+    fn keyboard_writes_preserve_preexisting_staging_and_its_external_alias() {
+        for initial_creation in [true, false] {
+            let project = temporary_directory("staging-alias");
+            fs::create_dir_all(project.join("conf")).unwrap();
+            let mut store =
+                (!initial_creation).then(|| KeyboardConfigStore::load(&project).unwrap());
+            let unrelated = project.join("unrelated.txt");
+            let staging = project.join("conf/.keyboard.json.tmp");
+            fs::write(&unrelated, b"unrelated existing content").unwrap();
+            fs::hard_link(&unrelated, &staging).unwrap();
+            if let Some(store) = store.as_mut() {
+                store.delete_action("toggleWindow").unwrap();
+            } else {
+                KeyboardConfigStore::load(&project).unwrap();
+            }
+            let original = fs::read(&unrelated).unwrap();
+            let staged = fs::read(&staging);
+            let loaded = KeyboardConfigStore::load(&project).unwrap();
+            assert_eq!(
+                loaded.config().shortcuts["toggleWindow"].is_empty(),
+                !initial_creation
+            );
+            let entries = fs::read_dir(project.join("conf")).unwrap().count();
+            fs::remove_dir_all(project).unwrap();
+            assert!(
+                original == b"unrelated existing content",
+                "keyboard write overwrote the external alias"
+            );
+            assert_eq!(staged.unwrap(), b"unrelated existing content");
+            assert_eq!(
+                entries, 3,
+                "no owned staging should survive a successful write"
+            );
+        }
+    }
 
     #[test]
     fn concurrent_keyboard_saves_from_one_revision_have_one_winner() {

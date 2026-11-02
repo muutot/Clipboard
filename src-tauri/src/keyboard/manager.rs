@@ -71,6 +71,43 @@ mod tests {
     use crate::keyboard::Modifier;
     use crate::storage::StorageError;
 
+    #[cfg(windows)]
+    #[test]
+    fn replacement_failure_keeps_disk_and_matcher_and_cleans_owned_staging() {
+        use std::os::windows::fs::OpenOptionsExt;
+        let project = temporary_directory();
+        let mut manager = KeyboardManager::load(&project).unwrap();
+        let before = manager.config();
+        let original = fs::read(manager.path()).unwrap();
+        let unrelated = project.join("conf/.keyboard.json.tmp");
+        fs::write(&unrelated, b"unrelated existing content").unwrap();
+        let held = fs::OpenOptions::new()
+            .read(true)
+            .share_mode(1)
+            .open(manager.path())
+            .unwrap();
+        let result = manager.delete_action("toggleWindow".into());
+        let saved = fs::read(manager.path()).unwrap();
+        let retained = fs::read(&unrelated).unwrap();
+        let entries = fs::read_dir(project.join("conf")).unwrap().count();
+        drop(held);
+        assert_eq!(manager.config().shortcuts, before.shortcuts);
+        assert_eq!(manager.match_chord([Modifier::Alt], "C"), &["toggleWindow"]);
+        manager.delete_action("toggleWindow".into()).unwrap();
+        assert!(KeyboardManager::load(&project)
+            .unwrap()
+            .match_chord([Modifier::Alt], "C")
+            .is_empty());
+        fs::remove_dir_all(project).unwrap();
+        assert!(result.is_err());
+        assert!(
+            saved == original,
+            "failed replacement changed keyboard configuration"
+        );
+        assert_eq!(retained, b"unrelated existing content");
+        assert_eq!(entries, 3, "failed replacement left owned staging behind");
+    }
+
     #[test]
     fn stale_keyboard_instance_cannot_restore_a_disabled_global_shortcut() {
         let project = temporary_directory();

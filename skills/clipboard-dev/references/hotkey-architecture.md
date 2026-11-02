@@ -134,9 +134,14 @@ Window-only (main window focused):
   rejects a stale instance before replacing the file. Save/delete/reset retain
   their config and matcher rollback and request a restart before retrying.
   Rejected saves do not adopt another instance's runtime bindings. The lock also
-  serializes the fixed temporary file across participating Clipboard processes;
-  external editors that bypass it remain outside the protocol. UTs use real
-  independent stores/managers, concurrent creation and one-winner saves.
+  serializes participating Clipboard processes. Each write exclusively creates
+  a short UUID temporary sibling before writing and flushing it; a preexisting
+  `.keyboard.json.tmp` entry or its external hard-link alias stays untouched.
+  Creation failure authorizes no cleanup, and replacement failure removes only
+  owned staging while preserving disk/config/matcher state. External editors
+  that bypass the lock remain outside the revision protocol. UTs use real
+  independent stores/managers, concurrent creation, one-winner saves and Windows
+  sharing failures with retry.
 
 - One shared message loop for all global actions; `stop()` before every
   rebuild tears down the previous message window so re-registration never
