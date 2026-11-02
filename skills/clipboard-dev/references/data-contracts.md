@@ -376,6 +376,8 @@ Namespace rotation uses the Sync background-operation slot. Its registered child
 token governs transport, engine and explicit cancellation checks; the privacy
 parent is not a substitute for task cancellation. `run_rotation_operation` finishes
 the slot with the rotation result, preserving success/cancelled/failed status.
+Its strong privacy registration stays alive through the run and finish because
+the policy registry holds only a weak Arc; the task child is not its lifetime owner.
 
 Long operations use polling rather than payload-bearing events:
 `get_background_operation(kind)` returns null or

@@ -1003,12 +1003,18 @@ pub async fn rotate_sync_namespace(
 }
 
 fn run_rotation_operation<T>(
-    operation: crate::background_operations::Operation,
+    registration: (
+        crate::background_operations::Operation,
+        Arc<clipboard_sync::cancellation::CancellationToken>,
+    ),
     work: impl FnOnce(
         &clipboard_sync::cancellation::CancellationToken,
         &crate::background_operations::Operation,
     ) -> Result<T, String>,
 ) -> Result<T, String> {
+    // SyncCancellation stores only a Weak registration. Keep its strong owner
+    // alive while the operation's child token runs and finishes.
+    let (operation, _privacy_registration) = registration;
     let outcome = operation
         .token()
         .run(|| work(operation.token(), &operation));
@@ -1048,8 +1054,10 @@ fn run_namespace_rotation(app: &tauri::AppHandle, new_password: String) -> Resul
         let token = app
             .state::<SyncCancellation>()
             .register(guard.privacy_local_only(), &cancellation)?;
-        app.state::<BackgroundOperations>()
-            .start(OperationKind::Sync, &token)?
+        let operation = app
+            .state::<BackgroundOperations>()
+            .start(OperationKind::Sync, &token)?;
+        (operation, token)
     };
     let mut config_committed = false;
     let outcome = run_rotation_operation(operation, |token, operation| {
@@ -2507,29 +2515,30 @@ mod tests {
             assert!(registry.cancel(OperationKind::Sync, &id));
         }
         let mut committed = false;
-        let result = run_rotation_operation(operation, |token, operation| {
-            perform_namespace_rotation(
-                &old_store,
-                &new_store,
-                &database,
-                &paths,
-                &settings,
-                &new_settings,
-                None,
-                token,
-                &mut || {
-                    committed = true;
-                    Ok(())
-                },
-                &mut |_| {
-                    let _ = operation.progress(
-                        crate::background_operations::OperationPhase::Preparing,
-                        0,
-                        None,
-                    );
-                },
-            )
-        });
+        let result =
+            run_rotation_operation((operation, Arc::new(root.clone())), |token, operation| {
+                perform_namespace_rotation(
+                    &old_store,
+                    &new_store,
+                    &database,
+                    &paths,
+                    &settings,
+                    &new_settings,
+                    None,
+                    token,
+                    &mut || {
+                        committed = true;
+                        Ok(())
+                    },
+                    &mut |_| {
+                        let _ = operation.progress(
+                            crate::background_operations::OperationPhase::Preparing,
+                            0,
+                            None,
+                        );
+                    },
+                )
+            });
         let status = registry.snapshot(OperationKind::Sync).unwrap().status;
         let writes = new_store.puts.load(Ordering::Relaxed);
         drop(database);
@@ -2555,6 +2564,25 @@ mod tests {
     #[test]
     fn registered_rotation_reports_successful_completion() {
         registered_rotation_scenario(false);
+    }
+
+    #[test]
+    fn registered_rotation_retains_privacy_cancellation_registration() {
+        use crate::background_operations::{BackgroundOperations, OperationKind, OperationStatus};
+        let policy = SyncCancellation::default();
+        let registry = BackgroundOperations::default();
+        let registered = policy.register(false, &policy.0).unwrap();
+        let operation = registry.start(OperationKind::Sync, &registered).unwrap();
+        let result = run_rotation_operation((operation, registered), |token, _operation| {
+            policy.cancel_active();
+            token.check()
+        });
+        assert_eq!(result.unwrap_err(), clipboard_sync::cancellation::CANCELLED);
+        assert_eq!(
+            registry.snapshot(OperationKind::Sync).unwrap().status,
+            OperationStatus::Cancelled
+        );
+        assert!(!policy.0.is_cancelled());
     }
 
     /// A local configuration commit that keeps failing after the tombstone is

@@ -260,6 +260,11 @@ rotation checks. Cancelling one task must not cancel its privacy parent or be lo
 by running on that parent. Finish the operation with its result so success is
 reported as `Succeeded`; dropping an unfinished guard records failure/cancellation.
 
+Keep the privacy registration's strong `Arc<CancellationToken>` beside the
+operation through completion. `SyncCancellation` retains only a weak reference;
+the operation child token does not own that Arc, so dropping it before work makes
+later local-only toggles unable to cancel the registered rotation.
+
 Sync interruption recovery uses
 `SyncRepository::sync_outbox_range_matches_mutations(remote_scope, after, through, mutations)`.
 The SQLite adapter reads pending IDs and their current mutations in one WAL snapshot,
