@@ -139,8 +139,16 @@ console.log(`\n  Backup of '${branch}' saved at ${backupRef} (old tip ${tip.slic
 console.log(
   `  Dropping ${short} via rebase --committer-date-is-author-date (preserving timestamps)...`,
 );
+// If --branch pointed elsewhere, attach it first. No <branch> operand on the
+// rebase itself: git rebase treats a branch argument as a commit-ish (under a
+// tag/branch name clash it resolves to the TAG), rebases a detached HEAD and
+// never moves the branch ref — the drop would be silently lost. With HEAD
+// attached, a bare rebase updates the branch ref natively.
+if (branchArg && branch !== gitOut("branch --show-current")) {
+  git(`checkout -q ${branch}`);
+}
 try {
-  git(`rebase --committer-date-is-author-date --onto ${parent} ${commit} ${branch}`);
+  git(`rebase --committer-date-is-author-date --onto ${parent} ${commit}`);
 } catch {
   try {
     git("rebase --abort");
@@ -155,6 +163,18 @@ try {
   exit(1);
 }
 
-const newTip = gitOut(`rev-parse ${branch}`);
+// Guard against silent no-ops: the dropped commit must no longer be an
+// ancestor of HEAD.
+if (gitOk(`merge-base --is-ancestor ${commit} HEAD`)) {
+  git(`update-ref refs/heads/${branch} ${tip}`);
+  console.error(
+    `\n  ERROR: rebase reported success but ${short} is still reachable from HEAD;` +
+      `'${branch}' restored to its previous tip.`,
+  );
+  console.error(`  Restore if needed: git update-ref refs/heads/${branch} ${backupRef}`);
+  exit(1);
+}
+
+const newTip = gitOut(`rev-parse refs/heads/${branch}`);
 console.log(`\n✓ Dropped ${short}: '${branch}' ${tip.slice(0, 12)} → ${newTip.slice(0, 12)}`);
 console.log(`  Restore if needed: git update-ref refs/heads/${branch} ${backupRef}`);

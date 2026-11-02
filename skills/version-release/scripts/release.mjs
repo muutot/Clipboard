@@ -132,6 +132,16 @@ if (isRegenerate) {
             );
             exit(1);
           }
+          // The bare rebase below rewrites whatever HEAD is attached to; make
+          // sure that is actually the release branch.
+          const headRef = gitOutput(`git symbolic-ref -q HEAD`);
+          if (headRef !== BRANCH_REF) {
+            console.error(
+              `  ERROR: HEAD is not attached to '${BRANCH}' (found '${headRef || "detached HEAD"}').` +
+                ` Check out the branch before regenerating.`,
+            );
+            exit(1);
+          }
 
           const tip = gitOutput(`git rev-parse ${BRANCH_REF}`);
           const backupRef = `refs/backup/pre-release-delete-${shortSha}`;
@@ -164,13 +174,17 @@ if (isRegenerate) {
 
           // Standard single-commit removal: replay everything after the old release
           // commit onto its parent. --committer-date-is-author-date keeps every
-          // surviving commit's original timestamp.
+          // surviving commit's original timestamp. No <branch> operand: git rebase
+          // treats a branch argument as a commit-ish, rebases a detached HEAD and
+          // never moves the branch ref (exit 0) — the drop would be silently lost.
+          // HEAD is attached to BRANCH here (it is derived from HEAD), so a bare
+          // rebase updates the branch ref natively.
           console.log(
             `  Dropping commit ${shortSha} via rebase --committer-date-is-author-date (preserving timestamps)...`,
           );
           try {
             execSync(
-              `git rebase --committer-date-is-author-date --onto ${parentSha} ${tagCommit} ${BRANCH_REF}`,
+              `git rebase --committer-date-is-author-date --onto ${parentSha} ${tagCommit}`,
               { cwd: ROOT, encoding: "utf-8", stdio: "inherit", shell: true },
             );
           } catch {
@@ -196,14 +210,17 @@ if (isRegenerate) {
             exit(1);
           }
 
+          // Guard against silent no-ops: the dropped commit must no longer be an
+          // ancestor of HEAD, and the branch must carry the rewritten tip.
+          if (isAncestorOfHead(tagCommit)) {
+            console.error(
+              `\n  ERROR: rebase reported success but ${shortSha} is still reachable from HEAD;` +
+                `'${BRANCH}' left unchanged. Restore if needed: git update-ref ${BRANCH_REF} ${backupRef}`,
+            );
+            exit(1);
+          }
+
           const newTip = gitOutput(`git rev-parse ${BRANCH_REF}`);
-          // `git rebase --onto <parent> <commit> <branch>` updated the branch
-          // ref but left HEAD detached: with our release branch and tag sharing
-          // a name (v1.7.2), the branch argument is ambiguous and rebase treats
-          // it as a commit-ish. Reattach so the release commit below lands on
-          // the branch instead of a detached HEAD. The short name is required
-          // here: `git checkout refs/heads/<name>` would detach HEAD instead.
-          gitOutput(`git checkout -q "${BRANCH}"`);
           console.log(
             `  ✓ Dropped ${shortSha}: '${BRANCH}' ${tip.slice(0, 12)} → ${newTip.slice(0, 12)}`,
           );
