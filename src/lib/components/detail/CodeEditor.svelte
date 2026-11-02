@@ -57,6 +57,9 @@
   let contextMenu = $state<{ x: number; y: number } | null>(null);
   let composing = $state(false);
   let lastEditorValue = "";
+  // Only this owned, non-editable node is presentation. U+200B in user text
+  // must survive editing, paste and save just like any other character.
+  let trailingBreak: HTMLSpanElement | null = null;
 
   /** 0-based line the caret sits on — drives the active-line highlight. */
   let caretLine = $state(0);
@@ -164,7 +167,9 @@
     if (readEditorContent(currentEditor) !== nextContent) {
       // Keep the display-only zero-width space in sync so a trailing break
       // renders its line box here too, not just after user edits.
-      currentEditor.textContent = nextContent.endsWith("\n") ? `${nextContent}\u200b` : nextContent;
+      currentEditor.textContent = nextContent;
+      trailingBreak = null;
+      normalizeTrailingBreak(currentEditor);
     }
     lastEditorValue = nextContent;
   });
@@ -196,12 +201,14 @@
   });
 
   function readEditorContent(element: HTMLElement): string {
-    return (
-      (element.textContent ?? "")
-        .replace(/\r\n?/g, "\n")
-        // The display-only zero-width space keeps a trailing break visible.
-        .replace(/\u200b$/, "")
-    );
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    let text = "";
+    while (walker.nextNode()) {
+      if (!trailingBreak?.contains(walker.currentNode)) {
+        text += walker.currentNode.textContent ?? "";
+      }
+    }
+    return text.replace(/\r\n?/g, "\n");
   }
 
   /** `pre-wrap` collapses a forced break at the very end into no line box, so
@@ -209,16 +216,18 @@
    * Mirror the break with a zero-width space (stripped by readEditorContent,
    * never saved) and remove it again once the break is gone. */
   function normalizeTrailingBreak(element: HTMLElement) {
-    const text = element.textContent ?? "";
-    if (/\n$/.test(text.replace(/\u200b$/, ""))) {
-      if (!text.endsWith("\u200b")) {
-        element.appendChild(document.createTextNode("\u200b"));
+    if (trailingBreak && !element.contains(trailingBreak)) trailingBreak = null;
+    if (readEditorContent(element).endsWith("\n")) {
+      if (!trailingBreak) {
+        trailingBreak = document.createElement("span");
+        trailingBreak.setAttribute("contenteditable", "false");
+        trailingBreak.setAttribute("aria-hidden", "true");
+        trailingBreak.textContent = "\u200b";
       }
+      if (element.lastChild !== trailingBreak) element.appendChild(trailingBreak);
     } else {
-      const last = element.lastChild;
-      if (last?.nodeType === Node.TEXT_NODE && last.textContent === "\u200b") {
-        last.remove();
-      }
+      trailingBreak?.remove();
+      trailingBreak = null;
     }
   }
 
@@ -273,7 +282,7 @@
     before.setEnd(range.startContainer, range.startOffset);
     const caretOffset = before.toString().length;
 
-    const text = editor.textContent ?? "";
+    const text = readEditorContent(editor);
     const lineEnd = text.indexOf("\n", caretOffset);
     moveCaretToOffset(editor, lineEnd === -1 ? text.length : lineEnd);
     insertTextAtSelection("\n");
@@ -285,6 +294,7 @@
     let node: Text | null = null;
     while (walker.nextNode()) {
       const current = walker.currentNode as Text;
+      if (trailingBreak?.contains(current)) continue;
       if (remaining <= current.data.length) {
         node = current;
         break;
@@ -344,6 +354,7 @@
 
     const range = document.createRange();
     range.selectNodeContents(element);
+    if (trailingBreak && element.contains(trailingBreak)) range.setEndBefore(trailingBreak);
     range.collapse(false);
     selection.removeAllRanges();
     selection.addRange(range);

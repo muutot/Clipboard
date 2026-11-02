@@ -385,6 +385,60 @@ describe("DetailPanel editor trailing break", () => {
     flushSync();
   };
 
+  const paste = (draft: HTMLElement, text: string) => {
+    const event = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "clipboardData", {
+      value: { getData: () => text },
+    });
+    draft.dispatchEvent(event);
+    flushSync();
+  };
+
+  it.each(["alpha\u200b", "alpha\n\u200b", "\u200b"])(
+    "preserves a real trailing zero-width character in %j after editing and saving",
+    async (body) => {
+      const onsaveedit = vi.fn(async () => true);
+      const target = mountPanel(item({ textContent: body }), { onsaveedit });
+      await settle();
+      enterEdit(target);
+      await settle();
+      const draft = target.querySelector<HTMLElement>(".code-input")!;
+      const range = document.createRange();
+      range.setStart(draft.firstChild!, 0);
+      range.collapse(true);
+      range.insertNode(document.createTextNode("edited "));
+      draft.dispatchEvent(new Event("input", { bubbles: true }));
+      flushSync();
+      target.querySelector<HTMLButtonElement>(".edit-save")!.click();
+      await settle();
+      expect(onsaveedit).toHaveBeenCalledWith("record", `edited ${body}`);
+    },
+  );
+
+  it("preserves a pasted trailing zero-width character", async () => {
+    const onsaveedit = vi.fn(async () => true);
+    const target = mountPanel(item({ textContent: "alpha" }), { onsaveedit });
+    await settle();
+    enterEdit(target);
+    await settle();
+    paste(target.querySelector<HTMLElement>(".code-input")!, "beta\u200b");
+    target.querySelector<HTMLButtonElement>(".edit-save")!.click();
+    await settle();
+    expect(onsaveedit).toHaveBeenCalledWith("record", "alphabeta\u200b");
+  });
+
+  it("does not save the display marker when continuing a trailing line", async () => {
+    const onsaveedit = vi.fn(async () => true);
+    const target = mountPanel(item({ textContent: "alpha\n" }), { onsaveedit });
+    await settle();
+    enterEdit(target);
+    await settle();
+    paste(target.querySelector<HTMLElement>(".code-input")!, "next");
+    target.querySelector<HTMLButtonElement>(".edit-save")!.click();
+    await settle();
+    expect(onsaveedit).toHaveBeenCalledWith("record", "alpha\nnext");
+  });
+
   it("keeps a trailing break visible with a display-only zero-width space", async () => {
     const target = mountPanel(item({ textContent: "const a = 1;" }));
     await settle();
