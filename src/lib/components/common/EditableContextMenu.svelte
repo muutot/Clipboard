@@ -11,10 +11,12 @@
     y: number;
     /** The focused editable (`<textarea>`/`<input>`/contenteditable) to act on. */
     target: HTMLElement;
+    /** Optional owner projection that excludes display-only editor nodes. */
+    readSelectedText?: (range: Range) => string;
     onclose: () => void;
   }
 
-  let { x, y, target, onclose }: Props = $props();
+  let { x, y, target, readSelectedText, onclose }: Props = $props();
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);
@@ -73,7 +75,11 @@
       element.contains(candidate.endContainer)
         ? candidate.cloneRange()
         : null;
-    const selectedText = field ? value.slice(start, end) : (range?.toString() ?? "");
+    const selectedText = field
+      ? value.slice(start, end)
+      : range
+        ? (readSelectedText?.(range) ?? range.toString())
+        : "";
 
     function replace(text: string): boolean {
       if (!element.isConnected || !element.contains(document.activeElement)) return false;

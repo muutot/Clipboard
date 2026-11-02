@@ -160,6 +160,13 @@ marker, and continuing a trailing line removes the display node without saving i
 character. The mounted detail tests cover real-character retention, continuation,
 and the existing trailing-line display behavior; native browser composition and
 undo still require runtime checks.
+Copy/cut selections use the same display-node ownership: `CodeEditor` supplies
+`EditableContextMenu`'s optional `readSelectedText(range)` projection and intercepts
+native copy/cut only when its owned marker is selected. It writes clean plain text;
+native cut prefers the browser's undo-aware delete command with a selected-range
+fallback. Ordinary editors and selections keep their existing behavior. Failed
+context-menu writes retain the draft. The focused editor UTs verify output, real
+U+200B retention and selected deletion; native clipboard/undo remain runtime gates.
 
 `CodePreview` bounds tokenization/rendering at `FILE_PREVIEW_LIMIT` UTF-16 code
 units, cutting back to a line boundary where possible. Whenever it omits content,

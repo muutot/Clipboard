@@ -211,6 +211,48 @@
     return text.replace(/\r\n?/g, "\n");
   }
 
+  function readSelectedText(range: Range): string {
+    const readable = range.cloneRange();
+    // The owned marker is always last. Only shorten a selection that actually
+    // intersects it; normal selections and real U+200B remain untouched.
+    if (trailingBreak && readable.intersectsNode(trailingBreak)) {
+      readable.setEndBefore(trailingBreak);
+    }
+    return readable.toString();
+  }
+
+  function handleClipboardSelection(event: ClipboardEvent, cut: boolean) {
+    const selection = window.getSelection();
+    const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
+    if (
+      !editor ||
+      !range ||
+      range.collapsed ||
+      !event.clipboardData ||
+      !trailingBreak ||
+      !editor.contains(range.startContainer) ||
+      !editor.contains(range.endContainer) ||
+      !range.intersectsNode(trailingBreak)
+    )
+      return;
+
+    const text = readSelectedText(range);
+    event.preventDefault();
+    if (!text) return;
+    event.clipboardData.setData("text/plain", text);
+    if (cut) {
+      // Retain the browser's undo-aware edit where supported. The DOM fallback
+      // still removes only this selection and synchronizes the draft.
+      if (!document.execCommand?.("delete")) {
+        range.deleteContents();
+        range.collapse(true);
+        selection!.removeAllRanges();
+        selection!.addRange(range);
+        syncContent(editor);
+      }
+    }
+  }
+
   /** `pre-wrap` collapses a forced break at the very end into no line box, so
    * pressing Enter at the bottom looked like a no-op until the second press.
    * Mirror the break with a zero-width space (stripped by readEditorContent,
@@ -412,6 +454,8 @@
         oninput={handleInput}
         onkeydown={handleKeydown}
         onpaste={handlePaste}
+        oncopy={(event) => handleClipboardSelection(event, false)}
+        oncut={(event) => handleClipboardSelection(event, true)}
         oncontextmenu={handleContextMenu}
         oncompositionstart={() => (composing = true)}
         oncompositionend={(event) => {
@@ -428,6 +472,7 @@
     x={contextMenu.x}
     y={contextMenu.y}
     target={editor}
+    {readSelectedText}
     onclose={() => (contextMenu = null)}
   />
 {/if}
