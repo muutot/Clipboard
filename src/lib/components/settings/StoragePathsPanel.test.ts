@@ -175,6 +175,48 @@ it.each(["save", "restore"])(
   },
 );
 
+it.each([
+  ["directory", "succeeded"],
+  ["directory", "failed"],
+  ["resource", "succeeded"],
+  ["resource", "failed"],
+])("does not publish a %s save that %s after teardown", async (operation, outcome) => {
+  let finish!: (result: unknown) => void;
+  let fail!: (error: Error) => void;
+  const pending = new Promise((resolve, reject) => {
+    finish = resolve;
+    fail = reject;
+  });
+  (operation === "directory" ? bridge.directory : bridge.save).mockReturnValue(pending);
+  const target = render();
+  await settle();
+  const actions =
+    operation === "directory"
+      ? target.querySelector("#data-directory")!.parentElement!.querySelectorAll("button")
+      : target.querySelectorAll(".resource-path-actions button");
+  (actions[1] as HTMLButtonElement).click();
+  await settle();
+  expect(operation === "directory" ? bridge.directory : bridge.save).toHaveBeenCalledTimes(1);
+  await cleanups.pop()!();
+  if (outcome === "failed") fail(new Error("late fixture path failure"));
+  else
+    finish(
+      operation === "directory"
+        ? {
+            dataDirectoryPath: "C:/saved",
+            storagePath: "C:/saved/storage",
+            restartRequired: true,
+          }
+        : {
+            imageStoragePath: "C:/saved/images",
+            fileStoragePath: "C:/saved/files",
+            restartRequired: true,
+          },
+    );
+  await settle();
+  expect(bridge.feedback).not.toHaveBeenCalled();
+});
+
 it.each(["save", "restore"])(
   "applies the resolved directory after %s when the submitted draft is unchanged",
   async (operation) => {

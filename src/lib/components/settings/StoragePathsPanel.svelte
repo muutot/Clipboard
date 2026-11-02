@@ -101,10 +101,13 @@
   }
 
   async function saveDirectory(directory: string | null) {
+    if (disposed || saving) return;
     const submittedDraft = dataDirectory;
     saving = true;
     try {
-      pending = await configureStorageDirectory(directory);
+      const result = await configureStorageDirectory(directory);
+      if (disposed) return;
+      pending = result;
       if (dataDirectory === submittedDraft) dataDirectory = pending.dataDirectoryPath;
       restartNeeded = pending.restartRequired;
       onfeedback(
@@ -112,10 +115,11 @@
         true,
       );
     } catch (error) {
+      if (disposed) return;
       console.error("Unable to configure storage directory", error);
       onfeedback(error instanceof Error ? error.message : String(error), false);
     } finally {
-      saving = false;
+      if (!disposed) saving = false;
     }
   }
 
@@ -136,10 +140,11 @@
   }
 
   async function saveResourcePaths(imagePath: string, filePath: string) {
-    if (!resourcePathsLoaded || savingResourceStorage) return;
+    if (disposed || !resourcePathsLoaded || savingResourceStorage) return;
     savingResourceStorage = true;
     try {
       const result = await setResourceStoragePaths(imagePath || null, filePath || null);
+      if (disposed) return;
       imageStoragePath = imagePath;
       fileStoragePath = filePath;
       pendingResourceStorage = result;
@@ -151,10 +156,11 @@
         true,
       );
     } catch (error) {
+      if (disposed) return;
       console.error("Unable to save resource storage paths", error);
       onfeedback(error instanceof Error ? error.message : String(error), false);
     } finally {
-      savingResourceStorage = false;
+      if (!disposed) savingResourceStorage = false;
     }
   }
 

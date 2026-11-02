@@ -360,6 +360,10 @@ the input only if its submitted draft is unchanged. Later typing survives the
 reply and can be submitted next; the pending summary describes saved state,
 not the still-unsaved draft. Mounted path tests delay both save and restore.
 
+Submitted data-directory and resource-path saves remain backend-owned after
+teardown, but their late success/failure no longer updates the disposed panel
+or its shared feedback. Mounted path tests cover both save channels and outcomes.
+
 `CustomCssSettingsPanel.svelte` is the lazy Appearance → Custom CSS section. It waits for
 shared settings initialization, retains an unsaved draft across external updates and offers
 explicit save/apply, discard, example and clear actions. The enable switch keeps saved code.

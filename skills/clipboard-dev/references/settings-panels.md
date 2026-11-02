@@ -210,6 +210,9 @@ backend until completion or explicit cancellation.
 - StoragePathsPanel's editable data-directory draft survives older configure or
   restore replies. The next-launch summary always reflects the saved response;
   the input adopts its normalized path only while the submitted draft is unchanged.
+- Path-save completion in StoragePathsPanel checks lifetime before updating
+  panel state or shared feedback, including failures. Teardown leaves already
+  submitted directory/configuration work in the backend.
 - State a platform limitation in the panel, not only in the README. Read the authoritative
   `get_runtime_info` capability (`capabilities.globalShortcut`,
   `capabilities.quickPaste`) rather than inferring from `operatingSystem`:
