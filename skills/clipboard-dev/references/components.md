@@ -161,6 +161,13 @@ character. The mounted detail tests cover real-character retention, continuation
 and the existing trailing-line display behavior; native browser composition and
 undo still require runtime checks.
 
+`CodePreview` bounds tokenization/rendering at `FILE_PREVIEW_LIMIT` UTF-16 code
+units, cutting back to a line boundary where possible. Whenever it omits content,
+it renders the localized `detail.codePreviewTruncated` status in the existing
+`.code-truncated` style. Its notice says partial preview without promising a byte
+count; the full detail body remains available to copy/edit owners. Mounted tests
+cover the exact cap, omission, locale changes and notice removal on shorter content.
+
 ### `TagEditDialog.svelte`
 
 Modal edit dialog for a single tag, opened from the main route by right-clicking a tag chip on a `ClipboardCard` (`oneditTag`). Props: `tag: string`, `color: string` (current registry color, empty when none), `onclose: () => void`. It lets the user rename the tag (Enter commits, conflict-checked against `listAllTags()`) and pick a color from an 8-column swatch grid (two rows): row 1 holds 8 presets, row 2 holds 7 presets plus a final custom `<input type="color">` picker — 15 shared presets total (kept in sync with `TagManagementSettingsPanel`, whose compact per-tag row opens a `.popover-surface` color popover holding the same 15 presets plus an identical custom `<input type="color">` swatch). The custom color is stored per tag (`setTagColor(tag, value)`), not shared; the custom swatch renders the current tag's own custom color when one is set, otherwise a rainbow gradient, and the hidden input defaults to the tag's current hex (or `#5c7cfa`). Clicking the already-active preset clears the tag's color (toggle, matching the settings panel), so no separate "none" swatch exists. All actions call the tag-management commands in `services/clipboard.ts` (`renameTag`, `setTagColor`) and then emit `tags-changed` with the same `TagsChangedPayload` contract the settings tag panel uses, so the route's existing `tags-changed` listener reconciles items, filters, and colors. Tag deletion stays in the settings tag panel; this dialog has no delete button. The dialog is a native `<dialog>` with `showModal()`, closed via Escape, backdrop click, or the close button; its name field is the title row (no separate header) so the modal stays compact.

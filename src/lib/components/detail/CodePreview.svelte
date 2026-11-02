@@ -6,13 +6,14 @@
 
   import { FILE_PREVIEW_LIMIT } from "$lib/utils/content/file-preview";
   import { detectCodeLang, tokenizeCode } from "$lib/utils/content/code-tokenize";
+  import { messages, resolvePath } from "$lib/i18n";
 
   let { content, language = null }: Props = $props();
 
   // The tokenizer and the per-line spans have no other bound: without a cap,
   // opening the detail panel on a multi-hundred-KB code item tokenizes and
-  // renders every byte at once. Cap at the same limit as file previews and
-  // reuse the shared truncation note.
+  // renders every token at once. Reuse the file preview's numeric cap as a
+  // UTF-16 code-unit bound and disclose that only part of the code is displayed.
   const preview = $derived.by(() => {
     if (content.length <= FILE_PREVIEW_LIMIT) {
       return { text: content, truncated: false };
@@ -45,6 +46,11 @@
           >
         {/each}</code
       ></pre>
+    {#if preview.truncated}
+      <span class="code-truncated" role="status">
+        {resolvePath($messages, "detail.codePreviewTruncated")}
+      </span>
+    {/if}
   </div>
 {/if}
 

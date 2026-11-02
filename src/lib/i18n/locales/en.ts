@@ -867,6 +867,7 @@ const en: LocaleDefinition = {
     filePreviewUnavailable: "Text preview is not available for this file",
     filePreviewFailed: "Failed to read file content",
     filePreviewTruncated: "Content is too large; showing the first {size} KB",
+    codePreviewTruncated: "Code is too long; showing a partial preview",
     findPlaceholder: "Find in preview",
     findLabel: "Find in detail preview",
     findPrev: "Previous match (Shift+Enter)",

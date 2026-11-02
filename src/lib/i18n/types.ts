@@ -798,6 +798,7 @@ export interface LocaleDefinition {
     filePreviewUnavailable: string;
     filePreviewFailed: string;
     filePreviewTruncated: string;
+    codePreviewTruncated: string;
     findPlaceholder: string;
     findLabel: string;
     findPrev: string;

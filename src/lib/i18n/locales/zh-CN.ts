@@ -836,6 +836,7 @@ const zhCN: LocaleDefinition = {
     filePreviewUnavailable: "当前文件不支持文本预览",
     filePreviewFailed: "读取文件内容失败",
     filePreviewTruncated: "内容过长，仅显示前 {size} KB",
+    codePreviewTruncated: "代码过长，仅显示部分预览",
     findPlaceholder: "在预览中查找",
     findLabel: "详情预览内查找",
     findPrev: "上一个匹配（Shift+Enter）",
