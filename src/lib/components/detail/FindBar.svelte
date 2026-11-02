@@ -57,7 +57,7 @@
     {placeholder}
     aria-label={label}
   />
-  <span class="match-count" class:empty={count === 0}>{current + 1}/{count}</span>
+  <span class="match-count" class:empty={count === 0}>{count === 0 ? 0 : current + 1}/{count}</span>
   <button
     type="button"
     class="nav-button"

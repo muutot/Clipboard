@@ -143,6 +143,36 @@ describe("DetailPanel find in detail", () => {
     expect(target.querySelector(".find-bar .match-count")?.textContent).toBe("1/1");
   });
 
+  // Regression: two query changes flushed back-to-back queue two highlight
+  // passes. Without unwrapping inside the deferred pass, the second pass
+  // wrapped over the first pass's fresh marks, counted 0, and left the bar
+  // showing "1/0" next to live highlights.
+  it("keeps the count correct when two highlight passes overlap", async () => {
+    const target = mountPanel(item({ textContent: "a2b a2c 23" }), {
+      findRequest: { seq: 1 },
+    });
+    await settle();
+    const input = target.querySelector<HTMLInputElement>(".find-bar input")!;
+    input.value = "2";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    flushSync();
+    input.value = "23";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    flushSync();
+    await settle();
+    expect(target.querySelectorAll("mark[data-find-match]")).toHaveLength(1);
+    expect(target.querySelector(".find-bar .match-count")?.textContent).toBe("1/1");
+  });
+
+  it("shows 0/0 when the query has no matches", async () => {
+    const target = mountPanel(item({ textContent: "alpha beta" }), {
+      findRequest: { seq: 1 },
+    });
+    await settle();
+    const bar = await typeQuery(target, "zz");
+    expect(bar.querySelector(".match-count")?.textContent).toBe("0/0");
+  });
+
   it("closes on Escape without closing the panel and unwraps the marks", async () => {
     const target = mountPanel(item({ textContent: "alpha beta alpha" }), {
       findRequest: { seq: 1 },

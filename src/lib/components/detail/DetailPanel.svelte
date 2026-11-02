@@ -193,6 +193,11 @@
     unwrapMatches(container);
     void tick().then(() => {
       if (!findOpen || !previewEl || previewEl !== container) return;
+      // Two dep changes batched into one flush queue two applies; an earlier
+      // pass can wrap marks between this run's body unwrap and its own apply,
+      // and wrapping over pre-marked DOM counts 0 while stale marks remain.
+      // Unwrap again right before counting so the pass always sees plain text.
+      unwrapMatches(container);
       findCount = wrapMatches(container, query);
       if (findCount === 0) {
         findCurrent = 0;
