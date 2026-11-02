@@ -1,11 +1,9 @@
 <script lang="ts">
-  import { onMount } from "svelte";
   import AppIcon from "$lib/components/card/AppIcon.svelte";
   import TransferPanel from "$lib/components/settings/TransferPanel.svelte";
   import EntryHeading from "$lib/components/settings/settings-entries/EntryHeading.svelte";
   import { messages, resolvePath } from "$lib/i18n";
   import { rebuildSearchIndex, repairDatabase, type RepairResult } from "$lib/services/storage";
-  import { invoke } from "@tauri-apps/api/core";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);
@@ -20,20 +18,6 @@
   let rebuilding = $state(false);
   let repairLoading = $state(false);
   let repairResult = $state<RepairResult | null>(null);
-  let maxItemCount = $state(10000);
-
-  onMount(() => {
-    void loadMaxItemCount();
-  });
-
-  async function loadMaxItemCount() {
-    try {
-      const result = await invoke<{ maxItems: number }>("get_history_config");
-      if (result) maxItemCount = result.maxItems;
-    } catch (error) {
-      console.error("Unable to load history config", error);
-    }
-  }
 
   async function doRepair() {
     repairLoading = true;
@@ -80,7 +64,7 @@
 </script>
 
 <div class="settings-scroll">
-  <TransferPanel {maxItemCount} {onfeedback} {onadjustlimit} />
+  <TransferPanel {onfeedback} {onadjustlimit} />
 
   <section class="setting-card toggle-card" data-settings-search-id="storage.search-index">
     <EntryHeading

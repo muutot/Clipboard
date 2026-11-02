@@ -14,6 +14,7 @@
     importFromFile,
     type ExportFormatInfo,
     type ImportFormatInfo,
+    type ImportSummary,
   } from "$lib/services/storage";
   import { endOfDay, startOfDay } from "$lib/utils/search/date-query";
 
@@ -21,12 +22,11 @@
     resolvePath($messages, path, params);
 
   interface Props {
-    maxItemCount: number;
     onfeedback: (message: string, success: boolean) => void;
     onadjustlimit: () => void;
   }
 
-  let { maxItemCount, onfeedback, onadjustlimit }: Props = $props();
+  let { onfeedback, onadjustlimit }: Props = $props();
 
   const storageKinds: readonly {
     kind: "text" | "link" | "image" | "file";
@@ -48,8 +48,7 @@
   let exportDateTo = $state("");
   let exporting = $state(false);
   let importing = $state(false);
-  let showLimitWarning = $state(false);
-  let importTruncationCount = $state(0);
+  let importResult = $state<ImportSummary | null>(null);
 
   $effect(() => {
     void loadExportFormats();
@@ -155,6 +154,7 @@
       });
       if (!filePath) return;
       const result = await importFromFile(filePath);
+      importResult = result;
       if (result.errors.length > 0) {
         const detail = `${_t("storage.importErrorsN", {
           count: result.errors.length,
@@ -175,10 +175,6 @@
           }),
           true,
         );
-      }
-      if (result.pendingTruncation > 0) {
-        showLimitWarning = true;
-        importTruncationCount = result.pendingTruncation;
       }
     } catch (error) {
       onfeedback(
@@ -222,12 +218,12 @@
       </button>
     </div>
   </div>
-  {#if showLimitWarning}
+  {#if importResult && importResult.pendingTruncation > 0}
     <div class="transfer-limit-warning">
       <span
         >{_t("storage.importTruncationWarning", {
-          max: maxItemCount,
-          count: importTruncationCount,
+          max: importResult.maxItems,
+          count: importResult.pendingTruncation,
         })}</span
       >
       <button type="button" class="settings-action-btn" onclick={onadjustlimit}>

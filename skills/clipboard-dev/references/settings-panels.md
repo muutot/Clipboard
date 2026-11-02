@@ -188,6 +188,9 @@ backend until completion or explicit cancellation.
 - Use `.settings-feedback`; add `.success` for success and default to error styling otherwise.
 - Clear feedback with a timer whose cleanup is retained when the component can unmount or messages can be replaced.
 - Disable controls or show a saving/loading state during commands that cannot safely overlap.
+- Import capacity warnings use `maxItems` and `pendingTruncation` from the same
+  completed `ImportSummary`. Every completed result replaces the warning snapshot,
+  so zero risk removes an older warning; cancellation or rejection retains it.
 - About's latest-update check and current-version notes use separate result/error
   state. Only a latest check reports up-to-date. A dialog request generation keeps
   older responses from replacing the most recently requested presentation, and
