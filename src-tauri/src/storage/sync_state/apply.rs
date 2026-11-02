@@ -35,7 +35,8 @@ impl Database {
             ));
         }
         self.with_connection(|connection| {
-            let transaction = connection.transaction()?;
+            let transaction =
+                connection.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
             if let Some(existing) = load_cursor(&transaction, remote_scope, &cursor.device_id)? {
                 if existing.epoch == cursor.epoch && existing.sequence > cursor.sequence {
                     return Err(StorageError::InvalidSyncState(
@@ -76,7 +77,8 @@ impl Database {
         // whole pack.
 
         self.with_connection(|connection| {
-            let transaction = connection.transaction()?;
+            let transaction =
+                connection.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
             if let Some(existing) = load_cursor(&transaction, remote_scope, &cursor.device_id)? {
                 if existing.epoch == cursor.epoch && existing.sequence > cursor.sequence {
                     return Err(StorageError::InvalidSyncState(
@@ -114,7 +116,8 @@ impl Database {
         validate_remote_scope(remote_scope)?;
         validate_cursor_identity(cursor)?;
         self.with_connection(|connection| {
-            let transaction = connection.transaction()?;
+            let transaction =
+                connection.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
             let existing =
                 load_cursor(&transaction, remote_scope, &cursor.device_id)?.ok_or_else(|| {
                     StorageError::InvalidSyncState(

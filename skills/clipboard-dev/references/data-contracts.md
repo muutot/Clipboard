@@ -164,6 +164,13 @@ current databases can open during a storage migration writer reservation. Writer
 refusal leaves the missing/invalid value unchanged and can be retried; no schema
 or identity format changes accompany this initialization fix.
 
+Sync state read-modify-write transactions use BEGIN IMMEDIATE before reading
+publication/cursor/initialization/resource state. This prevents unrelated capture
+or usage commits from invalidating a deferred WAL snapshot before its first
+write. A sync-run lease alone does not exclude those ordinary writers. Read-only
+snapshot export and outbox comparison transactions remain deferred; rollback,
+cursor/version checks, echo suppression and wire/schema fields are unchanged.
+
 Current schema v2 fills only NULL `last_used_at_ms` values with each row's
 `created_at_ms`, preserving existing usage timestamps and all content. It creates
 `clipboard_items_deleted_last_used_idx` on `(deleted, last_used_at_ms DESC, id DESC)`

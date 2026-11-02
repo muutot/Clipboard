@@ -11,7 +11,8 @@ impl Database {
     ) -> Result<(), StorageError> {
         validate_remote_scope(remote_scope)?;
         self.with_connection(|connection| {
-            let transaction = connection.transaction()?;
+            let transaction =
+                connection.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
             for replicated in &mutations.upserts {
                 let current = transaction
                     .query_row(
@@ -117,7 +118,8 @@ impl Database {
                 .map_err(StorageError::InvalidSyncState)?;
         }
         self.with_connection(|connection| {
-            let transaction = connection.transaction()?;
+            let transaction =
+                connection.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
             let Some(scope_id) = sync_resource_scope_id(&transaction, remote_scope)? else {
                 transaction.commit()?;
                 return Ok(false);

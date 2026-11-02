@@ -118,7 +118,8 @@ impl Database {
     /// the first local snapshot; no historical schema or sync state is read.
     pub fn initialize_sync(&self) -> Result<bool, StorageError> {
         self.with_connection(|connection| {
-            let transaction = connection.transaction()?;
+            let transaction =
+                connection.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
             let current_enabled: Option<String> = transaction
                 .query_row(
                     "SELECT value FROM sync_metadata WHERE key = 'sync_enabled'",

@@ -2,6 +2,115 @@
 
 use super::*;
 
+fn run_sync_write_during_capture(
+    table: &'static str,
+    operation: impl FnOnce(&Database) -> Result<(), StorageError>,
+) {
+    use rusqlite::hooks::{AuthAction, AuthContext, Authorization};
+    use std::sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    };
+    let root = std::env::temp_dir().join(format!("clipboard-sync-write-race-{}", Uuid::new_v4()));
+    std::fs::create_dir(&root).unwrap();
+    let path = root.join("history.sqlite3");
+    let database = Database::open(&path).unwrap();
+    let writer = Arc::new(Database::open(&path).unwrap());
+    writer
+        .save_item(&item("capture", "capture-hash", "synthetic capture"))
+        .unwrap();
+    writer
+        .with_connection(|connection| {
+            connection.busy_timeout(std::time::Duration::ZERO)?;
+            Ok(())
+        })
+        .unwrap();
+    let attempted = Arc::new(AtomicBool::new(false));
+    let attempted_in_hook = attempted.clone();
+    let writer_in_hook = writer.clone();
+    database
+        .with_connection(|connection| {
+            connection.authorizer(Some(move |context: AuthContext<'_>| {
+                let table_name = match context.action {
+                    AuthAction::Insert { table_name } | AuthAction::Update { table_name, .. } => {
+                        table_name
+                    }
+                    _ => return Authorization::Allow,
+                };
+                if table_name == table && !attempted_in_hook.swap(true, Ordering::SeqCst) {
+                    // Preparation of the first write happens after the production
+                    // decision read. A real independent usage write either commits
+                    // there or is briefly refused by an existing writer reservation.
+                    match writer_in_hook.set_last_used("capture") {
+                        Ok(true) => {}
+                        Err(StorageError::Sqlite(error))
+                            if error.sqlite_error_code()
+                                == Some(rusqlite::ErrorCode::DatabaseBusy) => {}
+                        other => panic!("unexpected capture result: {other:?}"),
+                    }
+                }
+                Authorization::Allow
+            }))?;
+            Ok(())
+        })
+        .unwrap();
+    let result = operation(&database);
+    database
+        .with_connection(|connection| {
+            connection.authorizer(None::<fn(AuthContext<'_>) -> Authorization>)?;
+            assert!(connection.is_autocommit());
+            Ok(())
+        })
+        .unwrap();
+    assert!(writer.set_last_used("capture").unwrap());
+    assert!(database.get_item("capture").unwrap().is_some());
+    assert!(
+        attempted.load(Ordering::SeqCst),
+        "real writer interleaving never ran"
+    );
+    drop(writer);
+    drop(database);
+    std::fs::remove_dir_all(root).unwrap();
+    assert!(
+        result.is_ok(),
+        "sync write failed after an unrelated capture: {result:?}"
+    );
+}
+
+#[test]
+fn sync_initialization_survives_an_independent_capture_write() {
+    run_sync_write_during_capture("sync_metadata", |database| {
+        assert!(database.initialize_sync()?);
+        assert!(database.is_sync_initialized()?);
+        assert!(!database.initialize_sync()?);
+        Ok(())
+    });
+}
+
+#[test]
+fn remote_state_creation_survives_an_independent_capture_write() {
+    run_sync_write_during_capture("sync_publication_state", |database| {
+        let created = database.get_or_create_sync_remote_state(REMOTE_SCOPE)?;
+        assert_eq!(
+            database.get_or_create_sync_remote_state(REMOTE_SCOPE)?,
+            created
+        );
+        Ok(())
+    });
+}
+
+#[test]
+fn checkpoint_publication_survives_an_independent_capture_write() {
+    run_sync_write_during_capture("sync_checkpoint_state", |database| {
+        database.record_sync_checkpoint_published(REMOTE_SCOPE, 1, &"a".repeat(64), &[])?;
+        assert_eq!(
+            database.get_sync_checkpoint_state(REMOTE_SCOPE)?,
+            Some((1, "a".repeat(64)))
+        );
+        Ok(())
+    });
+}
+
 #[test]
 fn migration_identity_fork_preserves_records_versions_outbox_and_resource_refs() {
     use crate::sync::v1::{ResourceCategory, SyncResourceRef};

@@ -9,7 +9,8 @@ impl Database {
     ) -> Result<SyncRemoteState, StorageError> {
         validate_remote_scope(remote_scope)?;
         self.with_connection(|connection| {
-            let transaction = connection.transaction()?;
+            let transaction =
+                connection.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
             if let Some(state) = load_remote_state(&transaction, remote_scope)? {
                 transaction.commit()?;
                 return Ok(state);
@@ -91,7 +92,8 @@ impl Database {
         let snapshot_records =
             sequence_to_i64(snapshot.record_count, "sync snapshot record count")?;
         self.with_connection(|connection| {
-            let transaction = connection.transaction()?;
+            let transaction =
+                connection.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
             if through_sequence
                 > sequence_to_i64(current_sequence(&transaction)?, "sync current sequence")?
             {
@@ -149,7 +151,8 @@ impl Database {
         validate_remote_scope(remote_scope)?;
         let through_sequence = sequence_to_i64(through_sequence, "sync segment sequence")?;
         self.with_connection(|connection| {
-            let transaction = connection.transaction()?;
+            let transaction =
+                connection.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
             let current = load_remote_state(&transaction, remote_scope)?.ok_or_else(|| {
                 StorageError::InvalidSyncState("remote publication state is missing".to_string())
             })?;

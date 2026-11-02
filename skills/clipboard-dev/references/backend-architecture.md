@@ -127,6 +127,15 @@ committed identity is reused rather than promoting a stale WAL read transaction
 and failing with SQLITE_BUSY_SNAPSHOT. Reservation failures retain the previous
 state and permit retry; migration identity forking remains a separate operation.
 
+Sync persistence reserves the SQLite writer before decision reads in its
+read-modify-write transactions: initialization, remote publication creation and
+confirmation, incoming snapshot/segment/checkpoint apply, and resource reference
+or materialized-path commits. The sync-run OS lease excludes another sync run,
+not ordinary capture/usage writers; deferred snapshot promotion can otherwise
+fail with SQLITE_BUSY_SNAPSHOT after those writers commit. Pure snapshot export
+and outbox comparisons retain read transactions. SQLite authorizer UTs inject
+real independent usage writes before the first mutation without production hooks.
+
 Startup recovery distinguishes confirmed invalidity from unavailable inspection.
 Only a missing database, SQLite CORRUPT/NOTADB, failed integrity messages or a
 missing core table authorize backup selection. Busy, permission/open and other

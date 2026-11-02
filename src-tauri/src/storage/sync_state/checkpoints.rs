@@ -153,7 +153,8 @@ impl Database {
         validate_checkpoint_cursors(cursors)?;
         let generation = sequence_to_i64(generation, "sync checkpoint generation")?;
         self.with_connection(|connection| {
-            let transaction = connection.transaction()?;
+            let transaction =
+                connection.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
             if let Some((stored_generation, stored_sha256)) = transaction
                 .query_row(
                     "SELECT generation, checkpoint_sha256
@@ -230,7 +231,8 @@ impl Database {
         validate_checkpoint_cursors(cursors)?;
 
         self.with_connection(|connection| {
-            let transaction = connection.transaction()?;
+            let transaction =
+                connection.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
             if let Some((stored_generation, stored_sha256)) = transaction
                 .query_row(
                     "SELECT generation, checkpoint_sha256
@@ -363,7 +365,8 @@ impl Database {
         // the transaction back, so nothing partial is committed.
 
         self.with_connection(|connection| {
-            let transaction = connection.transaction()?;
+            let transaction =
+                connection.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
             if let Some((stored_generation, stored_sha256)) = transaction
                 .query_row(
                     "SELECT generation, checkpoint_sha256
