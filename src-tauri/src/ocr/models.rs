@@ -196,12 +196,19 @@ pub fn file_matches_sha256(path: &Path, expected: &str) -> std::io::Result<bool>
 }
 
 /// Hashes `path` and persists the digest next to the model file so later
-/// install attempts can detect on-disk corruption or replacement without
-/// relying on upstream-pinned hashes.
+/// install attempts can detect on-disk corruption or replacement. Publication
+/// replaces the sidecar entry without writing through an existing link.
 pub fn record_model_digest(dir: &Path, file: &PpOcrModelFile) -> std::io::Result<()> {
     let digest = compute_file_sha256(&dir.join(file.filename))?;
-    std::fs::write(model_digest_path(dir, file), digest)
-        .map_err(|error| error_with_path("record model digest", dir.join(file.filename), error))?;
+    let sidecar = model_digest_path(dir, file);
+    crate::content::file_store::store_atomically(&sidecar, |temporary| {
+        std::fs::write(temporary, digest)
+    })
+    .map_err(|error| match error {
+        crate::storage::StorageError::Io(error) => error,
+        error => std::io::Error::other(error.to_string()),
+    })
+    .map_err(|error| error_with_path("record model digest", sidecar, error))?;
     invalidate_digest_cache(&dir.join(file.filename));
     Ok(())
 }
@@ -337,6 +344,65 @@ mod tests {
         )
         .unwrap());
         fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn recording_digest_preserves_an_existing_sidecar_external_alias() {
+        let dir = temporary_test_directory("digest-alias");
+        fs::create_dir_all(&dir).unwrap();
+        let file = PpOcrModelFile {
+            filename: "synthetic-model.bin",
+            label: "synthetic",
+            size_bytes: 5,
+            sha256: "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
+            url: "http://127.0.0.1/unused",
+        };
+        fs::write(dir.join(file.filename), b"hello").unwrap();
+        let unrelated = dir.join("unrelated.txt");
+        fs::write(&unrelated, b"unrelated existing content").unwrap();
+        let sidecar = super::model_digest_path(&dir, &file);
+        fs::hard_link(&unrelated, &sidecar).unwrap();
+
+        let result = record_model_digest(&dir, &file);
+        let original = fs::read(&unrelated).unwrap();
+        let recorded = fs::read_to_string(&sidecar).unwrap();
+        let matches = model_digest_matches(&dir, &file);
+        let entries = fs::read_dir(&dir).unwrap().count();
+        fs::remove_dir_all(dir).unwrap();
+
+        assert!(result.is_ok());
+        assert_eq!(original, b"unrelated existing content");
+        assert_eq!(recorded, file.sha256);
+        assert!(matches);
+        assert_eq!(
+            entries, 3,
+            "no owned staging should remain after publication"
+        );
+    }
+
+    #[test]
+    fn failed_digest_publication_preserves_destination_and_allows_retry() {
+        let dir = temporary_test_directory("digest-publication-error");
+        fs::create_dir_all(&dir).unwrap();
+        let file = model_spec("tiny").unwrap().dictionary;
+        create_sized_file(&dir, &file);
+        let sidecar = super::model_digest_path(&dir, &file);
+        fs::create_dir(&sidecar).unwrap();
+        fs::write(sidecar.join("keep"), b"existing content").unwrap();
+
+        let result = record_model_digest(&dir, &file);
+        let preserved = fs::read(sidecar.join("keep")).unwrap();
+        let entries = fs::read_dir(&dir).unwrap().count();
+        fs::remove_dir_all(&sidecar).unwrap();
+        let retry = record_model_digest(&dir, &file);
+        let matches = model_digest_matches(&dir, &file);
+        fs::remove_dir_all(dir).unwrap();
+
+        assert!(result.is_err());
+        assert_eq!(preserved, b"existing content");
+        assert_eq!(entries, 2, "failed writes must remove their owned staging");
+        assert!(retry.is_ok());
+        assert!(matches);
     }
 
     #[test]

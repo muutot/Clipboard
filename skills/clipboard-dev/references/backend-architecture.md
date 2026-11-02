@@ -478,6 +478,13 @@ Tantivy uses the schema/query modules and a CJK-friendly n-gram tokenizer. SQLit
 
 ## OCR
 
+`ocr/models.rs::record_model_digest` uses the shared atomic store to publish
+`.sha256` sidecars through exclusively created, flushed sibling staging. An
+existing sidecar link cannot overwrite unrelated files. Failed publication
+preserves the destination, removes only owned staging and allows a later retry;
+the digest cache is invalidated only after successful publication. Upstream
+download verification and legacy missing-digest readiness are unchanged.
+
 `get_ocr_status`, `check_ppocr_status`, `set_ocr_config` and `restart_ocr_engine` run their process probes, digest checks and worker joins on `spawn_blocking`, not the main thread.
 
 Worker stop revokes a per-worker publication mutex before the bounded join.
