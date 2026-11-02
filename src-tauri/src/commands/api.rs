@@ -587,7 +587,9 @@ mod tests {
             );
             let bytes = std::fs::read(saved).unwrap();
             let words: Vec<_> = bytes
-                .chunks_exact(2)
+                .as_chunks::<2>()
+                .0
+                .iter()
                 .map(|word| u16::from_le_bytes([word[0], word[1]]))
                 .collect();
             String::from_utf16(&words).unwrap()
@@ -677,7 +679,9 @@ mod tests {
             assert!(outcome.status.success());
             let bytes = std::fs::read(saved).unwrap();
             let words: Vec<_> = bytes
-                .chunks_exact(2)
+                .as_chunks::<2>()
+                .0
+                .iter()
                 .map(|word| u16::from_le_bytes([word[0], word[1]]))
                 .collect();
             String::from_utf16(&words).unwrap()
