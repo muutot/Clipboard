@@ -820,6 +820,7 @@ dependencies = [
  "wayland-protocols",
  "wayland-protocols-wlr",
  "window-vibrancy",
+ "windows-sys 0.61.2",
  "x11rb",
  "zeroize",
  "zip",

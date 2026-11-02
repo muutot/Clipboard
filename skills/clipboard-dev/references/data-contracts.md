@@ -378,6 +378,16 @@ Every S3 request is issued through `s3::send_with_retry`, which allows four atte
 
 A direct `invoke` in a component is still a public cross-layer contract and receives the same audit.
 
+### Local API credential
+
+The loopback API credential remains plaintext in `conf/api.token` for local
+scripts. On Windows, load/write tightens its complete DACL to one current-process
+user SID grant with parent inheritance disabled. The native operation changes
+permissions only, retaining token bytes and the existing owner. A failed ACL
+operation is logged under the existing best-effort contract; it does not establish
+confidentiality. Windows creation-time protection remains separate because the
+std::fs write precedes tightening. Unix mode handling is unchanged.
+
 ### Bincode decode allocation bounds
 
 Metadata bincode decoding uses verified raw input length to limit container

@@ -55,6 +55,10 @@ bincode = { version = "2", features = ["serde"] }
 keyring-core = "1"
 zeroize = "1"
 
+[target.'cfg(target_os = "windows")'.dependencies]
+# Typed bindings for replacing the API token's DACL with one current-user ACE.
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security_Authorization", "Win32_Storage_FileSystem", "Win32_System_Threading"] }
+
 [target.'cfg(target_os = "macos")'.dependencies]
 apple-native-keyring-store = { version = "1", features = ["keychain"] }
 # task_info RSS probe only; already in the tree transitively (72 dependents).

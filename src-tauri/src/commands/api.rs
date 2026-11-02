@@ -53,8 +53,8 @@ fn load_or_create_api_token(project_directory: &Path) -> Result<String, String> 
 /// every local account; on a volume that does not implement POSIX modes
 /// (exFAT, some network shares) the later narrowing is a silent no-op and the
 /// window never closes. Applying the mode at creation removes the window, and
-/// the Windows branch still has to set a DACL afterwards because Windows has no
-/// creation mode to set.
+/// the Windows std::fs path still sets a DACL after writing. Its creation-time
+/// exposure window is separate from tightening an existing file's ACL.
 fn write_api_token(path: &Path, token: &str) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
@@ -90,7 +90,7 @@ fn write_api_token(path: &Path, token: &str) -> Result<(), String> {
     }
 }
 
-/// Tightens the token file to owner-only. The token authorizes the loopback
+/// Tightens the token file to its Unix owner / current Windows user. The token authorizes the loopback
 /// API, so a world-readable file would let another local account read or
 /// delete the clipboard history. Best-effort: a failure leaves the previous
 /// permissions rather than blocking the API.
@@ -113,49 +113,116 @@ fn restrict_api_token_permissions(path: &Path) {
 
 #[cfg(target_os = "windows")]
 fn restrict_api_token_permissions(path: &Path) {
-    use std::process::Command;
-
-    // Best-effort owner-only ACL on Windows, where `set_permissions` cannot
-    // express a DACL. `icacls` is a Windows built-in; the principal comes from
-    // the environment so this stays dependency-free. A failure leaves the
-    // inherited ACL, matching the Unix path's best-effort contract.
-    let user = std::env::var("USERNAME").unwrap_or_default();
-    if user.is_empty() {
+    if let Err(error) = set_api_token_acl(path) {
         crate::log_warn!(
-            "[api] USERNAME is unset, so no owner-only ACL was applied to {}",
+            "[api] could not restrict {} to the current user: {error}; another local account may be able to read the local API token",
             path.display()
         );
-        return;
     }
-    let principal = match std::env::var("USERDOMAIN") {
-        Ok(domain) if !domain.is_empty() => format!("{domain}\\{user}"),
-        _ => user,
+}
+
+#[cfg(target_os = "windows")]
+fn set_api_token_acl(path: &Path) -> std::io::Result<()> {
+    use std::os::windows::ffi::OsStrExt;
+    use std::ptr::{null, null_mut};
+    use windows_sys::Win32::Foundation::{CloseHandle, LocalFree, ERROR_SUCCESS, HANDLE};
+    use windows_sys::Win32::Security::Authorization::{
+        SetEntriesInAclW, SetNamedSecurityInfoW, EXPLICIT_ACCESS_W, NO_MULTIPLE_TRUSTEE,
+        SET_ACCESS, SE_FILE_OBJECT, TRUSTEE_IS_SID, TRUSTEE_IS_USER, TRUSTEE_W,
     };
-    // `icacls` can fail for reasons that leave the file readable by others —
-    // a blocked process, a filesystem without ACL support, a non-elevated
-    // shell against a protected file — and a non-zero status was previously
-    // discarded, so a token left world-readable produced no trace at all.
-    match Command::new("icacls")
-        .arg(path)
-        .arg("/inheritance:r")
-        .arg("/grant:r")
-        .arg(format!("{principal}:F"))
-        .status()
-    {
-        Ok(status) if status.success() => {}
-        Ok(status) => crate::log_warn!(
-            "[api] icacls exited with {status} for {}; another local account may be able to read \
-             the local API token",
-            path.display()
-        ),
-        Err(error) => {
-            crate::log_warn!(
-                "[api] could not run icacls for {}: {error}; another local account may be able to \
-                 read the local API token",
-                path.display()
-            );
+    use windows_sys::Win32::Security::{
+        GetTokenInformation, TokenUser, ACL, DACL_SECURITY_INFORMATION, NO_INHERITANCE,
+        PROTECTED_DACL_SECURITY_INFORMATION, TOKEN_QUERY, TOKEN_USER,
+    };
+    use windows_sys::Win32::Storage::FileSystem::FILE_ALL_ACCESS;
+    use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
+
+    struct Token(HANDLE);
+    impl Drop for Token {
+        fn drop(&mut self) {
+            // SAFETY: this guard owns the handle returned by OpenProcessToken.
+            unsafe {
+                CloseHandle(self.0);
+            }
         }
     }
+    struct OwnedAcl(*mut ACL);
+    impl Drop for OwnedAcl {
+        fn drop(&mut self) {
+            // SAFETY: SetEntriesInAclW allocates this ACL with LocalAlloc.
+            unsafe {
+                LocalFree(self.0.cast());
+            }
+        }
+    }
+
+    let name: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
+    if name[..name.len() - 1].contains(&0) {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "token path contains NUL",
+        ));
+    }
+    // SAFETY: all output buffers are initialized and sized as passed to the OS.
+    // The SID remains inside aligned token storage until the ACL has copied it;
+    // the ACL stays allocated through SetNamedSecurityInfoW and is then released.
+    unsafe {
+        let mut handle = null_mut();
+        if OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut handle) == 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        let token = Token(handle);
+        let mut required = 0;
+        GetTokenInformation(token.0, TokenUser, null_mut(), 0, &mut required);
+        if !(std::mem::size_of::<TOKEN_USER>() as u32..=64 * 1024).contains(&required) {
+            return Err(std::io::Error::last_os_error());
+        }
+        // usize storage aligns TOKEN_USER and the embedded SID on both Windows ABIs.
+        let mut storage = vec![0usize; (required as usize).div_ceil(std::mem::size_of::<usize>())];
+        if GetTokenInformation(
+            token.0,
+            TokenUser,
+            storage.as_mut_ptr().cast(),
+            required,
+            &mut required,
+        ) == 0
+        {
+            return Err(std::io::Error::last_os_error());
+        }
+        let user = &*storage.as_ptr().cast::<TOKEN_USER>();
+        let entry = EXPLICIT_ACCESS_W {
+            grfAccessPermissions: FILE_ALL_ACCESS,
+            grfAccessMode: SET_ACCESS,
+            grfInheritance: NO_INHERITANCE,
+            Trustee: TRUSTEE_W {
+                pMultipleTrustee: null_mut(),
+                MultipleTrusteeOperation: NO_MULTIPLE_TRUSTEE,
+                TrusteeForm: TRUSTEE_IS_SID,
+                TrusteeType: TRUSTEE_IS_USER,
+                ptstrName: user.User.Sid.cast(),
+            },
+        };
+        let mut acl = null_mut();
+        // Start with no old ACL: retaining it would preserve explicit broad grants.
+        let status = SetEntriesInAclW(1, &entry, null(), &mut acl);
+        if status != ERROR_SUCCESS {
+            return Err(std::io::Error::from_raw_os_error(status as i32));
+        }
+        let acl = OwnedAcl(acl);
+        let status = SetNamedSecurityInfoW(
+            name.as_ptr(),
+            SE_FILE_OBJECT,
+            DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION,
+            null_mut(),
+            null_mut(),
+            acl.0,
+            null(),
+        );
+        if status != ERROR_SUCCESS {
+            return Err(std::io::Error::from_raw_os_error(status as i32));
+        }
+    }
+    Ok(())
 }
 
 #[cfg(all(not(unix), not(target_os = "windows")))]
@@ -436,6 +503,97 @@ mod tests {
         assert_eq!(std::fs::read_to_string(&token_path).unwrap(), "second\n");
 
         let _ = std::fs::remove_dir_all(project);
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn a_token_with_explicit_everyone_access_is_narrowed_on_load() {
+        use std::process::Command;
+        let project = temp_project("explicit-acl");
+        let token_path = project.join("conf").join("api.token");
+        std::fs::create_dir_all(token_path.parent().unwrap()).unwrap();
+        std::fs::write(&token_path, "synthetic-token\n").unwrap();
+        let grant = Command::new("icacls")
+            .arg(&token_path)
+            .arg("/grant")
+            .arg("*S-1-1-0:R")
+            .output()
+            .unwrap();
+        assert!(
+            grant.status.success(),
+            "fixture must grant real explicit Everyone access"
+        );
+        let read_acl = |name: &str| {
+            let saved = project.join(name);
+            let outcome = Command::new("icacls")
+                .arg(&token_path)
+                .arg("/save")
+                .arg(&saved)
+                .arg("/q")
+                .output()
+                .unwrap();
+            assert!(
+                outcome.status.success(),
+                "fixture must read the actual Windows DACL"
+            );
+            let bytes = std::fs::read(saved).unwrap();
+            let words: Vec<_> = bytes
+                .chunks_exact(2)
+                .map(|word| u16::from_le_bytes([word[0], word[1]]))
+                .collect();
+            String::from_utf16(&words).unwrap()
+        };
+        let before = read_acl("before-acl.txt");
+        assert!(
+            before.contains(";;;WD)") || before.contains(";;;S-1-1-0)"),
+            "fixture must contain an explicit world-readable ACE: {before}"
+        );
+        assert_eq!(
+            load_or_create_api_token(&project).unwrap(),
+            "synthetic-token"
+        );
+        let after = read_acl("after-acl.txt");
+        assert!(
+            !after.contains(";;;WD)") && !after.contains(";;;S-1-1-0)"),
+            "loading must remove explicit Everyone access, not only inherited ACEs: {after}"
+        );
+        assert_eq!(
+            after.matches("(A;").count(),
+            1,
+            "the replacement must contain one current-user grant"
+        );
+        assert!(
+            after.contains("D:P"),
+            "the ACL must remain protected from parent inheritance"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&token_path).unwrap(),
+            "synthetic-token\n",
+            "owner read and stable credential must remain available"
+        );
+        std::fs::remove_dir_all(project).unwrap();
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn token_acl_supports_unicode_paths_and_reports_native_failures() {
+        let project = temp_project("权限-😀");
+        let token_path = project.join("conf").join("api.token");
+        write_api_token(&token_path, "synthetic-unicode-token").unwrap();
+        super::set_api_token_acl(&token_path).unwrap();
+        assert_eq!(
+            load_or_create_api_token(&project).unwrap(),
+            "synthetic-unicode-token"
+        );
+        let missing = project.join("missing.token");
+        assert!(super::set_api_token_acl(&missing).is_err());
+        assert!(!missing.exists());
+        assert!(super::set_api_token_acl(std::path::Path::new("bad\0token")).is_err());
+        assert_eq!(
+            std::fs::read_to_string(&token_path).unwrap(),
+            "synthetic-unicode-token\n"
+        );
+        std::fs::remove_dir_all(project).unwrap();
     }
 
     #[cfg(unix)]
