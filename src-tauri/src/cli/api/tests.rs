@@ -1,6 +1,6 @@
 //! Unit and loopback tests for the `api` module.
 
-use std::io::{Read, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{mpsc, Arc};
@@ -376,18 +376,37 @@ fn successful_api_mutation_notifies_but_reads_and_errors_do_not() {
     }));
     server.set_token("test".into());
     let port = server.start().unwrap();
-    for (method, path, body, expected) in [
-        ("GET", "/items", "", 0),
-        ("DELETE", "/items/absent", "", 0),
-        ("POST", "/paste", "sample", 1),
+    for (method, path, body, expected_status, expected) in [
+        ("GET", "/items", "", 200, 0),
+        ("DELETE", "/items/absent", "", 404, 0),
+        ("POST", "/paste", "sample", 201, 1),
     ] {
         let mut socket = TcpStream::connect(("127.0.0.1", port)).unwrap();
         socket
             .set_read_timeout(Some(Duration::from_secs(3)))
             .unwrap();
         write!(socket, "{method} {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nAuthorization: Bearer test\r\nContent-Length: {}\r\n\r\n{body}", body.len()).unwrap();
-        let mut response = String::new();
-        socket.read_to_string(&mut response).unwrap();
+        // Content-Length frames a complete HTTP reply. Windows may reset the
+        // connection after those bytes arrive; waiting for EOF tests socket
+        // teardown rather than whether the mutation produced a valid reply.
+        let mut response = BufReader::new(socket);
+        let mut line = String::new();
+        response.read_line(&mut line).unwrap();
+        assert!(line.starts_with(&format!("HTTP/1.1 {expected_status} ")));
+        let mut content_length = None;
+        loop {
+            line.clear();
+            assert!(response.read_line(&mut line).unwrap() > 0);
+            if line == "\r\n" {
+                break;
+            }
+            if let Some(value) = line.strip_prefix("Content-Length:") {
+                content_length = Some(value.trim().parse::<usize>().unwrap());
+            }
+        }
+        let mut body = vec![0; content_length.expect("reply must declare its body length")];
+        response.read_exact(&mut body).unwrap();
+        let _: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(count.load(Ordering::SeqCst), expected);
     }
     server.stop().unwrap();

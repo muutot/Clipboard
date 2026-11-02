@@ -770,6 +770,11 @@ Windows may inherit the listener's nonblocking flag; a timeout alone does not cl
 delayed request bytes would otherwise cause an immediate `WouldBlock` disconnect. The
 delayed-request regression forces this socket mode on every platform.
 
+The loopback mutation-notification UT reads replies through their Content-Length
+and checks the HTTP status and complete JSON body before inspecting callbacks.
+Waiting for EOF can report a Windows connection reset after a complete reply;
+framed reading still rejects missing or truncated response bytes.
+
 `main.rs` separates GUI and process CLI execution. `cli/mod.rs` implements list/search/copy/paste/delete/export/stats over the same configured database path as the GUI. `cli/api/` splits the loopback server into `mod.rs` (lifecycle), `http.rs` (transport, auth, and responses), and `routes.rs` (endpoints); it starts during setup on an ephemeral `127.0.0.1` port (with explicit start/stop/status commands still available), writes the bound port to `conf/api.port`, enforces configured limits, and retains a stoppable listener/thread lifecycle. `item_operations.rs` owns `CopyContext`, complete-record copy/usage ordering and single-item
 membership operations for native default GUI copy, CLI and API. Text/link copy writes plain
 text; media resolves existing originals/managed resources through the same resolver. Missing
