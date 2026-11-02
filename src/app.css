@@ -47,6 +47,7 @@
   --font-size-cardPreview: 11px;
   --modal-scrim: rgba(0, 0, 0, 0.52);
   --modal-scrim-filter: blur(2px);
+  --shadow-float: 0 8px 32px rgba(0, 0, 0, 0.5);
 }
 
 * {

@@ -68,7 +68,7 @@
     border-radius: 10px;
     color: var(--text-primary);
     background: var(--card-bg);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    box-shadow: var(--shadow-float);
     width: min(320px, calc(100vw - 32px));
   }
 

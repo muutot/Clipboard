@@ -94,7 +94,7 @@
     border: 1px solid var(--border-color);
     border-radius: 8px;
     background: var(--surface-bg);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    box-shadow: var(--shadow-float);
     backdrop-filter: blur(12px);
   }
 

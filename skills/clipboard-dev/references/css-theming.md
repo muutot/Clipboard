@@ -84,7 +84,7 @@ The current `ThemeColors` interface has 20 semantic values:
 | `--warning-color`     | `warningColor`     | caution/emphasis states                           |
 | `--scrollbar-color`   | `scrollbarColor`   | scroll thumb                                      |
 
-Two static (non-theme-mapped) accent/scrim tokens live alongside in `app.css` `:root`: `--favorite-color` (favorite star/filter accent) and `--modal-scrim` / `--modal-scrim-filter` (shared modal scrim consumed by the global `dialog::backdrop` rule and div-based overlays; full-screen shells keep stronger local scrims).
+Two static (non-theme-mapped) accent/scrim/shadow tokens live alongside in `app.css` `:root`: `--favorite-color` (favorite star/filter accent), `--modal-scrim` / `--modal-scrim-filter` (shared modal scrim consumed by the global `dialog::backdrop` rule and div-based overlays; full-screen shells keep stronger local scrims), and `--shadow-float` (elevated floating-surface shadow shared by dialogs, context menus, and the find bar).
 
 Use these variables for reusable surfaces, text, borders, controls, and status states. Derive translucency with `color-mix` instead of inventing parallel shades.
 
