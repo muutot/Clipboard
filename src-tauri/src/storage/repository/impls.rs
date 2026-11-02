@@ -12,10 +12,10 @@ use rusqlite::{params, params_from_iter, OptionalExtension, TransactionBehavior}
 
 use super::{
     content_exists_on_connection, current_time_ms, delete_kind_records, history_predicates,
-    insert_item_row, is_valid_tag_color, kind_to_storage, query_kind_storage_stats,
-    rewrite_item_tags, unique_ids, ClipboardRepository, HistoryFilter, KindDeleteResult,
-    KindDeleteScope, KindStorageStats, StorageFileReferences, StoredClipboardItem, TagInfo,
-    TextItemUpdate, ITEM_COLUMNS, ITEM_LOOKUP_CHUNK_SIZE,
+    is_valid_tag_color, kind_to_storage, query_kind_storage_stats, rewrite_item_tags, unique_ids,
+    ClipboardRepository, HistoryFilter, KindDeleteResult, KindDeleteScope, KindStorageStats,
+    StorageFileReferences, StoredClipboardItem, TagInfo, TextItemUpdate, ITEM_COLUMNS,
+    ITEM_LOOKUP_CHUNK_SIZE,
 };
 use crate::domain::{ClipboardItem, ClipboardKind};
 use crate::storage::{Database, StorageError};
@@ -36,25 +36,7 @@ const LAST_ACTIVITY_SQL: &str = "MAX(created_at_ms, COALESCE(last_used_at_ms, cr
 
 impl ClipboardRepository for Database {
     fn save_item(&self, item: &ClipboardItem) -> Result<String, StorageError> {
-        super::validate_clipboard_text(
-            &item.title,
-            item.text_content.as_deref(),
-            item.html_content.as_deref(),
-            item.rtf_content.as_deref(),
-        )?;
-        let _resource_publication = self.begin_resource_write()?;
-        let size_bytes =
-            i64::try_from(item.size_bytes).map_err(|_| StorageError::ValueOutOfRange {
-                field: "size_bytes",
-            })?;
-
-        self.with_connection(|connection| {
-            let transaction =
-                connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
-            let id = insert_item_row(&transaction, item, size_bytes)?;
-            transaction.commit()?;
-            Ok(id)
-        })
+        self.save_item_with_result(item, |_, id| Ok(id))
     }
 
     fn content_exists(

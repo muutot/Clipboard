@@ -745,6 +745,14 @@ Window opacity/effects are posted to the UI thread. `apply_webview_transparency`
 
 ## CLI and loopback API
 
+`POST /paste` saves through `Database::save_item_returning`, which reads the
+canonical upsert row inside the same immediate transaction before commit. Its
+reply retains existing favorites, custom titles, rich formats, tags, icons and
+original creation time instead of substituting the newly constructed input.
+`save_item_with_result` shares validation/publication/upsert with the ID-only
+`save_item`; result preparation errors roll back the row, tags and outboxes.
+The callback reads its transaction and must not reenter Database.
+
 The listener owns every accepted connection's socket clone and join handle.
 Stop closes all retained sockets before joining handlers, interrupting delayed
 request reads and response writes; an already executing database operation may

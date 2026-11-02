@@ -24,6 +24,13 @@ save. Matching platform CI is required beyond the Windows UTs.
 
 ## Clipboard record contract
 
+The local API `POST /paste` returns the canonical saved record, including values
+retained by content dedup. `Database::save_item_returning` reads that row before
+committing the shared immediate save transaction; result-read errors roll back
+the write. Ordinary `ClipboardRepository::save_item` still returns only the ID
+without an additional row read. Schema, dedup rules and HTTP payload fields are
+unchanged.
+
 Sync treats `metadata_json.originalPath` and every nested `originalPath` as
 device-local fields: outgoing preparation and incoming deferred/eager paths
 remove them, including fields received from older peers. File `name` and

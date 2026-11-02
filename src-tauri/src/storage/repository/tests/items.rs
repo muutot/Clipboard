@@ -206,6 +206,39 @@ fn save_rolls_back_record_and_tags_on_derived_index_failure() {
 }
 
 #[test]
+fn saved_result_read_failure_rolls_back_new_and_existing_rows() {
+    let database = Database::open_in_memory().unwrap();
+    let mut original = text_item("existing", "hash-existing", 100);
+    original.metadata_json = Some(r#"{"tags":["keep"]}"#.into());
+    database.save_item(&original).unwrap();
+    let before = database.get_item(&original.id).unwrap().unwrap();
+    let before_search = database.read_search_outbox(100).unwrap();
+
+    for mut item in [original.clone(), text_item("new", "hash-new", 200)] {
+        item.title = "uncommitted title".into();
+        item.metadata_json = Some(r#"{"tags":["uncommitted"]}"#.into());
+        let result = database.save_item_with_result(&item, |transaction, _| {
+            transaction
+                .query_row("SELECT value FROM missing_result_table", [], |row| {
+                    row.get::<_, String>(0)
+                })
+                .map_err(StorageError::from)
+        });
+        assert!(result.is_err());
+        assert_eq!(database.get_item(&original.id).unwrap().unwrap(), before);
+        assert!(database.get_item("new").unwrap().is_none());
+        assert_eq!(database.read_search_outbox(100).unwrap(), before_search);
+        let tags = database.list_all_tags().unwrap();
+        assert_eq!(tags.len(), 1);
+        assert_eq!(tags[0].name, "keep");
+    }
+    let saved = database
+        .save_item_returning(&text_item("retry", "hash-retry", 300))
+        .unwrap();
+    assert_eq!(saved, database.get_item("retry").unwrap().unwrap());
+}
+
+#[test]
 fn bulk_import_does_not_overwrite_a_row_on_id_collision() {
     let database = Database::open_in_memory().unwrap();
     let mut victim = text_item("shared-id", "hash-victim", 100);

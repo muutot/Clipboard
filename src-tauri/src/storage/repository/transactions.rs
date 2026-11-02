@@ -1,6 +1,7 @@
-//! Transactional write funnels for distinct saves, renames, backup restore and history import.
+//! Transactional write funnels for ordinary/distinct saves, renames, backup restore and history import.
 //!
-//! Owns `Database::rename_item_transactional`, `Database::save_item_as_new`,
+//! Owns `Database::save_item_with_result`, `Database::save_item_returning`,
+//! `Database::rename_item_transactional`, `Database::save_item_as_new`,
 //! `TransactionalSaveSummary`, `Database::validate_restore_items`,
 //! `Database::restore_items_transactional(_with_progress)`,
 //! `Database::save_items_transactional`, and the import bounds
@@ -24,6 +25,50 @@ pub struct TransactionalSaveSummary {
 }
 
 impl Database {
+    /// Read the stored upsert result before committing it. Dedup preserves
+    /// user fields, rich formats and creation time that the input need not have.
+    pub(crate) fn save_item_returning(
+        &self,
+        item: &ClipboardItem,
+    ) -> Result<ClipboardItem, StorageError> {
+        self.save_item_with_result(item, |transaction, id| {
+            let stored = transaction.query_row(
+                &format!("SELECT {ITEM_COLUMNS} FROM clipboard_items WHERE id = ?1"),
+                [id],
+                StoredClipboardItem::from_row,
+            )?;
+            stored.try_into()
+        })
+    }
+
+    /// Shared single-row write funnel. Result preparation may read this
+    /// transaction but must not reenter Database; any failure rolls it back.
+    pub(super) fn save_item_with_result<T>(
+        &self,
+        item: &ClipboardItem,
+        result: impl FnOnce(&rusqlite::Transaction<'_>, String) -> Result<T, StorageError>,
+    ) -> Result<T, StorageError> {
+        validate_clipboard_text(
+            &item.title,
+            item.text_content.as_deref(),
+            item.html_content.as_deref(),
+            item.rtf_content.as_deref(),
+        )?;
+        let _resource_publication = self.begin_resource_write()?;
+        let size_bytes =
+            i64::try_from(item.size_bytes).map_err(|_| StorageError::ValueOutOfRange {
+                field: "size_bytes",
+            })?;
+        self.with_connection(|connection| {
+            let transaction =
+                connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+            let id = insert_item_row(&transaction, item, size_bytes)?;
+            let saved = result(&transaction, id)?;
+            transaction.commit()?;
+            Ok(saved)
+        })
+    }
+
     /// Rename only an active row using its latest state. The callback may change
     /// title, resource/preview paths, file-list text and metadata, and must not
     /// reenter this Database. Other fields are outside the rename write set.

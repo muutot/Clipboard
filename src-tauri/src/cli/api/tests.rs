@@ -94,6 +94,57 @@ fn paste_list_search_and_delete_endpoints_use_database() {
         .is_empty());
 }
 
+#[test]
+fn paste_returns_the_actual_deduplicated_record() {
+    for text in ["existing API note", "https://example.com/existing"] {
+        let database = Database::open_in_memory().unwrap();
+        let kind = if text.starts_with("https://") {
+            ClipboardKind::Link
+        } else {
+            ClipboardKind::Text
+        };
+        let mut original =
+            super::super::build_text_clipboard_item(text.into(), kind, "existing", "original app");
+        original.id = "original-id".into();
+        original.created_at_ms = 100;
+        original.last_used_at_ms = Some(100);
+        original.title = "User-authored title".into();
+        original.is_favorite = true;
+        original.html_content = Some("<p>retained formatting</p>".into());
+        original.rtf_content = Some("{\\rtf1 retained formatting}".into());
+        original.icon_path = Some("retained-icon.png".into());
+        original.metadata_json = Some(
+            serde_json::json!({
+                "customTitle": true,
+                "tags": ["manual"],
+                "codeLanguage": "Rust",
+                "web": {"url": "https://example.com/old"}
+            })
+            .to_string(),
+        );
+        database.save_item(&original).unwrap();
+
+        let response = dispatch(
+            &request("POST", "/paste", text.as_bytes()),
+            &database,
+            500,
+            500,
+        );
+        assert_eq!(response.status, 201);
+        let returned: ClipboardItem = serde_json::from_slice(&response.body).unwrap();
+        let stored = database.get_item(&original.id).unwrap().unwrap();
+        assert_eq!(database.item_count().unwrap(), 1);
+        assert!(stored.is_favorite);
+        assert_eq!(stored.title, original.title);
+        assert_eq!(stored.created_at_ms, 100);
+        assert_eq!(stored.source_app.as_deref(), Some("Local API"));
+        assert_eq!(
+            returned, stored,
+            "API response must describe the row it saved"
+        );
+    }
+}
+
 fn gated_capture_state(paused: bool, text_limit: u64) -> CaptureState {
     let capture = CaptureState::new(
         &crate::privacy::PrivacyManager::new(),

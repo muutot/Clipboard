@@ -248,10 +248,7 @@ fn save_text(database: &Database, text: &str) -> Result<ClipboardItem, String> {
         ClipboardKind::Text
     };
     let item = build_text_clipboard_item(text.to_owned(), kind, "api", "Local API");
-    let saved_id = database
-        .save_item(&item)
-        .map_err(|error| error.to_string())?;
-    let mut saved = item;
-    saved.id = saved_id;
-    Ok(saved)
+    database
+        .save_item_returning(&item)
+        .map_err(|error| error.to_string())
 }
