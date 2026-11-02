@@ -463,6 +463,13 @@ verify both file/icon references, and confirm ordinary orphan removal resumes.
 
 ## Search
 
+Manifest writes exclusively create a short UUID sibling, serialize and flush it,
+then atomically replace `manifest.json`. The fixed `manifest.json.tmp` path is
+never reused, so a preexisting hard-link alias retains its unrelated bytes.
+Only successfully created staging is cleaned up on serialization, flush or
+publication failure. Failed publication preserves the destination and permits
+retry; the v2 manifest schema and rebuild decisions are unchanged.
+
 Relative-week search subtracts calendar dates before resolving local midnight; it must not subtract 24-hour durations from the current instant. `week_start_date` is tested against New York, Berlin and Lord Howe DST boundaries with the test-only `chrono-tz` dependency, without changing the host timezone.
 
 `search_clipboard_items` and `rebuild_search_index` are async commands whose SQLite/Tantivy work runs inside `tauri::async_runtime::spawn_blocking`; neither may block the main event loop.

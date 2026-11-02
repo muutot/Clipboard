@@ -1,6 +1,5 @@
 use std::{
     fs,
-    fs::File,
     path::{Path, PathBuf},
     time::Duration,
 };
@@ -141,13 +140,25 @@ fn write_manifest(path: &Path, state: SearchIndexState) -> Result<(), SearchErro
     // Replace atomically (fsync'd temporary + platform-atomic rename) so a
     // crash mid-write cannot corrupt the manifest into a needless full
     // rebuild of the index.
-    let temporary = path.with_extension("json.tmp");
-    let mut file = File::create(&temporary)?;
-    serde_json::to_writer_pretty(&mut file, &manifest)?;
-    file.sync_all()?;
-    drop(file);
-    replace_file(&temporary, path)?;
-    Ok(())
+    let temporary =
+        path.with_file_name(format!(".clipboard-manifest.tmp-{}", uuid::Uuid::new_v4()));
+    // Establish ownership before writing or authorizing cleanup. A fixed stage
+    // can be a link to unrelated data, or belong to another write.
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temporary)?;
+    let result = (|| -> Result<(), SearchError> {
+        serde_json::to_writer_pretty(&mut file, &manifest)?;
+        file.sync_all()?;
+        drop(file);
+        replace_file(&temporary, path)?;
+        Ok(())
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&temporary);
+    }
+    result
 }
 
 #[cfg(test)]
@@ -155,6 +166,60 @@ mod tests {
     use std::{fs, path::PathBuf, time::SystemTime};
 
     use super::{SearchIndexLayout, SearchIndexManifest, SearchIndexState};
+
+    #[test]
+    fn manifest_writes_preserve_preexisting_staging_and_its_external_alias() {
+        let root = temporary_directory("staging-alias");
+        fs::create_dir_all(&root).unwrap();
+        let unrelated = root.join("unrelated.txt");
+        let staging = root.join("manifest.json.tmp");
+        fs::write(&unrelated, b"unrelated existing content").unwrap();
+        fs::hard_link(&unrelated, &staging).unwrap();
+        let layout = SearchIndexLayout::prepare(root.clone()).unwrap();
+        layout.mark_ready().unwrap();
+        layout.mark_building().unwrap();
+        let original = fs::read(&unrelated).unwrap();
+        let staged = fs::read(&staging);
+        let manifest: SearchIndexManifest =
+            serde_json::from_slice(&fs::read(root.join("manifest.json")).unwrap()).unwrap();
+        let entries = fs::read_dir(&root).unwrap().count();
+        fs::remove_dir_all(root).unwrap();
+        assert!(
+            original == b"unrelated existing content",
+            "manifest write overwrote the external alias"
+        );
+        assert_eq!(staged.unwrap(), b"unrelated existing content");
+        assert_eq!(manifest.state, SearchIndexState::Building);
+        assert_eq!(
+            entries, 4,
+            "no owned staging should survive a successful write"
+        );
+    }
+
+    #[test]
+    fn failed_manifest_publication_preserves_destination_and_removes_owned_staging() {
+        let root = temporary_directory("publication-error");
+        let layout = SearchIndexLayout::prepare(root.clone()).unwrap();
+        let manifest = root.join("manifest.json");
+        fs::remove_file(&manifest).unwrap();
+        fs::create_dir(&manifest).unwrap();
+        fs::write(manifest.join("keep"), b"existing content").unwrap();
+
+        let result = layout.mark_ready();
+        let preserved = fs::read(manifest.join("keep")).unwrap();
+        let entries = fs::read_dir(&root).unwrap().count();
+        fs::remove_dir_all(&manifest).unwrap();
+        let retry = layout.mark_ready();
+        let saved: SearchIndexManifest =
+            serde_json::from_slice(&fs::read(&manifest).unwrap()).unwrap();
+        fs::remove_dir_all(root).unwrap();
+
+        assert!(result.is_err());
+        assert_eq!(preserved, b"existing content");
+        assert_eq!(entries, 2, "failed writes must remove their owned staging");
+        assert!(retry.is_ok());
+        assert_eq!(saved.state, SearchIndexState::Ready);
+    }
 
     #[test]
     fn missing_or_incomplete_indexes_require_a_rebuild() {
