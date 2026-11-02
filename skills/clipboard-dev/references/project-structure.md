@@ -108,6 +108,15 @@ The resolver takes `$UninstallProjectRoot`. Before removing settings, uninstall 
 
 `scripts/sync_release.py` sends the GitCode bearer credential only to HTTPS upload URLs with the same origin as `GITCODE_API_BASE`. External presigned uploads use only the returned upload headers; explicit upload authorization takes precedence case-insensitively. Invalid or insecure upload URLs are rejected without printing signed URLs. `python scripts/test-sync-release.py` exercises the production upload functions with synthetic HTTP responses, without calling release services.
 
+Release-asset downloads request identity encoding and resume only a prefix obtained
+in the current operation with a strong ETag, using `Range` plus `If-Range`.
+Changed/unknown entities restart in write mode; partial responses must match the
+entity, range, total and length before appending. A 416 is retried from scratch,
+never treated as proof of a complete file. `python scripts/test-sync-release-download.py`
+uses the production downloader/session factory and temporary loopback HTTP servers
+to verify interruptions, replacement assets and protocol errors. The GitCode sync
+workflow runs both focused download/upload suites before external mirroring.
+
 Release workflow resolution uses `scripts/validate-release-version.mjs --resolve`
 to validate the requested tag tree and pass one immutable SHA to verify/build jobs.
 Its dispatch, tag, commit-scope and version regressions run with

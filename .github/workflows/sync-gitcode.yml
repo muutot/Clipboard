@@ -35,6 +35,11 @@ jobs:
       - name: Install sync dependencies
         run: pip install -r scripts/requirements-sync.txt
 
+      - name: Verify mirror download and upload boundaries
+        run: |
+          python -B scripts/test-sync-release-download.py -v
+          python -B scripts/test-sync-release.py -v
+
       # Mirrors the published GitHub Release body + assets to GitCode.
       # Requires repo secrets GITCODE_TOKEN (GitCode personal access token),
       # GITCODE_OWNER and GITCODE_REPO (target GitCode coordinates).

@@ -12,6 +12,7 @@ Required: GITCODE_TOKEN. Everything else has sane defaults/can be derived.
 """
 
 import os
+import re
 import sys
 import tempfile
 import time
@@ -106,44 +107,97 @@ def download_file_with_progress_and_resume(
     带有 tqdm 进度条 + HTTP Range 断点续传的下载函数
     """
     download_headers = {}
+    # Stored offsets must refer to the same uncompressed HTTP representation.
+    download_headers["Accept-Encoding"] = "identity"
     if GITHUB_TOKEN and GITHUB_TOKEN.strip():
         download_headers["Authorization"] = f"Bearer {GITHUB_TOKEN.strip()}"
 
+    resume_etag = None
+    expected_size = None
+
     for attempt in range(1, max_attempts + 1):
-        file_mode = "ab"  # 追加写入模式
+        file_mode = "wb"
         downloaded_bytes = 0
 
-        if os.path.exists(local_path):
+        if resume_etag and os.path.exists(local_path):
             downloaded_bytes = os.path.getsize(local_path)
 
         headers = download_headers.copy()
         if downloaded_bytes > 0:
             headers["Range"] = f"bytes={downloaded_bytes}-"
+            headers["If-Range"] = resume_etag
 
         try:
             with http.get(
                 download_url, headers=headers, stream=True, timeout=(15, 60)
             ) as r:
                 if r.status_code == 416:
-                    print(f"    [OK] {asset_name} 已完整下载，无需重复拉取。")
-                    return True
+                    # An unsatisfied range is not proof that the local bytes
+                    # are complete or current. Retry a full representation.
+                    resume_etag = None
+                    expected_size = None
+                    r.raise_for_status()
 
                 # 服务器忽略 Range 请求返回 200 时，本地半截文件不能继续追加，
                 # 必须丢弃旧分片从头重写，否则会拼出损坏的资产文件。
-                if r.status_code == 200 and downloaded_bytes > 0:
-                    file_mode = "wb"
+                if r.status_code == 200:
                     downloaded_bytes = 0
+                    etag = r.headers.get("ETag", "")
+                    resume_etag = (
+                        etag
+                        if len(etag) >= 2 and etag.startswith('"') and etag.endswith('"')
+                        else None
+                    )
+                    expected_size = None
+                elif r.status_code == 206:
+                    content_range = re.fullmatch(
+                        r"bytes (\d+)-(\d+)/(\d+)", r.headers.get("Content-Range", "")
+                    )
+                    if (
+                        not downloaded_bytes
+                        or not resume_etag
+                        or r.headers.get("ETag") != resume_etag
+                        or not content_range
+                    ):
+                        resume_etag = None
+                        expected_size = None
+                        raise ValueError("Partial download has no matching entity and byte range")
+                    start, end, total = map(int, content_range.groups())
+                    if (
+                        start != downloaded_bytes
+                        or end < start
+                        or total <= end
+                        or (expected_size is not None and total != expected_size)
+                    ):
+                        resume_etag = None
+                        expected_size = None
+                        raise ValueError("Partial download range does not match the stored prefix")
+                    expected_size = total
+                    file_mode = "ab"
 
                 if r.status_code not in (200, 206):
                     print(f"    [!] 服务器返回状态码: {r.status_code}")
 
                 r.raise_for_status()
+                if r.status_code not in (200, 206):
+                    raise ValueError("Unexpected successful download status")
+                if r.headers.get("Content-Encoding", "identity").lower() != "identity":
+                    resume_etag = None
+                    expected_size = None
+                    raise ValueError("Download did not honor the identity encoding")
 
                 # 获取文件总大小 (如果是 206 断点续传，Content-Length 是剩余部分大小)
-                content_length = int(r.headers.get("Content-Length", 0))
-                total_size = (
-                    content_length + downloaded_bytes if content_length else None
-                )
+                length_header = r.headers.get("Content-Length")
+                content_length = int(length_header) if length_header is not None else None
+                if content_length is not None and content_length < 0:
+                    raise ValueError("Invalid download length")
+                if r.status_code == 200:
+                    expected_size = content_length
+                elif content_length is not None and content_length != end - start + 1:
+                    resume_etag = None
+                    expected_size = None
+                    raise ValueError("Partial download length disagrees with its byte range")
+                total_size = expected_size
 
                 chunk_size = 1024 * 1024  # 1MB
 
@@ -162,9 +216,18 @@ def download_file_with_progress_and_resume(
                     with open(local_path, file_mode) as f:
                         for chunk in r.iter_content(chunk_size=chunk_size):
                             if chunk:
+                                if (
+                                    expected_size is not None
+                                    and downloaded_bytes + len(chunk) > expected_size
+                                ):
+                                    raise ValueError("Download exceeded its declared length")
                                 f.write(chunk)
                                 f.flush()
+                                downloaded_bytes += len(chunk)
                                 pbar.update(len(chunk))  # 更新进度条
+
+                if expected_size is not None and downloaded_bytes != expected_size:
+                    raise ValueError("Download ended before the declared length")
 
             print(f"    [OK] 下载成功: {asset_name}")
             return True
