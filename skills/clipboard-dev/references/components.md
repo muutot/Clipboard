@@ -354,6 +354,12 @@ Its mounted tests cover both languages, custom identifiers and malformed failure
 
 `StoragePathsPanel` gates resource-path inputs on `getStorageConfig`, using persisted overrides (including changes awaiting restart); `StorageStatus` supplies active-path placeholders only. Saving one input preserves the loaded other value. Explicit restore-defaults sends two nulls, and failed saves retain the draft. Inputs are disabled during save, and late initialization after unmount is ignored.
 
+The data-directory field remains editable during configure/restore requests.
+Successful replies always update the saved next-launch summary, but normalize
+the input only if its submitted draft is unchanged. Later typing survives the
+reply and can be submitted next; the pending summary describes saved state,
+not the still-unsaved draft. Mounted path tests delay both save and restore.
+
 `CustomCssSettingsPanel.svelte` is the lazy Appearance → Custom CSS section. It waits for
 shared settings initialization, retains an unsaved draft across external updates and offers
 explicit save/apply, discard, example and clear actions. The enable switch keeps saved code.

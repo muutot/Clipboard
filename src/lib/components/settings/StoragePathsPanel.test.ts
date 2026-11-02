@@ -3,7 +3,12 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { StorageStatus } from "$lib/services/storage";
 import StoragePathsPanel from "./StoragePathsPanel.svelte";
 
-const bridge = vi.hoisted(() => ({ load: vi.fn(), save: vi.fn(), feedback: vi.fn() }));
+const bridge = vi.hoisted(() => ({
+  load: vi.fn(),
+  save: vi.fn(),
+  directory: vi.fn(),
+  feedback: vi.fn(),
+}));
 vi.mock("$lib/services/settings", async () => {
   const { writable } = await import("svelte/store");
   return { generalSettings: writable({ colorIcons: false }) };
@@ -11,7 +16,7 @@ vi.mock("$lib/services/settings", async () => {
 vi.mock("$lib/services/storage", () => ({
   getStorageConfig: bridge.load,
   setResourceStoragePaths: bridge.save,
-  configureStorageDirectory: vi.fn(),
+  configureStorageDirectory: bridge.directory,
   setResourceOwnership: vi.fn(),
 }));
 const configured = {
@@ -59,6 +64,7 @@ beforeEach(() => {
     restartRequired: true,
   }));
   bridge.feedback.mockReset();
+  bridge.directory.mockReset();
 });
 afterEach(async () => {
   for (const cleanup of cleanups.splice(0)) await cleanup();
@@ -123,3 +129,71 @@ it("restores defaults explicitly and retains the draft if saving fails", async (
   expect(target.querySelector<HTMLInputElement>("#image-storage-path")!.value).toBe("");
   expect(target.querySelector<HTMLInputElement>("#file-storage-path")!.value).toBe("");
 });
+
+it.each(["save", "restore"])(
+  "preserves a later directory draft when a pending %s returns",
+  async (operation) => {
+    let finish!: (result: {
+      dataDirectoryPath: string;
+      storagePath: string;
+      restartRequired: boolean;
+    }) => void;
+    bridge.directory.mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const target = render();
+    await settle();
+    const input = target.querySelector<HTMLInputElement>("#data-directory")!;
+    input.value = "C:/submitted";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    flushSync();
+    const actions = input.parentElement!.querySelectorAll<HTMLButtonElement>("button");
+    actions[operation === "save" ? 1 : 0].click();
+    await settle();
+    expect(bridge.directory).toHaveBeenCalledWith(operation === "save" ? "C:/submitted" : null);
+    expect(actions[1].disabled).toBe(true);
+    expect(input.disabled).toBe(false);
+    // The directory field remains editable while the submitted request is pending.
+    input.value = "C:/later-draft";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    flushSync();
+    finish({
+      dataDirectoryPath: "C:/resolved",
+      storagePath: "C:/resolved/storage",
+      restartRequired: true,
+    });
+    await settle();
+    expect(input.value).toBe("C:/later-draft");
+    expect(target.querySelector(".pending-path code")!.textContent).toBe("C:/resolved/storage");
+    expect(actions[1].disabled).toBe(false);
+    expect(bridge.feedback).toHaveBeenCalledWith(expect.any(String), true);
+    actions[1].click();
+    await settle();
+    expect(bridge.directory).toHaveBeenLastCalledWith("C:/later-draft");
+  },
+);
+
+it.each(["save", "restore"])(
+  "applies the resolved directory after %s when the submitted draft is unchanged",
+  async (operation) => {
+    bridge.directory.mockResolvedValue({
+      dataDirectoryPath: "C:/resolved",
+      storagePath: "C:/resolved/storage",
+      restartRequired: true,
+    });
+    const target = render();
+    await settle();
+    const input = target.querySelector<HTMLInputElement>("#data-directory")!;
+    input.value = " C:/submitted ";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    flushSync();
+    input
+      .parentElement!.querySelectorAll<HTMLButtonElement>("button")
+      [operation === "save" ? 1 : 0].click();
+    await settle();
+    expect(bridge.directory).toHaveBeenCalledWith(operation === "save" ? "C:/submitted" : null);
+    expect(input.value).toBe("C:/resolved");
+  },
+);

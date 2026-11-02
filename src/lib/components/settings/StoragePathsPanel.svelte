@@ -101,10 +101,11 @@
   }
 
   async function saveDirectory(directory: string | null) {
+    const submittedDraft = dataDirectory;
     saving = true;
     try {
       pending = await configureStorageDirectory(directory);
-      dataDirectory = pending.dataDirectoryPath;
+      if (dataDirectory === submittedDraft) dataDirectory = pending.dataDirectoryPath;
       restartNeeded = pending.restartRequired;
       onfeedback(
         pending.restartRequired ? _t("storage.savedAndRestart") : _t("storage.alreadyUsingDir"),

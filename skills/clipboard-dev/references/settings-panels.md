@@ -207,6 +207,9 @@ backend until completion or explicit cancellation.
 - Privacy pause hydration subscribes before fetching status and ignores a snapshot when a newer pause event has arrived. Failed initial status reads retain a retry gate; teardown suppresses late loads and releases even a late listener registration.
 - `SensitiveContentSettingsPanel` keeps pattern drafts separate from saved privacy settings. A save response updates only the submitted field; pattern normalization replaces the editor only if its text is unchanged since submission. Toggling local-only must never reset the pattern draft.
 - Keep restart-required state explicit for path/config changes that do not apply live.
+- StoragePathsPanel's editable data-directory draft survives older configure or
+  restore replies. The next-launch summary always reflects the saved response;
+  the input adopts its normalized path only while the submitted draft is unchanged.
 - State a platform limitation in the panel, not only in the README. Read the authoritative
   `get_runtime_info` capability (`capabilities.globalShortcut`,
   `capabilities.quickPaste`) rather than inferring from `operatingSystem`:
