@@ -56,7 +56,7 @@ keyring-core = "1"
 zeroize = "1"
 
 [target.'cfg(target_os = "windows")'.dependencies]
-# Typed bindings for replacing the API token's DACL with one current-user ACE.
+# Typed bindings for current-user API token DACLs and private scratch creation.
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security_Authorization", "Win32_Storage_FileSystem", "Win32_System_Threading"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]

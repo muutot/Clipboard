@@ -644,6 +644,13 @@ and date-only queries use this command even when their records are not loaded in
 
 ### Portable backups
 
+Scratch directories are private before creating records or resource files:
+Unix mode 0700; Windows protected single-current-user DACL inherited only by its
+descendants. Creation refuses existing entries and propagates security errors.
+The shared Windows ACL helper also serves API tokens with their unchanged
+NO_INHERITANCE flag. This affects temporary permissions, not archive/schema/IPC
+fields or user-selected final output permissions; Unix needs its native gate.
+
 Creation tests the same per-file source that remapping uses: nonempty `storagePath`,
 then legacy `path`, otherwise `originalPath`. Remapping normalizes the legacy alias
 to `storagePath` and removes `path`, preserving its resource bytes without leaving

@@ -32,6 +32,7 @@ pub mod modifier_input;
 pub mod native_hotkeys;
 pub mod os_locale;
 pub mod platform_info;
+pub(crate) mod private_directory;
 #[cfg(any(test, not(target_os = "windows")))]
 pub mod quick_paste;
 pub mod secret_store;

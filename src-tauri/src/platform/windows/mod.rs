@@ -134,6 +134,8 @@ mod monitor;
 mod read_text;
 mod register;
 mod rtf;
+#[cfg(target_os = "windows")]
+pub(crate) mod security;
 mod write;
 
 #[cfg(target_os = "windows")]

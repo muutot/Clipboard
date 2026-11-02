@@ -72,6 +72,13 @@ Platform source files may contain detailed scaffolding or documented intended fl
 scratch cleanup and atomic icon conversion from the Objective-C adapter. It is
 also compiled in portable tests with synthetic command outputs and files.
 
+`platform/private_directory.rs` creates new private scratch directories before
+data writes: Unix mode 0700, Windows protected current-user DACL at creation.
+`platform/windows/security.rs` owns the shared process-token SID/ACL lifetime;
+API tokens request no inheritance and private directories pass their grant to
+descendants. Portable backups use the directory helper for spooled records,
+archive copies and extracted resources. Existing entries are never reused.
+
 ## Persistent layout
 
 ```text

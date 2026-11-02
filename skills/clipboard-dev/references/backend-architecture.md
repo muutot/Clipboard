@@ -731,6 +731,16 @@ Local filesystem calls and a single SQLite busy wait remain non-preemptible.
 
 ### Portable backups and file staging
 
+Portable-backup scratch creation uses `platform/private_directory.rs` before any
+record/resource write. Unix uses an exclusive directory with mode 0700; Windows
+CreateDirectoryW receives a protected DACL with one current-process user SID grant
+that child files/directories inherit. It cannot inherit public temp-parent grants.
+Existing entries or failed creation return errors without changing/reusing them.
+`platform/windows/security.rs::with_current_user_acl` owns the extracted process
+token/LocalAlloc ACL helper; API tokens retain NO_INHERITANCE and their existing
+create/rewrite/read behavior. Real Windows ACL and file tests cover shared parents,
+children, Unicode/long paths and cleanup; Unix mode/runtime remains a platform gate.
+
 `content::file_store::store_atomically` removes its owned temporary file when
 population fails, including after a partial write, and leaves any existing target
 untouched. Flush/publication failures use the same cleanup guarantee.

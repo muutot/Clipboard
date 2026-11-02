@@ -54,7 +54,7 @@ impl Scratch {
     fn at(parent: &Path) -> Result<Self, String> {
         fs::create_dir_all(parent).map_err(err)?;
         let path = parent.join(format!("clipboard-backup-{}", uuid::Uuid::new_v4()));
-        fs::create_dir(&path).map_err(err)?;
+        crate::platform::private_directory::create_private_directory(&path).map_err(err)?;
         Ok(Self(path))
     }
 }
@@ -656,6 +656,65 @@ mod scale_bench;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn backup_scratch_is_private_before_writing_under_a_shared_temp_parent() {
+        use std::process::Command;
+
+        let root = Scratch::at(&std::env::temp_dir()).unwrap();
+        let parent = root.0.join("shared-temp");
+        fs::create_dir(&parent).unwrap();
+        let grant = Command::new("icacls")
+            .arg(&parent)
+            .arg("/grant")
+            .arg("*S-1-1-0:(OI)(CI)R")
+            .output()
+            .unwrap();
+        assert!(grant.status.success());
+        let read_acl = |path: &Path, label: &str| {
+            let saved = root.0.join(format!("{label}-acl.txt"));
+            let result = Command::new("icacls")
+                .arg(path)
+                .arg("/save")
+                .arg(&saved)
+                .arg("/q")
+                .output()
+                .unwrap();
+            assert!(result.status.success());
+            let bytes = fs::read(saved).unwrap();
+            let words: Vec<_> = bytes
+                .chunks_exact(2)
+                .map(|word| u16::from_le_bytes([word[0], word[1]]))
+                .collect();
+            String::from_utf16(&words).unwrap()
+        };
+        let has_everyone = |acl: &str| acl.contains(";;;WD)") || acl.contains(";;;S-1-1-0)");
+        let ordinary = parent.join("ordinary.txt");
+        fs::write(&ordinary, b"synthetic control").unwrap();
+        assert!(has_everyone(&read_acl(&ordinary, "control")));
+
+        let scratch = Scratch::at(&parent).unwrap();
+        let before = read_acl(&scratch.0, "private-directory");
+        assert!(
+            !has_everyone(&before),
+            "scratch is public before the first sensitive write: {before}"
+        );
+        assert!(before.contains("D:P"));
+        let records = scratch.0.join("records.jsonl");
+        fs::write(&records, b"synthetic clipboard records").unwrap();
+        let nested = scratch.0.join("nested");
+        fs::create_dir(&nested).unwrap();
+        let resource = nested.join("resource.bin");
+        fs::write(&resource, b"synthetic resource bytes").unwrap();
+        for (path, label) in [(&records, "records"), (&resource, "resource")] {
+            assert!(!has_everyone(&read_acl(path, label)));
+        }
+        let path = scratch.0.clone();
+        drop(scratch);
+        assert!(!path.exists());
+    }
+
     fn assert_no_published_resources(paths: &StoragePaths) {
         for root in [&paths.images, &paths.files] {
             assert!(!fs::read_dir(root).unwrap().any(|entry| entry
