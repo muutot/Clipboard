@@ -731,6 +731,15 @@ Local filesystem calls and a single SQLite busy wait remain non-preemptible.
 
 ### Portable backups and file staging
 
+PPaste extraction also uses `platform/private_directory.rs` before writing its
+embedded SQLite database. `export/ppaste.rs::ExtractedDatabase` owns one exclusive
+UUID directory and its `PPaste2.db3` PathBuf; write/read errors and normal drop
+remove that directory including SQLite sidecars. Drop the guard after reading,
+before materializing imported rows, to minimize temporary-data lifetime.
+No conversion through a lossy path string is needed. Native Windows DACL UTs
+cover the DB/WAL/SHM under a public parent; Unix permission tests need Unix CI.
+Abrupt process exit and OS refusal to delete are outside drop cleanup guarantees.
+
 Portable-backup scratch creation uses `platform/private_directory.rs` before any
 record/resource write. Unix uses an exclusive directory with mode 0700; Windows
 CreateDirectoryW receives a protected DACL with one current-process user SID grant

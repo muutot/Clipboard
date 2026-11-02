@@ -1,4 +1,5 @@
-use std::io::Read;
+use std::io::{Read, Write};
+use std::path::{Path, PathBuf};
 
 use rusqlite::Connection;
 
@@ -40,40 +41,61 @@ pub(crate) fn import_from_ppaste_backup(
         .map_err(|error| format!("invalid PPaste backup {path}: {error}"))?;
 
     let db_bytes = read_zip_entry(&mut archive, "PPaste2.db3")?;
-    let db_path = extract_db_to_temp(&db_bytes)?;
-    let result = read_records(&db_path).and_then(|(rows, files_dropped, unreadable)| {
-        let _ = std::fs::remove_file(&db_path);
-        let mut summary = import_rows(&rows, &mut archive, database, paths)?;
-        if files_dropped > 0 {
-            summary.skipped_count += files_dropped;
-            summary.errors.push(format!(
+    let temporary = extract_db_to_temp(&db_bytes)?;
+    let (rows, files_dropped, unreadable) = read_records(&temporary.path)?;
+    drop(temporary);
+    let mut summary = import_rows(&rows, &mut archive, database, paths)?;
+    if files_dropped > 0 {
+        summary.skipped_count += files_dropped;
+        summary.errors.push(format!(
                 "{files_dropped} file record(s) were skipped: they reference files on the original machine and their contents are not included in the backup"
-            ));
-        }
-        if unreadable > 0 {
-            summary.skipped_count += unreadable;
-            summary.errors.push(format!(
-                "{unreadable} record(s) used an unknown type and were skipped"
-            ));
-        }
-        Ok(summary)
-    });
-    let _ = std::fs::remove_file(&db_path);
-    result
+        ));
+    }
+    if unreadable > 0 {
+        summary.skipped_count += unreadable;
+        summary.errors.push(format!(
+            "{unreadable} record(s) used an unknown type and were skipped"
+        ));
+    }
+    Ok(summary)
 }
 
-fn extract_db_to_temp(db_bytes: &[u8]) -> Result<String, String> {
-    let unique = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_nanos();
-    let db_path =
-        std::env::temp_dir().join(format!("ppaste_import_{}_{unique}.db3", std::process::id()));
-    std::fs::write(&db_path, db_bytes).map_err(|error| error.to_string())?;
-    Ok(db_path.to_string_lossy().to_string())
+struct ExtractedDatabase {
+    directory: PathBuf,
+    path: PathBuf,
 }
 
-fn read_records(db_path: &str) -> Result<(Vec<PpRow>, u64, u64), String> {
+impl Drop for ExtractedDatabase {
+    fn drop(&mut self) {
+        // The directory was exclusively created by this operation. Include any
+        // SQLite sidecars, and clean up on both write and read errors.
+        let _ = std::fs::remove_dir_all(&self.directory);
+    }
+}
+
+fn extract_db_to_temp(db_bytes: &[u8]) -> Result<ExtractedDatabase, String> {
+    extract_db_to_temp_at(db_bytes, &std::env::temp_dir())
+}
+
+fn extract_db_to_temp_at(db_bytes: &[u8], parent: &Path) -> Result<ExtractedDatabase, String> {
+    let directory = parent.join(format!("ppaste-import-{}", uuid::Uuid::new_v4()));
+    crate::platform::private_directory::create_private_directory(&directory)
+        .map_err(|error| format!("failed to create private PPaste directory: {error}"))?;
+    let temporary = ExtractedDatabase {
+        path: directory.join("PPaste2.db3"),
+        directory,
+    };
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temporary.path)
+        .map_err(|error| format!("failed to create PPaste database: {error}"))?;
+    file.write_all(db_bytes)
+        .map_err(|error| format!("failed to write PPaste database: {error}"))?;
+    Ok(temporary)
+}
+
+fn read_records(db_path: &Path) -> Result<(Vec<PpRow>, u64, u64), String> {
     let connection = Connection::open(db_path)
         .map_err(|error| format!("failed to read PPaste database: {error}"))?;
     let mut statement = connection
@@ -491,6 +513,155 @@ mod tests {
     use crate::storage::ClipboardRepository;
     use std::io::Write;
     use std::path::{Path, PathBuf};
+
+    struct TempRoot(PathBuf);
+    impl TempRoot {
+        fn new() -> Self {
+            let path =
+                std::env::temp_dir().join(format!("ppaste-private-{}", uuid::Uuid::new_v4()));
+            crate::platform::private_directory::create_private_directory(&path).unwrap();
+            Self(path)
+        }
+    }
+    impl Drop for TempRoot {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn extracted_ppaste_database_is_private_under_a_shared_temp_parent() {
+        use std::process::Command;
+
+        let root = TempRoot::new();
+        let source = root.0.join("source.db3");
+        make_source_db(&source);
+        let bytes = std::fs::read(&source).unwrap();
+        let parent = root.0.join("shared-temp");
+        std::fs::create_dir(&parent).unwrap();
+        let grant = Command::new("icacls")
+            .arg(&parent)
+            .arg("/grant")
+            .arg("*S-1-1-0:(OI)(CI)R")
+            .output()
+            .unwrap();
+        assert!(grant.status.success());
+        let read_acl = |path: &Path, label: &str| {
+            let saved = root.0.join(format!("{label}-acl.txt"));
+            let result = Command::new("icacls")
+                .arg(path)
+                .arg("/save")
+                .arg(&saved)
+                .arg("/q")
+                .output()
+                .unwrap();
+            assert!(result.status.success());
+            let bytes = std::fs::read(saved).unwrap();
+            let words: Vec<_> = bytes
+                .chunks_exact(2)
+                .map(|word| u16::from_le_bytes([word[0], word[1]]))
+                .collect();
+            String::from_utf16(&words).unwrap()
+        };
+        let has_everyone = |acl: &str| acl.contains(";;;WD)") || acl.contains(";;;S-1-1-0)");
+        let ordinary = parent.join("ordinary.txt");
+        std::fs::write(&ordinary, b"synthetic control").unwrap();
+        assert!(has_everyone(&read_acl(&ordinary, "control")));
+
+        let temporary = extract_db_to_temp_at(&bytes, &parent).unwrap();
+        let path = &temporary.path;
+        assert_eq!(std::fs::read(path).unwrap(), bytes);
+        assert_eq!(read_records(path).unwrap().0.len(), 4);
+        let acl = read_acl(path, "extracted-db");
+        assert!(
+            !has_everyone(&acl),
+            "extracted PPaste database inherits public read access: {acl}"
+        );
+        let directory_acl = read_acl(&temporary.directory, "private-directory");
+        assert!(directory_acl.contains("D:P"));
+        assert!(!has_everyone(&directory_acl));
+        let connection = Connection::open(path).unwrap();
+        connection
+            .execute_batch("PRAGMA journal_mode=WAL; CREATE TABLE scratch_write(value TEXT);")
+            .unwrap();
+        for name in ["PPaste2.db3-wal", "PPaste2.db3-shm"] {
+            assert!(!has_everyone(&read_acl(
+                &temporary.directory.join(name),
+                name
+            )));
+        }
+        drop(connection);
+    }
+
+    #[test]
+    fn private_extraction_is_independent_and_cleans_sqlite_sidecars() {
+        let root = TempRoot::new();
+        let source = root.0.join("source.db3");
+        make_source_db(&source);
+        let bytes = std::fs::read(&source).unwrap();
+        let first = extract_db_to_temp_at(&bytes, &root.0).unwrap();
+        let second = extract_db_to_temp_at(&bytes, &root.0).unwrap();
+        assert_ne!(first.directory, second.directory);
+        assert_eq!(std::fs::read(&first.path).unwrap(), bytes);
+        assert_eq!(read_records(&first.path).unwrap().0.len(), 4);
+        let connection = Connection::open(&first.path).unwrap();
+        connection
+            .execute_batch("PRAGMA journal_mode=WAL; CREATE TABLE scratch_write(value TEXT);")
+            .unwrap();
+        let wal = first.directory.join("PPaste2.db3-wal");
+        let shm = first.directory.join("PPaste2.db3-shm");
+        assert!(wal.is_file());
+        assert!(shm.is_file());
+        let wal_bytes = std::fs::read(&wal).unwrap();
+        let shm_bytes = std::fs::read(&shm).unwrap();
+        assert!(!wal_bytes.is_empty());
+        assert!(!shm_bytes.is_empty());
+        drop(connection);
+        // SQLite normally removes sidecars itself on close. Recreate their
+        // already observed bytes as a crash-residual control for directory drop.
+        std::fs::write(&wal, wal_bytes).unwrap();
+        std::fs::write(&shm, shm_bytes).unwrap();
+        let directory = first.directory.clone();
+        drop(first);
+        assert!(!directory.exists());
+        assert_eq!(read_records(&second.path).unwrap().0.len(), 4);
+        assert_eq!(std::fs::read(&source).unwrap(), bytes);
+    }
+
+    #[test]
+    fn private_extraction_cleans_after_invalid_database_reads_and_refuses_missing_parents() {
+        let root = TempRoot::new();
+        let temporary = extract_db_to_temp_at(b"not a SQLite database", &root.0).unwrap();
+        let directory = temporary.directory.clone();
+        assert!(read_records(&temporary.path).is_err());
+        drop(temporary);
+        assert!(!directory.exists());
+        let missing = root.0.join("missing");
+        assert!(extract_db_to_temp_at(b"data", &missing).is_err());
+        assert!(!missing.exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn ppaste_database_is_confined_by_owner_only_directory_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = TempRoot::new();
+        std::fs::set_permissions(&root.0, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let temporary = extract_db_to_temp_at(b"synthetic database", &root.0).unwrap();
+        assert_eq!(
+            std::fs::metadata(&temporary.directory)
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o077,
+            0
+        );
+        assert_eq!(
+            std::fs::read(&temporary.path).unwrap(),
+            b"synthetic database"
+        );
+    }
 
     fn make_source_db(path: &Path) {
         let conn = Connection::open(path).unwrap();
