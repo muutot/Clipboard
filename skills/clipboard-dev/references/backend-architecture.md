@@ -812,6 +812,13 @@ Window opacity/effects are posted to the UI thread. `apply_webview_transparency`
 
 ## CLI and loopback API
 
+`commands/api.rs::start_api_and_publish_port` owns listener startup followed by
+`conf/api.port` publication. A publication failure stops/joins only the listener
+that this call started, then returns the write error (plus any stop failure).
+An already-running/bind failure returns before publication and must not stop an
+existing listener. Temporary-file and real-loopback UTs verify successful discovery,
+publication-failure closure/retry, and preservation of an already-running server.
+
 macOS/Linux CLI paste reads (`pbpaste`, `wl-paste`, `xclip`, `xsel`) share
 `cli/mod.rs::read_clipboard_output` and `BoundedCommandExt`: 600 ms per helper,
 a 64 MiB stdout ceiling, strict UTF-8 and successful-exit validation. Errors

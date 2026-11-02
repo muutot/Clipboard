@@ -365,6 +365,27 @@ fn write_api_port(project_directory: &Path, port: u16) -> Result<(), String> {
         .map_err(|error| format!("failed to write {}: {error}", path.display()))
 }
 
+fn start_api_and_publish_port(
+    api: &mut LocalApiServer,
+    database: Arc<Database>,
+    project_directory: &Path,
+) -> Result<LocalApiStatus, String> {
+    let bound_port = api.start_with_database(database)?;
+    if let Err(error) = write_api_port(project_directory, bound_port) {
+        // A failed start must not leave an undiscoverable listener that blocks retry.
+        return match api.stop() {
+            Ok(()) => Err(error),
+            Err(stop_error) => Err(format!(
+                "{error}; failed to stop the new local API: {stop_error}"
+            )),
+        };
+    }
+    Ok(LocalApiStatus {
+        running: true,
+        port: bound_port,
+    })
+}
+
 pub(crate) fn start_local_api_with(
     app: &tauri::AppHandle,
     self_trigger: &SelfTriggerState,
@@ -396,12 +417,7 @@ pub(crate) fn start_local_api_with(
         crate::item_operations::invalidate_desktop(&app)
     }));
     api.set_token(load_or_create_api_token(&paths.project)?);
-    let bound_port = api.start_with_database(database)?;
-    write_api_port(&paths.project, bound_port)?;
-    Ok(LocalApiStatus {
-        running: true,
-        port: bound_port,
-    })
+    start_api_and_publish_port(&mut api, database, &paths.project)
 }
 
 #[tauri::command]
@@ -449,9 +465,91 @@ pub fn get_local_api_status(
 
 #[cfg(test)]
 mod tests {
-    use super::{load_or_create_api_token, write_api_token};
+    use super::{load_or_create_api_token, start_api_and_publish_port, write_api_token};
 
     use std::path::PathBuf;
+
+    #[test]
+    fn api_start_publication_failure_stops_the_new_listener_and_allows_retry() {
+        let project = temp_project("port-publication-failure");
+        let port_file = project.join("conf/api.port");
+        std::fs::create_dir_all(&port_file).unwrap();
+        let database = std::sync::Arc::new(crate::storage::Database::open_in_memory().unwrap());
+        let mut api = crate::cli::LocalApiServer::new(0);
+        api.set_token("synthetic-start-token".into());
+
+        let error = start_api_and_publish_port(&mut api, database.clone(), &project).unwrap_err();
+        assert!(error.contains("api.port"));
+        assert!(
+            !api.is_running(),
+            "failed publication left the listener running"
+        );
+        let rejected_port = api.port;
+        assert!(std::net::TcpStream::connect(("127.0.0.1", rejected_port)).is_err());
+        assert!(
+            port_file.is_dir(),
+            "the conflicting entry must remain untouched"
+        );
+
+        std::fs::remove_dir(&port_file).unwrap();
+        let status = start_api_and_publish_port(&mut api, database, &project).unwrap();
+        assert!(status.running);
+        assert!(api.is_running());
+        assert_eq!(
+            std::fs::read_to_string(&port_file).unwrap(),
+            format!("{}\n", status.port)
+        );
+        api.stop().unwrap();
+        std::fs::remove_dir_all(project).unwrap();
+    }
+
+    #[test]
+    fn api_start_publication_success_exposes_the_live_port() {
+        use std::io::{BufRead, BufReader, Write};
+        let project = temp_project("port-publication-success");
+        let database = std::sync::Arc::new(crate::storage::Database::open_in_memory().unwrap());
+        let mut api = crate::cli::LocalApiServer::new(0);
+        api.set_token("synthetic-start-token".into());
+        let status = start_api_and_publish_port(&mut api, database, &project).unwrap();
+        let published: u16 = std::fs::read_to_string(project.join("conf/api.port"))
+            .unwrap()
+            .trim()
+            .parse()
+            .unwrap();
+        assert_eq!(published, status.port);
+        let mut client = std::net::TcpStream::connect(("127.0.0.1", published)).unwrap();
+        client
+            .set_read_timeout(Some(std::time::Duration::from_secs(2)))
+            .unwrap();
+        write!(
+            client,
+            "GET /health HTTP/1.1\r\nHost: 127.0.0.1:{published}\r\n\r\n"
+        )
+        .unwrap();
+        let mut line = String::new();
+        BufReader::new(client).read_line(&mut line).unwrap();
+        assert!(line.starts_with("HTTP/1.1 200 "));
+        api.stop().unwrap();
+        std::fs::remove_dir_all(project).unwrap();
+    }
+
+    #[test]
+    fn api_start_publication_retry_does_not_stop_an_existing_listener() {
+        let project = temp_project("port-publication-running");
+        let database = std::sync::Arc::new(crate::storage::Database::open_in_memory().unwrap());
+        let mut api = crate::cli::LocalApiServer::new(0);
+        api.set_token("synthetic-start-token".into());
+        let status = start_api_and_publish_port(&mut api, database.clone(), &project).unwrap();
+        let port_file = project.join("conf/api.port");
+        let saved = std::fs::read(&port_file).unwrap();
+        let error = start_api_and_publish_port(&mut api, database, &project).unwrap_err();
+        assert!(error.contains("already running"));
+        assert!(api.is_running());
+        assert_eq!(api.port, status.port);
+        assert_eq!(std::fs::read(&port_file).unwrap(), saved);
+        api.stop().unwrap();
+        std::fs::remove_dir_all(project).unwrap();
+    }
 
     fn temp_project(label: &str) -> PathBuf {
         let unique = std::time::SystemTime::now()
