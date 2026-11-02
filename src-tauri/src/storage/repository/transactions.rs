@@ -1,13 +1,17 @@
-//! Transactional write funnels for distinct saves, backup restore and history import.
+//! Transactional write funnels for distinct saves, renames, backup restore and history import.
 //!
-//! Owns `Database::save_item_as_new`, `TransactionalSaveSummary`, `Database::validate_restore_items`,
+//! Owns `Database::rename_item_transactional`, `Database::save_item_as_new`,
+//! `TransactionalSaveSummary`, `Database::validate_restore_items`,
 //! `Database::restore_items_transactional(_with_progress)`,
 //! `Database::save_items_transactional`, and the import bounds
 //! (`MAX_IMPORT_*`, `validate_imported_item`) every importer is validated against.
 
-use rusqlite::TransactionBehavior;
+use rusqlite::{params, OptionalExtension, TransactionBehavior};
 
-use super::{content_exists_on_connection, current_time_ms, insert_item_row};
+use super::{
+    content_exists_on_connection, current_time_ms, insert_item_row, sync_item_tags_from_metadata,
+    StoredClipboardItem, ITEM_COLUMNS,
+};
 use crate::domain::ClipboardItem;
 use crate::storage::{Database, StorageError};
 
@@ -20,6 +24,57 @@ pub struct TransactionalSaveSummary {
 }
 
 impl Database {
+    /// Rename only an active row using its latest state. The callback may change
+    /// title, resource/preview paths, file-list text and metadata, and must not
+    /// reenter this Database. Other fields are outside the rename write set.
+    pub(crate) fn rename_item_transactional(
+        &self,
+        id: &str,
+        rename: impl FnOnce(&mut ClipboardItem) -> Result<(), StorageError>,
+    ) -> Result<Option<ClipboardItem>, StorageError> {
+        let _resource_publication = self.begin_resource_write()?;
+        self.with_connection(|connection| {
+            let transaction =
+                connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+            let stored = transaction
+                .query_row(
+                    &format!(
+                        "SELECT {ITEM_COLUMNS} FROM clipboard_items WHERE id = ?1 AND deleted = 0"
+                    ),
+                    [id],
+                    StoredClipboardItem::from_row,
+                )
+                .optional()?;
+            let Some(stored) = stored else {
+                return Ok(None);
+            };
+            let mut item: ClipboardItem = stored.try_into()?;
+            rename(&mut item)?;
+            validate_clipboard_text(
+                &item.title,
+                item.text_content.as_deref(),
+                item.html_content.as_deref(),
+                item.rtf_content.as_deref(),
+            )?;
+            transaction.execute(
+                "UPDATE clipboard_items SET title = ?2, resource_path = ?3,
+                    preview_path = ?4, text_content = ?5, metadata_json = ?6
+                 WHERE id = ?1 AND deleted = 0",
+                params![
+                    id,
+                    item.title,
+                    item.resource_path,
+                    item.preview_path,
+                    item.text_content,
+                    item.metadata_json
+                ],
+            )?;
+            sync_item_tags_from_metadata(&transaction, id)?;
+            transaction.commit()?;
+            Ok(Some(item))
+        })
+    }
+
     /// Persist a separate item, keeping its proposed hash only when unused.
     /// Collision checks and insertion share the SQLite writer transaction, so
     /// capture on another connection cannot turn this save into a dedup upsert.

@@ -60,6 +60,15 @@ and other metadata remain current; JSON true/false stay booleans. An absent flag
 leaves metadata untouched; setting a flag normalizes malformed/non-object metadata
 to an object, matching the former command preparation fallback.
 
+`rename.rs::persist_item_rename` uses `Database::rename_item_transactional` after
+any resource copy finishes. Its immediate transaction reads only an active row,
+then changes title and intended paths in the latest metadata/file list. Favorites,
+usage, generated thumbnails and concurrent tags/language are retained; the exact
+updated row is returned. A changed kind or copied source path/hash aborts with a
+retryable conflict, and a deleted source is never resurrected. Row/tag/search/sync
+outbox changes roll back together. The callback must not reenter the database;
+file copy stays outside the SQLite writer reservation under the publication guard.
+
 Text/link save-as-new prepares the edited record in
 `commands/clipboard/operations/duplicate.rs`, then persists it through
 `repository/transactions.rs::Database::save_item_as_new`. Hash collision checks

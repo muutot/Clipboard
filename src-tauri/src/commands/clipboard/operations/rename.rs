@@ -1,7 +1,5 @@
 //! Display/file rename commands and their path-rewriting helpers.
 
-use rusqlite::params;
-
 use super::*;
 
 #[tauri::command]
@@ -123,38 +121,52 @@ fn rename_item_record_with_copy(
         }
     }
     updated.title = new_name.trim().to_string();
-    if matches!(updated.kind, ClipboardKind::Text | ClipboardKind::Link) {
-        updated.metadata_json = Some(set_custom_title_metadata(
-            updated.metadata_json.as_deref(),
-            true,
-        )?);
-        // User-initiated renames bypass the content-dedup upsert title guard so a
-        // second rename of the same item is not silently discarded. Persist with
-        // a direct UPDATE by id instead of save_item; customTitle stays true so
-        // future re-captures still cannot overwrite the user title.
-        let metadata = updated.metadata_json.clone();
-        let rows = database
-            .with_connection(|connection| {
-                connection
-                    .execute(
-                        "UPDATE clipboard_items
-                 SET title = ?2, metadata_json = COALESCE(?3, metadata_json)
-                 WHERE id = ?1 AND deleted = 0 AND kind IN ('text', 'link')",
-                        params![updated.id, updated.title, metadata],
-                    )
-                    .map_err(crate::storage::StorageError::from)
-            })
-            .map_err(|e| e.to_string())?;
-        // The row can disappear between the earlier read and this UPDATE when
-        // another window deletes it concurrently; report that instead of a
-        // silent fake success.
-        if rows == 0 {
-            return Err("item not found".to_string());
-        }
-        return Ok(updated);
-    }
-    database.save_item(&updated).map_err(|e| e.to_string())?;
-    Ok(updated)
+    persist_item_rename(database, &item, updated)
+}
+
+fn persist_item_rename(
+    database: &Database,
+    source: &ClipboardItem,
+    updated: ClipboardItem,
+) -> Result<ClipboardItem, String> {
+    database
+        .rename_item_transactional(&source.id, |current| {
+            let conflict = || {
+                crate::storage::StorageError::Io(std::io::Error::other(
+                    "item changed while renaming; retry with its current state",
+                ))
+            };
+            if current.kind != source.kind {
+                return Err(conflict());
+            }
+            if updated.resource_path != source.resource_path {
+                // The complete copied body belongs to the source we read. Never
+                // attach it to another rename/capture's replacement resource.
+                if current.resource_path != source.resource_path
+                    || current.content_hash != source.content_hash
+                {
+                    return Err(conflict());
+                }
+                if let (Some(old), Some(new)) = (&source.resource_path, &updated.resource_path) {
+                    current.resource_path = Some(new.clone());
+                    if current.preview_path.as_deref() == Some(old.as_str()) {
+                        current.preview_path = Some(new.clone());
+                    }
+                    rewrite_stored_resource_paths(current, old, new);
+                }
+            }
+            current.title = updated.title;
+            if matches!(current.kind, ClipboardKind::Text | ClipboardKind::Link) {
+                current.metadata_json = Some(
+                    set_custom_title_metadata(current.metadata_json.as_deref(), true).map_err(
+                        |error| crate::storage::StorageError::Io(std::io::Error::other(error)),
+                    )?,
+                );
+            }
+            Ok(())
+        })
+        .map_err(|error| error.to_string())?
+        .ok_or_else(|| "item not found".to_string())
 }
 
 /// Create a new complete body without overwriting a concurrent rename target.
@@ -311,6 +323,296 @@ fn replace_path_strings(value: &mut serde_json::Value, old_path: &str, new_path:
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[derive(Clone, Copy)]
+    enum RenameInterleave {
+        Metadata,
+        Delete,
+        OtherRename,
+    }
+
+    fn text_rename_after_concurrent_edit(kind: ClipboardKind) {
+        let root =
+            std::env::temp_dir().join(format!("clipboard-text-rename-{}", uuid::Uuid::new_v4()));
+        let paths = StoragePaths::initialize(root.clone()).unwrap();
+        let database = Database::open(&paths.database).unwrap();
+        let other = Database::open(&paths.database).unwrap();
+        let source = ClipboardItem {
+            id: "source".into(),
+            kind,
+            title: "old title".into(),
+            text_content: Some("old body".into()),
+            html_content: None,
+            rtf_content: None,
+            resource_path: None,
+            preview_path: None,
+            content_hash: "old-hash".into(),
+            source_app: None,
+            size_bytes: 8,
+            created_at_ms: 1,
+            last_used_at_ms: Some(1),
+            is_favorite: true,
+            icon_path: None,
+            metadata_json: Some(
+                serde_json::json!({"tags": ["before"], "codeLanguage": "Python"}).to_string(),
+            ),
+        };
+        database.save_item(&source).unwrap();
+        let read = database
+            .get_items_by_ids(&["source".into()])
+            .unwrap()
+            .remove(0);
+        let mut prepared = read.clone();
+        prepared.title = "renamed title".into();
+        assert!(other.set_tags("source", &["after".into()]).unwrap());
+        assert!(other.set_code_language("source", Some("Rust")).unwrap());
+        assert!(other.set_favorite("source", false).unwrap());
+        assert!(other
+            .update_text_item(&TextItemUpdate {
+                id: "source",
+                kind,
+                title: "later title",
+                text_content: "later body",
+                content_hash: "later-hash",
+                size_bytes: 10,
+                custom_title: None,
+            })
+            .unwrap());
+        let mut expected = other.get_item("source").unwrap().unwrap();
+        expected.title = prepared.title.clone();
+        expected.metadata_json =
+            Some(set_custom_title_metadata(expected.metadata_json.as_deref(), true).unwrap());
+        let renamed = persist_item_rename(&database, &read, prepared).unwrap();
+        let stored = database.get_item("source").unwrap().unwrap();
+        let tags = other.list_all_tags().unwrap();
+        drop(other);
+        drop(database);
+        std::fs::remove_dir_all(root).unwrap();
+        assert_eq!(stored, expected, "rename replaced later metadata");
+        assert_eq!(renamed, stored, "rename returned an obsolete body/metadata");
+        assert!(tags.iter().any(|tag| tag.name == "after" && tag.count == 1));
+    }
+
+    #[test]
+    fn text_rename_preserves_concurrent_edit_and_metadata() {
+        text_rename_after_concurrent_edit(ClipboardKind::Text);
+    }
+
+    #[test]
+    fn link_rename_preserves_concurrent_edit_and_metadata() {
+        text_rename_after_concurrent_edit(ClipboardKind::Link);
+    }
+
+    fn rename_after_concurrent_change(kind: ClipboardKind, interleave: RenameInterleave) {
+        let root =
+            std::env::temp_dir().join(format!("clipboard-rename-change-{}", uuid::Uuid::new_v4()));
+        let paths = StoragePaths::initialize(root.clone()).unwrap();
+        let database = Database::open(&paths.database).unwrap();
+        let other = Database::open(&paths.database).unwrap();
+        let old = if kind == ClipboardKind::Image {
+            paths.images.join("old.png")
+        } else {
+            paths.files.join("old.bin")
+        };
+        if kind == ClipboardKind::Image {
+            image::RgbaImage::new(1, 1).save(&old).unwrap();
+        } else {
+            std::fs::write(&old, b"fixture body").unwrap();
+        }
+        let body = std::fs::read(&old).unwrap();
+        let preview = paths.previews.join("later.png");
+        image::RgbaImage::new(1, 1).save(&preview).unwrap();
+        let old_path = old.display().to_string();
+        let source = ClipboardItem {
+            id: "source".into(),
+            kind,
+            title: "old".into(),
+            text_content: (kind == ClipboardKind::File)
+                .then(|| serde_json::to_string(&vec![&old_path]).unwrap()),
+            html_content: None,
+            rtf_content: None,
+            resource_path: Some(old_path.clone()),
+            preview_path: Some(old_path.clone()),
+            content_hash: "fixture-hash".into(),
+            source_app: None,
+            size_bytes: body.len() as u64,
+            created_at_ms: 1,
+            last_used_at_ms: Some(1),
+            is_favorite: true,
+            icon_path: None,
+            metadata_json: Some(
+                serde_json::json!({"tags": ["before"], "resourcePath": &old_path,
+                "files": [{"storagePath": &old_path}], "custom": "keep"})
+                .to_string(),
+            ),
+        };
+        database.save_item(&source).unwrap();
+        let mut later = None;
+        let result = rename_item_record_with_copy(
+            &database,
+            &paths,
+            "source".into(),
+            "new".into(),
+            |from, to| {
+                copy_rename_resource(from, to)?;
+                match interleave {
+                    RenameInterleave::Metadata => {
+                        assert!(other.set_tags("source", &["after".into()]).unwrap());
+                        assert!(other.set_favorite("source", false).unwrap());
+                        assert!(other
+                            .set_preview_path("source", preview.to_str().unwrap())
+                            .unwrap());
+                        assert!(other.set_last_used("source").unwrap());
+                    }
+                    RenameInterleave::Delete => {
+                        assert!(other.set_favorite("source", false).unwrap());
+                        assert!(other.soft_delete("source").unwrap());
+                    }
+                    RenameInterleave::OtherRename => {
+                        rename_item_record(&other, &paths, "source".into(), "other".into())
+                            .unwrap();
+                    }
+                }
+                later = other.get_item("source").unwrap();
+                Ok(())
+            },
+        );
+        let saved = database.get_item("source").unwrap().unwrap();
+        let deleted = database
+            .list_deleted(10, 0)
+            .unwrap()
+            .iter()
+            .any(|item| item.id == "source");
+        let saved_body = std::fs::read(saved.resource_path.as_ref().unwrap()).unwrap();
+        let tags = database.list_all_tags().unwrap();
+        drop(other);
+        drop(database);
+        std::fs::remove_dir_all(root).unwrap();
+        let later = later.unwrap();
+        match interleave {
+            RenameInterleave::Metadata => {
+                assert!(!saved.is_favorite, "rename restored a cleared favorite");
+                assert_eq!(saved.preview_path, later.preview_path);
+                assert_eq!(saved.last_used_at_ms, later.last_used_at_ms);
+                let mut expected = later;
+                expected.title = "new".into();
+                let new_path = old
+                    .with_file_name(if kind == ClipboardKind::Image {
+                        "new.png"
+                    } else {
+                        "new.bin"
+                    })
+                    .display()
+                    .to_string();
+                expected.resource_path = Some(new_path.clone());
+                rewrite_stored_resource_paths(&mut expected, &old_path, &new_path);
+                assert_eq!(saved, expected);
+                assert_eq!(result.unwrap(), saved);
+                assert!(tags.iter().any(|tag| tag.name == "after" && tag.count == 1));
+            }
+            RenameInterleave::Delete | RenameInterleave::OtherRename => {
+                assert!(result.is_err(), "rename succeeded using an obsolete source");
+                assert_eq!(saved, later);
+                assert_eq!(deleted, matches!(interleave, RenameInterleave::Delete));
+            }
+        }
+        assert_eq!(saved_body, body);
+    }
+
+    #[test]
+    fn image_rename_preserves_concurrent_metadata_and_thumbnail() {
+        rename_after_concurrent_change(ClipboardKind::Image, RenameInterleave::Metadata);
+    }
+
+    #[test]
+    fn file_rename_preserves_concurrent_metadata_and_thumbnail() {
+        rename_after_concurrent_change(ClipboardKind::File, RenameInterleave::Metadata);
+    }
+
+    #[test]
+    fn file_rename_does_not_resurrect_a_concurrently_deleted_source() {
+        rename_after_concurrent_change(ClipboardKind::File, RenameInterleave::Delete);
+    }
+
+    #[test]
+    fn file_rename_rejects_a_source_changed_by_another_rename() {
+        rename_after_concurrent_change(ClipboardKind::File, RenameInterleave::OtherRename);
+    }
+
+    #[test]
+    fn rename_rolls_back_paths_tags_and_outboxes_when_tag_refresh_fails() {
+        let root = std::env::temp_dir().join(format!(
+            "clipboard-rename-rollback-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = StoragePaths::initialize(root.clone()).unwrap();
+        let database = Database::open(&paths.database).unwrap();
+        database.initialize_sync().unwrap();
+        let old = paths.files.join("old.bin");
+        std::fs::write(&old, b"fixture").unwrap();
+        let source = ClipboardItem {
+            id: "source".into(),
+            kind: ClipboardKind::File,
+            title: "old".into(),
+            text_content: None,
+            html_content: None,
+            rtf_content: None,
+            resource_path: Some(old.display().to_string()),
+            preview_path: None,
+            content_hash: "fixture".into(),
+            source_app: None,
+            size_bytes: 7,
+            created_at_ms: 1,
+            last_used_at_ms: Some(1),
+            is_favorite: false,
+            icon_path: None,
+            metadata_json: Some(serde_json::json!({"tags": ["keep"]}).to_string()),
+        };
+        database.save_item(&source).unwrap();
+        let stored_before = database.get_item("source").unwrap();
+        let tags_before = database.list_all_tags().unwrap();
+        let counts = || {
+            database
+                .with_connection(|connection| {
+                    Ok((
+                        connection.query_row("SELECT COUNT(*) FROM search_outbox", [], |row| {
+                            row.get::<_, i64>(0)
+                        })?,
+                        connection.query_row("SELECT COUNT(*) FROM sync_outbox", [], |row| {
+                            row.get::<_, i64>(0)
+                        })?,
+                    ))
+                })
+                .unwrap()
+        };
+        let counts_before = counts();
+        database
+            .with_connection(|connection| {
+                connection.execute_batch(
+                    "CREATE TRIGGER reject_rename_tags BEFORE INSERT ON item_tags
+                BEGIN SELECT RAISE(FAIL, 'fixture rejects rename tag'); END;",
+                )?;
+                Ok(())
+            })
+            .unwrap();
+        let result = rename_item_record(&database, &paths, "source".into(), "new".into());
+        let stored_after = database.get_item("source").unwrap();
+        let tags_after = database.list_all_tags().unwrap();
+        let counts_after = counts();
+        let cleanup =
+            crate::commands::cleanup::cleanup_orphan_storage_files(&database, &paths).unwrap();
+        let old_body = std::fs::read(&old).unwrap();
+        let new_retained = paths.files.join("new.bin").exists();
+        drop(database);
+        std::fs::remove_dir_all(root).unwrap();
+        assert!(result.is_err_and(|error| error.contains("fixture rejects rename tag")));
+        assert_eq!(stored_after, stored_before);
+        assert_eq!(tags_after, tags_before);
+        assert_eq!(counts_after, counts_before);
+        assert_eq!(cleanup.removed_files, 1);
+        assert!(!new_retained);
+        assert_eq!(old_body, b"fixture");
+    }
 
     #[test]
     fn rename_copy_never_overwrites_an_existing_destination() {

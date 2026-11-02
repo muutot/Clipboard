@@ -324,6 +324,14 @@ keeping metadata and `item_tags` consistent. Hash collisions reject the complete
 edit, including the flag. None preserves metadata; a supplied flag is a JSON
 boolean and normalizes malformed/non-object metadata to an object.
 
+`rename_item` keeps its IPC contract and returns the actual committed current row.
+Rename persistence reads the active row in an immediate transaction, writes only
+title/resource/preview/file-list/metadata fields, and preserves later independent
+changes. Text/link renames merge `customTitle` into current metadata. A deleted row
+returns an error; a copied media source whose kind/path/hash changed is rejected
+without replacing that newer row. Copy I/O occurs before this short transaction;
+a complete rejected copy remains unreferenced for normal orphan cleanup.
+
 `save_clipboard_item_as_new(id, newTitle, newTextContent)` is the atomic text/link "Save as new" path (formerly frontend `duplicate_clipboard_item` + `update_clipboard_text`). It validates non-empty text and text/link kind in one command, clears stale `html_content`/`rtf_content`, and when the proposed content hash already exists (including unchanged text saved beside its source) stores `{hash}-{uuid}` instead of failing the unique constraint. Failure cannot leave a half-created duplicate.
 
 Distinct persistence uses `Database::save_item_as_new`: collision checks, UUID
