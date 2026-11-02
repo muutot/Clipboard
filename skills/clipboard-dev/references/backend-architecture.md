@@ -401,7 +401,9 @@ requests. Keep this lock file persistent and release ownership by closing the
 handle. Different model directories can progress independently, and failed
 downloads release the lease for retries. `commands/ocr/download_tests.rs` tests
 the production HTTP/file pipeline with synthetic loopback bodies, held response
-chunks, overlapping installs and failed-digest/cache controls.
+chunks, overlapping installs and failed-digest/cache controls. Accepted fixture
+sockets explicitly use blocking mode before timeouts: Windows may inherit the
+listener's nonblocking flag, causing premature reads/writes to fail or truncate.
 
 Pinned model size is the download's disk budget. Reject a larger declared
 Content-Length before creating staging, and check each received chunk against

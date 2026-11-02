@@ -76,6 +76,9 @@ fn server_with_response(mode: ResponseMode) -> DownloadServer {
         while !stopping.load(Ordering::SeqCst) {
             match listener.accept() {
                 Ok((mut stream, _)) => {
+                    // Windows may inherit the listener's nonblocking mode;
+                    // timeouts alone do not make fixture reads/writes block.
+                    stream.set_nonblocking(false).unwrap();
                     stream
                         .set_read_timeout(Some(Duration::from_secs(5)))
                         .unwrap();
