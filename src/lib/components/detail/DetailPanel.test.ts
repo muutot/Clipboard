@@ -108,6 +108,36 @@ async function typeQuery(target: HTMLElement, query: string): Promise<HTMLElemen
 
 describe("DetailPanel find in detail", () => {
   it.each([
+    { body: "const value = 1;\nconst value = 2;", query: "const value" },
+    { body: "**alpha** beta\n\n**alpha** beta", query: "alpha beta" },
+  ])("finds and navigates phrases across inline markup in $body", async ({ body, query }) => {
+    const target = mountPanel(item({ textContent: body }), { findRequest: { seq: 1 } });
+    await settle();
+    const bar = await typeQuery(target, query);
+    expect(bar.querySelector(".match-count")?.textContent).toBe("1/2");
+    const currentText = () =>
+      [...target.querySelectorAll("mark.find-current")].map((mark) => mark.textContent).join("");
+    expect(currentText()).toBe(query);
+    navButton(bar, t("detail.findNext")).click();
+    flushSync();
+    expect(bar.querySelector(".match-count")?.textContent).toBe("2/2");
+    expect(currentText()).toBe(query);
+    navButton(bar, t("detail.findNext")).click();
+    flushSync();
+    expect(bar.querySelector(".match-count")?.textContent).toBe("1/2");
+  });
+
+  it.each([
+    { body: "const alpha = 1;\nconst beta = 2;", query: "1;const" },
+    { body: "**alpha**\n\nbeta", query: "alphabeta" },
+  ])("keeps separate rendered blocks apart in $body", async ({ body, query }) => {
+    const target = mountPanel(item({ textContent: body }), { findRequest: { seq: 1 } });
+    await settle();
+    const bar = await typeQuery(target, query);
+    expect(bar.querySelector(".match-count")?.textContent).toBe("0/0");
+  });
+
+  it.each([
     { body: "İ alpha", query: "alpha", matches: ["alpha"] },
     { body: "İ alpha İ", query: "İ", matches: ["İ", "İ"] },
     { body: "𝔸 İ [a.*]+ İ", query: "[a.*]+", matches: ["[a.*]+"] },

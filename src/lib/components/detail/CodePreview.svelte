@@ -38,7 +38,7 @@
       <div class="code-lang-label" data-find-ignore>{detectedLang}</div>
     {/if}
     <pre class="code-content"><code
-        >{#each tokenizedLines as line, i}<span class="code-line"
+        >{#each tokenizedLines as line, i}<span class="code-line" data-find-block
             ><span class="line-number" data-find-ignore
               >{String(i + 1).padStart(String(tokenizedLines.length).length, " ")}</span
             >{#each line as token}{#if token.classes}<span class={token.classes}>{token.text}</span

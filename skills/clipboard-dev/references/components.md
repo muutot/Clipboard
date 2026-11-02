@@ -177,6 +177,13 @@ Literal queries use Unicode case-insensitive matching on original DOM text so
 length-changing lowercase mappings (such as U+0130) cannot shift highlight offsets.
 Regex metacharacters are escaped; queries remain literal. Mounted tests verify
 exact highlighted strings, repeated dotted-I matches and unchanged source text.
+Inline DOM nodes within one rendered block are searched as one text run. Code
+lines declare `data-find-block`; paragraph/list/heading/pre/div boundaries and
+breaks/media separate runs. A phrase split by syntax or Markdown spans counts
+once and gives each fragment the same `data-find-match` ID; navigation highlights
+the whole group and scrolls its first fragment. The ordered match/part scan avoids
+comparing every match with every node. Mounted tests cover phrase navigation,
+wrap-around and separation of distinct code lines/paragraphs.
 
 ### `TagEditDialog.svelte`
 
