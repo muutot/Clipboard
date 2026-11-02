@@ -53,8 +53,8 @@ fn load_or_create_api_token(project_directory: &Path) -> Result<String, String> 
 /// every local account; on a volume that does not implement POSIX modes
 /// (exFAT, some network shares) the later narrowing is a silent no-op and the
 /// window never closes. Applying the mode at creation removes the window, and
-/// the Windows std::fs path still sets a DACL after writing. Its creation-time
-/// exposure window is separate from tightening an existing file's ACL.
+/// Windows creates with a protected DACL and tightens an existing file through
+/// its opened handle before truncating or writing any credential bytes.
 fn write_api_token(path: &Path, token: &str) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
@@ -82,12 +82,95 @@ fn write_api_token(path: &Path, token: &str) -> Result<(), String> {
         Ok(())
     }
 
-    #[cfg(not(unix))]
+    #[cfg(target_os = "windows")]
+    {
+        use std::io::Write;
+        let mut file = open_api_token_file(path).map_err(|error| error.to_string())?;
+        file.write_all(contents.as_bytes())
+            .map_err(|error| error.to_string())?;
+        Ok(())
+    }
+
+    #[cfg(all(not(unix), not(target_os = "windows")))]
     {
         std::fs::write(path, contents).map_err(|error| error.to_string())?;
         restrict_api_token_permissions(path);
         Ok(())
     }
+}
+
+#[cfg(target_os = "windows")]
+fn open_api_token_file(path: &Path) -> std::io::Result<std::fs::File> {
+    use std::os::windows::io::{AsRawHandle, FromRawHandle};
+    use std::ptr::{null, null_mut};
+    use windows_sys::Win32::Foundation::{ERROR_SUCCESS, GENERIC_WRITE, INVALID_HANDLE_VALUE};
+    use windows_sys::Win32::Security::Authorization::{SetSecurityInfo, SE_FILE_OBJECT};
+    use windows_sys::Win32::Security::{
+        InitializeSecurityDescriptor, SetSecurityDescriptorControl, SetSecurityDescriptorDacl,
+        DACL_SECURITY_INFORMATION, PROTECTED_DACL_SECURITY_INFORMATION, SECURITY_ATTRIBUTES,
+        SECURITY_DESCRIPTOR, SE_DACL_PROTECTED,
+    };
+    use windows_sys::Win32::Storage::FileSystem::{
+        CreateFileW, FILE_ATTRIBUTE_NORMAL, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE,
+        OPEN_ALWAYS, WRITE_DAC,
+    };
+
+    let name = api_token_path_wide(path)?;
+    with_api_token_acl(|acl| {
+        // SAFETY: descriptor/attributes and the owned ACL remain valid through
+        // CreateFileW. Its successful handle is transferred exactly once to File.
+        unsafe {
+            let mut descriptor = SECURITY_DESCRIPTOR::default();
+            let descriptor_ptr = (&mut descriptor as *mut SECURITY_DESCRIPTOR).cast();
+            // SECURITY_DESCRIPTOR_REVISION is 1 for this Windows ABI.
+            if InitializeSecurityDescriptor(descriptor_ptr, 1) == 0
+                || SetSecurityDescriptorDacl(descriptor_ptr, 1, acl, 0) == 0
+                || SetSecurityDescriptorControl(
+                    descriptor_ptr,
+                    SE_DACL_PROTECTED,
+                    SE_DACL_PROTECTED,
+                ) == 0
+            {
+                return Err(std::io::Error::last_os_error());
+            }
+            let attributes = SECURITY_ATTRIBUTES {
+                nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
+                lpSecurityDescriptor: descriptor_ptr,
+                bInheritHandle: 0,
+            };
+            // OPEN_ALWAYS preserves existing bytes until permissions are tightened.
+            // New files receive the protected DACL as part of their creation.
+            let handle = CreateFileW(
+                name.as_ptr(),
+                GENERIC_WRITE | WRITE_DAC,
+                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                &attributes,
+                OPEN_ALWAYS,
+                FILE_ATTRIBUTE_NORMAL,
+                null_mut(),
+            );
+            if handle == INVALID_HANDLE_VALUE {
+                return Err(std::io::Error::last_os_error());
+            }
+            let file = std::fs::File::from_raw_handle(handle);
+            // Creation attributes do not replace an existing file's DACL. Use
+            // the opened handle to tighten that file before truncation or writes.
+            let status = SetSecurityInfo(
+                file.as_raw_handle(),
+                SE_FILE_OBJECT,
+                DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION,
+                null_mut(),
+                null_mut(),
+                acl,
+                null(),
+            );
+            if status != ERROR_SUCCESS {
+                return Err(std::io::Error::from_raw_os_error(status as i32));
+            }
+            file.set_len(0)?;
+            Ok(file)
+        }
+    })
 }
 
 /// Tightens the token file to its Unix owner / current Windows user. The token authorizes the loopback
@@ -123,16 +206,76 @@ fn restrict_api_token_permissions(path: &Path) {
 
 #[cfg(target_os = "windows")]
 fn set_api_token_acl(path: &Path) -> std::io::Result<()> {
+    use std::ptr::{null, null_mut};
+    use windows_sys::Win32::Foundation::ERROR_SUCCESS;
+    use windows_sys::Win32::Security::Authorization::{SetNamedSecurityInfoW, SE_FILE_OBJECT};
+    use windows_sys::Win32::Security::{
+        DACL_SECURITY_INFORMATION, PROTECTED_DACL_SECURITY_INFORMATION,
+    };
+    let name = api_token_path_wide(path)?;
+    with_api_token_acl(|acl| {
+        // SAFETY: the NUL-terminated path and the owned ACL are valid through this call.
+        let status = unsafe {
+            SetNamedSecurityInfoW(
+                name.as_ptr(),
+                SE_FILE_OBJECT,
+                DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION,
+                null_mut(),
+                null_mut(),
+                acl,
+                null(),
+            )
+        };
+        if status != ERROR_SUCCESS {
+            return Err(std::io::Error::from_raw_os_error(status as i32));
+        }
+        Ok(())
+    })
+}
+
+#[cfg(target_os = "windows")]
+fn api_token_path_wide(path: &Path) -> std::io::Result<Vec<u16>> {
     use std::os::windows::ffi::OsStrExt;
+    let name: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
+    if name[..name.len() - 1].contains(&0) {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "token path contains NUL",
+        ));
+    }
+    // Rust's canonical Windows directory uses a verbatim prefix, preserving
+    // std::fs long-path support for our direct Win32 create/security calls.
+    // Resolve only the parent because the new token file does not exist yet.
+    let parent = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let file_name = path.file_name().ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "token path has no file name",
+        )
+    })?;
+    Ok(std::fs::canonicalize(parent)?
+        .join(file_name)
+        .as_os_str()
+        .encode_wide()
+        .chain(Some(0))
+        .collect())
+}
+
+#[cfg(target_os = "windows")]
+fn with_api_token_acl<T>(
+    apply: impl FnOnce(*mut windows_sys::Win32::Security::ACL) -> std::io::Result<T>,
+) -> std::io::Result<T> {
     use std::ptr::{null, null_mut};
     use windows_sys::Win32::Foundation::{CloseHandle, LocalFree, ERROR_SUCCESS, HANDLE};
     use windows_sys::Win32::Security::Authorization::{
-        SetEntriesInAclW, SetNamedSecurityInfoW, EXPLICIT_ACCESS_W, NO_MULTIPLE_TRUSTEE,
-        SET_ACCESS, SE_FILE_OBJECT, TRUSTEE_IS_SID, TRUSTEE_IS_USER, TRUSTEE_W,
+        SetEntriesInAclW, EXPLICIT_ACCESS_W, NO_MULTIPLE_TRUSTEE, SET_ACCESS, TRUSTEE_IS_SID,
+        TRUSTEE_IS_USER, TRUSTEE_W,
     };
     use windows_sys::Win32::Security::{
-        GetTokenInformation, TokenUser, ACL, DACL_SECURITY_INFORMATION, NO_INHERITANCE,
-        PROTECTED_DACL_SECURITY_INFORMATION, TOKEN_QUERY, TOKEN_USER,
+        GetTokenInformation, TokenUser, ACL, NO_INHERITANCE, TOKEN_QUERY, TOKEN_USER,
     };
     use windows_sys::Win32::Storage::FileSystem::FILE_ALL_ACCESS;
     use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
@@ -156,16 +299,9 @@ fn set_api_token_acl(path: &Path) -> std::io::Result<()> {
         }
     }
 
-    let name: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
-    if name[..name.len() - 1].contains(&0) {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            "token path contains NUL",
-        ));
-    }
     // SAFETY: all output buffers are initialized and sized as passed to the OS.
     // The SID remains inside aligned token storage until the ACL has copied it;
-    // the ACL stays allocated through SetNamedSecurityInfoW and is then released.
+    // the ACL stays allocated through the supplied operation and is then released.
     unsafe {
         let mut handle = null_mut();
         if OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut handle) == 0 {
@@ -209,20 +345,8 @@ fn set_api_token_acl(path: &Path) -> std::io::Result<()> {
             return Err(std::io::Error::from_raw_os_error(status as i32));
         }
         let acl = OwnedAcl(acl);
-        let status = SetNamedSecurityInfoW(
-            name.as_ptr(),
-            SE_FILE_OBJECT,
-            DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION,
-            null_mut(),
-            null_mut(),
-            acl.0,
-            null(),
-        );
-        if status != ERROR_SUCCESS {
-            return Err(std::io::Error::from_raw_os_error(status as i32));
-        }
+        apply(acl.0)
     }
-    Ok(())
 }
 
 #[cfg(all(not(unix), not(target_os = "windows")))]
@@ -592,6 +716,102 @@ mod tests {
         assert_eq!(
             std::fs::read_to_string(&token_path).unwrap(),
             "synthetic-unicode-token\n"
+        );
+        std::fs::remove_dir_all(project).unwrap();
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn token_file_is_private_before_the_first_credential_write() {
+        use std::io::Write;
+        use std::process::Command;
+        let project = temp_project("creation-acl");
+        let parent = project.join("shared");
+        std::fs::create_dir_all(&parent).unwrap();
+        let grant = Command::new("icacls")
+            .arg(&parent)
+            .arg("/grant")
+            .arg("*S-1-1-0:(OI)(CI)R")
+            .output()
+            .unwrap();
+        assert!(
+            grant.status.success(),
+            "fixture must give the parent inheritable Everyone read access"
+        );
+        let inherited_control = parent.join("ordinary.txt");
+        std::fs::write(&inherited_control, "synthetic control").unwrap();
+        let read_acl = |path: &std::path::Path, name: &str| {
+            let saved = project.join(name);
+            let outcome = Command::new("icacls")
+                .arg(path)
+                .arg("/save")
+                .arg(&saved)
+                .arg("/q")
+                .output()
+                .unwrap();
+            assert!(outcome.status.success());
+            let bytes = std::fs::read(saved).unwrap();
+            let words: Vec<_> = bytes
+                .chunks_exact(2)
+                .map(|word| u16::from_le_bytes([word[0], word[1]]))
+                .collect();
+            String::from_utf16(&words).unwrap()
+        };
+        let control = read_acl(&inherited_control, "control-acl.txt");
+        assert!(
+            control.contains(";;;WD)") || control.contains(";;;S-1-1-0)"),
+            "control must really inherit the public grant"
+        );
+        let token_path = parent.join("api.token");
+        // Inspect the actual production open stage before any credential bytes
+        // or later post-write permission tightening can conceal the exposure.
+        let mut file = super::open_api_token_file(&token_path).unwrap();
+        let created = read_acl(&token_path, "created-acl.txt");
+        assert!(
+            !created.contains(";;;WD)") && !created.contains(";;;S-1-1-0)"),
+            "the production create stage must already exclude Everyone: {created}"
+        );
+        assert!(created.contains("D:P"));
+        file.write_all(b"synthetic-first-token\n").unwrap();
+        drop(file);
+        assert_eq!(
+            std::fs::read_to_string(&token_path).unwrap(),
+            "synthetic-first-token\n"
+        );
+        std::fs::remove_dir_all(project).unwrap();
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn token_write_preserves_existing_bytes_on_open_failure_and_supports_long_paths() {
+        let project = temp_project("write-boundaries");
+        let token_path = project.join("api.token");
+        std::fs::write(&token_path, "synthetic-old-token\n").unwrap();
+        let permissions = std::fs::metadata(&token_path).unwrap().permissions();
+        let mut readonly = permissions.clone();
+        readonly.set_readonly(true);
+        std::fs::set_permissions(&token_path, readonly).unwrap();
+        let outcome = write_api_token(&token_path, "synthetic-replacement");
+        std::fs::set_permissions(&token_path, permissions).unwrap();
+        assert!(
+            outcome.is_err(),
+            "a failed native open must not claim a successful write"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&token_path).unwrap(),
+            "synthetic-old-token\n"
+        );
+
+        let long_parent = project
+            .join("x".repeat(90))
+            .join("y".repeat(90))
+            .join("z".repeat(90));
+        let long_path = long_parent.join("api.token");
+        assert!(long_path.as_os_str().len() > 260);
+        write_api_token(&long_path, "synthetic-long-path-token").unwrap();
+        assert_eq!(
+            std::fs::read_to_string(&long_path).unwrap(),
+            "synthetic-long-path-token\n"
         );
         std::fs::remove_dir_all(project).unwrap();
     }

@@ -382,11 +382,15 @@ A direct `invoke` in a component is still a public cross-layer contract and rece
 
 The loopback API credential remains plaintext in `conf/api.token` for local
 scripts. On Windows, load/write tightens its complete DACL to one current-process
-user SID grant with parent inheritance disabled. The native operation changes
-permissions only, retaining token bytes and the existing owner. A failed ACL
-operation is logged under the existing best-effort contract; it does not establish
-confidentiality. Windows creation-time protection remains separate because the
-std::fs write precedes tightening. Unix mode handling is unchanged.
+user SID grant with parent inheritance disabled. Read-side tightening changes
+permissions only, retaining token bytes and the existing owner; it remains
+best-effort with logged failures. New credential files receive a protected DACL
+in `CreateFileW`. Rewrites use `OPEN_ALWAYS`, tighten the opened handle via
+`SetSecurityInfo`, and only then truncate/write. Permission/open failures stop
+before truncation; later write errors retain the existing non-atomic behavior.
+A new empty file may remain for retry. The canonical
+parent preserves verbatim long paths. A filesystem unable to establish a DACL can
+reject Windows token creation/rewriting. Unix mode handling is unchanged.
 
 ### Bincode decode allocation bounds
 
