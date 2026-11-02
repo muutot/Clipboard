@@ -60,6 +60,60 @@ fn parse_query_rejects_malformed_components() {
 }
 
 #[test]
+fn search_accepts_form_encoded_spaces_and_keeps_escaped_plus() {
+    let database = Database::open_in_memory().unwrap();
+    for (id, text) in [
+        ("spaced", "two words"),
+        ("pluses", "C++ tutorial"),
+        ("unicode", "中文 记录"),
+    ] {
+        let mut item = super::super::build_text_clipboard_item(
+            text.into(),
+            ClipboardKind::Text,
+            "query",
+            "test",
+        );
+        item.id = id.into();
+        database.save_item(&item).unwrap();
+    }
+    for (query, expected) in [
+        ("two+words", "spaced"),
+        ("two%20words", "spaced"),
+        ("C%2B%2B+tutorial", "pluses"),
+        ("%E4%B8%AD%E6%96%87+%E8%AE%B0%E5%BD%95", "unicode"),
+    ] {
+        let response = dispatch(
+            &request("GET", &format!("/search?q={query}"), b""),
+            &database,
+            500,
+            500,
+        );
+        assert_eq!(response.status, 200);
+        let found: Vec<ClipboardItem> = serde_json::from_slice(&response.body).unwrap();
+        assert_eq!(found.len(), 1, "query {query} should find the saved text");
+        assert_eq!(found[0].id, expected);
+    }
+}
+
+#[test]
+fn path_plus_stays_literal_when_query_spaces_are_decoded() {
+    for path in ["/items/record+id", "/items/record%2Bid"] {
+        let database = Database::open_in_memory().unwrap();
+        let mut item = super::super::build_text_clipboard_item(
+            "path plus".into(),
+            ClipboardKind::Text,
+            "query",
+            "test",
+        );
+        item.id = "record+id".into();
+        database.save_item(&item).unwrap();
+        let response = dispatch(&request("DELETE", path, b""), &database, 500, 500);
+        assert_eq!(response.status, 200);
+        assert_eq!(database.item_count().unwrap(), 0);
+    }
+}
+
+#[test]
 fn health_endpoint_is_real_json() {
     let database = Database::open_in_memory().unwrap();
     let http = request("GET", "/health", b"");

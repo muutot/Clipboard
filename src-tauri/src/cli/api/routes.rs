@@ -198,8 +198,10 @@ pub(super) fn parse_query(
         let (key, value) = part.split_once('=').unwrap_or((part, ""));
         // Reject a malformed component instead of silently treating the
         // parameter as absent and returning unrelated results.
-        let key = decode_component(key)?;
-        let value = decode_component(value)?;
+        // Query strings use form encoding: raw '+' is a space, while '%2B'
+        // represents a literal plus. Path segments remain percent-only.
+        let key = decode_component(&key.replace('+', " "))?;
+        let value = decode_component(&value.replace('+', " "))?;
         parsed.insert(key, value);
     }
     Ok(parsed)

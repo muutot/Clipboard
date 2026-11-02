@@ -745,6 +745,12 @@ Window opacity/effects are posted to the UI thread. `apply_webview_transparency`
 
 ## CLI and loopback API
 
+API query parameters use form decoding: raw `+` becomes a space before percent
+decoding, while `%2B` remains a literal plus. This supports conventional HTTP
+client encoders for multi-word searches. Path segments use percent decoding
+without changing raw plus signs, so item IDs retain their identity. Malformed
+UTF-8 percent escapes are still rejected.
+
 `POST /paste` saves through `Database::save_item_returning`, which reads the
 canonical upsert row inside the same immediate transaction before commit. Its
 reply retains existing favorites, custom titles, rich formats, tags, icons and
