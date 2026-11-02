@@ -132,13 +132,13 @@ pub struct ClipboardMonitorStatus {
 pub fn mark_self_triggered(
     self_trigger: tauri::State<'_, SelfTriggerState>,
     text: String,
-) -> Result<(), String> {
-    self_trigger
+) -> Result<Vec<String>, String> {
+    let registration = self_trigger
         .0
         .lock()
         .map_err(|_| "self-trigger lock poisoned".to_owned())?
         .mark_clipboard_write(&text);
-    Ok(())
+    Ok(vec![registration])
 }
 
 #[tauri::command]
@@ -148,7 +148,7 @@ pub fn mark_self_triggered_image(
     paths: tauri::State<'_, StoragePaths>,
     resource_path: Option<String>,
     content_hash: Option<String>,
-) -> Result<(), String> {
+) -> Result<Vec<String>, String> {
     let mut guard = self_trigger
         .0
         .lock()
@@ -162,50 +162,28 @@ pub fn mark_self_triggered_image(
 }
 
 #[tauri::command]
-/// Clears a text self-trigger marker after the clipboard write failed, so an
-/// external copy of the same content inside the suppression window is still
-/// captured instead of being silently swallowed.
+/// Rolls back a failed write's registrations without clearing other writes.
 pub fn unmark_self_triggered(
     self_trigger: tauri::State<'_, SelfTriggerState>,
-    text: String,
-) -> Result<(), String> {
-    self_trigger
-        .0
-        .lock()
-        .map_err(|_| "self-trigger lock poisoned".to_owned())?
-        .unmark_clipboard_write(&text);
-    Ok(())
-}
-
-#[tauri::command]
-/// Clears image self-trigger markers after the clipboard write failed.
-pub fn unmark_self_triggered_image(
-    self_trigger: tauri::State<'_, SelfTriggerState>,
-    paths: tauri::State<'_, StoragePaths>,
-    resource_path: Option<String>,
-    content_hash: Option<String>,
+    registrations: Vec<String>,
 ) -> Result<(), String> {
     let mut guard = self_trigger
         .0
         .lock()
         .map_err(|_| "self-trigger lock poisoned".to_owned())?;
-    if let Some(path) = resource_path
-        .as_deref()
-        .filter(|path| !path.trim().is_empty())
-    {
-        // Only managed storage paths may cross the IPC boundary; anything
-        // else (or unreadable) is skipped exactly like a read failure.
-        if let Ok(data) = read_managed_image(&paths.images, path) {
-            guard.unmark_media_write("image", &data);
-        }
-    }
-    if let Some(content_hash) = content_hash
-        .as_deref()
-        .filter(|hash| !hash.trim().is_empty())
-    {
-        guard.unmark(content_hash);
+    for registration in registrations {
+        guard.cancel_registration(&registration);
     }
     Ok(())
+}
+
+#[tauri::command]
+/// Rolls back image registrations without re-reading a possibly changed body.
+pub fn unmark_self_triggered_image(
+    self_trigger: tauri::State<'_, SelfTriggerState>,
+    registrations: Vec<String>,
+) -> Result<(), String> {
+    unmark_self_triggered(self_trigger, registrations)
 }
 
 // ---------------------------------------------------------------------------

@@ -59,16 +59,17 @@ impl CopyContext {
         text: &str,
         write: impl FnOnce() -> Result<(), String>,
     ) -> Result<(), CopyError> {
-        if let Some(guard) = &self.self_trigger {
-            if let Ok(mut guard) = guard.lock() {
-                guard.mark_clipboard_write(text);
-            }
-        }
+        let registration = self.self_trigger.as_ref().and_then(|guard| {
+            guard
+                .lock()
+                .ok()
+                .map(|mut guard| guard.mark_clipboard_write(text))
+        });
         let result = write();
         if result.is_err() {
-            if let Some(guard) = &self.self_trigger {
+            if let (Some(guard), Some(registration)) = (&self.self_trigger, registration) {
                 if let Ok(mut guard) = guard.lock() {
-                    guard.unmark_clipboard_write(text);
+                    guard.cancel_registration(&registration);
                 }
             }
         }
@@ -515,6 +516,62 @@ mod tests {
             .lock()
             .unwrap()
             .is_text_write_self_triggered("text", "sample"));
+    }
+
+    #[test]
+    fn delayed_failed_write_keeps_a_concurrent_successful_capture_marker() {
+        let guard = Arc::new(Mutex::new(
+            crate::content::self_trigger::SelfTriggerGuard::new(),
+        ));
+        let context = CopyContext {
+            paths: None,
+            self_trigger: Some(guard.clone()),
+        };
+        let (marked_tx, marked_rx) = std::sync::mpsc::channel();
+        let (finish_tx, finish_rx) = std::sync::mpsc::channel();
+        let delayed = context.clone();
+        let writer = std::thread::spawn(move || {
+            delayed.write_marked("https://example.com", || {
+                marked_tx.send(()).unwrap();
+                finish_rx
+                    .recv_timeout(std::time::Duration::from_secs(2))
+                    .unwrap();
+                Err("delayed failure".into())
+            })
+        });
+        marked_rx
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .unwrap();
+        context
+            .write_marked("https://example.com", || Ok(()))
+            .unwrap();
+        finish_tx.send(()).unwrap();
+        assert!(writer.join().unwrap().is_err());
+        assert!(crate::commands::capture::should_skip_self_triggered_text(
+            &mut guard.lock().unwrap(),
+            ClipboardKind::Link,
+            "https://example.com",
+        ));
+    }
+
+    #[test]
+    fn failed_retry_keeps_an_earlier_successful_capture_marker() {
+        let guard = Arc::new(Mutex::new(
+            crate::content::self_trigger::SelfTriggerGuard::new(),
+        ));
+        let context = CopyContext {
+            paths: None,
+            self_trigger: Some(guard.clone()),
+        };
+        context.write_marked("first\nsecond", || Ok(())).unwrap();
+        assert!(context
+            .write_marked("first\nsecond", || Err("retry failure".into()))
+            .is_err());
+        assert!(crate::commands::capture::should_skip_self_triggered_text(
+            &mut guard.lock().unwrap(),
+            ClipboardKind::Text,
+            "first\r\nsecond",
+        ));
     }
     #[test]
     fn membership_actions_preserve_favorites_and_recycle_guards() {

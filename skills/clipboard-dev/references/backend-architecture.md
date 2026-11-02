@@ -642,6 +642,14 @@ indentation, Unicode whitespace and CR/LF endings remain in the native write and
 self-trigger payload. Menu titles still collapse whitespace independently.
 Empty/whitespace-only and media records remain ineligible for tray copying.
 
+Self-trigger registrations own hashes per write attempt, identified by an opaque
+UUID. Concurrent attempts for identical content retain separate entries with
+their own five-second lifetimes. Native CopyContext/tray and frontend text/HTML/
+image writes cancel only the receipts returned for a failed attempt; failure to
+register never authorizes clearing another marker. Image receipts include byte
+and fallback-hash registrations, so cancellation does not re-read changed files.
+Unknown/repeated cancellations are harmless; expiry still removes stale entries.
+
 macOS RTF capture reads `public.rtf` as NSData (16 MiB allocation ceiling), preserves non-ASCII code-page bytes as RTF hex escapes, and rejects raw `\\bin` runs because the stored RTF contract is a UTF-8 string. HTML/plain-text capture remains available when RTF is rejected. Native pasteboard behavior requires macOS verification.
 
 Windows native reads validate HGLOBAL sizes before copying: 64 MiB for text/HTML/RTF, 4 KiB for the private self-trigger marker and 512 MiB for DIB input. Every Windows clipboard reader, including the private self-trigger marker that decides whether a change is the application's own write, opens the clipboard with the same bounded retry (`platform/windows/access.rs::open_clipboard_with_retry`): a single failed `OpenClipboard` would turn a clipboard that another application holds for a moment into a false negative, so the application's own copy would be captured as a new history entry. DIB and HBITMAP dimensions share the 16,384-axis and 512 MiB decoded RGBA ceiling; only declared pixel rows are converted. HBITMAP reads require all requested rows and use one DIB allocation. These are native safety ceilings; configured capture/persistence limits still apply afterwards. Synthetic DIB/header tests exercise the limits without touching the system clipboard; the single Windows test that writes the real clipboard (`read_clipboard_file_paths_reads_a_cf_hdrop`) runs only when `CLIPBOARD_ALLOW_REAL_CLIPBOARD_TEST` is set, which CI's Windows runner does and local `npm run verify` / `ci:local` runs do not, so a developer's clipboard is never overwritten.

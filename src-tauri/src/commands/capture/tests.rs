@@ -260,6 +260,42 @@ fn register_image_self_trigger_reads_resource_or_falls_back() {
 }
 
 #[test]
+fn cancelling_image_registration_keeps_other_writes_and_uses_original_receipt() {
+    let directory = temp_dir("image-registration-ownership");
+    let image_path = directory.join("shot.png");
+    fs::write(&image_path, b"original-image").unwrap();
+    let mut guard = SelfTriggerGuard::new();
+    let first = register_image_self_trigger(
+        &mut guard,
+        &directory,
+        image_path.to_str(),
+        Some("fallback"),
+    )
+    .unwrap();
+    let second = register_image_self_trigger(
+        &mut guard,
+        &directory,
+        image_path.to_str(),
+        Some("fallback"),
+    )
+    .unwrap();
+    // Cleanup must use what was actually registered, even if the body changed.
+    fs::write(&image_path, b"changed-image").unwrap();
+    for registration in first {
+        guard.cancel_registration(&registration);
+    }
+    assert!(guard.is_media_write_self_triggered("image", b"original-image"));
+    assert!(guard.is_self_triggered("fallback"));
+    for registration in second {
+        guard.cancel_registration(&registration);
+    }
+    assert!(!guard.is_media_write_self_triggered("image", b"original-image"));
+    assert!(!guard.is_media_write_self_triggered("image", b"changed-image"));
+    assert!(!guard.is_self_triggered("fallback"));
+    fs::remove_dir_all(&directory).unwrap();
+}
+
+#[test]
 fn store_captured_file_references_copies_small_files_into_storage() {
     let source_dir = temp_dir("files-src");
     let storage_dir = temp_dir("files-store");

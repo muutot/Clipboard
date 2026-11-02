@@ -512,17 +512,21 @@ fn tray_copy_item<R: Runtime>(app: &AppHandle<R>, item_id: &str) {
             .ok_or("history item no longer exists")?;
         let text = tray_copy_text(&item)?;
         let owned = text.to_owned();
-        if let Some(guard) = app.try_state::<SelfTriggerState>() {
-            if let Ok(mut guard) = guard.0.lock() {
-                guard.mark_clipboard_write(&owned);
-            }
-        }
+        let registration = app.try_state::<SelfTriggerState>().and_then(|guard| {
+            guard
+                .0
+                .lock()
+                .ok()
+                .map(|mut guard| guard.mark_clipboard_write(&owned))
+        });
         if let Err(error) =
             crate::platform::platform().write_clipboard_text_with_self_trigger(&owned)
         {
-            if let Some(guard) = app.try_state::<SelfTriggerState>() {
+            if let (Some(guard), Some(registration)) =
+                (app.try_state::<SelfTriggerState>(), registration)
+            {
                 if let Ok(mut guard) = guard.0.lock() {
-                    guard.unmark_clipboard_write(&owned);
+                    guard.cancel_registration(&registration);
                 }
             }
             return Err(format!("failed to write clipboard: {error}"));

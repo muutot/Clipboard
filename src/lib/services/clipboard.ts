@@ -37,9 +37,10 @@ export async function hydrateClipboardItem(item: ClipboardItem): Promise<Clipboa
 }
 
 export async function writeClipboardText(text: string): Promise<void> {
+  let registrations: string[] = [];
   if (isTauriRuntime()) {
     try {
-      await invoke("mark_self_triggered", { text });
+      registrations = await invoke<string[]>("mark_self_triggered", { text });
     } catch (error) {
       console.warn("Unable to register text self-trigger", error);
     }
@@ -47,11 +48,10 @@ export async function writeClipboardText(text: string): Promise<void> {
   try {
     await navigator.clipboard.writeText(text);
   } catch (error) {
-    // The write failed; drop the pre-write marker so an external copy of the
-    // same text inside the suppression window is still captured.
-    if (isTauriRuntime()) {
+    // Roll back only this attempt; another write may own the same hashes.
+    if (registrations.length > 0) {
       try {
-        await invoke("unmark_self_triggered", { text });
+        await invoke("unmark_self_triggered", { registrations });
       } catch (unmarkError) {
         console.warn("Unable to clear text self-trigger", unmarkError);
       }
@@ -79,9 +79,10 @@ export async function writeClipboardImage(
   contentHash?: string,
 ): Promise<void> {
   const shouldMark = isTauriRuntime() && Boolean(resourcePath || contentHash);
+  let registrations: string[] = [];
   if (shouldMark) {
     try {
-      await invoke("mark_self_triggered_image", {
+      registrations = await invoke<string[]>("mark_self_triggered_image", {
         resourcePath: resourcePath ?? null,
         contentHash: contentHash ?? null,
       });
@@ -93,11 +94,10 @@ export async function writeClipboardImage(
   try {
     await navigator.clipboard.write([new ClipboardItem({ [blob.type || "image/png"]: blob })]);
   } catch (error) {
-    if (shouldMark) {
+    if (registrations.length > 0) {
       try {
         await invoke("unmark_self_triggered_image", {
-          resourcePath: resourcePath ?? null,
-          contentHash: contentHash ?? null,
+          registrations,
         });
       } catch (unmarkError) {
         console.warn("Unable to clear image self-trigger", unmarkError);
@@ -149,9 +149,10 @@ export async function writeClipboardHtml(
   rtf?: string | null,
 ): Promise<void> {
   const shouldMark = isTauriRuntime() && Boolean(plainText);
+  let registrations: string[] = [];
   if (shouldMark) {
     try {
-      await invoke("mark_self_triggered", { text: plainText });
+      registrations = await invoke<string[]>("mark_self_triggered", { text: plainText });
     } catch (error) {
       console.warn("Unable to register HTML self-trigger", error);
     }
@@ -169,9 +170,9 @@ export async function writeClipboardHtml(
   try {
     await navigator.clipboard.write([new ClipboardItem(payload)]);
   } catch (error) {
-    if (shouldMark && plainText) {
+    if (registrations.length > 0) {
       try {
-        await invoke("unmark_self_triggered", { text: plainText });
+        await invoke("unmark_self_triggered", { registrations });
       } catch (unmarkError) {
         console.warn("Unable to clear HTML self-trigger", unmarkError);
       }

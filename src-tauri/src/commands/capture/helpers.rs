@@ -103,14 +103,13 @@ pub fn register_image_self_trigger(
     image_root: &Path,
     resource_path: Option<&str>,
     fallback_hash: Option<&str>,
-) -> Result<(), String> {
-    let mut registered = false;
+) -> Result<Vec<String>, String> {
+    let mut registrations = Vec::new();
 
     if let Some(path) = resource_path.filter(|path| !path.trim().is_empty()) {
         match read_managed_image(image_root, path) {
             Ok(data) => {
-                guard.mark_media_write("image", &data);
-                registered = true;
+                registrations.push(guard.mark_media_write("image", &data));
             }
             Err(error) if fallback_hash.is_none() => {
                 return Err(format!("failed to read image for self-trigger: {error}"));
@@ -120,12 +119,11 @@ pub fn register_image_self_trigger(
     }
 
     if let Some(content_hash) = fallback_hash.filter(|hash| !hash.trim().is_empty()) {
-        guard.mark_as_self_triggered(content_hash);
-        registered = true;
+        registrations.push(guard.mark_as_self_triggered(content_hash));
     }
 
-    if registered {
-        Ok(())
+    if !registrations.is_empty() {
+        Ok(registrations)
     } else {
         Err("image self-trigger has no readable resource or content hash".to_owned())
     }

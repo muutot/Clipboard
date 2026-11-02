@@ -357,6 +357,15 @@ The only wire namespace is `v1/`, and every object has the `CLPSYNC1` magic plus
 
 ## Tauri command contract
 
+`mark_self_triggered(text)` and `mark_self_triggered_image(resourcePath?,
+contentHash?)` return `string[]` opaque registration receipts. Their matching
+`unmark_self_triggered` / `unmark_self_triggered_image` commands accept only
+`{registrations: string[]}` and roll back those attempts, never all hashes for
+the supplied content. Identical overlapping writes retain independent ownership;
+image rollback does not read the resource again. A failed registration provides
+no receipt and must not trigger cleanup. UUID receipts are process-local and
+expire with the existing five-second markers; no schema/config/wire field changes.
+
 OCR configuration application (`set_ocr_config`, `restart_ocr_engine`, and post-install activation) shares the manager's operation mutex across clones. Partial updates resolve against the latest preceding applied configuration, and save/restart stay in one operation. Engine probing and worker joins do not hold `Mutex<ConfigStore>`; a save failure leaves the old configuration and worker unchanged and releases the operation gate.
 
 Commands are registered in `src-tauri/src/lib.rs` with `tauri::generate_handler!`. Frontend wrappers live primarily under `src/lib/services/`.

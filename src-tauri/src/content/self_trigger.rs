@@ -27,6 +27,7 @@ pub struct DedupResult {
 
 struct SelfTriggerEntry {
     hash: String,
+    registration: String,
     timestamp: Instant,
     ttl: Duration,
 }
@@ -42,59 +43,40 @@ impl SelfTriggerGuard {
         }
     }
 
-    pub fn mark_as_self_triggered(&mut self, content_hash: &str) {
-        self.mark_with_ttl(content_hash, ENTRY_TTL);
+    /// Registers one hash and returns the receipt for cancelling this attempt.
+    pub fn mark_as_self_triggered(&mut self, content_hash: &str) -> String {
+        self.mark_with_ttl(vec![content_hash.to_owned()], ENTRY_TTL)
     }
 
-    fn mark_with_ttl(&mut self, content_hash: &str, ttl: Duration) {
+    fn mark_with_ttl(&mut self, hashes: Vec<String>, ttl: Duration) -> String {
         self.cleanup_expired();
-        if let Some(entry) = self
-            .entries
-            .iter_mut()
-            .find(|entry| entry.hash == content_hash)
-        {
-            entry.timestamp = Instant::now();
-            entry.ttl = ttl;
-            return;
-        }
-        self.entries.push(SelfTriggerEntry {
-            hash: content_hash.to_owned(),
-            timestamp: Instant::now(),
-            ttl,
-        });
+        let registration = uuid::Uuid::new_v4().to_string();
+        let timestamp = Instant::now();
+        self.entries
+            .extend(hashes.into_iter().map(|hash| SelfTriggerEntry {
+                hash,
+                registration: registration.clone(),
+                timestamp,
+                ttl,
+            }));
+        registration
     }
 
-    pub fn mark_clipboard_write(&mut self, text: &str) {
-        for hash in compute_clipboard_write_hashes(text) {
-            self.mark_with_ttl(&hash, ENTRY_TTL);
-        }
+    /// Registers canonical text/link/file hashes under one independent receipt.
+    pub fn mark_clipboard_write(&mut self, text: &str) -> String {
+        self.mark_with_ttl(compute_clipboard_write_hashes(text), ENTRY_TTL)
     }
 
-    pub fn mark_media_write(&mut self, kind: &str, data: &[u8]) {
-        for hash in compute_media_write_hashes(kind, data) {
-            self.mark_with_ttl(&hash, MEDIA_ENTRY_TTL);
-        }
+    /// Registers raw and normalized media hashes under one independent receipt.
+    pub fn mark_media_write(&mut self, kind: &str, data: &[u8]) -> String {
+        self.mark_with_ttl(compute_media_write_hashes(kind, data), MEDIA_ENTRY_TTL)
     }
 
-    /// Removes markers registered by [`SelfTriggerGuard::mark_clipboard_write`].
-    /// The frontend marks before writing; when the write itself fails the
-    /// marker must be dropped, otherwise an external copy of the same content
-    /// inside the suppression window would be silently swallowed.
-    pub fn unmark_clipboard_write(&mut self, text: &str) {
-        let hashes = compute_clipboard_write_hashes(text);
-        self.entries.retain(|entry| !hashes.contains(&entry.hash));
-    }
-
-    /// Removes markers registered by [`SelfTriggerGuard::mark_media_write`].
-    pub fn unmark_media_write(&mut self, kind: &str, data: &[u8]) {
-        let hashes = compute_media_write_hashes(kind, data);
-        self.entries.retain(|entry| !hashes.contains(&entry.hash));
-    }
-
-    /// Removes a single hash previously registered via
-    /// [`SelfTriggerGuard::mark_as_self_triggered`].
-    pub fn unmark(&mut self, content_hash: &str) {
-        self.entries.retain(|entry| entry.hash != content_hash);
+    /// Rolls back only this write attempt's hashes. Other attempts can own the
+    /// same hashes independently, including a successful write before a retry.
+    pub fn cancel_registration(&mut self, registration: &str) {
+        self.entries
+            .retain(|entry| entry.registration != registration);
     }
 
     pub fn is_self_triggered(&mut self, content_hash: &str) -> bool {
@@ -197,15 +179,41 @@ mod tests {
     #[test]
     fn unmarking_a_failed_write_restores_external_capture() {
         let mut guard = SelfTriggerGuard::new();
-        guard.mark_clipboard_write("https://example.com");
-        guard.unmark_clipboard_write("https://example.com");
+        let registration = guard.mark_clipboard_write("https://example.com");
+        guard.cancel_registration(&registration);
 
         assert!(!guard.is_text_write_self_triggered("text", "https://example.com"));
         assert!(!guard.is_text_write_self_triggered("link", "https://example.com"));
         // Unrelated markers survive.
         guard.mark_clipboard_write("other");
-        guard.unmark_clipboard_write("unrelated");
+        guard.cancel_registration("unknown-registration");
         assert!(guard.is_text_write_self_triggered("text", "other"));
+    }
+
+    #[test]
+    fn cancellation_preserves_each_other_owner_and_is_idempotent() {
+        let mut guard = SelfTriggerGuard::new();
+        let first = guard.mark_clipboard_write("same");
+        let second = guard.mark_clipboard_write("same");
+        assert_ne!(first, second);
+        guard.cancel_registration(&first);
+        guard.cancel_registration(&first);
+        assert!(guard.is_text_write_self_triggered("text", "same"));
+        guard.cancel_registration(&second);
+        assert!(!guard.is_text_write_self_triggered("text", "same"));
+    }
+
+    #[test]
+    fn failed_retry_does_not_extend_an_expired_successful_registration() {
+        let mut guard = SelfTriggerGuard::new();
+        guard.mark_clipboard_write("same");
+        for entry in &mut guard.entries {
+            entry.timestamp -= ENTRY_TTL;
+        }
+        let retry = guard.mark_clipboard_write("same");
+        guard.cancel_registration(&retry);
+        assert!(!guard.is_text_write_self_triggered("text", "same"));
+        assert!(guard.entries.is_empty());
     }
 
     #[test]
