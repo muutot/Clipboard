@@ -362,7 +362,7 @@
     color: #8fc7de;
   }
   .filters button:nth-child(6) :global(svg) {
-    color: #f5c842;
+    color: var(--favorite-color);
   }
 
   .filter-dropdowns {

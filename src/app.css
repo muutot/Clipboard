@@ -18,6 +18,7 @@
   --success-color: #51b96b;
   --danger-color: #e85d5d;
   --warning-color: #e2c05d;
+  --favorite-color: #f5c842;
   --scrollbar-color: #858585;
   font-family: var(
     --font-ui-family,
