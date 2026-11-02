@@ -108,6 +108,16 @@ and failure release the guard so subsequent cleanup can reclaim unreferenced fil
 
 `storage/recovery.rs` validates SQLite integrity, rotates current/previous backups, quarantines damaged files, restores the first valid backup, and causes the derived search index to be quarantined/rebuilt after recovery. A deliberate schema reset deletes obsolete backup generations before writing a fresh v1 backup, so discarded rows cannot return through recovery. Persistence changes must preserve atomic config writes, recovery, backup refresh, and rebuildability of derived data.
 
+Startup recovery distinguishes confirmed invalidity from unavailable inspection.
+Only a missing database, SQLite CORRUPT/NOTADB, failed integrity messages or a
+missing core table authorize backup selection. Busy, permission/open and other
+SQLite errors stop recovery before staging or quarantine; existence-check errors
+also propagate. An unavailable latest backup stops selection instead of silently
+using an older generation. Lock release permits retry; genuinely invalid latest
+backups still fall back to previous. Native Windows sharing regressions retain
+newer rows and both backups, while a real exclusive SQLite lock exercises busy
+refusal. Unix native sharing/permission behavior remains a platform gate.
+
 Recovery streams the chosen backup into an exclusively created, independently
 writable sibling and flushes it before integrity validation and quarantine.
 Read-only backup permissions stay on the backup, so restored databases can accept

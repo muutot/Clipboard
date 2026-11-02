@@ -4,7 +4,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use rusqlite::{Connection, OpenFlags};
+use rusqlite::{Connection, ErrorCode, OpenFlags};
 
 use super::{Database, StorageError};
 
@@ -61,12 +61,26 @@ pub fn discard_database_quarantine(quarantined_database: &Path) -> Result<(), St
 pub fn recover_database_if_needed(
     database_path: &Path,
 ) -> Result<Option<DatabaseRecoveryReport>, StorageError> {
-    let current_error = if database_path.exists() {
+    let current_error = if database_path
+        .try_exists()
+        .map_err(|error| recovery_error(database_path, error))?
+    {
         match validate_database_file(database_path) {
             Ok(()) => return Ok(None),
-            Err(error) => error,
+            Err(DatabaseValidationError::Invalid(error)) => error,
+            Err(error) => {
+                return Err(recovery_error(
+                    database_path,
+                    format!("cannot inspect current database; refusing recovery: {error}"),
+                ));
+            }
         }
-    } else if !backup_path(database_path).exists() && !previous_backup_path(database_path).exists()
+    } else if !backup_path(database_path)
+        .try_exists()
+        .map_err(|error| recovery_error(database_path, error))?
+        && !previous_backup_path(database_path)
+            .try_exists()
+            .map_err(|error| recovery_error(database_path, error))?
     {
         return Ok(None);
     } else {
@@ -78,18 +92,33 @@ pub fn recover_database_if_needed(
         previous_backup_path(database_path),
     ];
     let mut candidate_errors = Vec::new();
-    let backup = candidates.iter().find(|candidate| {
-        if !candidate.exists() {
-            return false;
+    let mut backup = None;
+    for candidate in &candidates {
+        if !candidate
+            .try_exists()
+            .map_err(|error| recovery_error(database_path, error))?
+        {
+            continue;
         }
         match validate_database_file(candidate) {
-            Ok(()) => true,
-            Err(error) => {
+            Ok(()) => {
+                backup = Some(candidate);
+                break;
+            }
+            Err(DatabaseValidationError::Invalid(error)) => {
                 candidate_errors.push(format!("{}: {error}", candidate.display()));
-                false
+            }
+            Err(error) => {
+                return Err(recovery_error(
+                    database_path,
+                    format!(
+                        "cannot inspect backup {}; refusing an older recovery generation: {error}",
+                        candidate.display()
+                    ),
+                ));
             }
         }
-    });
+    }
 
     let Some(backup) = backup else {
         let details = if candidate_errors.is_empty() {
@@ -243,39 +272,58 @@ pub fn reset_search_index(search_index: &Path) -> Result<(), StorageError> {
     })
 }
 
-fn validate_database_file(path: &Path) -> Result<(), String> {
+#[derive(Debug)]
+enum DatabaseValidationError {
+    Invalid(String),
+    Unavailable(rusqlite::Error),
+}
+
+impl From<rusqlite::Error> for DatabaseValidationError {
+    fn from(error: rusqlite::Error) -> Self {
+        match error.sqlite_error_code() {
+            Some(ErrorCode::DatabaseCorrupt | ErrorCode::NotADatabase) => {
+                Self::Invalid(error.to_string())
+            }
+            _ => Self::Unavailable(error),
+        }
+    }
+}
+
+impl std::fmt::Display for DatabaseValidationError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Invalid(reason) => formatter.write_str(reason),
+            Self::Unavailable(error) => error.fmt(formatter),
+        }
+    }
+}
+
+fn validate_database_file(path: &Path) -> Result<(), DatabaseValidationError> {
     let connection = Connection::open_with_flags(
         path,
         OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-    )
-    .map_err(|error| error.to_string())?;
-    connection
-        .busy_timeout(std::time::Duration::from_secs(5))
-        .map_err(|error| error.to_string())?;
+    )?;
+    connection.busy_timeout(std::time::Duration::from_secs(5))?;
 
-    let mut statement = connection
-        .prepare("PRAGMA integrity_check")
-        .map_err(|error| error.to_string())?;
+    let mut statement = connection.prepare("PRAGMA integrity_check")?;
     let messages = statement
-        .query_map([], |row| row.get::<_, String>(0))
-        .map_err(|error| error.to_string())?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|error| error.to_string())?;
+        .query_map([], |row| row.get::<_, String>(0))?
+        .collect::<Result<Vec<_>, _>>()?;
     if messages.len() != 1 || messages.first().map(String::as_str) != Some("ok") {
-        return Err(messages.join("; "));
+        return Err(DatabaseValidationError::Invalid(messages.join("; ")));
     }
 
-    let core_table_count: i64 = connection
-        .query_row(
-            "SELECT COUNT(*)
+    let core_table_count: i64 = connection.query_row(
+        "SELECT COUNT(*)
              FROM sqlite_master
              WHERE type = 'table' AND name = 'clipboard_items'",
-            [],
-            |row| row.get(0),
-        )
-        .map_err(|error| error.to_string())?;
+        [],
+        |row| row.get(0),
+    )?;
     if core_table_count != 1 {
-        return Err("clipboard_items table is missing".to_owned());
+        return Err(DatabaseValidationError::Invalid(
+            "clipboard_items table is missing".to_owned(),
+        ));
     }
 
     Ok(())
@@ -795,6 +843,129 @@ mod tests {
         assert!(restored.get_item("safe").unwrap().is_some());
         drop(restored);
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn temporarily_unreadable_valid_database_does_not_restore_a_stale_backup() {
+        use std::os::windows::fs::OpenOptionsExt;
+
+        let root = temporary_path("unreadable-current");
+        let database_path = root.join("clipboard.sqlite3");
+        let database = Database::open(&database_path).unwrap();
+        database.save_item(&item("backed-up")).unwrap();
+        refresh_database_backup(&database, &database_path).unwrap();
+        database.save_item(&item("newer-than-backup")).unwrap();
+        drop(database);
+        let original = fs::read(&database_path).unwrap();
+        let backup_before = fs::read(backup_path(&database_path)).unwrap();
+        // A temporary reader/AV lock can prevent SQLite from opening the file
+        // while still permitting rename. Inaccessibility is not corruption.
+        let held = fs::OpenOptions::new()
+            .read(true)
+            .share_mode(4) // FILE_SHARE_DELETE, without read/write sharing
+            .open(&database_path)
+            .unwrap();
+        let result = recover_database_if_needed(&database_path);
+        drop(held);
+        let unchanged = fs::read(&database_path).unwrap() == original;
+        let backup_unchanged = fs::read(backup_path(&database_path)).unwrap() == backup_before;
+        let retry = recover_database_if_needed(&database_path);
+        let reopened = Database::open(&database_path).unwrap();
+        let recent = reopened.get_item("newer-than-backup").unwrap().is_some();
+        reopened.save_item(&item("after-lock-release")).unwrap();
+        drop(reopened);
+        let quarantines = fs::read_dir(&root)
+            .unwrap()
+            .filter(|entry| {
+                entry
+                    .as_ref()
+                    .unwrap()
+                    .file_name()
+                    .to_string_lossy()
+                    .contains(".corrupt")
+            })
+            .count();
+        fs::remove_dir_all(root).unwrap();
+        assert!(
+            unchanged && recent,
+            "temporary read denial replaced a valid database with its stale backup: {result:?}"
+        );
+        assert!(result.is_err());
+        assert!(retry.unwrap().is_none());
+        assert!(backup_unchanged);
+        assert_eq!(quarantines, 0);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn temporarily_unreadable_latest_backup_does_not_restore_an_older_generation() {
+        use std::os::windows::fs::OpenOptionsExt;
+
+        let root = temporary_path("unreadable-backup");
+        let database_path = root.join("clipboard.sqlite3");
+        let database = Database::open(&database_path).unwrap();
+        database.save_item(&item("first")).unwrap();
+        refresh_database_backup(&database, &database_path).unwrap();
+        database.save_item(&item("second")).unwrap();
+        refresh_database_backup(&database, &database_path).unwrap();
+        drop(database);
+        let current_bytes = b"corrupt current database";
+        fs::write(&database_path, current_bytes).unwrap();
+        let latest = backup_path(&database_path);
+        let latest_bytes = fs::read(&latest).unwrap();
+        let previous_bytes = fs::read(previous_backup_path(&database_path)).unwrap();
+        let held = fs::OpenOptions::new()
+            .read(true)
+            .share_mode(4)
+            .open(&latest)
+            .unwrap();
+        let result = recover_database_if_needed(&database_path);
+        drop(held);
+        let untouched = fs::read(&database_path).unwrap() == current_bytes;
+        let backups_unchanged = fs::read(&latest).unwrap() == latest_bytes
+            && fs::read(previous_backup_path(&database_path)).unwrap() == previous_bytes;
+        let retry = recover_database_if_needed(&database_path);
+        let reopened = Database::open(&database_path).unwrap();
+        let recent = reopened.get_item("second").unwrap().is_some();
+        drop(reopened);
+        fs::remove_dir_all(root).unwrap();
+        assert!(
+            untouched && result.is_err(),
+            "a temporarily unreadable backup was skipped for an older generation: {result:?}"
+        );
+        assert!(backups_unchanged && recent);
+        assert_eq!(retry.unwrap().unwrap().restored_from, latest);
+    }
+
+    #[test]
+    fn an_exclusive_sqlite_lock_is_not_database_corruption() {
+        let root = temporary_path("busy-current");
+        let database_path = root.join("clipboard.sqlite3");
+        let database = Database::open(&database_path).unwrap();
+        database.save_item(&item("backed-up")).unwrap();
+        refresh_database_backup(&database, &database_path).unwrap();
+        database.save_item(&item("recent")).unwrap();
+        drop(database);
+        let writer = rusqlite::Connection::open(&database_path).unwrap();
+        writer
+            .execute_batch("PRAGMA journal_mode=DELETE; BEGIN EXCLUSIVE")
+            .unwrap();
+        let result = recover_database_if_needed(&database_path);
+        writer.execute_batch("ROLLBACK").unwrap();
+        drop(writer);
+        let retry = recover_database_if_needed(&database_path);
+        let reopened = Database::open(&database_path).unwrap();
+        let recent = reopened.get_item("recent").unwrap().is_some();
+        drop(reopened);
+        fs::remove_dir_all(root).unwrap();
+        assert!(
+            matches!(result, Err(crate::storage::StorageError::DatabaseRecoveryFailed { ref reason, .. })
+                if reason.contains("cannot inspect current database; refusing recovery")),
+            "a SQLite lock must refuse recovery before restoring a backup: {result:?}"
+        );
+        assert!(recent);
+        assert!(retry.unwrap().is_none());
     }
 
     #[test]
