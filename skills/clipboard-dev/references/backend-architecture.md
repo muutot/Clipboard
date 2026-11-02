@@ -666,6 +666,13 @@ preservation, failed publication and staging cleanup.
 
 `ConfigStore` saves use optimistic file revisions and an exclusive `conf.json.lock` OS lock shared by Clipboard instances. Startup creation/quarantine uses the same lock; the scheduled `load_existing` reader creates nothing. A stale complete-config save is rejected before atomic replacement, so a later display/geometry change cannot overwrite another instance's privacy, retention or storage policy. Setter rollback keeps local/runtime state unchanged and the error requests a restart before retrying; cross-instance runtime policy synchronization is not implied. The revision advances only after a successful replacement. Concurrent-store UTs verify one winner per shared revision and preservation of another store's sensitive-application rules across repeated rejected saves and explicit reload.
 
+Config writes exclusively create a short UUID sibling before writing JSON,
+flushing and replacing the destination. They never reuse `.conf.json.tmp`, whose
+preexisting link could overwrite unrelated files. Only a successfully created
+stage may be removed on failure; replacement failures retain saved bytes and
+setter state. Real-file UTs cover initial creation, later saves, external hard-link
+aliases and Windows sharing failures with retry.
+
 Privacy pause, ignored applications, and sensitive-source checks happen before persistence, file writes, OCR, or index work. Cleanup reads current config periodically, protects favorites, respects recycle-bin policy, removes database rows through repository rules, and removes only positively owned orphan resources. The retention inputs are snapshotted into a `CleanupPolicy` value (`retention_days`, `max_items`, `recycle_bin_days`) before any work starts: the cleanup walks every resource root and canonicalizes every referenced path, so holding `Mutex<ConfigStore>` across it would stall every other config-reading command and the auto-sync worker's per-tick read. `enforce_history_cleanup_with_policy` therefore takes no `ConfigStore` at all. The scheduled worker uses `ConfigStore::load_existing` per tick: missing, invalid or unreadable config logs a failure and skips the run without creating, quarantining or replacing anything. Only startup uses the recovering loader. This prevents a failed policy read from changing a user's retention/capacity to defaults and deleting records. A later valid policy is applied on the next tick; real-worker UTs cover both invalid/missing policies and resumption.
 
 ## Platform adapters

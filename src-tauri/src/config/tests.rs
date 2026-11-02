@@ -5,6 +5,80 @@ use serde_json::{json, Value};
 use crate::config::ConfigStore;
 
 #[test]
+fn config_writes_preserve_preexisting_staging_and_its_external_alias() {
+    for initial_creation in [true, false] {
+        let project = temporary_test_directory("config-staging-alias");
+        fs::create_dir_all(project.join("conf")).unwrap();
+        let mut store = (!initial_creation).then(|| ConfigStore::load(&project).unwrap());
+        let unrelated = project.join("unrelated.txt");
+        let staging = project.join("conf/.conf.json.tmp");
+        fs::write(&unrelated, b"unrelated existing content").unwrap();
+        fs::hard_link(&unrelated, &staging).unwrap();
+        if let Some(store) = store.as_mut() {
+            store.set_close_to_tray(false).unwrap();
+        } else {
+            ConfigStore::load(&project).unwrap();
+        }
+        let original = fs::read(&unrelated).unwrap();
+        let staged = fs::read(&staging);
+        let loaded = ConfigStore::load_existing(&project).unwrap();
+        assert_eq!(loaded.close_to_tray(), initial_creation);
+        let entries = fs::read_dir(project.join("conf")).unwrap().count();
+        fs::remove_dir_all(project).unwrap();
+        assert!(
+            original == b"unrelated existing content",
+            "config write overwrote the external alias"
+        );
+        assert_eq!(staged.unwrap(), b"unrelated existing content");
+        assert_eq!(
+            entries, 3,
+            "no owned staging should survive a successful write"
+        );
+    }
+}
+
+#[cfg(windows)]
+#[test]
+fn failed_config_replacement_preserves_state_and_removes_only_owned_staging() {
+    use std::os::windows::fs::OpenOptionsExt;
+    let project = temporary_test_directory("config-replacement-failure");
+    let mut store = ConfigStore::load(&project).unwrap();
+    let original = fs::read(store.path()).unwrap();
+    let unrelated = project.join("conf/.conf.json.tmp");
+    fs::write(&unrelated, b"unrelated existing content").unwrap();
+    let before = store.close_to_tray();
+    let held = fs::OpenOptions::new()
+        .read(true)
+        .share_mode(1)
+        .open(store.path())
+        .unwrap();
+    let result = store.set_close_to_tray(!before);
+    let saved = fs::read(store.path()).unwrap();
+    let retained = fs::read(&unrelated).unwrap();
+    let entries = fs::read_dir(project.join("conf")).unwrap().count();
+    drop(held);
+    assert_eq!(store.close_to_tray(), before);
+    store.set_close_to_tray(!before).unwrap();
+    assert_eq!(
+        ConfigStore::load_existing(&project)
+            .unwrap()
+            .close_to_tray(),
+        !before
+    );
+    fs::remove_dir_all(project).unwrap();
+    assert!(result.is_err());
+    assert!(
+        saved == original,
+        "failed replacement changed the saved configuration"
+    );
+    assert_eq!(retained, b"unrelated existing content");
+    assert_eq!(
+        entries, 3,
+        "failed replacement left its owned staging behind"
+    );
+}
+
+#[test]
 fn system_theme_is_the_fresh_and_legacy_missing_default() {
     let project = temporary_test_directory("system-theme-default");
     let store = ConfigStore::load(&project).unwrap();

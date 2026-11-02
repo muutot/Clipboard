@@ -795,13 +795,15 @@ fn atomic_write_json(path: &Path, contents: Vec<u8>) -> Result<(), StorageError>
     let directory = path.parent().ok_or_else(|| {
         StorageError::Io(std::io::Error::other("config file has no parent directory"))
     })?;
-    let file_name = path
-        .file_name()
-        .ok_or_else(|| StorageError::Io(std::io::Error::other("config file has no file name")))?;
-    let temporary_path = directory.join(format!(".{}.tmp", file_name.to_string_lossy()));
+    let temporary_path = directory.join(format!(".clipboard-config.tmp-{}", uuid::Uuid::new_v4()));
+    // Reserve this operation's own file before writing or authorizing cleanup.
+    // A fixed name can follow a preexisting link and overwrite unrelated bytes.
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temporary_path)?;
 
     let result = (|| -> Result<(), StorageError> {
-        let mut file = fs::File::create(&temporary_path)?;
         file.write_all(&contents)?;
         file.sync_all()?;
         drop(file);
