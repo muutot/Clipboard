@@ -9,6 +9,7 @@
   import { applyGeneralSettingsToDocument } from "$lib/services/settings-bootstrap";
   import { isTauriRuntime } from "$lib/services/runtime";
   import { isCustomCssRecoveryShortcut } from "$lib/utils/settings/custom-css";
+  import { watchSystemTheme } from "$lib/utils/settings/theme";
   import AppContextMenu from "$lib/components/common/AppContextMenu.svelte";
   import { onDestroy, onMount } from "svelte";
 
@@ -39,6 +40,10 @@
     const unsubscribe = generalSettings.subscribe((settings) =>
       applyGeneralSettingsToDocument(settings),
     );
+    const stopSystemTheme = watchSystemTheme(() => {
+      const current = get(generalSettings);
+      if (current.theme === "system") applyGeneralSettingsToDocument(current);
+    });
     const recover = (event: KeyboardEvent) => {
       if (!get(generalSettings).customCssEnabled || !isCustomCssRecoveryShortcut(event)) return;
       event.preventDefault();
@@ -51,6 +56,7 @@
     window.addEventListener("keydown", recover, true);
     return () => {
       unsubscribe();
+      stopSystemTheme();
       window.removeEventListener("keydown", recover, true);
     };
   });

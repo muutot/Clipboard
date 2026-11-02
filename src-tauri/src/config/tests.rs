@@ -5,6 +5,63 @@ use serde_json::{json, Value};
 use crate::config::ConfigStore;
 
 #[test]
+fn system_theme_is_the_fresh_and_legacy_missing_default() {
+    let project = temporary_test_directory("system-theme-default");
+    let store = ConfigStore::load(&project).unwrap();
+    assert_eq!(store.general_settings().theme, "system");
+    let missing: super::types::GeneralConfig = serde_json::from_value(json!({})).unwrap();
+    assert_eq!(missing.theme, "system");
+    assert_eq!(missing.theme_background(false), "#f5f5f5");
+    assert_eq!(missing.theme_background(true), "#1b1b1b");
+    fs::remove_dir_all(project).unwrap();
+}
+
+#[test]
+fn system_theme_ignores_a_saved_palette_from_another_system_appearance() {
+    let settings: super::types::GeneralConfig = serde_json::from_value(json!({
+        "theme": "system", "themeColors": {"bg": "#123456"}
+    }))
+    .unwrap();
+    assert_eq!(settings.theme_background(false), "#f5f5f5");
+    assert_eq!(settings.theme_background(true), "#1b1b1b");
+}
+
+#[test]
+fn system_theme_default_preserves_explicit_persisted_choices() {
+    let project = temporary_test_directory("system-theme-choices");
+    let mut store = ConfigStore::load(&project).unwrap();
+    for mode in ["light", "dark", "custom", "system"] {
+        let mut settings = store.general_settings().clone();
+        settings.theme = mode.into();
+        store.set_general_settings(settings).unwrap();
+        assert_eq!(
+            ConfigStore::load_existing(&project)
+                .unwrap()
+                .general_settings()
+                .theme,
+            mode
+        );
+    }
+    for (mode, background) in [
+        ("light", "#f5f5f5"),
+        ("dark", "#1b1b1b"),
+        ("custom", "#1b1b1b"),
+    ] {
+        let preset: super::types::GeneralConfig =
+            serde_json::from_value(json!({"theme": mode})).unwrap();
+        assert_eq!(preset.theme_background(false), background);
+        assert_eq!(preset.theme_background(true), background);
+        let saved: super::types::GeneralConfig = serde_json::from_value(json!({
+            "theme": mode, "themeColors": {"bg": "#123456"}
+        }))
+        .unwrap();
+        assert_eq!(saved.theme_background(false), "#123456");
+        assert_eq!(saved.theme_background(true), "#123456");
+    }
+    fs::remove_dir_all(project).unwrap();
+}
+
+#[test]
 fn stale_config_save_cannot_remove_another_instances_privacy_changes() {
     let project = temporary_test_directory("stale-store-save");
     let mut first = ConfigStore::load(&project).unwrap();

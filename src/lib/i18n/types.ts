@@ -1078,6 +1078,7 @@ export interface LocaleDefinition {
     codeTheme: string;
     codeThemeDescription: string;
     codeThemeAuto: string;
+    system: string;
     dark: string;
     light: string;
     custom: string;

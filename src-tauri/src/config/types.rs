@@ -157,7 +157,7 @@ impl Default for GeneralConfig {
             remember_window_position: false,
             always_on_top: false,
             use_system_title_bar: false,
-            theme: "dark".to_owned(),
+            theme: "system".to_owned(),
             custom_css_enabled: false,
             custom_css: String::new(),
             image_fullscreen_mode: "overlay".to_owned(),
@@ -180,20 +180,23 @@ impl Default for GeneralConfig {
 }
 
 impl GeneralConfig {
-    /// Saved window backdrop (`themeColors.bg`) for the native window surface.
+    /// Native backdrop for the actual system appearance or an explicit palette.
     ///
     /// `themeColors` lives in the flattened extra map because the frontend owns
-    /// the palette; the fallback mirrors the preset backgrounds so a first launch
-    /// (or an old config file) still gets a themed surface instead of white.
-    pub fn theme_background(&self) -> &str {
+    /// the palette. System mode ignores cached colors from a previous appearance;
+    /// missing system information is light. Explicit saved choices are retained.
+    pub fn theme_background(&self, system_dark: bool) -> &str {
+        if self.theme == "system" {
+            return if system_dark { "#1b1b1b" } else { "#f5f5f5" };
+        }
         self.extra
             .get("themeColors")
             .and_then(|colors| colors.get("bg"))
             .and_then(|bg| bg.as_str())
-            .unwrap_or(if self.theme == "light" {
-                "#f5f5f5"
-            } else {
+            .unwrap_or(if self.theme == "dark" || self.theme == "custom" {
                 "#1b1b1b"
+            } else {
+                "#f5f5f5"
             })
     }
 }

@@ -41,6 +41,12 @@ Rust config's flattened `extra` map, no dedicated Rust struct field) validated a
 `themeColors.bg` for custom presets) into one of the concrete `[data-code-theme="…"]`
 scopes defined in `app.css`.
 
+The app theme selector offers system/dark/light/custom. System is the default;
+its readonly colors follow the current OS preference without saving each change.
+Selecting a mode merges mode, palette and active-preset clear as one store edit.
+Switching from system to custom starts from the currently displayed palette.
+The panel owns and releases its system-appearance listener.
+
 Appearance also includes the `custom_css` secondary section, implemented by the lazy
 `CustomCssSettingsPanel`. Its searchable card is `appearance.custom-css`; the parent
 owns its title/breadcrumb, as with other appearance panels.

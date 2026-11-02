@@ -134,7 +134,7 @@ export interface OcrTextBlock {
   height: number;
 }
 
-export type ThemeMode = "dark" | "light" | "custom";
+export type ThemeMode = "system" | "dark" | "light" | "custom";
 
 export interface ThemePreset {
   id: string;

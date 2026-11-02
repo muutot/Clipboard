@@ -178,6 +178,16 @@ its capture-phase recovery key listener and subscription are removed on teardown
 
 `settings-bootstrap.ts` is used at startup; per-panel live preview code must remain consistent with it. Do not create a second divergent theme/font mapping. Long-lived windows that outlive the settings window (settings page, float panel) subscribe to `generalSettings` and re-apply it to the document on remote changes; the root layout bootstraps once at load and owns the live custom CSS subscription.
 
+System theme resolution ignores saved palette hints and follows
+`prefers-color-scheme`, defaulting to light when unavailable. The root layout
+re-applies document colors and automatic code highlighting on OS changes only
+in system mode, and releases its listener on teardown. Bootstrap updates both
+native surfaces for opaque main/settings/float windows; transparent main
+windows retain their transparent native surfaces. The settings window uses
+`settingsBg`. Focused UTs are `settings-bootstrap.test.ts`,
+`utils/settings/theme.test.ts` and `routes/theme-layout.test.ts`; native OS
+appearance delivery and visual composition still require platform verification.
+
 ## Main route state boundaries
 
 `src/routes/+page.svelte` intentionally owns high-level collection/UI state: active/deleted pagination, search request IDs, loaded items, the frontend search-result cache, selection, detail mode, filters, and runtime event reconciliation. Services own IPC and record mapping; cards own rendering and controlled callbacks.

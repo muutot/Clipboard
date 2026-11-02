@@ -4,6 +4,12 @@ Use this reference whenever a value crosses TypeScript, Tauri, Rust, SQLite, JSO
 
 ## Configuration write concurrency
 
+`GeneralConfig.theme` and `GeneralSettings.theme` default to `system` when missing;
+the frontend accepts system/dark/light/custom. Explicit legacy choices are
+preserved. Native `theme_background(system_dark)` and frontend resolution ignore
+saved `themeColors` while following the system; unavailable preference information
+falls back to light. No configuration migration rewrites a saved dark choice.
+
 `ConfigStore` tracks a SHA-256 revision of the exact loaded/saved bytes. Startup
 creation/quarantine and every save hold an exclusive OS lock on `conf.json.lock`.
 A save compares the on-disk revision while holding that lock, then atomically

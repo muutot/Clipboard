@@ -1,25 +1,26 @@
 :root {
-  --bg-app: #1b1b1b;
-  --bg-settings: #1b1b1b;
-  --accent: #2576f8;
-  --text-primary: #f5f5f5;
-  --text-muted: #999999;
-  --border-color: #3a3a3a;
-  --card-bg: #1e1e1e;
-  --surface-bg: #1e1e1e;
-  --statusbar-bg: #181818;
-  --hover-bg: #2c2c2c;
-  --input-bg: #1a1a1a;
-  --text-secondary: #b2b2b2;
-  --text-faint: #6e6e6e;
-  --placeholder-color: #6e6e6e;
-  --border-subtle: #292929;
-  --selection-color: #4aa8ff;
-  --success-color: #51b96b;
-  --danger-color: #e85d5d;
-  --warning-color: #e2c05d;
+  color-scheme: light;
+  --bg-app: #f5f5f5;
+  --bg-settings: #f7f8fa;
+  --accent: #1a6ae8;
+  --text-primary: #1a1a1a;
+  --text-muted: #666666;
+  --border-color: #cccccc;
+  --card-bg: #ffffff;
+  --surface-bg: #ffffff;
+  --statusbar-bg: #e8e8e8;
+  --hover-bg: #e0e0e0;
+  --input-bg: #f0f0f0;
+  --text-secondary: #444444;
+  --text-faint: #999999;
+  --placeholder-color: #aaaaaa;
+  --border-subtle: #dddddd;
+  --selection-color: #1a73e8;
+  --success-color: #388e3c;
+  --danger-color: #d32f2f;
+  --warning-color: #f9a825;
   --favorite-color: #f5c842;
-  --scrollbar-color: #858585;
+  --scrollbar-color: #aaaaaa;
   font-family: var(
     --font-ui-family,
     "Cascadia Code",
@@ -48,6 +49,32 @@
   --modal-scrim: rgba(0, 0, 0, 0.52);
   --modal-scrim-filter: blur(2px);
   --shadow-float: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --bg-app: #1b1b1b;
+    --bg-settings: #1b1b1b;
+    --accent: #2576f8;
+    --text-primary: #f5f5f5;
+    --text-muted: #999999;
+    --border-color: #3a3a3a;
+    --card-bg: #1e1e1e;
+    --surface-bg: #1e1e1e;
+    --statusbar-bg: #181818;
+    --hover-bg: #2c2c2c;
+    --input-bg: #1a1a1a;
+    --text-secondary: #b2b2b2;
+    --text-faint: #6e6e6e;
+    --placeholder-color: #6e6e6e;
+    --border-subtle: #292929;
+    --selection-color: #4c8dff;
+    --success-color: #51b96b;
+    --danger-color: #e85d5d;
+    --warning-color: #e2c05d;
+    --scrollbar-color: #858585;
+  }
 }
 
 * {

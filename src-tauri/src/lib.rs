@@ -703,7 +703,8 @@ pub fn run() {
             // with the controller, which is why the settings window (creation-time
             // `backgroundColor`) never flashes and a later `setBackgroundColor`
             // call from the page still does.
-            let main_backdrop = general.theme_background().to_owned();
+            let startup_general = general.clone();
+            let main_backdrop = general.theme_background(false).to_owned();
             app.manage(Mutex::new(config));
             if let Some(window_config) = app
                 .config()
@@ -722,6 +723,15 @@ pub fn run() {
                     }
                 }
                 let main_window = builder.build()?;
+                // The window is hidden until hydration. Read the native GTK/OS
+                // preference before reveal; saved system palettes are only hints.
+                if main_backdrop_opaque && startup_general.theme == "system" {
+                    let dark = matches!(main_window.theme(), Ok(tauri::Theme::Dark));
+                    let color = startup_general.theme_background(dark).parse().ok();
+                    if let Err(error) = main_window.set_background_color(color) {
+                        crate::log_warn!("[window] failed to apply the system-theme backdrop: {error}");
+                    }
+                }
                 // Tao erases the whole client rectangle with the window
                 // background on show; without clipping the webview out of that
                 // erase, the content blinks behind the backdrop for a frame.

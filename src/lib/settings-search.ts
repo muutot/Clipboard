@@ -486,7 +486,7 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
     { section: "theme" },
     i18n("general.theme"),
     i18n("general.themeDescription"),
-    [i18n("general.themeDark"), i18n("general.themeLight"), "外观"],
+    [i18n("theme.system"), i18n("general.themeDark"), i18n("general.themeLight"), "外观"],
   ),
 
   entry(

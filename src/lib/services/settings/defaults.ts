@@ -2,7 +2,7 @@
 // every field validator and the settings store starts from.
 
 import type { GeneralSettings } from "$lib/types/clipboard";
-import { DARK_THEME_COLORS } from "$lib/types/clipboard";
+import { LIGHT_THEME_COLORS } from "$lib/types/clipboard";
 import { DEFAULT_CODE_THEME } from "$lib/utils/content/code-theme";
 
 export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
@@ -31,11 +31,11 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   rememberWindowPosition: false,
   alwaysOnTop: false,
   useSystemTitleBar: false,
-  theme: "dark",
+  theme: "system",
   codeTheme: DEFAULT_CODE_THEME,
   customCssEnabled: false,
   customCss: "",
-  themeColors: { ...DARK_THEME_COLORS },
+  themeColors: { ...LIGHT_THEME_COLORS },
   customPresets: [],
   activePresetId: undefined,
   imageFullscreenMode: "overlay",

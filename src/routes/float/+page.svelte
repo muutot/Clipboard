@@ -351,7 +351,7 @@
     // surface with the theme color: whatever the native surface shows before the
     // first composited frame is the panel color instead of black or white (the
     // same reason the settings window passes `backgroundColor` at creation).
-    const backdrop = resolveThemeColors($generalSettings.themeColors).bg;
+    const backdrop = resolveThemeColors($generalSettings.themeColors, $generalSettings.theme).bg;
     await Promise.allSettled([
       getCurrentWindow().setBackgroundColor(backdrop),
       webview.setBackgroundColor(backdrop),

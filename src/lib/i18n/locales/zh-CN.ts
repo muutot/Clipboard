@@ -1116,10 +1116,11 @@ const zhCN: LocaleDefinition = {
   theme: {
     title: "主题设置",
     themeMode: "主题模式",
-    themeModeDescription: "选择预设主题或自定义颜色方案",
+    themeModeDescription: "跟随系统外观、选择预设主题或自定义颜色方案",
     codeTheme: "代码高亮主题",
     codeThemeDescription: "代码预览与编辑器的语法高亮配色",
     codeThemeAuto: "跟随应用主题",
+    system: "跟随系统",
     dark: "暗黑",
     light: "浅色",
     custom: "自定义",

@@ -9,6 +9,11 @@
   import { generalSettings } from "$lib/services/settings";
   import { validCodeTheme } from "$lib/utils/content/code-theme";
   import { createFeedback } from "$lib/utils/settings/feedback.svelte";
+  import {
+    resolveThemeColors,
+    systemPrefersDark,
+    watchSystemTheme,
+  } from "$lib/utils/settings/theme";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);
@@ -23,6 +28,13 @@
   let s = $state($generalSettings);
   const feedback = createFeedback(2000);
   let themeColors = $state<ThemeColors>({ ...DARK_THEME_COLORS });
+  let systemDark = $state(systemPrefersDark());
+
+  $effect(() =>
+    watchSystemTheme(() => {
+      systemDark = systemPrefersDark();
+    }),
+  );
 
   $effect(() => {
     const unsub = generalSettings.subscribe((v) => {
@@ -41,13 +53,15 @@
   onDestroy(() => feedback.dispose());
 
   function changeTheme(value: ThemeMode) {
-    generalSettings.updateSetting("theme", value);
-    generalSettings.updateSetting("activePresetId", undefined);
-    if (value === "dark") {
-      generalSettings.updateSetting("themeColors", { ...DARK_THEME_COLORS });
-    } else if (value === "light") {
-      generalSettings.updateSetting("themeColors", { ...LIGHT_THEME_COLORS });
-    }
+    const colors =
+      value === "custom"
+        ? resolveThemeColors(themeColors, s.theme)
+        : resolveThemeColors(undefined, value);
+    generalSettings.merge({
+      theme: value,
+      activePresetId: undefined,
+      themeColors: { ...colors },
+    });
   }
 
   function updateColor(key: keyof ThemeColors, value: string) {
@@ -133,7 +147,15 @@
 
   const isReadonly = $derived(s.theme !== "custom");
   const displayColors = $derived(
-    s.theme === "dark" ? DARK_THEME_COLORS : s.theme === "light" ? LIGHT_THEME_COLORS : themeColors,
+    s.theme === "system"
+      ? systemDark
+        ? DARK_THEME_COLORS
+        : LIGHT_THEME_COLORS
+      : s.theme === "dark"
+        ? DARK_THEME_COLORS
+        : s.theme === "light"
+          ? LIGHT_THEME_COLORS
+          : themeColors,
   );
 
   let editingId = $state<string | undefined>(undefined);
@@ -252,12 +274,13 @@
       value={s.theme}
       ariaLabel={_t("theme.themeMode")}
       options={[
+        { value: "system", label: _t("theme.system") },
         { value: "dark", label: _t("theme.dark") },
         { value: "light", label: _t("theme.light") },
         { value: "custom", label: _t("theme.custom") },
       ]}
       onchange={(val) => {
-        if (val === "dark" || val === "light" || val === "custom") {
+        if (val === "system" || val === "dark" || val === "light" || val === "custom") {
           changeTheme(val);
         }
       }}

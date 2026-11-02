@@ -5,14 +5,15 @@
     <script src="%sveltekit.assets%/theme-init.js"></script>
     <link rel="icon" href="%sveltekit.assets%/favicon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#151515" />
+    <meta name="theme-color" content="#f5f5f5" />
     <style>
       /* Important declarations in the first layer override built-in author styles. */
       @layer clipboard-custom-overrides;
 
       :root {
-        --bg-app: #1b1b1b;
-        --bg-settings: #1b1b1b;
+        color-scheme: light;
+        --bg-app: #f5f5f5;
+        --bg-settings: #f7f8fa;
         --font-size-base: 14px;
         --font-size-small: calc(var(--font-size-secondary, 11px) + 1px);
         --font-size-secondary: 11px;
@@ -20,6 +21,14 @@
         --font-size-cardTitle: 13px;
         --font-size-cardPreview: 11px;
         font-size: 14px;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          color-scheme: dark;
+          --bg-app: #1b1b1b;
+          --bg-settings: #1b1b1b;
+        }
       }
 
       html,

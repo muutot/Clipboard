@@ -1166,10 +1166,11 @@ const en: LocaleDefinition = {
   theme: {
     title: "Theme Settings",
     themeMode: "Theme Mode",
-    themeModeDescription: "Choose a preset theme or customize colors",
+    themeModeDescription: "Follow the system appearance, choose a preset or customize colors",
     codeTheme: "Code Highlight Theme",
     codeThemeDescription: "Syntax highlight palette for code preview and editor",
     codeThemeAuto: "Follow app theme",
+    system: "Follow system",
     dark: "Dark",
     light: "Light",
     custom: "Custom",

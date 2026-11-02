@@ -1,5 +1,6 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { applyThemeColors } from "$lib/utils/settings/theme";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
+import { applyThemeColors, resolveThemeColors, resolveThemeMode } from "$lib/utils/settings/theme";
 import { applyCustomCss } from "$lib/utils/settings/custom-css";
 import { applyCodeTheme } from "$lib/utils/content/code-theme";
 import { isTauriRuntime } from "$lib/services/runtime";
@@ -8,6 +9,7 @@ import type {
   GeneralSettings,
   UiFontFamily,
   WindowEffect,
+  ThemeColors,
 } from "$lib/types/clipboard";
 
 /** Interface font stacks keyed by the `uiFontFamily` setting; the app.css
@@ -73,9 +75,36 @@ export function applyGeneralSettingsToDocument(settings: GeneralSettings): void 
   if (typeof document === "undefined") return;
 
   applyFontSizesToDocument(settings.fontSizes);
-  applyThemeColors(settings.themeColors);
-  applyCodeTheme(settings.codeTheme, settings.theme, settings.themeColors?.bg);
+  const colors = resolveThemeColors(settings.themeColors, settings.theme);
+  applyThemeColors(colors, settings.theme);
+  applyCodeTheme(settings.codeTheme, resolveThemeMode(settings.theme), colors.bg);
+  applyNativeBackdrop(settings, colors);
   applyWindowEffectToDocument(settings.windowEffect);
   applyWindowOpacityToDocument(settings.windowTransparency, settings.windowOpacityAffectsText);
   applyCustomCss(settings.customCss, settings.customCssEnabled);
+}
+
+let lastNativeBackdrop: string | undefined;
+
+/** Transparent main windows must retain their transparent native surfaces. */
+function applyNativeBackdrop(settings: GeneralSettings, colors: ThemeColors): void {
+  if (!isTauriRuntime()) return;
+  const win = getCurrentWindow();
+  const bg = win.label === "settings" ? colors.settingsBg : colors.bg;
+  if (
+    win.label === "main" &&
+    (settings.windowEffect !== "off" ||
+      settings.windowOpacityAffectsText ||
+      settings.windowTransparency < 100)
+  )
+    return;
+  const key = `${win.label}:${bg}`;
+  if (lastNativeBackdrop === key) return;
+  lastNativeBackdrop = key;
+  void Promise.all([win.setBackgroundColor(bg), getCurrentWebview().setBackgroundColor(bg)]).catch(
+    (error) => {
+      if (lastNativeBackdrop === key) lastNativeBackdrop = undefined;
+      console.error("Unable to apply the native theme backdrop", error);
+    },
+  );
 }

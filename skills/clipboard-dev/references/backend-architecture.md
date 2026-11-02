@@ -737,3 +737,13 @@ preview RSS/time with synthetic archives; see `docs/PERFORMANCE_V1_8.md` for lim
 `export::backup` implements version-1 `.clipbackup` ZIP bundles of active records and original resource bytes. Before archiving, creation drops path references that are not regular files (directory-valued file captures, missing/imported placeholders) while preserving tags/other metadata; a valid history row must not abort the whole bundle. Export uses the snapshot visitor, streams binaries and spools JSONL to disk. Derived previews/icons and configuration are excluded. Restore first copies the archive to private scratch space, validates entry names/counts, SHA-256, expanded sizes and record constraints, then remaps every known resource reference to newly published flat files under the matching managed image/file root. A strict SQLite transaction skips duplicate content and rolls back on any other failure; rollback removes the newly published files. The Tauri restore command holds storage_maintenance_lock against cleanup, clears the search result cache and invalidates history/tags after success. It reports retention limits without truncating during restore. The snapshot visitor holds the DB mutex during export; very large exports may delay capture.
 
 `FileStore::save_file` now hashes while streaming source bytes into an exclusively created staging file (64 KiB buffer), avoiding a second full read. Hash and size describe exactly the bytes written when the file is published. If a live source grows past the copy cap, staging stops at/below that cap and the remaining source is hashed for the existing pass-through fallback; the partial stage is removed. Flush/fsync and atomic publication remain unchanged. Read/write failures remove only the owned stage. This bounds staging writes, not the lifetime or total reads of an unbounded growing source.
+
+## System appearance
+
+GeneralConfig defaults the app theme to system, preserving explicit legacy choices.
+`theme_background(system_dark)` ignores saved palette hints in system mode and
+falls back to light when the preference is unavailable. The hidden opaque main
+window reads its native theme after creation and aligns both surfaces before
+reveal. Frontend media listeners own live app/code-theme changes and are released
+on teardown. Native GTK/OS delivery and visual first frames require the matching
+platform; focused config UTs verify temporary-file persistence and resolution.

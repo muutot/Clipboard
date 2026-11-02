@@ -60,7 +60,9 @@ export function validTheme(
   value: unknown,
   fallback: GeneralSettings["theme"],
 ): GeneralSettings["theme"] {
-  return value === "dark" || value === "light" || value === "custom" ? value : fallback;
+  return value === "system" || value === "dark" || value === "light" || value === "custom"
+    ? value
+    : fallback;
 }
 
 export function validUiFontFamily(

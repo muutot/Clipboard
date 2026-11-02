@@ -5,7 +5,7 @@
 import { normalizeCustomCss } from "$lib/utils/settings/custom-css";
 import { normalizeSavedSearches } from "$lib/utils/settings/saved-searches";
 import type { GeneralSettings } from "$lib/types/clipboard";
-import { DARK_THEME_COLORS } from "$lib/types/clipboard";
+import { DARK_THEME_COLORS, LIGHT_THEME_COLORS } from "$lib/types/clipboard";
 
 import { DEFAULT_GENERAL_SETTINGS } from "./defaults";
 import {
@@ -241,16 +241,19 @@ export function normalizeGeneralSettings(
     source.useSystemTitleBar ?? fallback("useSystemTitleBar"),
     defaultSettings.useSystemTitleBar,
   );
-  result.theme = validTheme(source.theme ?? fallback("theme"), "dark");
+  result.theme = validTheme(source.theme ?? fallback("theme"), "system");
   result.codeTheme = validCodeTheme(source.codeTheme ?? fallback("codeTheme"), "auto");
   result.customCssEnabled = booleanValue(
     source.customCssEnabled ?? fallback("customCssEnabled"),
     false,
   );
   result.customCss = normalizeCustomCss(source.customCss ?? fallback("customCss"));
-  result.themeColors = normalizeThemeColors(source.themeColors ?? fallback("themeColors"), {
-    ...DARK_THEME_COLORS,
-  });
+  const palette =
+    result.theme === "dark" || result.theme === "custom" ? DARK_THEME_COLORS : LIGHT_THEME_COLORS;
+  result.themeColors = normalizeThemeColors(
+    source.themeColors ?? (result.theme === base.theme ? fallback("themeColors") : palette),
+    { ...palette },
+  );
   result.customPresets = normalizeCustomPresets(source.customPresets ?? fallback("customPresets"));
   // Like every other optional field, a *missing* value falls back to the
   // current store state so a partial payload (older backend, partial
