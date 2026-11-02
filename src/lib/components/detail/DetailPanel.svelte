@@ -1029,7 +1029,7 @@
     color: var(--text-secondary);
     background: var(--card-bg);
     font: inherit;
-    font-size: 11.5px;
+    font-size: var(--font-size-small);
     line-height: 1;
     cursor: pointer;
     transition:

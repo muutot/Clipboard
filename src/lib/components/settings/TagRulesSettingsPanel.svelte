@@ -333,7 +333,7 @@
     border-radius: 6px;
     color: var(--text-primary);
     background: var(--input-bg, var(--surface-bg));
-    font-size: 12px;
+    font-size: var(--font-size-small);
   }
 
   .autotag-pattern:focus,
@@ -373,7 +373,7 @@
     color: var(--text-secondary);
     background: var(--card-bg);
     cursor: pointer;
-    font-size: 11.5px;
+    font-size: var(--font-size-small);
     font-weight: 500;
   }
 

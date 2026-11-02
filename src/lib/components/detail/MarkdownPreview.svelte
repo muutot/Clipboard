@@ -61,7 +61,7 @@
   :global(.markdown-body .md-h6) {
     margin: 8px 0 4px;
     color: var(--text-primary);
-    font-size: 12px;
+    font-size: var(--font-size-small);
     font-weight: 550;
   }
 

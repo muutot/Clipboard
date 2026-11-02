@@ -211,7 +211,7 @@
     background: transparent;
     text-align: left;
     cursor: pointer;
-    font-size: 12px;
+    font-size: var(--font-size-small);
   }
 
   .search-suggestions button :global(svg) {

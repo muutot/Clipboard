@@ -212,7 +212,7 @@
     color: rgba(255, 255, 255, 0.7);
     background: rgba(30, 30, 30, 0.7);
     backdrop-filter: blur(6px);
-    font-size: 12px;
+    font-size: var(--font-size-small);
     pointer-events: none;
   }
 </style>

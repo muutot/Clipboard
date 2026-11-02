@@ -256,7 +256,7 @@
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    font-size: 12px;
+    font-size: var(--font-size-small);
   }
 
   .ocr-dot {
@@ -324,7 +324,7 @@
     gap: 12px;
     min-height: 140px;
     color: var(--text-faint);
-    font-size: 12px;
+    font-size: var(--font-size-small);
   }
 
   .ocr-failed {

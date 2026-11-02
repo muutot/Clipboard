@@ -50,7 +50,7 @@
     line-height: 1;
     background: var(--card-bg);
     font: inherit;
-    font-size: 11.5px;
+    font-size: var(--font-size-small);
     cursor: pointer;
     transition:
       background 100ms ease,

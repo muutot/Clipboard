@@ -64,7 +64,7 @@
   }
 
   .bulk-count {
-    font-size: 11.5px;
+    font-size: var(--font-size-small);
     color: var(--text-secondary);
     font-weight: 500;
   }
@@ -79,7 +79,7 @@
     color: var(--text-muted);
     background: transparent;
     cursor: pointer;
-    font-size: 11.5px;
+    font-size: var(--font-size-small);
     transition: color 100ms ease;
   }
 
@@ -105,7 +105,7 @@
     color: var(--text-secondary);
     background: var(--card-bg);
     cursor: pointer;
-    font-size: 11.5px;
+    font-size: var(--font-size-small);
     font-weight: 500;
     line-height: 1;
     transition:

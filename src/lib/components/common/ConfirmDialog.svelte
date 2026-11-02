@@ -92,7 +92,7 @@
 
   .confirm-message {
     color: var(--text-secondary);
-    font-size: 12px;
+    font-size: var(--font-size-small);
     line-height: 1.5;
     overflow-wrap: anywhere;
     white-space: pre-wrap;
@@ -112,7 +112,7 @@
     border-radius: 6px;
     color: var(--text-primary);
     background: var(--input-bg);
-    font-size: 12px;
+    font-size: var(--font-size-small);
     cursor: pointer;
   }
 

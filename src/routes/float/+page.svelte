@@ -553,7 +553,7 @@
     border: 1px solid var(--border-subtle);
     background: var(--bg-app);
     color: var(--text-primary);
-    font-size: 12px;
+    font-size: var(--font-size-small);
   }
 
   .float-header {
@@ -584,7 +584,7 @@
     color: var(--text-secondary);
     background: transparent;
     cursor: pointer;
-    font-size: 11.5px;
+    font-size: var(--font-size-small);
   }
 
   .float-tabs button:hover {
@@ -650,7 +650,7 @@
     background: transparent;
     cursor: pointer;
     text-align: left;
-    font-size: 12px;
+    font-size: var(--font-size-small);
   }
 
   .float-row:hover:not(:disabled) {

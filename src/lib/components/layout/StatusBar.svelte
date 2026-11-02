@@ -33,7 +33,7 @@
     border-top: 1px solid var(--border-subtle);
     color: var(--text-faint);
     background: var(--statusbar-bg);
-    font-size: 11.5px;
+    font-size: var(--font-size-small);
     overflow: hidden;
   }
 

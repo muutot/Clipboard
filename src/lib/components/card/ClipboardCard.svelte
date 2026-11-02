@@ -830,11 +830,11 @@
   }
 
   .clip-card .meta-row span {
-    font-size: 12px;
+    font-size: var(--font-size-small);
   }
 
   .clip-card .content {
-    font-size: 12px;
+    font-size: var(--font-size-small);
   }
 
   .clip-card .text-preview {
@@ -1166,7 +1166,7 @@
     color: var(--text-primary);
     background: var(--input-bg);
     font: inherit;
-    font-size: 12px;
+    font-size: var(--font-size-small);
     outline: none;
     box-sizing: border-box;
   }
@@ -1210,7 +1210,7 @@
     border: 1px solid var(--border-color);
     border-radius: 5px;
     font: inherit;
-    font-size: 11.5px;
+    font-size: var(--font-size-small);
     line-height: 1;
     cursor: pointer;
     transition:

@@ -183,7 +183,7 @@
     color: var(--text-primary);
     background: transparent;
     font: inherit;
-    font-size: 12px;
+    font-size: var(--font-size-small);
   }
 
   .tag-input-wrap input::placeholder {

@@ -329,7 +329,7 @@
     height: 30px;
     padding: 3px 8px;
     border-radius: 6px;
-    font-size: 12px;
+    font-size: var(--font-size-small);
   }
 
   .filters button:hover,
@@ -386,7 +386,7 @@
     color: var(--text-muted);
     background: transparent;
     cursor: pointer;
-    font-size: 11.5px;
+    font-size: var(--font-size-small);
     white-space: nowrap;
     transition:
       color 100ms ease,
@@ -438,7 +438,7 @@
     outline: 0;
     color: var(--text-primary);
     background: transparent;
-    font-size: 12px;
+    font-size: var(--font-size-small);
   }
 
   .dropdown-search input::placeholder {

@@ -200,7 +200,7 @@
     text-align: right;
     overflow: hidden;
     color: var(--text-faint);
-    font-size: 11.5px;
+    font-size: var(--font-size-small);
     pointer-events: none;
     opacity: 0;
     transition: opacity 120ms ease;

@@ -227,7 +227,7 @@
     justify-content: space-between;
     gap: 16px;
     color: var(--text-muted);
-    font-size: 11.5px;
+    font-size: var(--font-size-small);
   }
 
   .history-list {
@@ -264,6 +264,6 @@
 
   .empty-state p {
     margin: 6px 0;
-    font-size: 12px;
+    font-size: var(--font-size-small);
   }
 </style>

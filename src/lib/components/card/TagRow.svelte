@@ -148,7 +148,7 @@
     border-radius: 6px;
     color: var(--text-secondary);
     background: transparent;
-    font-size: 12px;
+    font-size: var(--font-size-small);
     cursor: pointer;
   }
 
