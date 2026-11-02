@@ -117,8 +117,11 @@ pub(super) fn dispatch_with_context(
             }
         }
         ("POST", [segment]) if segment == "paste" => {
-            let body = String::from_utf8_lossy(&request.body).into_owned();
-            let text = parse_paste_body(&body);
+            let body = match std::str::from_utf8(&request.body) {
+                Ok(body) => body,
+                Err(_) => return error_response(400, "paste body is not valid UTF-8"),
+            };
+            let text = parse_paste_body(body);
             if text.is_empty() {
                 return error_response(400, "paste body is empty");
             }

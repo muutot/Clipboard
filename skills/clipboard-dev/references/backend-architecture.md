@@ -821,6 +821,11 @@ use the existing connection-close/error-log path and cannot emit mutation events
 Loopback UTs check HTTP status, exact stored bytes and callbacks for valid requests,
 plus no database writes for rejected framing and truncated bodies.
 
+`POST /paste` validates body UTF-8 before interpreting raw text or JSON. Invalid
+bytes receive HTTP 400 without a saved row or mutation callback; never replace
+them with U+FFFD and report a successful import. A legitimate U+FFFD character,
+Unicode and whitespace remain unchanged in both supported body forms.
+
 API query parameters use form decoding: raw `+` becomes a space before percent
 decoding, while `%2B` remains a literal plus. This supports conventional HTTP
 client encoders for multi-word searches. Path segments use percent decoding

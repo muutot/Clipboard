@@ -329,11 +329,19 @@ fn expired_read_deadline_rejects_without_blocking() {
 }
 
 fn run_framed_paste(headers: &str, body: &str) -> (Result<u16, String>, Vec<ClipboardItem>, usize) {
+    run_framed_paste_bytes(headers, body.as_bytes())
+}
+
+fn run_framed_paste_bytes(
+    headers: &str,
+    body: &[u8],
+) -> (Result<u16, String>, Vec<ClipboardItem>, usize) {
     let database = Database::open_in_memory().unwrap();
     let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
     let port = listener.local_addr().unwrap().port();
     let mut client = TcpStream::connect(("127.0.0.1", port)).unwrap();
-    write!(client, "POST /paste HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nAuthorization: Bearer test\r\n{headers}\r\n{body}").unwrap();
+    write!(client, "POST /paste HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nAuthorization: Bearer test\r\n{headers}\r\n").unwrap();
+    client.write_all(body).unwrap();
     client.shutdown(Shutdown::Write).unwrap();
     let (stream, _) = listener.accept().unwrap();
     let changes = AtomicUsize::new(0);
@@ -470,6 +478,40 @@ fn request_framing_rejects_truncated_body_before_paste_mutates() {
     assert!(result.unwrap_err().contains("before sending the body"));
     assert!(items.is_empty());
     assert_eq!(changes, 0);
+}
+
+#[test]
+fn paste_encoding_rejects_invalid_utf8_before_mutating() {
+    for body in [
+        b"caf\xe9".as_slice(),
+        b"incomplete \xe4\xb8".as_slice(),
+        b"{\"text\":\"caf\xe9\"}".as_slice(),
+    ] {
+        let (result, items, changes) =
+            run_framed_paste_bytes(&format!("Content-Length: {}\r\n", body.len()), body);
+        assert!(
+            items.is_empty(),
+            "invalid UTF-8 was saved with status {result:?}"
+        );
+        assert_eq!(result.unwrap(), 400);
+        assert_eq!(changes, 0);
+    }
+}
+
+#[test]
+fn paste_encoding_preserves_valid_unicode_in_raw_and_json_bodies() {
+    let text = "\n café 中文 \u{fffd}\r\n";
+    for body in [
+        text.to_owned(),
+        serde_json::json!({"text": text}).to_string(),
+    ] {
+        let (result, items, changes) =
+            run_framed_paste(&format!("Content-Length: {}\r\n", body.len()), &body);
+        assert_eq!(result.unwrap(), 201);
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].text_content.as_deref(), Some(text));
+        assert_eq!(changes, 1);
+    }
 }
 
 #[test]
