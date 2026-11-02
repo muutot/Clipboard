@@ -336,6 +336,25 @@ fn import_database_from_path(database: &Database, path: &str) -> Result<ImportSu
     }
 }
 
+fn import_from_path_with_summary(
+    database: &Database,
+    config: &Mutex<ConfigStore>,
+    paths: &StoragePaths,
+    path: &str,
+) -> Result<ImportSummary, String> {
+    let mut summary = if path.to_ascii_lowercase().ends_with(BACKUP_EXTENSION) {
+        import_from_ppaste_backup(path, database, paths)?
+    } else {
+        import_database_from_path(database, path)?
+    };
+    // Rows have committed. Keep the success summary and invalidation path even
+    // if the optional capacity diagnostic cannot be read.
+    if let Err(error) = annotate_truncation_risk(&mut summary, database, config) {
+        summary.errors.push(error);
+    }
+    Ok(summary)
+}
+
 /// Async: importing a large backup performs blocking SQLite and file work, so
 /// it runs on the dedicated blocking pool instead of an async worker.
 #[tauri::command]
@@ -347,13 +366,8 @@ pub async fn import_from_file(
         let database = app.state::<Database>();
         let config = app.state::<Mutex<ConfigStore>>();
         let paths = app.state::<StoragePaths>();
-        let lower = path.to_ascii_lowercase();
-        let mut summary = if lower.ends_with(BACKUP_EXTENSION) {
-            import_from_ppaste_backup(&path, database.inner(), paths.inner())?
-        } else {
-            import_database_from_path(database.inner(), &path)?
-        };
-        annotate_truncation_risk(&mut summary, database.inner(), config.inner())?;
+        let summary =
+            import_from_path_with_summary(database.inner(), config.inner(), paths.inner(), &path)?;
         if summary.imported_count > 0 {
             if let Err(error) = app.emit(
                 "clipboard-history-invalidated",
@@ -459,6 +473,90 @@ mod tests {
     use super::*;
     use crate::domain::{ClipboardItem, ClipboardKind};
     use crate::storage::ClipboardRepository;
+
+    #[test]
+    fn import_diagnostic_failure_preserves_a_committed_success_summary() {
+        let root = std::env::temp_dir().join(format!(
+            "clipboard-import-diagnostic-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = StoragePaths::initialize(root.clone()).unwrap();
+        let database = Database::open_in_memory().unwrap();
+        let config = Mutex::new(ConfigStore::load(&root).unwrap());
+        let path = root.join("input.txt");
+        std::fs::write(&path, "diagnostic failure must not hide this record").unwrap();
+        // A real poisoned config mutex fails the post-commit capacity query.
+        // Import reads no configuration until after the transaction commits.
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _guard = config.lock().unwrap();
+            panic!("inject poisoned configuration lock");
+        }));
+        let outcome =
+            import_from_path_with_summary(&database, &config, &paths, path.to_str().unwrap());
+        assert_eq!(
+            database.item_count().unwrap(),
+            1,
+            "the import already committed even if the diagnostic failed"
+        );
+        let summary =
+            outcome.expect("a post-commit diagnostic must not turn an import into an IPC error");
+        assert_eq!(summary.imported_count, 1);
+        assert_eq!(summary.skipped_count, 0);
+        assert_eq!(summary.errors, vec!["configuration lock is poisoned"]);
+        assert_eq!(summary.pending_truncation, 0);
+        assert_eq!(summary.max_items, 0);
+        // A retry sees the same persisted row rather than another successful insert.
+        let retry =
+            import_from_path_with_summary(&database, &config, &paths, path.to_str().unwrap())
+                .unwrap();
+        assert_eq!(retry.imported_count, 0);
+        assert_eq!(retry.skipped_count, 1);
+        assert_eq!(database.item_count().unwrap(), 1);
+        drop(database);
+        drop(config);
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn import_diagnostic_success_reports_capacity_and_preserves_parser_errors() {
+        let root =
+            std::env::temp_dir().join(format!("clipboard-import-summary-{}", uuid::Uuid::new_v4()));
+        let paths = StoragePaths::initialize(root.clone()).unwrap();
+        let database = Database::open_in_memory().unwrap();
+        let config = Mutex::new(ConfigStore::load(&root).unwrap());
+        let path = root.join("input.json");
+        let mut items = sample_items();
+        let mut invalid = items[0].clone();
+        invalid.id = "invalid-title".into();
+        invalid.title = "x".repeat(4097);
+        invalid.content_hash = "invalid-title-hash".into();
+        items.push(invalid);
+        std::fs::write(&path, serde_json::to_string(&items).unwrap()).unwrap();
+        let summary =
+            import_from_path_with_summary(&database, &config, &paths, path.to_str().unwrap())
+                .unwrap();
+        assert_eq!(summary.imported_count, 2);
+        assert_eq!(summary.skipped_count, 1);
+        assert_eq!(summary.max_items, config.lock().unwrap().max_items());
+        assert_eq!(summary.pending_truncation, 0);
+        assert_eq!(
+            summary.errors.len(),
+            1,
+            "row-validation errors must remain visible"
+        );
+        assert!(summary.errors[0].contains("title"));
+        assert_eq!(database.item_count().unwrap(), 2);
+        std::fs::write(&path, "[").unwrap();
+        assert!(
+            import_from_path_with_summary(&database, &config, &paths, path.to_str().unwrap())
+                .is_err(),
+            "a parser failure before commit must still fail the command"
+        );
+        assert_eq!(database.item_count().unwrap(), 2);
+        drop(database);
+        drop(config);
+        std::fs::remove_dir_all(&root).unwrap();
+    }
 
     #[test]
     fn import_file_growth_after_size_snapshot_cannot_bypass_the_read_budget() {

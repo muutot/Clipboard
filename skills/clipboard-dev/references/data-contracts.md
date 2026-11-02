@@ -77,6 +77,12 @@ reader accepts only the ceiling plus one sentinel byte before rejecting overflow
 UTF-8 decoding and importer execution happen only after the byte check. Valid
 input bytes, IPC payload limits and importer row validation remain unchanged.
 
+If file import or portable restore has committed, a failed capacity diagnostic
+is included in `ImportSummary.errors` while retaining `importedCount` and
+`skippedCount`. It must not turn that result into a command rejection or prevent
+the history invalidation after a nonempty import. Unknown capacity remains the
+summary's default zero values; this is no assertion that cleanup is unnecessary.
+
 ### CSV export/import
 
 Exports append a `clipboard_text_encoding` column with the value `apostrophe-v1`. Text cells whose first non-whitespace character is `=`, `+`, `-`, or `@` receive a leading apostrophe before CSV quoting, so a CSV consumer does not see a formula-leading cell; original leading apostrophes are doubled for reversibility. `import_from_csv` removes one leading apostrophe only on rows with that exact encoding marker, preserving literal apostrophes and compatibility with older/external CSV files. Regression tests parse the exported cells and round-trip formulas, whitespace, and literal apostrophes through the real importer. Spreadsheet-specific display and re-save behavior still require native consumer testing.

@@ -103,6 +103,13 @@ cannot inherit an earlier size check. Exact-limit UTF-8, BOM and CRLF bytes rema
 unchanged. This bounds input retention, not parser allocations or filesystem wait
 time.
 
+File import dispatch and its post-commit capacity diagnostic are owned by
+`commands/export.rs::import_from_path_with_summary`. A diagnostic failure is
+appended to `ImportSummary.errors`; committed counts remain successful so the
+command still broadcasts history invalidation. Parse/import failures before a
+successful result remain command errors. Portable restore follows the same
+post-commit rule.
+
 Historical auto tags use `Database::with_task_connection`: an existing file is reopened
 without schema initialization, with a small cache and file-backed temporary storage. The
 in-memory test path retains its single connection. Matching reads one WAL snapshot and
