@@ -286,7 +286,24 @@ fn restore_from_backup(
     backup: &Path,
 ) -> Result<Option<PathBuf>, StorageError> {
     let temporary = unique_sibling(database_path, ".restore-tmp");
-    fs::copy(backup, &temporary).map_err(|error| recovery_error(database_path, error))?;
+    // A recovery copy is a new writable database, even when the retained
+    // backup is read-only. fs::copy would propagate that attribute and let
+    // integrity validation succeed while the subsequent database open fails.
+    let mut source =
+        fs::File::open(backup).map_err(|error| recovery_error(database_path, error))?;
+    let mut staged = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temporary)
+        .map_err(|error| recovery_error(database_path, error))?;
+    let copied = std::io::copy(&mut source, &mut staged).and_then(|_| staged.sync_all());
+    drop(staged);
+    drop(source);
+    if let Err(error) = copied {
+        // Creation succeeded, so this operation owns the partial stage.
+        let _ = fs::remove_file(&temporary);
+        return Err(recovery_error(database_path, error));
+    }
     if let Err(error) = validate_database_file(&temporary) {
         let _ = fs::remove_file(&temporary);
         return Err(recovery_error(
@@ -704,6 +721,53 @@ mod tests {
         assert!(!wal.exists());
         assert!(!shm.exists());
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn read_only_backups_restore_to_a_writable_database_without_changing_the_backup() {
+        for missing in [true, false] {
+            let root = temporary_path("read-only-backup");
+            let database_path = root.join("clipboard.sqlite3");
+            let database = Database::open(&database_path).unwrap();
+            database.save_item(&item("safe")).unwrap();
+            refresh_database_backup(&database, &database_path).unwrap();
+            drop(database);
+            let backup = backup_path(&database_path);
+            let backup_bytes = fs::read(&backup).unwrap();
+            let permissions = fs::metadata(&backup).unwrap().permissions();
+            let mut read_only = permissions.clone();
+            read_only.set_readonly(true);
+            fs::set_permissions(&backup, read_only).unwrap();
+            if missing {
+                fs::remove_file(&database_path).unwrap();
+            } else {
+                fs::write(&database_path, b"corrupt current database").unwrap();
+            }
+            let result = (|| -> Result<(), crate::storage::StorageError> {
+                let report = recover_database_if_needed(&database_path)?;
+                assert!(report.is_some());
+                let restored = Database::open(&database_path)?;
+                assert!(restored.get_item("safe")?.is_some());
+                restored.save_item(&item("after-recovery"))?;
+                Ok(())
+            })();
+            let unchanged = fs::read(&backup).unwrap() == backup_bytes;
+            let still_read_only = fs::metadata(&backup).unwrap().permissions().readonly();
+            // Clear only our fixture's attributes so even the pre-fix failure
+            // removes read-only copied stages on Windows before asserting.
+            for entry in fs::read_dir(&root).unwrap() {
+                let path = entry.unwrap().path();
+                if path.is_file() {
+                    fs::set_permissions(path, permissions.clone()).unwrap();
+                }
+            }
+            fs::remove_dir_all(&root).unwrap();
+            assert!(
+                result.is_ok(),
+                "read-only backup recovery failed: {result:?}"
+            );
+            assert!(unchanged && still_read_only);
+        }
     }
 
     #[test]
