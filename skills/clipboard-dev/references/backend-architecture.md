@@ -66,6 +66,13 @@ Windows UTs include a handle that denies deletion; Unix behavior needs its CI ga
 Staging is exclusively created and receives streamed bytes without inheriting
 source permissions, so read-only resources remain exportable before the flush.
 
+Shared `storage/atomic.rs::replace_file` rejects NUL in either Windows native
+path before calling MoveFileExW. It canonicalizes each parent, preserving the
+final directory entry while supplying a verbatim prefix for long paths.
+Targets need not exist; a symlink target's referent is not resolved or rewritten.
+Focused native file UTs cover long paths, invalid strings and ordinary replacement;
+Unix rename and directory-sync behavior is unchanged.
+
 Ordinary text edits pass an optional typed `TextItemUpdate.custom_title`, rather
 than a copied metadata JSON object. `update_text_item` merges only `customTitle`
 into the current stored object in the same SQL update as title/body/hash/size
