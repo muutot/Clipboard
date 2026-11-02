@@ -277,9 +277,13 @@ pub async fn install_ppocr(
         .build()
         .map_err(|e| format!("create client: {e}"))?;
 
-    for model_file in model.files() {
-        download_ppocr_file(&app, &client, &models_dir, model_file).await?;
-    }
+    // Keep the directory lease through activation as well as all downloads.
+    let _installation = download_ppocr_models(&client, &models_dir, model.files(), |progress| {
+        if let Err(error) = app.emit("ppocr-download-progress", progress) {
+            crate::log_error!("[ocr] failed to emit download progress: {error}");
+        }
+    })
+    .await?;
 
     apply_ocr_runtime_settings(
         &config,
@@ -339,10 +343,10 @@ pub(crate) struct PpOcrDownloadProgress {
 }
 
 async fn download_ppocr_file(
-    app: &tauri::AppHandle,
     client: &reqwest::Client,
     models_dir: &Path,
     model_file: ocr::models::PpOcrModelFile,
+    progress: &mut impl FnMut(PpOcrDownloadProgress),
 ) -> Result<(), String> {
     if ocr::models::model_file_is_installed(models_dir, &model_file) {
         // Trust-on-first-use integrity: when we recorded a digest at install
@@ -366,18 +370,13 @@ async fn download_ppocr_file(
             .map_err(|e| format!("remove stale {}: {e}", temporary.display()))?;
     }
 
-    if let Err(error) = app.emit(
-        "ppocr-download-progress",
-        PpOcrDownloadProgress {
-            filename: model_file.filename.to_owned(),
-            label: model_file.label.to_owned(),
-            current: 0,
-            total: model_file.size_bytes,
-            percentage: 0.0,
-        },
-    ) {
-        crate::log_error!("[ocr] failed to emit download progress: {error}");
-    }
+    progress(PpOcrDownloadProgress {
+        filename: model_file.filename.to_owned(),
+        label: model_file.label.to_owned(),
+        current: 0,
+        total: model_file.size_bytes,
+        percentage: 0.0,
+    });
 
     let mut response = client
         .get(model_file.url)
@@ -404,18 +403,13 @@ async fn download_ppocr_file(
         } else {
             -1.0
         };
-        if let Err(error) = app.emit(
-            "ppocr-download-progress",
-            PpOcrDownloadProgress {
-                filename: model_file.filename.to_owned(),
-                label: model_file.label.to_owned(),
-                current: downloaded,
-                total,
-                percentage,
-            },
-        ) {
-            crate::log_error!("[ocr] failed to emit download progress: {error}");
-        }
+        progress(PpOcrDownloadProgress {
+            filename: model_file.filename.to_owned(),
+            label: model_file.label.to_owned(),
+            current: downloaded,
+            total,
+            percentage,
+        });
     }
 
     file.flush().await.map_err(|e| e.to_string())?;
@@ -468,6 +462,47 @@ async fn download_ppocr_file(
 
     Ok(())
 }
+
+async fn download_ppocr_models(
+    client: &reqwest::Client,
+    models_dir: &Path,
+    files: impl IntoIterator<Item = ocr::models::PpOcrModelFile>,
+    mut progress: impl FnMut(PpOcrDownloadProgress),
+) -> Result<std::fs::File, String> {
+    // Settings panels are remounted while their IPC keeps running. A local
+    // button guard cannot own the shared .part paths, and other processes may
+    // use this same configured model directory too.
+    let directory = models_dir.to_path_buf();
+    let installation = tauri::async_runtime::spawn_blocking(move || {
+        let directory = std::fs::canonicalize(directory).map_err(|e| e.to_string())?;
+        let file = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(directory.join(".ppocr-install.lock"))
+            .map_err(|e| format!("open model installation lock: {e}"))?;
+        match file.try_lock() {
+            Ok(()) => Ok(file),
+            Err(std::fs::TryLockError::WouldBlock) => {
+                Err("PP-OCR model installation is already in progress".to_owned())
+            }
+            Err(std::fs::TryLockError::Error(error)) => {
+                Err(format!("lock model installation: {error}"))
+            }
+        }
+    })
+    .await
+    .map_err(|e| format!("model installation lock task join failed: {e}"))??;
+    for model_file in files {
+        download_ppocr_file(client, models_dir, model_file, &mut progress).await?;
+    }
+    // Never unlink the lock file: another process may already own that inode.
+    Ok(installation)
+}
+
+#[cfg(test)]
+mod download_tests;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]

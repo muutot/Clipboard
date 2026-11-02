@@ -386,6 +386,16 @@ to the same bound instead of treating the stop request as thread completion.
 
 `OcrWorkerManager` also owns a separate settings-operation mutex shared by clones. `commands/ocr.rs` holds it across resolution, engine preparation, persistence and restart, while releasing the global config lock before probes and joins. Settings, explicit restart and post-install activation use the same apply path. A controlled post-save delay tests competing applies and the resulting worker's model version; save failures release the gate without replacing the worker. Existing stop signals, publication revocation and join handling remain in `OcrWorker`.
 
+Model installation additionally owns an OS lease on the canonical model
+directory's `.ppocr-install.lock`. `commands/ocr.rs::download_ppocr_models`
+returns the locked file so `install_ppocr` retains it through engine activation;
+same-directory competitors fail before touching shared `.part` paths or making
+requests. Keep this lock file persistent and release ownership by closing the
+handle. Different model directories can progress independently, and failed
+downloads release the lease for retries. `commands/ocr/download_tests.rs` tests
+the production HTTP/file pipeline with synthetic loopback bodies, held response
+chunks, overlapping installs and failed-digest/cache controls.
+
 Recognition failures are retried, but the retry queue lives in the worker
 (`ocr/worker.rs::PendingRetry`), not in the database, and both the first
 attempt and every retry go through `handle_recognition_failure` so the
