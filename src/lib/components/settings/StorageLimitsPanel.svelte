@@ -67,10 +67,12 @@
   });
 
   let disposed = false;
+  const deleteConfirmation = new AbortController();
   let refreshTimer: ReturnType<typeof setTimeout> | undefined;
   let unlistenAdd: (() => void) | undefined;
   let unlistenInvalidated: (() => void) | undefined;
   const scheduleRefresh = () => {
+    if (disposed) return;
     if (refreshTimer !== undefined) clearTimeout(refreshTimer);
     refreshTimer = setTimeout(() => {
       refreshTimer = undefined;
@@ -79,6 +81,7 @@
   };
   onDestroy(() => {
     disposed = true;
+    deleteConfirmation.abort();
     if (refreshTimer !== undefined) clearTimeout(refreshTimer);
     unlistenAdd?.();
     unlistenInvalidated?.();
@@ -147,6 +150,7 @@
   }
 
   async function loadStorageKindStats(): Promise<boolean> {
+    if (disposed) return false;
     try {
       const entries = await Promise.all(
         storageKinds.map(async ({ kind }) => {
@@ -155,10 +159,12 @@
           return [kind, stats] as const;
         }),
       );
+      if (disposed) return false;
       storageKindStats = Object.fromEntries(entries) as Record<StorageKind, StorageKindStats>;
       storageKindStatsAvailable = true;
       return true;
     } catch (error) {
+      if (disposed) return false;
       console.error("Unable to load storage kind statistics", error);
       storageKindStats = {
         text: { itemCount: 0, sizeBytes: 0 },
@@ -176,13 +182,14 @@
   }
 
   async function deleteStorageKind(kind: StorageKind) {
-    if (deletingStorageKind) return;
+    if (disposed || deletingStorageKind) return;
 
     const label = storageKindLabel(kind);
     deletingStorageKind = kind;
 
     try {
       const freshStats = await getStorageKindStats(kind);
+      if (disposed) return;
       if (!freshStats) throw new Error(_t("storage.storageUnavailable"));
       storageKindStats = { ...storageKindStats, [kind]: freshStats };
       storageKindStatsAvailable = true;
@@ -191,26 +198,34 @@
         return;
       }
 
-      const confirmed = await confirmDialog({
-        title: _t("confirm.title"),
-        message: _t("storage.deleteKindConfirm", {
-          kind: label,
-          count: freshStats.itemCount,
-          size: formatBytes(freshStats.sizeBytes),
-        }),
-        confirmLabel: _t("confirm.delete"),
-        danger: true,
-      });
-      if (!confirmed) return;
+      const confirmed = await confirmDialog(
+        {
+          title: _t("confirm.title"),
+          message: _t("storage.deleteKindConfirm", {
+            kind: label,
+            count: freshStats.itemCount,
+            size: formatBytes(freshStats.sizeBytes),
+          }),
+          confirmLabel: _t("confirm.delete"),
+          danger: true,
+        },
+        deleteConfirmation.signal,
+      );
+      if (disposed || !confirmed) return;
 
       const result = await permanentlyDeleteStorageKind(kind, freshStats);
+      if (disposed) return;
       const warnings = [...result.warnings];
       try {
-        storageKindStats = { ...storageKindStats, [kind]: await getStorageKindStats(kind) };
+        const updatedStats = await getStorageKindStats(kind);
+        if (disposed) return;
+        storageKindStats = { ...storageKindStats, [kind]: updatedStats };
       } catch (error) {
+        if (disposed) return;
         console.error("Unable to refresh storage statistics after deletion", error);
         warnings.push(_t("storage.deleteKindRefreshFailed"));
       }
+      if (disposed) return;
 
       const params = {
         kind: label,
@@ -230,8 +245,10 @@
         onfeedback(_t("storage.deleteKindSuccess", params), true);
       }
     } catch (error) {
+      if (disposed) return;
       console.error(`Unable to permanently delete ${kind} storage`, error);
       await loadStorageKindStats();
+      if (disposed) return;
       onfeedback(
         _t("storage.deleteKindFailed", {
           kind: label,
@@ -240,7 +257,7 @@
         false,
       );
     } finally {
-      deletingStorageKind = null;
+      if (!disposed) deletingStorageKind = null;
     }
   }
 </script>

@@ -176,6 +176,13 @@ localized by the caller; the monitor retains no clipboard payload.
 
 ## UI-only services
 
+`ui/confirm.svelte.ts::confirmDialog(options, signal?)` owns one window-local
+confirmation at a time. A newer request cancels the previous caller. An optional
+AbortSignal lets a panel cancel only its own request on teardown; an already
+aborted signal cannot replace another caller's dialog. Completion/replacement
+releases that request's abort listener. The signal governs confirmation only,
+not a backend mutation already submitted after acceptance.
+
 `utils/settings/custom-css.ts` parses with CSSOM in a constructed stylesheet or an inert document,
 promotes style declarations, caches the last compiled source and owns one style element.
 `applyGeneralSettingsToDocument` applies it after the theme/font values. The root layout

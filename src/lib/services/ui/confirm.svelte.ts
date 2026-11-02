@@ -24,12 +24,22 @@ interface PendingRequest extends ConfirmOptions {
 
 let current = $state<PendingRequest | null>(null);
 
-export function confirmDialog(options: ConfirmOptions): Promise<boolean> {
+/** An optional owner signal cancels only this request, never a newer one. */
+export function confirmDialog(options: ConfirmOptions, signal?: AbortSignal): Promise<boolean> {
+  if (signal?.aborted) return Promise.resolve(false);
   return new Promise<boolean>((resolve) => {
     // A newer request replaces a still-pending one; the stale caller is
     // released as cancelled so nothing hangs.
     current?.resolve(false);
-    current = { ...options, resolve };
+    const cancel = () => {
+      if (current?.resolve === complete) settleConfirm(false);
+    };
+    const complete = (answer: boolean) => {
+      signal?.removeEventListener("abort", cancel);
+      resolve(answer);
+    };
+    current = { ...options, resolve: complete };
+    signal?.addEventListener("abort", cancel, { once: true });
   });
 }
 

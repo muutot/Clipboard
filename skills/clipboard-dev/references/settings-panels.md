@@ -188,6 +188,10 @@ backend until completion or explicit cancellation.
 - Use `.settings-feedback`; add `.success` for success and default to error styling otherwise.
 - Clear feedback with a timer whose cleanup is retained when the component can unmount or messages can be replaced.
 - Disable controls or show a saving/loading state during commands that cannot safely overlap.
+- Per-kind permanent deletion in StorageLimitsPanel owns its confirmation signal.
+  Unmount cancels only that request; delayed statistics/acceptance cannot submit
+  deletion after teardown. Already submitted work completes in the backend, and
+  late results do not refresh the disposed panel or report feedback.
 - Import capacity warnings use `maxItems` and `pendingTruncation` from the same
   completed `ImportSummary`. Every completed result replaces the warning snapshot,
   so zero risk removes an older warning; cancellation or rejection retains it.

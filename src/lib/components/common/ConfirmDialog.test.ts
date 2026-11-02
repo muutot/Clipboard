@@ -92,4 +92,42 @@ describe("ConfirmDialog", () => {
     flushSync();
     await expect(fresh).resolves.toBe(true);
   });
+
+  it("cancels and removes a request when its owner aborts", async () => {
+    const target = mountHost();
+    const owner = new AbortController();
+    const pending = confirmDialog({ title: "Owned request", message: "Body" }, owner.signal);
+    flushSync();
+    expect(target.querySelector(".confirm-title")?.textContent).toBe("Owned request");
+    owner.abort();
+    flushSync();
+    expect(target.querySelector(".confirm-dialog")).toBeNull();
+    await expect(pending).resolves.toBe(false);
+  });
+
+  it("does not replace the current request for an already aborted owner", async () => {
+    const target = mountHost();
+    const current = confirmDialog({ title: "Current request", message: "Body" });
+    const owner = new AbortController();
+    owner.abort();
+    const cancelled = confirmDialog({ title: "Cancelled request", message: "Body" }, owner.signal);
+    flushSync();
+    expect(target.querySelector(".confirm-title")?.textContent).toBe("Current request");
+    await expect(cancelled).resolves.toBe(false);
+    acceptButton(target).click();
+    await expect(current).resolves.toBe(true);
+  });
+
+  it("retains a newer request when a replaced owner's signal later aborts", async () => {
+    const target = mountHost();
+    const owner = new AbortController();
+    const stale = confirmDialog({ title: "Old request", message: "Body" }, owner.signal);
+    const fresh = confirmDialog({ title: "New request", message: "Body" });
+    owner.abort();
+    flushSync();
+    await expect(stale).resolves.toBe(false);
+    expect(target.querySelector(".confirm-title")?.textContent).toBe("New request");
+    acceptButton(target).click();
+    await expect(fresh).resolves.toBe(true);
+  });
 });
