@@ -176,7 +176,7 @@ pub(crate) fn normalize_imported_icon_key(icon_path: Option<&str>) -> Option<Str
 /// Reverses the plain-text escaping used by export: a content line that is
 /// exactly `---` is written as `\---`, and any line starting with a backslash
 /// gains one leading backslash.
-fn unescape_plain_text(chunk: &str) -> String {
+fn unescape_plain_text(chunk: &str, exact_framing: bool) -> String {
     let mut output = String::with_capacity(chunk.len());
     for line in chunk.split_inclusive('\n') {
         let (content, ending) = if let Some(content) = line.strip_suffix("\r\n") {
@@ -186,8 +186,8 @@ fn unescape_plain_text(chunk: &str) -> String {
         } else {
             (line, "")
         };
-        if content == "\\---" {
-            output.push_str("---");
+        if content == "\\---" || (exact_framing && content == "\\---\r") {
+            output.push_str(&content[1..]);
         } else if let Some(rest) = content.strip_prefix("\\\\") {
             output.push('\\');
             output.push_str(rest);
@@ -203,6 +203,15 @@ fn unescape_plain_text(chunk: &str) -> String {
 /// `---`; blank chunks are ignored and duplicate content is handled by the
 /// database's normal content-hash upsert path.
 pub fn import_from_plain_text(text: &str, database: &Database) -> Result<ImportSummary, String> {
+    // Only the explicit generated-file header enables exact framing. Do not
+    // reinterpret old backups or handwritten separator padding as record data.
+    let (text, framing_ending) = match text.split_once('\n') {
+        Some((header, body)) if header == PLAIN_TEXT_HEADER => (body, Some("\n")),
+        Some((header, body)) if header.strip_suffix('\r') == Some(PLAIN_TEXT_HEADER) => {
+            (body, Some("\r\n"))
+        }
+        _ => (text, None),
+    };
     let mut entries = Vec::new();
     let mut chunks = Vec::new();
     let mut start = 0;
@@ -210,18 +219,34 @@ pub fn import_from_plain_text(text: &str, database: &Database) -> Result<ImportS
     // Recognize delimiter lines in both LF and CRLF files without normalizing
     // line endings inside the clipboard content itself.
     for line in text.split_inclusive('\n') {
-        if line.trim_end_matches(['\r', '\n']) == "---" {
-            chunks.push(&text[start..offset]);
+        let delimiter = if framing_ending.is_some() {
+            line.strip_suffix('\n')
+                .map(|line| line.strip_suffix('\r').unwrap_or(line))
+                .unwrap_or(line)
+                == "---"
+        } else {
+            line.trim_end_matches(['\r', '\n']) == "---"
+        };
+        if delimiter {
+            chunks.push((&text[start..offset], true));
             start = offset + line.len();
         }
         offset += line.len();
     }
-    chunks.push(&text[start..]);
+    chunks.push((&text[start..], false));
 
-    for (index, chunk) in chunks.into_iter().enumerate() {
-        let unescaped = unescape_plain_text(chunk);
-        let content = unescaped.trim_matches(['\r', '\n']);
-        if content.trim().is_empty() {
+    for (index, (chunk, followed_by_separator)) in chunks.into_iter().enumerate() {
+        let chunk = match framing_ending {
+            Some(ending) if followed_by_separator => chunk.strip_suffix(ending).unwrap_or(chunk),
+            _ => chunk,
+        };
+        let unescaped = unescape_plain_text(chunk, framing_ending.is_some());
+        let content = if framing_ending.is_some() {
+            unescaped.as_str()
+        } else {
+            unescaped.trim_matches(['\r', '\n'])
+        };
+        if content.is_empty() || (framing_ending.is_none() && content.trim().is_empty()) {
             continue;
         }
 

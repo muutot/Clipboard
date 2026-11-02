@@ -83,6 +83,18 @@ is included in `ImportSummary.errors` while retaining `importedCount` and
 the history invalidation after a nonempty import. Unknown capacity remains the
 summary's default zero values; this is no assertion that cleanup is unnecessary.
 
+### Plain-text export/import
+
+Nonempty generated plain-text files carry a first-line
+`\clipboard-plain-text-v1` header, with LF output. Its LF/CRLF ending declares
+exact separator framing: remove only the newline inserted before each `---`
+delimiter, then unescape content. Leading/trailing CR/LF and nonempty whitespace
+records retain their bytes and content hashes. A final bare CR on a `---` content
+line is escaped so it cannot combine with framing LF into a delimiter. Literal
+header/backslash lines are escaped normally. Headerless old/handwritten files
+retain boundary trimming; new files require a current importer. Empty text/media
+without text stay omitted; JSON/CSV/binary backup contracts do not change.
+
 ### CSV export/import
 
 Exports append a `clipboard_text_encoding` column with the value `apostrophe-v1`. Text cells whose first non-whitespace character is `=`, `+`, `-`, or `@` receive a leading apostrophe before CSV quoting, so a CSV consumer does not see a formula-leading cell; original leading apostrophes are doubled for reversibility. `import_from_csv` removes one leading apostrophe only on rows with that exact encoding marker, preserving literal apostrophes and compatibility with older/external CSV files. Regression tests parse the exported cells and round-trip formulas, whitespace, and literal apostrophes through the real importer. Spreadsheet-specific display and re-save behavior still require native consumer testing.

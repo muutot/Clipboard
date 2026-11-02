@@ -650,3 +650,151 @@ fn plain_text_round_trip_escapes_delimiter_and_backslash_lines() {
         .unwrap();
     assert_eq!(items[0].text_content.as_deref(), Some(body));
 }
+
+fn assert_plain_text_database_round_trip(body: &str) {
+    let source = Database::open_in_memory().unwrap();
+    let mut item = sample_items().remove(0);
+    item.text_content = Some(body.to_owned());
+    item.content_hash = crate::content::hash::compute_content_hash("text", body, None);
+    item.size_bytes = body.len() as u64;
+    source.save_item(&item).unwrap();
+    let options = ExportOptions {
+        format: ExportFormat::PlainText,
+        include_favorites: true,
+        date_from_ms: None,
+        date_to_ms: None,
+        content_types: vec!["text".to_owned()],
+    };
+    let exported = export_database(&source, &options).unwrap();
+    let restored = Database::open_in_memory().unwrap();
+    let summary = import_from_plain_text(&exported, &restored).unwrap();
+    assert_eq!(summary.imported_count, 1);
+    let items = restored
+        .list_recent(10, 0, &crate::storage::HistoryFilter::default())
+        .unwrap();
+    assert_eq!(items[0].text_content.as_deref(), Some(body));
+    assert_eq!(items[0].content_hash, item.content_hash);
+}
+
+#[test]
+fn plain_text_database_round_trip_preserves_leading_newlines() {
+    for body in [
+        "\nleading LF",
+        "\r\nleading CRLF",
+        "\rleading CR",
+        "\n\r\n---\n\\path",
+    ] {
+        assert_plain_text_database_round_trip(body);
+    }
+}
+
+#[test]
+fn plain_text_database_round_trip_preserves_trailing_newlines() {
+    for body in [
+        "trailing LF\n",
+        "trailing CRLF\r\n",
+        "trailing CR\r",
+        "---\r",
+        "line\n\r\n",
+    ] {
+        assert_plain_text_database_round_trip(body);
+    }
+}
+
+#[test]
+fn plain_text_database_round_trip_keeps_record_boundaries_and_literal_headers() {
+    let bodies = [
+        "\nfirst\r\n",
+        "---\r",
+        "---\r\r",
+        "\n---\n",
+        "\\clipboard-plain-text-v1\nheader is literal\n",
+        "\n\n",
+        " \n\t",
+        "\\\n---\r\n",
+        "last\r\n\n",
+    ];
+    let source = Database::open_in_memory().unwrap();
+    for (index, body) in bodies.iter().enumerate() {
+        let mut item = sample_items().remove(0);
+        item.id = format!("boundary-{index}");
+        item.text_content = Some((*body).to_owned());
+        item.content_hash = crate::content::hash::compute_content_hash("text", body, None);
+        item.size_bytes = body.len() as u64;
+        item.created_at_ms += index as i64;
+        source.save_item(&item).unwrap();
+    }
+    let options = ExportOptions {
+        format: ExportFormat::PlainText,
+        include_favorites: true,
+        date_from_ms: None,
+        date_to_ms: None,
+        content_types: vec!["text".to_owned()],
+    };
+    let exported = export_database(&source, &options).unwrap();
+    let restored = Database::open_in_memory().unwrap();
+    let summary = import_from_plain_text(&exported, &restored).unwrap();
+    assert_eq!(summary.imported_count, bodies.len() as u64);
+    let items = restored
+        .list_recent(20, 0, &crate::storage::HistoryFilter::default())
+        .unwrap();
+    let actual: std::collections::BTreeSet<_> = items
+        .iter()
+        .map(|item| item.text_content.as_deref().unwrap())
+        .collect();
+    assert_eq!(actual, bodies.into_iter().collect());
+    for item in &items {
+        assert_eq!(
+            item.content_hash,
+            crate::content::hash::compute_content_hash(
+                "text",
+                item.text_content.as_deref().unwrap(),
+                None
+            )
+        );
+    }
+    let reimported = import_from_plain_text(&exported, &restored).unwrap();
+    assert_eq!(reimported.imported_count, 0);
+    assert_eq!(reimported.skipped_count, bodies.len() as u64);
+}
+
+#[test]
+fn plain_text_import_retains_legacy_padding_rules_and_accepts_crlf_framing() {
+    let legacy_escape = Database::open_in_memory().unwrap();
+    import_from_plain_text("\\---\r", &legacy_escape).unwrap();
+    let items = legacy_escape
+        .list_recent(10, 0, &crate::storage::HistoryFilter::default())
+        .unwrap();
+    assert_eq!(items[0].text_content.as_deref(), Some("\\---"));
+
+    let legacy = Database::open_in_memory().unwrap();
+    let summary = import_from_plain_text("\n\nfirst\n\n---\n\nsecond\n\n---\n\n", &legacy).unwrap();
+    assert_eq!(summary.imported_count, 2);
+    let items = legacy
+        .list_recent(10, 0, &crate::storage::HistoryFilter::default())
+        .unwrap();
+    let actual: std::collections::BTreeSet<_> = items
+        .iter()
+        .map(|item| item.text_content.as_deref().unwrap())
+        .collect();
+    assert_eq!(actual, ["first", "second"].into_iter().collect());
+
+    let crlf = Database::open_in_memory().unwrap();
+    let summary = import_from_plain_text(
+        "\\clipboard-plain-text-v1\r\nfirst\r\n\r\n---\r\n\r\nsecond\r\n",
+        &crlf,
+    )
+    .unwrap();
+    assert_eq!(summary.imported_count, 2);
+    let items = crlf
+        .list_recent(10, 0, &crate::storage::HistoryFilter::default())
+        .unwrap();
+    let actual: std::collections::BTreeSet<_> = items
+        .iter()
+        .map(|item| item.text_content.as_deref().unwrap())
+        .collect();
+    assert_eq!(
+        actual,
+        ["first\r\n", "\r\nsecond\r\n"].into_iter().collect()
+    );
+}

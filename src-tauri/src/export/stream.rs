@@ -1,4 +1,7 @@
-use super::{clipboard_kind_name, escape_csv, ExportFormat, ExportOptions, CSV_TEXT_ENCODING};
+use super::{
+    clipboard_kind_name, escape_csv, ExportFormat, ExportOptions, CSV_TEXT_ENCODING,
+    PLAIN_TEXT_HEADER,
+};
 use crate::{
     domain::ClipboardItem,
     storage::{Database, StorageError},
@@ -32,8 +35,11 @@ fn write_escaped_plain_text<W: Write>(writer: &mut W, text: &str) -> Result<(), 
         } else {
             (line, "")
         };
-        if content == "---" {
-            writer.write_all(b"\\---")?;
+        // A final bare CR can pair with the separator's LF, so protect that
+        // delimiter-looking line too.
+        if content.strip_suffix('\r').unwrap_or(content) == "---" {
+            writer.write_all(b"\\")?;
+            writer.write_all(content.as_bytes())?;
         } else if content.starts_with('\\') {
             writer.write_all(b"\\")?;
             writer.write_all(content.as_bytes())?;
@@ -91,12 +97,16 @@ impl<'a, W: Write> ExportWriter<'a, W> {
                 CSV_TEXT_ENCODING
             )?,
             ExportFormat::PlainText => {
-                if let Some(text) = &item.text_content {
+                if let Some(text) = item.text_content.as_ref().filter(|text| !text.is_empty()) {
                     if self.has_text {
                         self.writer.write_all(b"\n---\n")?;
+                    } else {
+                        // Generated files have exact record framing. Legacy and
+                        // handwritten files retain their boundary-blank trimming.
+                        writeln!(self.writer, "{PLAIN_TEXT_HEADER}")?;
                     }
                     write_escaped_plain_text(&mut self.writer, text)?;
-                    self.has_text |= !text.is_empty();
+                    self.has_text = true;
                 }
             }
         }

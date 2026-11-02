@@ -95,6 +95,15 @@ delete the only recovery copy or claim that default settings were persisted.
 
 Plain-text import recognizes a `---` delimiter line with LF or CRLF endings, while preserving line endings inside each record. Delimiters at the file boundary create empty chunks that are ignored; they never create clipboard records. The CRLF regression imports two records and verifies the first record's internal CRLF bytes. Export escapes a content line that is exactly `---` as `\---` and doubles a leading backslash on any content line; import reverses that escaping, so a record containing a delimiter-looking line round-trips as one record.
 
+New nonempty plain-text exports start with `\clipboard-plain-text-v1` on its own
+line. That explicit header enables exact record framing: import removes only one
+separator newline before each delimiter, preserves leading/trailing CR/LF and
+nonempty whitespace-only bodies, and handles bare-CR delimiter-looking content.
+LF and CRLF headers select their corresponding separator framing. Headerless
+legacy/handwritten files keep boundary-blank trimming. A literal header in content
+is protected by the existing backslash escaping. Older importers do not understand
+the new header; use a current importer, or JSON/portable backup for legacy transfer.
+
 `commands/export.rs::read_import_file` opens the source once and reads metadata
 from that handle. Metadata provides an early size rejection; the read itself
 consumes at most the 256 MiB import limit plus one sentinel byte and rejects

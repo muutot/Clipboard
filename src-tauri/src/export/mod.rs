@@ -15,6 +15,7 @@ mod stream;
 mod tests;
 
 pub(crate) use csv::{clipboard_kind_name, escape_csv, CsvReader, CSV_TEXT_ENCODING};
+pub(super) const PLAIN_TEXT_HEADER: &str = "\\clipboard-plain-text-v1";
 pub use import::*;
 #[cfg(test)]
 pub(crate) use import::{normalize_imported_icon_key, sanitize_imported_path};
