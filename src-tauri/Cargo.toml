@@ -1,6 +1,6 @@
 [package]
 name = "clipboard-desktop"
-version = "1.8.1"
+version = "1.8.2"
 description = "A high-performance cross-platform clipboard manager"
 authors = ["muutot"]
 edition = "2021"
