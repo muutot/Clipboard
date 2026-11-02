@@ -27,7 +27,7 @@ export function createListenerScope() {
 }
 
 /** Mounted window settings, geometry persistence and native listeners have one disposal owner. */
-export function createMainWindowController(onFocus: () => Promise<void>) {
+export function createMainWindowController(onFocus: (focused: boolean) => Promise<void> | void) {
   const appWindow = isTauriRuntime() ? getCurrentWindow() : null;
   let previousRememberWindowPosition = false;
   const scope = createListenerScope();
@@ -50,8 +50,8 @@ export function createMainWindowController(onFocus: () => Promise<void>) {
   });
   if (appWindow) {
     scope.add(
-      appWindow.onFocusChanged(() => {
-        void onFocus();
+      appWindow.onFocusChanged(({ payload: focused }) => {
+        void onFocus(focused);
       }),
     );
     scope.add(appWindow.onMoved(() => bounds.scheduleSave()));

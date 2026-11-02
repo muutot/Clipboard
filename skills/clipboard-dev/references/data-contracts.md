@@ -220,6 +220,8 @@ The frontend `GeneralSettings` type/defaults/normalizer are richer than the expl
 
 `max_text_capture_bytes` is an explicit `GeneralConfig` member (`u64` bytes, default `500_000`); `ConfigStore::max_text_capture_bytes()` clamps to 10000–10000000. The capture loop reads the value per iteration from `CaptureState` (an `Arc<AtomicU64>` seeded at startup and pushed by `set_general_settings`), so it caps plain-text, HTML, and RTF captures live without a restart.
 
+`clearSearchOnBlur` / `clearSearchOnBlurSeconds` are explicit `GeneralConfig` members (`bool`, default `false`; `u32` seconds, default `5`). The main route clears the search box N seconds after `onFocusChanged(false)` — hiding a focused window also fires the focus-lost event — via `createSearchAutoClear` (`utils/search/search-auto-clear.ts`); the backend stores the values but has no behavior beyond serde defaults.
+
 `log_level` is an explicit `GeneralConfig` member (values `"error"`/`"warn"`/`"info"`/`"debug"`, default `"info"`) with a typed `LogLevel` enum in `logging.rs`; unknown/empty values parse as `Info`. `ConfigStore::log_level()` reads it, `logging::init` seeds the threshold before config load and `lib.rs` re-applies it after load, and `set_general_settings` calls `logging::set_level` so the dropdown applies live. Each log line is tagged `[LEVEL]`; lines below the threshold are dropped. See `backend-architecture.md` for the logging channel.
 
 ### Keyboard settings
