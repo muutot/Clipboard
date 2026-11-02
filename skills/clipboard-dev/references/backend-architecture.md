@@ -812,6 +812,15 @@ Window opacity/effects are posted to the UI thread. `apply_webview_transparency`
 
 ## CLI and loopback API
 
+macOS/Linux CLI paste reads (`pbpaste`, `wl-paste`, `xclip`, `xsel`) share
+`cli/mod.rs::read_clipboard_output` and `BoundedCommandExt`: 600 ms per helper,
+a 64 MiB stdout ceiling, strict UTF-8 and successful-exit validation. Errors
+propagate before a paste can save any row; Linux retains its existing ordered
+helper fallback. stderr is discarded by the shared runner, so failure diagnostics
+retain the helper name and exit status. Portable subprocess UTs exercise the
+same reader body on Windows; native adapters/process-group cleanup still need
+macOS/Linux CI or runtime evidence. Manual writer waits remain a separate path.
+
 The HTTP reader accepts an optional single decimal `Content-Length`, bounded by
 the existing body limit. Duplicate lengths (even identical), malformed/overflowing
 values, invalid header names/lines and any `Transfer-Encoding` are rejected before

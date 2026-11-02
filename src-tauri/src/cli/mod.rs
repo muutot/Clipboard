@@ -336,9 +336,20 @@ fn read_system_clipboard_text() -> Result<String, String> {
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 fn read_clipboard_command(program: &str, args: &[&str]) -> Result<String, String> {
-    let output = std::process::Command::new(program)
-        .args(args)
-        .output()
+    let mut command = std::process::Command::new(program);
+    command.args(args);
+    read_clipboard_output(&mut command, program)
+}
+
+#[cfg(any(target_os = "macos", target_os = "linux", test))]
+fn read_clipboard_output(
+    command: &mut std::process::Command,
+    program: &str,
+) -> Result<String, String> {
+    use crate::platform::bounded_command::BoundedCommandExt;
+    // Match the native text-read ceiling and bound selection-owner/helper stalls.
+    let output = command
+        .bounded_output(64 * 1024 * 1024)
         .map_err(|error| format!("{program}: {error}"))?;
     if !output.status.success() {
         return Err(format!(
@@ -385,6 +396,77 @@ mod tests {
             format: None,
             output_path: None,
         }
+    }
+
+    fn reader_fixture(mode: &str) -> std::process::Command {
+        let mut command = std::process::Command::new(std::env::current_exe().unwrap());
+        command
+            .args([
+                "--exact",
+                "platform::bounded_command::tests::child_fixture",
+                "--ignored",
+                "--nocapture",
+            ])
+            .env("CLIPBOARD_HELPER_FIXTURE", mode);
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            command.creation_flags(0x08000000);
+        }
+        command
+    }
+
+    #[test]
+    fn cli_reader_rejects_stalled_helper_within_a_bounded_time() {
+        let started = std::time::Instant::now();
+        let result = read_clipboard_output(&mut reader_fixture("stall"), "reader fixture");
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(2),
+            "CLI clipboard read waited for the stalled helper to finish"
+        );
+        let error = result.expect_err("an expired helper must not return captured text");
+        assert!(error.contains("reader fixture") && error.contains("timed out"));
+    }
+
+    #[test]
+    fn cli_reader_preserves_completed_output_and_rejects_failure() {
+        let result =
+            read_clipboard_output(&mut reader_fixture("normal"), "reader fixture").unwrap();
+        assert!(result.contains("fixture payload\n"));
+        let error =
+            read_clipboard_output(&mut reader_fixture("exit7"), "reader fixture").unwrap_err();
+        assert!(error.contains("reader fixture") && error.contains('7'));
+    }
+
+    #[test]
+    fn cli_reader_rejects_output_above_the_native_text_ceiling() {
+        let mut command = reader_fixture("large");
+        command.env(
+            "CLIPBOARD_HELPER_OUTPUT_BYTES",
+            (64 * 1024 * 1024 + 1).to_string(),
+        );
+        let error = match read_clipboard_output(&mut command, "reader fixture") {
+            Err(error) => error,
+            Ok(text) => panic!("oversized helper returned {} bytes of text", text.len()),
+        };
+        assert!(error.contains("reader fixture") && error.contains("exceeds limit"));
+    }
+
+    #[test]
+    fn cli_paste_does_not_save_an_expired_reader_result() {
+        let database = Database::open_in_memory().unwrap();
+        let capture = gated_capture_state(500_000);
+        let result = run_cli_command_with_clipboard(
+            &args(CliCommand::Paste),
+            &database,
+            500,
+            500,
+            || read_clipboard_output(&mut reader_fixture("stall"), "reader fixture"),
+            |_| panic!("paste must not write the system clipboard"),
+            Some(&capture),
+        );
+        assert!(result.unwrap_err().contains("timed out"));
+        assert_eq!(database.item_count().unwrap(), 0);
     }
 
     #[test]

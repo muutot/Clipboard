@@ -236,7 +236,20 @@ mod tests {
             }
             Ok("stall") => std::thread::sleep(Duration::from_secs(5)),
             Ok("large") => {
-                let _ = std::io::stdout().write_all(&vec![b'x'; 1024 * 1024]);
+                let size = std::env::var("CLIPBOARD_HELPER_OUTPUT_BYTES")
+                    .ok()
+                    .map(|value| value.parse::<usize>().unwrap())
+                    .unwrap_or(1024 * 1024);
+                assert!(size <= 65 * 1024 * 1024, "fixture output must stay bounded");
+                let buffer = [b'x'; 16 * 1024];
+                let mut remaining = size;
+                while remaining > 0 {
+                    let count = remaining.min(buffer.len());
+                    if std::io::stdout().write_all(&buffer[..count]).is_err() {
+                        break;
+                    }
+                    remaining -= count;
+                }
             }
             _ => println!("fixture payload"),
         }
