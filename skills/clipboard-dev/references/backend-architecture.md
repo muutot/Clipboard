@@ -95,6 +95,14 @@ delete the only recovery copy or claim that default settings were persisted.
 
 Plain-text import recognizes a `---` delimiter line with LF or CRLF endings, while preserving line endings inside each record. Delimiters at the file boundary create empty chunks that are ignored; they never create clipboard records. The CRLF regression imports two records and verifies the first record's internal CRLF bytes. Export escapes a content line that is exactly `---` as `\---` and doubles a leading backslash on any content line; import reverses that escaping, so a record containing a delimiter-looking line round-trips as one record.
 
+`commands/export.rs::read_import_file` opens the source once and reads metadata
+from that handle. Metadata provides an early size rejection; the read itself
+consumes at most the 256 MiB import limit plus one sentinel byte and rejects
+overflow before UTF-8 decoding or parsing. Concurrent growth or path replacement
+cannot inherit an earlier size check. Exact-limit UTF-8, BOM and CRLF bytes remain
+unchanged. This bounds input retention, not parser allocations or filesystem wait
+time.
+
 Historical auto tags use `Database::with_task_connection`: an existing file is reopened
 without schema initialization, with a small cache and file-backed temporary storage. The
 in-memory test path retains its single connection. Matching reads one WAL snapshot and

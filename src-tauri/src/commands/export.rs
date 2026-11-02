@@ -286,15 +286,39 @@ pub async fn import_clipboard_items(
 const MAX_IMPORT_FILE_BYTES: u64 = 256 * 1024 * 1024;
 
 fn read_import_file(path: &str) -> Result<String, String> {
-    let metadata =
-        std::fs::metadata(path).map_err(|error| format!("failed to inspect {path}: {error}"))?;
-    if metadata.len() > MAX_IMPORT_FILE_BYTES {
+    let source =
+        std::fs::File::open(path).map_err(|error| format!("failed to read {path}: {error}"))?;
+    let metadata = source
+        .metadata()
+        .map_err(|error| format!("failed to inspect {path}: {error}"))?;
+    read_import_file_contents(source, path, metadata.len(), MAX_IMPORT_FILE_BYTES)
+}
+
+fn read_import_file_contents(
+    source: impl std::io::Read,
+    path: &str,
+    declared_bytes: u64,
+    max_bytes: u64,
+) -> Result<String, String> {
+    if declared_bytes > max_bytes {
         return Err(format!(
-            "{path} is {} bytes, over the {MAX_IMPORT_FILE_BYTES} byte import limit",
-            metadata.len()
+            "{path} is {declared_bytes} bytes, over the {max_bytes} byte import limit"
         ));
     }
-    std::fs::read_to_string(path).map_err(|error| format!("failed to read {path}: {error}"))
+    use std::io::Read;
+    // Metadata is only an early rejection hint: an open file may still grow.
+    // Read at most one sentinel byte beyond the cap, before UTF-8 decoding.
+    let mut bytes = Vec::new();
+    source
+        .take(max_bytes.saturating_add(1))
+        .read_to_end(&mut bytes)
+        .map_err(|error| format!("failed to read {path}: {error}"))?;
+    if bytes.len() as u64 > max_bytes {
+        return Err(format!(
+            "{path} exceeds the {max_bytes} byte import limit while being read"
+        ));
+    }
+    String::from_utf8(bytes).map_err(|error| format!("failed to read {path}: {error}"))
 }
 
 fn import_database_from_path(database: &Database, path: &str) -> Result<ImportSummary, String> {
@@ -435,6 +459,93 @@ mod tests {
     use super::*;
     use crate::domain::{ClipboardItem, ClipboardKind};
     use crate::storage::ClipboardRepository;
+
+    #[test]
+    fn import_file_growth_after_size_snapshot_cannot_bypass_the_read_budget() {
+        use std::io::{Seek, Write};
+        let root =
+            std::env::temp_dir().join(format!("clipboard-import-growth-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        let path = root.join("growing.txt");
+        std::fs::write(&path, b"small").unwrap();
+        let declared = std::fs::metadata(&path).unwrap().len();
+        let mut source = std::fs::File::open(&path).unwrap();
+        // An independent file handle appends after the production size snapshot.
+        let mut writer = std::fs::OpenOptions::new()
+            .append(true)
+            .open(&path)
+            .unwrap();
+        writer.write_all(&[b'x'; 64]).unwrap();
+        writer.flush().unwrap();
+        let result = read_import_file_contents(&mut source, "growing.txt", declared, 32);
+        assert!(
+            result.is_err(),
+            "growth must fail before an oversized payload reaches the parser: {result:?}"
+        );
+        assert_eq!(
+            source.stream_position().unwrap(),
+            33,
+            "the rejection must consume only the cap and one sentinel byte"
+        );
+        drop(source);
+        drop(writer);
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn import_file_replacement_after_size_snapshot_cannot_bypass_the_read_budget() {
+        let root =
+            std::env::temp_dir().join(format!("clipboard-import-replace-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        let path = root.join("replaced.txt");
+        std::fs::write(&path, b"small").unwrap();
+        let declared = std::fs::metadata(&path).unwrap().len();
+        let replacement = root.join("other.txt");
+        std::fs::write(&replacement, [b'x'; 64]).unwrap();
+        crate::storage::replace_file(&replacement, &path).unwrap();
+        let source = std::fs::File::open(&path).unwrap();
+        let result = read_import_file_contents(source, "replaced.txt", declared, 32);
+        assert!(
+            result.is_err(),
+            "replacement must not inherit the former file's size permission: {result:?}"
+        );
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn import_file_read_budget_accepts_exact_utf8_and_reports_invalid_text() {
+        let text = "\u{FEFF}中文\r\n";
+        assert_eq!(
+            read_import_file_contents(
+                text.as_bytes(),
+                "unicode.txt",
+                text.len() as u64,
+                text.len() as u64
+            )
+            .unwrap(),
+            text
+        );
+        assert!(read_import_file_contents(&[0xff][..], "bad.txt", 1, 1)
+            .unwrap_err()
+            .contains("failed to read"));
+        assert!(read_import_file_contents(&b"large"[..], "large.txt", 5, 4)
+            .unwrap_err()
+            .contains("over the 4 byte import limit"));
+    }
+
+    #[test]
+    fn import_file_read_budget_rejects_growth_before_utf8_decoding() {
+        // The sentinel lands inside the final multi-byte code point. A size
+        // violation must remain a size error, rather than a UTF-8 parse error.
+        let result = read_import_file_contents("abc中文".as_bytes(), "grown.txt", 3, 4);
+        assert!(result
+            .unwrap_err()
+            .contains("exceeds the 4 byte import limit"));
+        assert_eq!(
+            read_import_file_contents(&b""[..], "empty.txt", 0, 0).unwrap(),
+            ""
+        );
+    }
 
     fn sample_items() -> Vec<ClipboardItem> {
         vec![
