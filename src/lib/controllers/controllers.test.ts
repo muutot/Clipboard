@@ -62,6 +62,8 @@ async function settle(ms = 0) {
   }
 }
 beforeEach(() => {
+  vi.mocked(service.loadClipboardHistory).mockReset();
+  vi.mocked(service.loadDeletedClipboardHistory).mockReset().mockResolvedValue([]);
   vi.useFakeTimers();
   out = {};
   target = document.createElement("div");
@@ -96,6 +98,25 @@ it("rejects stale history pages after invalidation and after unmount", async () 
   late.resolve([item("late")]);
   await settle();
   expect(out.store!.current.historyIds).toEqual(["current"]);
+});
+it("does not issue reads or change records when history callbacks run after unmount", async () => {
+  vi.mocked(service.loadClipboardHistory)
+    .mockReset()
+    .mockResolvedValue([item("late")]);
+  vi.mocked(service.loadDeletedClipboardHistory)
+    .mockReset()
+    .mockResolvedValue([{ ...item("late-bin"), deleted: true }]);
+  const before = out.store!.current;
+  await unmount(app!);
+  app = undefined;
+  out.history!.invalidateActiveHistoryPagination();
+  out.history!.invalidateDeletedHistoryPagination();
+  await out.history!.loadActiveHistoryPage();
+  await out.history!.loadDeletedHistoryPage();
+  await settle();
+  expect(service.loadClipboardHistory).not.toHaveBeenCalled();
+  expect(service.loadDeletedClipboardHistory).not.toHaveBeenCalled();
+  expect(out.store!.current).toBe(before);
 });
 it("keeps only the latest debounced query and ignores responses after disposal", async () => {
   const old = deferred<Awaited<ReturnType<typeof service.searchClipboardHistory>>>(),

@@ -25,6 +25,7 @@ export interface HistoryDependencies {
 /** Owns pagination/cancellation state; records remain exclusively in the supplied item store. */
 export function createHistoryController(deps: HistoryDependencies) {
   const DELETED_HISTORY_PAGE_SIZE = 100;
+  let disposed = false;
 
   let deletedHistoryLoaded = $state(false);
 
@@ -77,6 +78,7 @@ export function createHistoryController(deps: HistoryDependencies) {
   // set behind the recycle-bin OFFSET. Reset the cursor before loading again
   // so a mutation in an earlier page cannot cause the next row to be skipped.
   function invalidateDeletedHistoryPagination() {
+    if (disposed) return;
     deletedHistoryRequestId += 1;
     deletedHistoryLoading = false;
     deletedHistoryOffset = 0;
@@ -91,6 +93,7 @@ export function createHistoryController(deps: HistoryDependencies) {
   // still rebuilds from page zero instead of compensating with a fragile
   // local increment/decrement.
   function invalidateActiveHistoryPagination() {
+    if (disposed) return;
     activeHistoryRequestId += 1;
     activeHistoryLoading = false;
     activeHistoryCursor = null;
@@ -110,7 +113,8 @@ export function createHistoryController(deps: HistoryDependencies) {
   }
 
   async function loadActiveHistoryPage(): Promise<void> {
-    if (activeHistoryLoading || (activeHistoryCursor !== null && !activeHistoryHasMore)) return;
+    if (disposed || activeHistoryLoading || (activeHistoryCursor !== null && !activeHistoryHasMore))
+      return;
 
     if (!isTauriRuntime()) {
       activeHistoryExhausted = true;
@@ -187,7 +191,7 @@ export function createHistoryController(deps: HistoryDependencies) {
   }
 
   async function loadDeletedHistoryPage(): Promise<void> {
-    if (deletedHistoryLoading || !deletedHistoryHasMore) return;
+    if (disposed || deletedHistoryLoading || !deletedHistoryHasMore) return;
 
     // The browser preview has no persisted recycle bin. Mark the page as
     // exhausted so selecting the filter remains a harmless local operation.
@@ -231,6 +235,7 @@ export function createHistoryController(deps: HistoryDependencies) {
     }
   }
   onDestroy(() => {
+    disposed = true;
     activeHistoryRequestId++;
     deletedHistoryRequestId++;
   });

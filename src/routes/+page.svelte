@@ -835,6 +835,7 @@
   });
 
   onMount(() => {
+    let disposed = false;
     const invalidateFonts = () => {
       cardMeasurements.clear();
       fontEpoch += 1;
@@ -1071,11 +1072,12 @@
       unlistenSearchIndex,
       unlistenItemsChanged,
     ]).then(() => {
+      if (disposed) return;
       // Load history independently of the storage-status probe: a transient
       // status failure must not leave the whole list empty.
       void loadActiveHistoryPage()
         .then(() => {
-          if (items.length === 0) return;
+          if (disposed || items.length === 0) return;
           selectedId = items[0]?.id ?? "";
         })
         .catch((error) => {
@@ -1089,6 +1091,7 @@
     });
 
     return () => {
+      disposed = true;
       detailRequestId += 1;
       pendingDetail = null;
       fullscreenRequestId += 1;
