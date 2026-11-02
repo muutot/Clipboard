@@ -8,7 +8,7 @@
   import { destroySourceMappingRules } from "$lib/services/source-mapping.svelte";
   import { applyGeneralSettingsToDocument } from "$lib/services/settings-bootstrap";
   import { isTauriRuntime } from "$lib/services/runtime";
-  import { applyCustomCss, isCustomCssRecoveryShortcut } from "$lib/utils/settings/custom-css";
+  import { isCustomCssRecoveryShortcut } from "$lib/utils/settings/custom-css";
   import AppContextMenu from "$lib/components/common/AppContextMenu.svelte";
   import { onDestroy, onMount } from "svelte";
 
@@ -31,8 +31,13 @@
         console.error("Unable to show the main window", error),
       );
     }
+    // Re-apply on every store change so settings edited in the settings window
+    // (persisted → broadcast via "general-settings-changed" → applyRemote) reach
+    // this window live; window opacity and theme colors are document-level CSS
+    // variables that would otherwise stay at their startup values. The bootstrap
+    // call is idempotent and already covers custom CSS.
     const unsubscribe = generalSettings.subscribe((settings) =>
-      applyCustomCss(settings.customCss, settings.customCssEnabled),
+      applyGeneralSettingsToDocument(settings),
     );
     const recover = (event: KeyboardEvent) => {
       if (!get(generalSettings).customCssEnabled || !isCustomCssRecoveryShortcut(event)) return;
