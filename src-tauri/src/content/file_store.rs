@@ -315,11 +315,11 @@ fn copy_and_hash(
 
 static TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
-/// Populates `target` through a process-unique temporary file in the same
-/// directory followed by an atomic replacement. Storage paths are
-/// content-addressed and `save_file`/`save_screenshot` skip writing when the
-/// target already exists, so a plain in-place write that is interrupted by a
-/// crash would leave a truncated file that is never repaired.
+/// Exclusively reserves a sibling temporary file before population and atomic
+/// replacement. The callback writes an already-created, empty file. A collision
+/// is rejected before population or cleanup can alter the preexisting entry.
+/// Cache hits must verify bytes; a plain interrupted in-place write can corrupt
+/// an existing content-addressed body.
 pub(crate) fn store_atomically(
     target: &Path,
     populate: impl FnOnce(&Path) -> std::io::Result<()>,
@@ -335,6 +335,15 @@ pub(crate) fn store_atomically(
         sequence,
     );
     let temporary = target.with_file_name(temporary_name);
+    // Establish ownership before handing the path to callbacks using write,
+    // create or copy. In particular, their errors cannot authorize deleting a
+    // preexisting staging entry that this operation never created.
+    drop(
+        fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temporary)?,
+    );
 
     if let Err(error) = populate(&temporary) {
         let _ = fs::remove_file(&temporary);
@@ -370,6 +379,58 @@ fn sync_and_replace(temporary: &Path, target: &Path) -> Result<(), StorageError>
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn atomic_store_preserves_preexisting_staging_files() {
+        let root = std::env::temp_dir().join(format!(
+            "clipboard-staging-collision-{}",
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir(&root).unwrap();
+        for exclusive in [true, false] {
+            let parent = root.join(exclusive.to_string());
+            fs::create_dir(&parent).unwrap();
+            let target = parent.join("resource.png");
+            fs::write(&target, b"old destination").unwrap();
+            let first = TEMP_SEQUENCE.load(Ordering::Relaxed);
+            let collisions: Vec<_> = (first..first + 128)
+                .map(|sequence| {
+                    let path = parent.join(format!(
+                        ".resource.png.tmp-{}-{sequence}",
+                        std::process::id()
+                    ));
+                    fs::write(&path, b"unrelated preexisting bytes").unwrap();
+                    path
+                })
+                .collect();
+            let mut called = false;
+            let result = store_atomically(&target, |temporary| {
+                called = true;
+                if exclusive {
+                    fs::OpenOptions::new()
+                        .write(true)
+                        .create_new(true)
+                        .open(temporary)?
+                        .write_all(b"new destination")
+                } else {
+                    fs::write(temporary, b"new destination")
+                }
+            });
+            let preserved = collisions.iter().all(|path| {
+                fs::read(path).is_ok_and(|bytes| bytes == b"unrelated preexisting bytes")
+            });
+            let bytes = fs::read(&target).unwrap();
+            fs::remove_dir_all(&parent).unwrap();
+            assert!(
+                preserved,
+                "staging collisions must never be removed or overwritten"
+            );
+            assert!(result.is_err());
+            assert!(!called, "reject occupied staging before calling the writer");
+            assert_eq!(bytes, b"old destination");
+        }
+        fs::remove_dir(&root).unwrap();
+    }
 
     #[test]
     fn saves_and_deletes_a_file() {

@@ -782,9 +782,13 @@ token/LocalAlloc ACL helper; API tokens retain NO_INHERITANCE and their existing
 create/rewrite/read behavior. Real Windows ACL and file tests cover shared parents,
 children, Unicode/long paths and cleanup; Unix mode/runtime remains a platform gate.
 
-`content::file_store::store_atomically` removes its owned temporary file when
-population fails, including after a partial write, and leaves any existing target
-untouched. Flush/publication failures use the same cleanup guarantee.
+`content::file_store::store_atomically` exclusively creates its empty sibling
+temporary file before invoking a writer. Callbacks open/write/copy to that reserved
+file; they must not use `create_new`. A collision fails before population or cleanup,
+preserving the preexisting entry and target. Population failures (including partial
+writes) and flush/publication failures remove only the owned stage and retain the
+target. This reserves ownership against preexisting entries; it does not fence
+external tools that replace the staging path during population.
 
 Restored originals are published into the record role's managed root: image records
 use `paths.images`, file records use `paths.files`. A shared archive entry used by
