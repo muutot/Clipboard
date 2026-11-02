@@ -102,6 +102,7 @@ describe("i18n locales", () => {
       "about.info",
       "about.update",
       "about.devtools",
+      "font.family",
       "font.base",
       "font.secondary",
       "font.tiny",
