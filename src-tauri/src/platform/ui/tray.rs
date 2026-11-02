@@ -510,13 +510,7 @@ fn tray_copy_item<R: Runtime>(app: &AppHandle<R>, item_id: &str) {
             .get_item(item_id)
             .map_err(|error| error.to_string())?
             .ok_or("history item no longer exists")?;
-        if !matches!(item.kind, ClipboardKind::Text | ClipboardKind::Link) {
-            return Err("only text records can be copied from the tray".to_owned());
-        }
-        let text = item.text_content.as_deref().unwrap_or("").trim();
-        if text.is_empty() {
-            return Err("history item has no copyable text".to_owned());
-        }
+        let text = tray_copy_text(&item)?;
         let owned = text.to_owned();
         if let Some(guard) = app.try_state::<SelfTriggerState>() {
             if let Ok(mut guard) = guard.0.lock() {
@@ -547,9 +541,61 @@ fn tray_copy_item<R: Runtime>(app: &AppHandle<R>, item_id: &str) {
         crate::log_error!("[tray] failed to copy history item: {error}");
     }
 }
+
+/// Selects the payload used for tray copying; menu title normalization is separate.
+fn tray_copy_text(item: &crate::domain::ClipboardItem) -> Result<&str, String> {
+    if !matches!(item.kind, ClipboardKind::Text | ClipboardKind::Link) {
+        return Err("only text records can be copied from the tray".to_owned());
+    }
+    let text = item.text_content.as_deref().unwrap_or("");
+    if text.trim().is_empty() {
+        return Err("history item has no copyable text".to_owned());
+    }
+    Ok(text)
+}
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tray_copy_preserves_the_complete_text_and_link_payload() {
+        let database = Database::open_in_memory().unwrap();
+        for kind in [ClipboardKind::Text, ClipboardKind::Link] {
+            for text in [
+                "  indented line\r\n\t",
+                "\n中文正文\n",
+                "\u{2003}body\u{a0}",
+            ] {
+                let item = crate::cli::build_text_clipboard_item(text.into(), kind, "tray", "tray");
+                database.save_item(&item).unwrap();
+                let item = database.get_item(&item.id).unwrap().unwrap();
+                let payload = tray_copy_text(&item).unwrap();
+                assert_eq!(payload, text, "tray copy must preserve stored bytes");
+            }
+        }
+    }
+
+    #[test]
+    fn tray_copy_rejects_empty_or_whitespace_only_text() {
+        for text in [None, Some(""), Some(" \r\n\t\u{2003}")] {
+            let mut item = crate::cli::build_text_clipboard_item(
+                "placeholder".into(),
+                ClipboardKind::Text,
+                "tray",
+                "tray",
+            );
+            item.text_content = text.map(str::to_owned);
+            assert!(tray_copy_text(&item).is_err());
+        }
+    }
+
+    #[test]
+    fn tray_copy_rejects_media_even_with_a_text_field() {
+        for kind in [ClipboardKind::Image, ClipboardKind::File] {
+            let item = crate::cli::build_text_clipboard_item("body".into(), kind, "tray", "tray");
+            assert!(tray_copy_text(&item).is_err());
+        }
+    }
 
     #[test]
     fn failed_tray_pause_save_keeps_the_session_state_and_reports_restart_risk() {
