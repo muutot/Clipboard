@@ -13,6 +13,16 @@ use std::{
 
 const BODY: &[u8] = b"fixture-model";
 
+#[derive(Clone, Copy)]
+enum ResponseMode {
+    Exact,
+    ExactChunked,
+    ExactCloseDelimited,
+    OversizedDeclared,
+    OversizedChunked,
+    OversizedCloseDelimited,
+}
+
 struct DownloadServer {
     file: ocr::models::PpOcrModelFile,
     requests: Arc<AtomicUsize>,
@@ -38,6 +48,10 @@ impl Drop for DownloadServer {
 }
 
 fn server() -> DownloadServer {
+    server_with_response(ResponseMode::Exact)
+}
+
+fn server_with_response(mode: ResponseMode) -> DownloadServer {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     listener.set_nonblocking(true).unwrap();
     let url =
@@ -79,6 +93,62 @@ fn server() -> DownloadServer {
                             }
                             request.push(byte[0]);
                             assert!(request.len() < 8192);
+                        }
+                        if !matches!(mode, ResponseMode::Exact) {
+                            let framing = match mode {
+                                ResponseMode::OversizedDeclared => {
+                                    format!("Content-Length: {}\r\n", BODY.len() + 1)
+                                }
+                                ResponseMode::ExactChunked | ResponseMode::OversizedChunked => {
+                                    "Transfer-Encoding: chunked\r\n".to_owned()
+                                }
+                                ResponseMode::ExactCloseDelimited
+                                | ResponseMode::OversizedCloseDelimited => String::new(),
+                                ResponseMode::Exact => unreachable!(),
+                            };
+                            write!(
+                                stream,
+                                "HTTP/1.1 200 OK\r\n{framing}Connection: close\r\n\r\n"
+                            )
+                            .unwrap();
+                            let chunked = matches!(
+                                mode,
+                                ResponseMode::ExactChunked | ResponseMode::OversizedChunked
+                            );
+                            if chunked {
+                                write!(stream, "{:x}\r\n", BODY.len()).unwrap();
+                            }
+                            let _ = stream.write_all(BODY);
+                            if chunked {
+                                let _ = stream.write_all(b"\r\n");
+                            }
+                            let _ = stream.flush();
+                            if matches!(
+                                mode,
+                                ResponseMode::ExactChunked | ResponseMode::ExactCloseDelimited
+                            ) {
+                                if chunked {
+                                    let _ = stream.write_all(b"0\r\n\r\n");
+                                }
+                                return;
+                            }
+                            let release = release.unwrap();
+                            let _ = release.recv_timeout(Duration::from_secs(5));
+                            let overflow: &[u8] = if matches!(mode, ResponseMode::OversizedChunked)
+                            {
+                                b"1\r\nx\r\n"
+                            } else {
+                                b"x"
+                            };
+                            let _ = stream.write_all(overflow);
+                            let _ = stream.flush();
+                            // Do not end the response until the test has checked
+                            // the disk budget and early refusal, rather than EOF.
+                            let _ = release.recv_timeout(Duration::from_secs(5));
+                            if matches!(mode, ResponseMode::OversizedChunked) {
+                                let _ = stream.write_all(b"0\r\n\r\n");
+                            }
+                            return;
                         }
                         write!(
                             stream,
@@ -306,4 +376,159 @@ fn completed_download_keeps_the_lease_until_activation_caller_releases_it() {
         "retry failed after caller released the lease: {retry:?}"
     );
     assert_eq!(requests, 1);
+}
+
+fn oversized_download_scenario(mode: ResponseMode) {
+    let mut server = server_with_response(mode);
+    let directory = temporary_directory();
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .enable_all()
+        .build()
+        .unwrap();
+    let progress_bytes = Arc::new(AtomicUsize::new(0));
+    let progress = progress_bytes.clone();
+    let (result, partial_size, activated) = runtime.block_on(async {
+        let client = reqwest::Client::builder()
+            .no_proxy()
+            .timeout(Duration::from_secs(5))
+            .build()
+            .unwrap();
+        let file = server.file;
+        let download_dir = directory.clone();
+        let (ready, received) = tokio::sync::oneshot::channel();
+        let mut download = tokio::spawn(async move {
+            let mut ready = Some(ready);
+            download_ppocr_models(&client, &download_dir, [file], |event| {
+                progress.fetch_max(event.current as usize, Ordering::SeqCst);
+                if event.current > 0 {
+                    if let Some(ready) = ready.take() {
+                        let _ = ready.send(());
+                    }
+                }
+            })
+            .await
+            .map(drop)
+        });
+        if !matches!(mode, ResponseMode::OversizedDeclared) {
+            tokio::time::timeout(Duration::from_secs(5), received)
+                .await
+                .unwrap()
+                .unwrap();
+            // The valid prefix must be written before sending the first byte
+            // beyond the known asset size. EOF remains held by the fixture.
+            assert_eq!(
+                fs::metadata(directory.join(format!("{}.part", file.filename)))
+                    .unwrap()
+                    .len(),
+                file.size_bytes
+            );
+            server.release.send(()).unwrap();
+        }
+        let result = match tokio::time::timeout(Duration::from_secs(1), &mut download).await {
+            Ok(result) => Some(result.unwrap()),
+            Err(_) => {
+                download.abort();
+                let _ = download.await;
+                None
+            }
+        };
+        let partial_size = fs::metadata(directory.join(format!("{}.part", file.filename)))
+            .ok()
+            .map(|metadata| metadata.len());
+        let activated = directory.join(file.filename).exists()
+            || directory.join(format!("{}.sha256", file.filename)).exists();
+        (result, partial_size, activated)
+    });
+    // Both fixture pauses must be releasable even when the assertion fails.
+    let _ = server.release.send(());
+    let _ = server.release.send(());
+    server.shutdown();
+    fs::remove_dir_all(directory).unwrap();
+    let written = progress_bytes.load(Ordering::SeqCst);
+    assert!(
+        result.as_ref().is_some_and(|result| result
+            .as_ref()
+            .is_err_and(|error| error.contains("size"))),
+        "oversized response waited for EOF: result={result:?}, partial={partial_size:?}, progress={written}"
+    );
+    assert_eq!(partial_size, None, "rejected download left partial bytes");
+    assert!(!activated, "oversized response activated a model");
+    if matches!(mode, ResponseMode::OversizedDeclared) {
+        assert_eq!(
+            written, 0,
+            "oversized header must be rejected before writing"
+        );
+    } else {
+        assert_eq!(written, BODY.len(), "overflow chunk must not reach disk");
+    }
+}
+
+#[test]
+fn oversized_declared_model_download_is_rejected_before_writing() {
+    oversized_download_scenario(ResponseMode::OversizedDeclared);
+}
+
+#[test]
+fn oversized_chunked_model_download_is_rejected_before_writing_overflow() {
+    oversized_download_scenario(ResponseMode::OversizedChunked);
+}
+
+#[test]
+fn oversized_close_delimited_model_download_is_rejected_before_writing_overflow() {
+    oversized_download_scenario(ResponseMode::OversizedCloseDelimited);
+}
+
+fn valid_download_without_length_scenario(mode: ResponseMode) {
+    let mut server = server_with_response(mode);
+    let directory = temporary_directory();
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .enable_all()
+        .build()
+        .unwrap();
+    let mut progress = Vec::new();
+    let result = runtime.block_on(async {
+        let client = reqwest::Client::builder()
+            .no_proxy()
+            .timeout(Duration::from_secs(5))
+            .build()
+            .unwrap();
+        download_ppocr_models(&client, &directory, [server.file], |event| {
+            progress.push((event.current, event.total));
+        })
+        .await
+        .map(drop)
+    });
+    let body = fs::read(directory.join(server.file.filename)).ok();
+    let digest_matches = ocr::models::model_digest_matches(&directory, &server.file);
+    let partial = directory
+        .join(format!("{}.part", server.file.filename))
+        .exists();
+    server.shutdown();
+    fs::remove_dir_all(directory).unwrap();
+    assert!(
+        result.is_ok(),
+        "valid unbounded framing was rejected: {result:?}"
+    );
+    assert_eq!(body.as_deref(), Some(BODY));
+    assert!(digest_matches);
+    assert!(!partial);
+    assert_eq!(
+        progress.last(),
+        Some(&(BODY.len() as u64, BODY.len() as u64))
+    );
+    assert!(progress
+        .iter()
+        .all(|(_, total)| *total == BODY.len() as u64));
+}
+
+#[test]
+fn valid_chunked_model_download_uses_the_pinned_size_and_digest() {
+    valid_download_without_length_scenario(ResponseMode::ExactChunked);
+}
+
+#[test]
+fn valid_close_delimited_model_download_uses_the_pinned_size_and_digest() {
+    valid_download_without_length_scenario(ResponseMode::ExactCloseDelimited);
 }

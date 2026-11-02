@@ -396,6 +396,13 @@ downloads release the lease for retries. `commands/ocr/download_tests.rs` tests
 the production HTTP/file pipeline with synthetic loopback bodies, held response
 chunks, overlapping installs and failed-digest/cache controls.
 
+Pinned model size is the download's disk budget. Reject a larger declared
+Content-Length before creating staging, and check each received chunk against
+the remaining bytes before writing (including chunked/close-delimited bodies).
+An overflow closes/removes `.part` and fails without waiting for EOF. Progress
+uses the pinned size; EOF still requires exact size plus the upstream SHA-256.
+The loopback regressions hold EOF while asserting early refusal and disk bounds.
+
 Recognition failures are retried, but the retry queue lives in the worker
 (`ocr/worker.rs::PendingRetry`), not in the database, and both the first
 attempt and every retry go through `handle_recognition_failure` so the

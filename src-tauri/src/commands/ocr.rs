@@ -385,7 +385,17 @@ async fn download_ppocr_file(
         .map_err(|e| format!("download {}: {e}", model_file.filename))?
         .error_for_status()
         .map_err(|e| format!("download {}: {e}", model_file.filename))?;
-    let total = response.content_length().unwrap_or(model_file.size_bytes);
+    // The pinned asset size is also the disk budget, not merely an EOF
+    // integrity check. A changed server body must not fill the model volume.
+    let total = model_file.size_bytes;
+    if let Some(declared) = response.content_length() {
+        if declared > total {
+            return Err(format!(
+                "downloaded {} has unexpected size: expected {}, declared {}",
+                model_file.filename, total, declared
+            ));
+        }
+    }
     let mut file = tokio::fs::File::create(&temporary)
         .await
         .map_err(|e| e.to_string())?;
@@ -396,6 +406,16 @@ async fn download_ppocr_file(
         .await
         .map_err(|e| format!("download {}: {e}", model_file.filename))?
     {
+        // Check before writing the chunk, including chunked/close-delimited
+        // responses. Subtraction avoids overflowing a cumulative byte count.
+        if chunk.len() as u64 > total.saturating_sub(downloaded) {
+            drop(file);
+            let _ = tokio::fs::remove_file(&temporary).await;
+            return Err(format!(
+                "downloaded {} exceeds expected size: {}",
+                model_file.filename, total
+            ));
+        }
         file.write_all(&chunk).await.map_err(|e| e.to_string())?;
         downloaded += chunk.len() as u64;
         let percentage = if total > 0 {
