@@ -113,7 +113,7 @@
     border-radius: 6px;
     color: var(--text-primary);
     background: transparent;
-    font-size: 13px;
+    font-size: var(--font-size-cardTitle);
     font-weight: 600;
   }
 
@@ -136,7 +136,7 @@
 
   .tag-count {
     flex-shrink: 0;
-    font-size: 11px;
+    font-size: var(--font-size-secondary);
     color: var(--text-faint);
     white-space: nowrap;
   }

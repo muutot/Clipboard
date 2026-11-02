@@ -132,14 +132,14 @@
 
   .date-action-text time {
     color: var(--text-primary);
-    font-size: 13px;
+    font-size: var(--font-size-cardTitle);
     line-height: 1.35;
   }
 
   .date-action-text span {
     color: var(--text-muted);
     font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-    font-size: 11px;
+    font-size: var(--font-size-secondary);
     line-height: 1.3;
   }
 

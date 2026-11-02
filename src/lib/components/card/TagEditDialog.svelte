@@ -209,7 +209,7 @@
     border-radius: 6px;
     color: var(--text-primary);
     background: var(--input-bg);
-    font-size: 13px;
+    font-size: var(--font-size-cardTitle);
     font-weight: 600;
     outline: none;
   }

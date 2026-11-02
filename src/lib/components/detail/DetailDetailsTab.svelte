@@ -402,7 +402,7 @@
     align-items: center;
     gap: 6px;
     color: var(--text-muted);
-    font-size: 11px;
+    font-size: var(--font-size-secondary);
     font-weight: 500;
     flex-shrink: 0;
   }
@@ -410,7 +410,7 @@
   .detail-row dd {
     margin: 0;
     color: var(--text-primary);
-    font-size: 11px;
+    font-size: var(--font-size-secondary);
     text-align: right;
     word-break: break-all;
   }
@@ -422,7 +422,7 @@
     color: var(--text-secondary);
     background: var(--input-bg);
     font-family: "Cascadia Code", Consolas, monospace;
-    font-size: 10px;
+    font-size: var(--font-size-tiny);
   }
 
   .detail-row.path-row {
@@ -469,7 +469,7 @@
   .raw-metadata summary {
     padding: 9px 12px;
     color: var(--text-muted);
-    font-size: 10px;
+    font-size: var(--font-size-tiny);
     cursor: pointer;
   }
 
@@ -481,7 +481,7 @@
   .ocr-badge {
     padding: 2px 8px;
     border-radius: 999px;
-    font-size: 10px;
+    font-size: var(--font-size-tiny);
   }
 
   .ocr-badge.ocr-completed {
@@ -515,7 +515,7 @@
     gap: 6px;
     margin-bottom: 10px;
     color: var(--text-muted);
-    font-size: 11px;
+    font-size: var(--font-size-secondary);
     font-weight: 560;
   }
 
@@ -540,7 +540,7 @@
     padding: 4px 10px;
     border: 1px solid var(--border-subtle);
     border-radius: 14px;
-    font-size: 10px;
+    font-size: var(--font-size-tiny);
     font-weight: 500;
     color: var(--text-secondary);
     background: transparent;
@@ -579,7 +579,7 @@
     border: 1px solid var(--border-subtle);
     border-radius: 6px;
     color: var(--text-secondary);
-    font-size: 11px;
+    font-size: var(--font-size-secondary);
     background: var(--input-bg);
   }
 

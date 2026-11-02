@@ -78,7 +78,7 @@
     border-radius: 4px;
     color: var(--text-secondary);
     background: var(--surface-bg);
-    font-size: 11px;
+    font-size: var(--font-size-secondary);
     line-height: 1.4;
     white-space: nowrap;
     user-select: none;

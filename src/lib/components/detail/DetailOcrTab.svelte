@@ -228,7 +228,7 @@
     border-radius: 5px;
     color: var(--text-secondary);
     background: var(--card-bg);
-    font-size: 11px;
+    font-size: var(--font-size-secondary);
     cursor: pointer;
     transition:
       background 100ms ease,
@@ -249,7 +249,7 @@
 
   .ocr-feedback {
     color: var(--selection-color);
-    font-size: 11px;
+    font-size: var(--font-size-secondary);
   }
 
   .ocr-status {
@@ -276,7 +276,7 @@
 
   .ocr-copy-btn {
     padding: 2px 8px;
-    font-size: 11px;
+    font-size: var(--font-size-secondary);
     background: var(--card-bg);
     border: 1px solid var(--border-color);
     border-radius: 4px;

@@ -116,7 +116,7 @@
   .match-count {
     min-width: 38px;
     color: var(--text-secondary);
-    font-size: 11px;
+    font-size: var(--font-size-secondary);
     text-align: center;
     white-space: nowrap;
   }

@@ -201,18 +201,18 @@
 
   .file-full-preview strong {
     color: var(--text-primary);
-    font-size: 13px;
+    font-size: var(--font-size-cardTitle);
   }
 
   .file-full-preview span {
     color: var(--text-muted);
-    font-size: 11px;
+    font-size: var(--font-size-secondary);
   }
 
   .file-preview-state {
     max-width: 100%;
     color: var(--text-muted);
-    font-size: 11px;
+    font-size: var(--font-size-secondary);
     text-align: center;
   }
 
@@ -258,7 +258,7 @@
     background: var(--input-bg);
     border-radius: 6px;
     font-family: monospace;
-    font-size: 13px;
+    font-size: var(--font-size-cardTitle);
   }
 
   .file-tree-item {

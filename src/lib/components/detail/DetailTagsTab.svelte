@@ -150,7 +150,7 @@
   .tags-empty {
     margin: 0;
     color: var(--text-muted);
-    font-size: 11px;
+    font-size: var(--font-size-secondary);
   }
 
   /* Single rounded control that mirrors the shared settings input look

@@ -86,7 +86,7 @@
 
   .confirm-title {
     color: var(--text-primary);
-    font-size: 13px;
+    font-size: var(--font-size-cardTitle);
     font-weight: 600;
   }
 

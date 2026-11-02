@@ -450,14 +450,14 @@
     border: 1px solid var(--border-color);
     border-radius: 5px;
     color: var(--text-muted);
-    font-size: 11px;
+    font-size: var(--font-size-secondary);
     letter-spacing: 0.05em;
     text-transform: uppercase;
   }
 
   .editing-label {
     color: var(--text-faint);
-    font-size: 11px;
+    font-size: var(--font-size-secondary);
   }
 
   .wrap-toggle {
@@ -468,7 +468,7 @@
     color: var(--text-faint);
     background: var(--input-bg);
     font: inherit;
-    font-size: 11px;
+    font-size: var(--font-size-secondary);
     letter-spacing: 0.05em;
     cursor: pointer;
   }

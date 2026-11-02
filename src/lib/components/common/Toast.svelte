@@ -95,7 +95,7 @@
     padding: 9px 18px;
     border-radius: 10px;
     color: var(--text-primary);
-    font-size: 13px;
+    font-size: var(--font-size-cardTitle);
     box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
     pointer-events: auto;
     animation: toast-in 220ms ease-out forwards;

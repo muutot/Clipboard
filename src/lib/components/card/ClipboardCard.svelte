@@ -883,7 +883,7 @@
     border: 1px solid color-mix(in srgb, var(--selection-color) 45%, transparent);
     color: color-mix(in srgb, var(--selection-color) 80%, white);
     background: color-mix(in srgb, var(--selection-color) 22%, var(--card-bg));
-    font-size: 10px;
+    font-size: var(--font-size-tiny);
     font-weight: 600;
     line-height: 1;
     pointer-events: none;
@@ -1088,7 +1088,7 @@
     margin-top: 5px;
     overflow: hidden;
     color: var(--text-muted);
-    font-size: var(--font-size-secondary, 11.5px);
+    font-size: var(--font-size-secondary, 11px);
     white-space: nowrap;
     pointer-events: none;
   }

@@ -331,7 +331,7 @@
   .date-weekdays span {
     text-align: center;
     line-height: 22px;
-    font-size: 10px;
+    font-size: var(--font-size-tiny);
     color: var(--text-faint);
   }
 

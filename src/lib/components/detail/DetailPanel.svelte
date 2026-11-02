@@ -876,7 +876,7 @@
     line-height: 22px;
     overflow: hidden;
     color: var(--text-primary);
-    font-size: var(--font-size-base, 13px);
+    font-size: var(--font-size-base, 14px);
     font-weight: 540;
     white-space: nowrap;
     text-overflow: ellipsis;
@@ -895,7 +895,7 @@
     border-radius: 3px;
     color: var(--text-primary);
     background: var(--input-bg);
-    font-size: var(--font-size-base, 13px);
+    font-size: var(--font-size-base, 14px);
     font-weight: 540;
     outline: none;
   }
@@ -934,7 +934,7 @@
     color: var(--text-muted);
     background: transparent;
     font: inherit;
-    font-size: var(--font-size-secondary, 12px);
+    font-size: var(--font-size-secondary, 11px);
     cursor: pointer;
     transition:
       color 100ms ease,

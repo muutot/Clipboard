@@ -65,7 +65,7 @@
 
   .image-meta {
     color: var(--text-muted);
-    font-size: 11px;
+    font-size: var(--font-size-secondary);
   }
 
   .image-full-preview {

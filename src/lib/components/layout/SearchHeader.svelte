@@ -194,7 +194,7 @@
   .search-suggestions-heading {
     padding: 5px 12px 3px;
     color: var(--text-faint);
-    font-size: 10px;
+    font-size: var(--font-size-tiny);
     letter-spacing: 0.04em;
     text-transform: uppercase;
   }
