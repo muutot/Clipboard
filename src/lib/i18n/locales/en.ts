@@ -582,6 +582,7 @@ const en: LocaleDefinition = {
     close: "Close",
     releaseNotes: "Release Notes",
     loadingReleaseNotes: "Loading...",
+    releaseNotesFailed: "Failed to load release notes: {error}",
   },
   keyboard: {
     settings: "Settings / Shortcuts",

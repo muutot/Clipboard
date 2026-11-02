@@ -524,6 +524,7 @@ export interface LocaleDefinition {
     close: string;
     releaseNotes: string;
     loadingReleaseNotes: string;
+    releaseNotesFailed: string;
   };
   keyboard: {
     settings: string;

@@ -415,6 +415,14 @@ desktop event transport remains outside this controlled IPC test.
 
 `AboutSettingsPanel.svelte` is the lazy child for the About category. The shell keeps loading `appVersion`/`appExecutablePath` for the sidebar brand and passes them in; the panel owns the update-source select, release-notes/update checks, and `UpdateDialog` state, plus its scoped about styles. Moving the update service and dialog out of the shell keeps them out of the initial settings chunk.
 
+The About panel keeps the latest-check result separate from current-version notes
+and the displayed dialog result. Only `check_for_update` can assert up-to-date;
+`get_release` never implies that. The last started user action owns dialog contents,
+and closing cancels pending dialog presentation. Older check results may still
+update their own check status, while older notes cannot replace the current dialog.
+Each operation has independent error feedback, so a successful prior check cannot
+hide a notes failure. Mounted tests use real update wrappers with controlled IPC.
+
 `IconCacheSettingsPanel.svelte` is the lazy child for the Capture → Icon cache section. It receives `iconsDir` and an `onfeedback(message, success)` callback (the shell owns the shared feedback banner and auto-clear timer) and owns the icon list, selection, delete/replace flows, and the replace modal. Deleting an icon is refused by the backend while any stored record still references that icon file; replacing it remains the way to change a live icon. Its scoped `svelte:window` keydown handler stops Escape propagation while the replace modal is open so the shell dialog stays open, matching the previous shell-level behavior.
 
 ## Shared utility components

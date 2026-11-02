@@ -23,19 +23,30 @@
   let checkingUpdate = $state(false);
   let updateResult = $state<UpdateInfo | null>(null);
   let updateError = $state("");
+  let releaseError = $state("");
+  let dialogResult = $state<UpdateInfo | null>(null);
+  let dialogRequest = 0;
   let showUpdateDialog = $state(false);
   let dialogMode: "current" | "available" = $state("available");
   let loadingRelease = $state(false);
 
   async function handleViewRelease(): Promise<void> {
     if (!isTauriRuntime() || loadingRelease || !appVersion) return;
+    const request = ++dialogRequest;
+    showUpdateDialog = false;
+    dialogResult = null;
+    releaseError = "";
     loadingRelease = true;
     try {
-      updateResult = await getRelease(appVersion);
+      const result = await getRelease(appVersion);
+      if (request !== dialogRequest) return;
+      dialogResult = result;
       dialogMode = "current";
       showUpdateDialog = true;
     } catch (error) {
-      updateError = error instanceof Error ? error.message : String(error);
+      if (request === dialogRequest) {
+        releaseError = error instanceof Error ? error.message : String(error);
+      }
     } finally {
       loadingRelease = false;
     }
@@ -43,12 +54,16 @@
 
   async function handleCheckUpdate(): Promise<void> {
     if (!isTauriRuntime() || checkingUpdate) return;
+    const request = ++dialogRequest;
+    showUpdateDialog = false;
+    dialogResult = null;
     checkingUpdate = true;
     updateResult = null;
     updateError = "";
     try {
       updateResult = await checkForUpdate();
-      if (updateResult.updateAvailable) {
+      if (request === dialogRequest && updateResult.updateAvailable) {
+        dialogResult = updateResult;
         dialogMode = "available";
         showUpdateDialog = true;
       }
@@ -57,6 +72,12 @@
     } finally {
       checkingUpdate = false;
     }
+  }
+
+  function closeUpdateDialog() {
+    dialogRequest += 1;
+    showUpdateDialog = false;
+    dialogResult = null;
   }
 </script>
 
@@ -157,18 +178,21 @@
         <span>{_t("about.upToDate")}</span>
       </div>
     {/if}
-  {:else if updateError}
+  {/if}
+  {#if updateError}
     <div class="about-update-state about-update-state--fail" role="alert">
       <AppIcon name="x" size={14} />
       <span>{_t("about.checkFailed", { error: updateError })}</span>
     </div>
   {/if}
-  {#if showUpdateDialog && updateResult}
-    <UpdateDialog
-      result={updateResult}
-      mode={dialogMode}
-      onclose={() => (showUpdateDialog = false)}
-    />
+  {#if releaseError}
+    <div class="about-update-state about-update-state--fail" role="alert">
+      <AppIcon name="x" size={14} />
+      <span>{_t("about.releaseNotesFailed", { error: releaseError })}</span>
+    </div>
+  {/if}
+  {#if showUpdateDialog && dialogResult}
+    <UpdateDialog result={dialogResult} mode={dialogMode} onclose={closeUpdateDialog} />
   {/if}
 </div>
 

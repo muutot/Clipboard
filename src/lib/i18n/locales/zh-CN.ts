@@ -559,6 +559,7 @@ const zhCN: LocaleDefinition = {
     close: "关闭",
     releaseNotes: "发行说明",
     loadingReleaseNotes: "加载中…",
+    releaseNotesFailed: "加载版本说明失败：{error}",
   },
   keyboard: {
     settings: "设置 / 快捷键",
