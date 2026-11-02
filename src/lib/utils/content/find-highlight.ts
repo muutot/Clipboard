@@ -23,7 +23,7 @@ export function unwrapMatches(container: HTMLElement): void {
 /**
  * Wraps every case-insensitive literal occurrence of `query` in `container`'s
  * text nodes with `mark[data-find-match]` elements. Returns the match count.
- * Skips text inside existing marks so repeated application cannot stack.
+ * Skips existing marks and UI-only subtrees annotated with data-find-ignore.
  */
 export function wrapMatches(container: HTMLElement, query: string): number {
   const needle = query.toLowerCase();
@@ -31,7 +31,10 @@ export function wrapMatches(container: HTMLElement, query: string): number {
 
   const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
-      if (!node.parentElement || node.parentElement.closest(MARK_SELECTOR)) {
+      if (
+        !node.parentElement ||
+        node.parentElement.closest(`${MARK_SELECTOR}, [data-find-ignore]`)
+      ) {
         return NodeFilter.FILTER_REJECT;
       }
       return node.nodeValue && node.nodeValue.toLowerCase().includes(needle)

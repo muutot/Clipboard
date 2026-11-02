@@ -107,6 +107,37 @@ async function typeQuery(target: HTMLElement, query: string): Promise<HTMLElemen
 }
 
 describe("DetailPanel find in detail", () => {
+  it("counts code text without counting its line numbers", async () => {
+    const target = mountPanel(item({ textContent: "const value = 1;" }), {
+      findRequest: { seq: 1 },
+    });
+    await settle();
+    const bar = await typeQuery(target, "1");
+    expect(bar.querySelector(".match-count")?.textContent).toBe("1/1");
+    expect(target.querySelectorAll(".line-number mark[data-find-match]")).toHaveLength(0);
+  });
+
+  it("does not find the preview language label as content", async () => {
+    const target = mountPanel(item({ textContent: "const value = 7;" }), {
+      findRequest: { seq: 1 },
+    });
+    await settle();
+    const bar = await typeQuery(target, "JavaScript");
+    expect(bar.querySelector(".match-count")?.textContent).toBe("0/0");
+    expect(target.querySelectorAll(".code-lang-label mark[data-find-match]")).toHaveLength(0);
+  });
+
+  it("does not find the previous match counter as content", async () => {
+    const target = mountPanel(item({ textContent: "alpha alpha alpha" }), {
+      findRequest: { seq: 1 },
+    });
+    await settle();
+    await typeQuery(target, "alpha");
+    const bar = await typeQuery(target, "1");
+    expect(bar.querySelector(".match-count")?.textContent).toBe("0/0");
+    expect(bar.querySelectorAll("mark[data-find-match]")).toHaveLength(0);
+  });
+
   it("opens from the Ctrl+F signal, counts matches, and navigates with wrap-around", async () => {
     const target = mountPanel(item({ textContent: "alpha beta alpha gamma alpha" }), {
       findRequest: { seq: 1 },

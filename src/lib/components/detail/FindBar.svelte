@@ -47,7 +47,7 @@
   }
 </script>
 
-<div class="find-bar" role="search" aria-label={label}>
+<div class="find-bar" role="search" aria-label={label} data-find-ignore>
   <input
     bind:this={input}
     bind:value={query}
