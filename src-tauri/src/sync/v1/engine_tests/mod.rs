@@ -49,6 +49,7 @@ struct MemoryStore {
         Mutex<Option<(String, clipboard_sync::cancellation::CancellationToken)>>,
     after_list: Mutex<Option<AfterListHook>>,
     after_get: Mutex<Option<AfterListHook>>,
+    after_download: Mutex<Option<AfterListHook>>,
     after_put: Mutex<Option<AfterListHook>>,
 }
 
@@ -153,6 +154,17 @@ impl ObjectStore for MemoryStore {
             .open(destination)
             .map_err(|error| error.to_string())?;
         file.write_all(&bytes).map_err(|error| error.to_string())?;
+        let hook = {
+            let mut hook = self.after_download.lock().unwrap();
+            if hook.as_ref().is_some_and(|(expected, _)| expected == key) {
+                hook.take()
+            } else {
+                None
+            }
+        };
+        if let Some((_, hook)) = hook {
+            hook();
+        }
         Ok(Some(DownloadedFile {
             size_bytes: bytes.len() as u64,
             sha256: hex::encode(Sha256::digest(&bytes)),

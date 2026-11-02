@@ -320,7 +320,7 @@ pub fn get_sync_config(
 
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
-pub fn set_sync_config(
+pub async fn set_sync_config(
     provider: String,
     endpoint: Option<String>,
     remote_path: Option<String>,
@@ -335,43 +335,185 @@ pub fn set_sync_config(
     s3_access_key: Option<String>,
     s3_secret_key: Option<String>,
     sync_password: Option<String>,
-    database: tauri::State<'_, Database>,
-    config: tauri::State<'_, Mutex<ConfigStore>>,
+    app: tauri::AppHandle,
 ) -> Result<(), String> {
-    let mut guard = lock_state(&config, "configuration lock is poisoned")?;
-    let previous = guard.sync_config();
-    let mut sync = SyncConfig {
-        provider: if provider == "s3" {
-            SyncProvider::S3
-        } else {
-            SyncProvider::Off
-        },
-        endpoint: normalized_optional(endpoint),
-        remote_path: normalized_optional(remote_path),
-        s3_region: normalized_optional(s3_region),
-        s3_bucket: normalized_optional(s3_bucket),
-        s3_access_key: normalized_optional(s3_access_key),
-        s3_secret_key: retain_secret(s3_secret_key, previous.s3_secret_key),
-        sync_password: retain_secret(sync_password, previous.sync_password),
-        last_sync_ms: previous.last_sync_ms,
-        last_sync_status: previous.last_sync_status,
-        auto_sync,
-        auto_sync_interval_secs: auto_sync_interval_secs.clamp(10, 86_400),
-        segment_max_entries: segment_max_entries.clamp(16, 10_000),
-        resource_gc_mode: resource_gc_mode
-            .parse::<v1::ResourceGcMode>()
-            .unwrap_or_default()
-            .as_str()
-            .to_string(),
-        max_sync_image_bytes: max_sync_image_bytes
-            .clamp(MIN_SYNC_RESOURCE_BYTES, MAX_SYNC_RESOURCE_BYTES),
-        max_sync_file_bytes: max_sync_file_bytes
-            .clamp(MIN_SYNC_RESOURCE_BYTES, MAX_SYNC_RESOURCE_BYTES),
+    tauri::async_runtime::spawn_blocking(move || {
+        let result = update_sync_config(
+            &app.state::<Database>(),
+            &app.state::<StoragePaths>(),
+            &app.state::<Mutex<ConfigStore>>(),
+            &app.state::<SyncCancellation>(),
+            &app.state::<crate::background_operations::BackgroundOperations>(),
+            |previous| {
+                let mut sync = SyncConfig {
+                    provider: if provider == "s3" {
+                        SyncProvider::S3
+                    } else {
+                        SyncProvider::Off
+                    },
+                    endpoint: normalized_optional(endpoint),
+                    remote_path: normalized_optional(remote_path),
+                    s3_region: normalized_optional(s3_region),
+                    s3_bucket: normalized_optional(s3_bucket),
+                    s3_access_key: normalized_optional(s3_access_key),
+                    s3_secret_key: retain_secret(s3_secret_key, previous.s3_secret_key),
+                    sync_password: retain_secret(sync_password, previous.sync_password),
+                    last_sync_ms: previous.last_sync_ms,
+                    last_sync_status: previous.last_sync_status,
+                    auto_sync,
+                    auto_sync_interval_secs: auto_sync_interval_secs.clamp(10, 86_400),
+                    segment_max_entries: segment_max_entries.clamp(16, 10_000),
+                    resource_gc_mode: resource_gc_mode
+                        .parse::<v1::ResourceGcMode>()
+                        .unwrap_or_default()
+                        .as_str()
+                        .to_string(),
+                    max_sync_image_bytes: max_sync_image_bytes
+                        .clamp(MIN_SYNC_RESOURCE_BYTES, MAX_SYNC_RESOURCE_BYTES),
+                    max_sync_file_bytes: max_sync_file_bytes
+                        .clamp(MIN_SYNC_RESOURCE_BYTES, MAX_SYNC_RESOURCE_BYTES),
+                };
+                if let Some(endpoint) = sync.endpoint.clone() {
+                    sync.endpoint = Some(validate_sync_endpoint(&endpoint)?);
+                }
+                Ok(sync)
+            },
+            SyncSettings::object_store,
+        );
+        // A failed preparation may still have cached some resources locally.
+        crate::item_operations::invalidate_desktop(&app);
+        result
+    })
+    .await
+    .map_err(|error| format!("sync settings task join failed: {error}"))?
+}
+
+/// Preserve bodies that depend on the connection being replaced. Provider Off
+/// still retains a source: a later field-by-field edit must not discard it.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn update_sync_config<S: v1::ObjectStore>(
+    database: &Database,
+    paths: &StoragePaths,
+    config: &Mutex<ConfigStore>,
+    cancellation: &SyncCancellation,
+    operations: &crate::background_operations::BackgroundOperations,
+    build: impl FnOnce(SyncConfig) -> Result<SyncConfig, String>,
+    make_store: impl FnOnce(&SyncSettings) -> Result<S, String>,
+) -> Result<(), String> {
+    use crate::background_operations::{OperationKind, OperationPhase};
+    let _run_guard = try_lock_sync_run()?;
+    let _database_run = database.begin_sync_run().map_err(|e| e.to_string())?;
+    let _publication = database.begin_resource_write().map_err(|e| e.to_string())?;
+    let (previous, next) = {
+        let guard = lock_state(&config, "configuration lock is poisoned")?;
+        let previous = guard.sync_config();
+        let next = build(previous.clone())?;
+        (previous, next)
     };
-    if let Some(endpoint) = sync.endpoint.clone() {
-        sync.endpoint = Some(validate_sync_endpoint(&endpoint)?);
+    let source = SyncSettings::validated_from_sync_config(&previous).ok();
+    let destination = SyncSettings::validated_from_sync_config(&next).ok();
+    let source = source.filter(|old| {
+        !destination.as_ref().is_some_and(|new| {
+            old.remote_scope_id() == new.remote_scope_id()
+                && old.access_key == new.access_key
+                && old.secret_key == new.secret_key
+                && old.sync_password == new.sync_password
+        })
+    });
+    let mut scopes = Vec::new();
+    let mut needs_download = false;
+    if let Some(settings) = source.as_ref() {
+        let stable_scope = settings.remote_scope_id();
+        let binding = database
+            .sync_namespace_binding(&stable_scope)
+            .map_err(|e| e.to_string())?
+            .map(|bytes| clipboard_sync::v1::namespace::Namespace::from_bytes(&bytes))
+            .transpose()?;
+        let candidates = binding
+            .as_ref()
+            .map(|binding| vec![binding.scope.clone()])
+            .unwrap_or_else(|| vec![stable_scope, settings.legacy_scope_id()]);
+        for scope in candidates {
+            let refs = database
+                .list_sync_resource_refs_for_scope(&scope)
+                .map_err(|e| e.to_string())?;
+            if refs.is_empty() {
+                continue;
+            }
+            let key = match binding.as_ref() {
+                Some(binding) => binding.session_key(settings.sync_password.as_deref())?,
+                None => settings.session_key(&scope)?,
+            };
+            for (id, refs) in refs {
+                for reference in refs {
+                    let parsed = v1::parse_resource_key(&reference.object_key)?;
+                    let (_, limit) = resource_destination(paths, parsed.category, settings);
+                    let path = database
+                        .materialized_sync_resource_path(&scope, &id, &reference)
+                        .map_err(|e| e.to_string())?
+                        .map(|path| {
+                            if parsed.category == v1::ResourceCategory::Icon {
+                                paths.storage.join("icons").join(path)
+                            } else {
+                                PathBuf::from(path)
+                            }
+                        });
+                    needs_download |= !path.as_ref().is_some_and(|path| {
+                        local_resource_verified_cached(
+                            path,
+                            &reference.object_key,
+                            limit,
+                            key.as_ref(),
+                        )
+                    });
+                }
+            }
+            scopes.push((scope, key));
+        }
     }
-    persist_sync_config(&database, &mut guard, sync)
+    let commit = |token: Option<&clipboard_sync::cancellation::CancellationToken>| {
+        let mut guard = lock_state(&config, "configuration lock is poisoned")?;
+        if let Some(token) = token {
+            token.check()?;
+        }
+        if guard.sync_config() != previous {
+            return Err(
+                "sync configuration changed during resource preparation; retry save".into(),
+            );
+        }
+        persist_sync_config(database, &mut guard, next)
+    };
+    if !needs_download {
+        return commit(None);
+    }
+    let registration = {
+        let guard = lock_state(&config, "configuration lock is poisoned")?;
+        if guard.sync_config() != previous {
+            return Err(
+                "sync configuration changed during resource preparation; retry save".into(),
+            );
+        }
+        let token = cancellation.register(guard.privacy_local_only(), &cancellation.0)?;
+        (operations.start(OperationKind::Sync, &token)?, token)
+    };
+    run_rotation_operation(registration, |token, operation| {
+        token.check()?;
+        let settings = source.as_ref().ok_or("download needs a previous source")?;
+        let store = make_store(settings)?;
+        operation.progress(OperationPhase::Preparing, 0, Some(scopes.len() as u64))?;
+        for (index, (scope, key)) in scopes.iter().enumerate() {
+            token.check()?;
+            materialize_scope_resources(&store, database, paths, settings, scope, key.as_ref())?;
+            operation.progress(
+                OperationPhase::Preparing,
+                index as u64 + 1,
+                Some(scopes.len() as u64),
+            )?;
+        }
+        // Cancellation must not publish the new configuration after downloads.
+        token.check()?;
+        commit(Some(token))
+    })
 }
 
 pub(crate) fn persist_sync_config(

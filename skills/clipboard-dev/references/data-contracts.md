@@ -300,6 +300,14 @@ For each command change:
 
 `materialize_clipboard_item(id)` returns the refreshed camelCase `PersistedClipboardItem`. It is a local-cache mutation: it must not advance `(modified_at_ms, sync_writer_device_id)` or create a sync outbox row, and any stale/missing reference causes the whole path write-back to remain unchanged. The command is async and runs its S3 download on `tauri::async_runtime::spawn_blocking` with an injected `AppHandle` (the same pattern as `import_from_file`), so the frontend call arguments are unchanged.
 
+`set_sync_config` keeps its existing invoke payload/result but runs on the blocking
+pool. A connection replacement first caches old-scope media with task/privacy
+cancellation; retained Off settings remain a source during incremental edits.
+The config mutex is released during preparation and the previous `SyncConfig`
+snapshot is compared at commit. Failure, cancellation or conflict does not replace
+the saved target. Local cache writes preserve replicated versions/outbox and emit
+desktop invalidation even when preparation fails after a partial cache fill.
+
 `save_clipboard_item_file(id, dst)` is the constrained "Save As" primitive. The webview passes only the item id and a user-chosen absolute destination; the backend resolves the source from the stored record and requires it to live under an owned image/file root, so it cannot copy an arbitrary path. The former unrestricted `copy_file_to(src, dst)` was removed and must not be reintroduced. The command is async and runs the file copy on `tauri::async_runtime::spawn_blocking`, so arbitrarily large transfers never occupy the window event loop.
 
 The CLI `paste` command and the local API `POST /paste` are manual text-ingestion paths that write to the database directly instead of going through the clipboard-worker pipeline, so they enforce the capture privacy rules themselves through `CaptureState::reject_manual_text`: a paused capture, a text above `max_text_capture_bytes`, or a sensitive-pattern match refuses the write (HTTP status 403, or 413 for the size ceiling). Every production entry point must pass the live `CaptureState` — the in-app command and the API server take it from managed state, and the standalone CLI process rebuilds it from the persisted configuration; `None` is only for in-memory test harnesses.

@@ -211,6 +211,21 @@ can be a legacy scope; otherwise reset the stable identity. Saving the same acti
 target preserves its epoch/publication. Configured target identities and bound
 publication scopes are distinct and must not be interchanged.
 
+`set_sync_config` prepares target changes on the blocking pool through
+`update_sync_config`. Before replacing an old endpoint/bucket/prefix, login or
+password, materialize and verify its canonical resource bodies under the cached
+binding's actual scope (or stable/legacy scopes for an uncached source). Retained
+Off settings still identify the old source, so incremental connection edits must
+cache its bodies before invalidating those settings. Provider-only or same-source
+resaves need no download. Verified local bodies permit saves in local-only mode;
+missing bodies require a registered Sync operation with both task and privacy
+cancellation. Keep its strong registration through finish. Release the config
+mutex during downloads, then reject a changed sync snapshot or cancelled task
+while holding the commit lock. Failure retains the old saved config; completed
+cache writes are safe to retain and desktop invalidation refreshes their paths.
+The process sync lock and database sync lease exclude concurrent publication;
+the resource-publication guard excludes cleanup for the whole preparation/save.
+
 `sync/v1/s3_smoke.rs` holds opt-in real-server regressions that `MemoryStore` cannot prove:
 a thin ObjectStore decorator cancels after a successful immutable snapshot/segment PUT (the
 real head must stay unchanged; retry preserves pending rows and converges), an encrypted

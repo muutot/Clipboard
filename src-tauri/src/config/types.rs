@@ -499,7 +499,7 @@ pub struct ExportConfig {
     extra: BTreeMap<String, Value>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct SyncConfig {
     pub provider: SyncProvider,
