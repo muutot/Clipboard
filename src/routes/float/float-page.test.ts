@@ -12,6 +12,7 @@ import FloatPage from "./+page.svelte";
 
 const bridge = vi.hoisted(() => ({
   listeners: new Map<string, (event: { payload: unknown }) => void>(),
+  listen: vi.fn(),
   load: vi.fn(),
   favorite: vi.fn(),
   softDelete: vi.fn(),
@@ -23,10 +24,7 @@ const bridge = vi.hoisted(() => ({
 
 vi.mock("@tauri-apps/api/event", () => ({
   emitTo: bridge.emit,
-  listen: vi.fn(async (name, callback) => {
-    bridge.listeners.set(name, callback);
-    return () => bridge.listeners.delete(name);
-  }),
+  listen: bridge.listen,
 }));
 vi.mock("@tauri-apps/api/webviewWindow", () => ({
   WebviewWindow: {
@@ -83,6 +81,10 @@ const cleanups: (() => Promise<void>)[] = [];
 beforeEach(() => {
   generalSettings.update((settings) => ({ ...settings, floatPanelLeftClick: "favorite" }));
   bridge.listeners.clear();
+  bridge.listen.mockReset().mockImplementation(async (name, callback) => {
+    bridge.listeners.set(name, callback);
+    return () => bridge.listeners.delete(name);
+  });
   bridge.load.mockReset().mockResolvedValue([item("a", true)]);
   bridge.favorite.mockReset().mockResolvedValue(true);
   bridge.softDelete.mockReset().mockResolvedValue(true);
@@ -106,14 +108,19 @@ async function render() {
   const target = document.createElement("div");
   document.body.append(target);
   const app = mount(FloatPage, { target });
-  cleanups.push(async () => {
+  let destroyed = false;
+  const destroy = async () => {
+    if (destroyed) return;
+    destroyed = true;
     await unmount(app);
     target.remove();
-  });
+  };
+  cleanups.push(destroy);
   flushSync();
   await settle();
   return {
     target,
+    destroy,
     rows: () => [...target.querySelectorAll<HTMLButtonElement>(".float-row")],
     favorites: async () => {
       target.querySelectorAll<HTMLButtonElement>('[role="tab"]')[1].click();
@@ -127,6 +134,72 @@ function changed(payload: Partial<ClipboardItemsChangedPayload>) {
 }
 
 describe("float history reconciliation", () => {
+  it.each([
+    ["clipboard-item-added", [item("a"), item("captured")], {}],
+    ["clipboard-items-changed", [], { deletedIds: ["a"] }],
+    ["clipboard-history-invalidated", [item("imported")], { deletedIds: [] }],
+  ])("refreshes changes missed before %s registration completes", async (name, next, payload) => {
+    let register!: () => void;
+    const ready = new Promise<void>((resolve) => (register = resolve));
+    bridge.listen.mockImplementation(async (eventName, callback) => {
+      if (eventName === name) await ready;
+      bridge.listeners.set(eventName, callback);
+      return () => bridge.listeners.delete(eventName);
+    });
+    let records = [item("a")];
+    bridge.load.mockImplementation(async () => [...records]);
+    const page = await render();
+    // The database changes before this native listener is active, so no
+    // notification is delivered. Startup must still obtain the new snapshot.
+    records = next;
+    bridge.listeners.get(name)?.({ payload });
+    register();
+    await vi.waitFor(() => {
+      flushSync();
+      expect(page.rows().map((row) => row.title)).toEqual(next.map((record) => record.title));
+    });
+  });
+
+  it("still refreshes when a native history listener registration fails", async () => {
+    const error = new Error("synthetic listener failure");
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    cleanups.push(async () => log.mockRestore());
+    bridge.listen.mockRejectedValueOnce(error);
+    bridge.load.mockResolvedValueOnce([item("a")]).mockResolvedValue([item("latest")]);
+    const page = await render();
+    expect(page.rows().map((row) => row.title)).toEqual(["latest"]);
+    expect(log).toHaveBeenCalledWith("Unable to listen for float history changes", error);
+  });
+
+  it("discards a first-load snapshot completed after the registration refresh", async () => {
+    let finish!: (records: ClipboardItem[]) => void;
+    bridge.load
+      .mockReturnValueOnce(new Promise<ClipboardItem[]>((resolve) => (finish = resolve)))
+      .mockResolvedValue([item("latest")]);
+    const page = await render();
+    expect(page.rows().map((row) => row.title)).toEqual(["latest"]);
+    finish([item("a")]);
+    await settle();
+    expect(page.rows().map((row) => row.title)).toEqual(["latest"]);
+  });
+
+  it("releases late listeners without reading after unmount", async () => {
+    let register!: () => void;
+    const ready = new Promise<void>((resolve) => (register = resolve));
+    const unlisten = vi.fn();
+    bridge.listen.mockImplementation(async () => {
+      await ready;
+      return unlisten;
+    });
+    const page = await render();
+    await page.destroy();
+    const readsAtUnmount = bridge.load.mock.calls.length;
+    register();
+    await settle();
+    expect(unlisten).toHaveBeenCalledTimes(3);
+    expect(bridge.load).toHaveBeenCalledTimes(readsAtUnmount);
+  });
+
   it("reports a rejected favorite request and retains the row for retry", async () => {
     bridge.load.mockResolvedValue([item("a", false)]);
     bridge.favorite.mockRejectedValueOnce(new Error("synthetic persistence failure"));

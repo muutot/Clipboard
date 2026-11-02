@@ -58,6 +58,13 @@ The main search view always follows backend sort rules. Capture/content/membersh
 
 ### Float panel row operations
 
+The float route reads immediately for fast startup, then refreshes after all three
+history listener registrations settle. This recovers capture, mutation and import
+changes missed before the native listeners became active. Registration failures
+are logged and still permit the refresh; teardown releases late registrations and
+prevents further reads. Request generations discard an older first-load snapshot.
+Mounted route UTs delay the actual event-registration promises to cover that gap.
+
 Float deletion follows `generalSettings.useRecycleBin`: soft delete while enabled, direct active-record deletion while disabled, using the same services and backend favorite protection as the main route. Failed or rejected deletions retain the row and show failure feedback.
 
 Favorite and delete success replies patch/remove only the immutable row captured
