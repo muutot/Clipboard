@@ -35,7 +35,6 @@ pub fn update_clipboard_text(
     };
     let custom_title =
         resolve_custom_title(&new_title, &new_text_content, item.metadata_json.as_deref());
-    let metadata_json = set_custom_title_metadata(item.metadata_json.as_deref(), custom_title)?;
     let content_hash = content::hash::compute_content_hash(kind_name, &new_text_content, None);
     let size_bytes = new_text_content.len() as u64;
 
@@ -47,7 +46,7 @@ pub fn update_clipboard_text(
             text_content: &new_text_content,
             content_hash: &content_hash,
             size_bytes,
-            metadata_json: Some(&metadata_json),
+            custom_title: Some(custom_title),
         })
         .map_err(|e| e.to_string())?;
     if updated {

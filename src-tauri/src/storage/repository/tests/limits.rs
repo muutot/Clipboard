@@ -24,7 +24,7 @@ fn text_writes_reject_archive_limit_violations_without_mutation() {
                 text_content: text,
                 content_hash: "edited-hash",
                 size_bytes: 1, // A forged size cannot bypass the byte validation.
-                metadata_json: Some(r#"{"customTitle":true}"#),
+                custom_title: Some(true),
             })
             .is_err());
         assert_eq!(database.get_item("original").unwrap().unwrap(), original);
@@ -64,7 +64,7 @@ fn an_edit_at_the_utf8_byte_boundaries_still_creates_a_valid_backup() {
             text_content: &text,
             content_hash: "boundary-hash",
             size_bytes: text.len() as u64,
-            metadata_json: None,
+            custom_title: None,
         })
         .unwrap());
     let root = std::env::temp_dir().join(format!("clipboard-edit-backup-{}", uuid::Uuid::new_v4()));

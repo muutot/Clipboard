@@ -263,7 +263,7 @@ fn assert_restored_edit_survives_interrupted_publication(
                 text_content: text,
                 content_hash: hash,
                 size_bytes: text.len() as u64,
-                metadata_json: None,
+                custom_title: None,
             })
             .unwrap());
     };

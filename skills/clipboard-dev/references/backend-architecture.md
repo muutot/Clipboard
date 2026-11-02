@@ -52,6 +52,14 @@ Use `Mutex`/`Arc` according to existing ownership. Never hold a config or ingest
 
 ## Database and repositories
 
+Ordinary text edits pass an optional typed `TextItemUpdate.custom_title`, rather
+than a copied metadata JSON object. `update_text_item` merges only `customTitle`
+into the current stored object in the same SQL update as title/body/hash/size
+and rich-content clearing. Later tag/language commits (including cleared keys)
+and other metadata remain current; JSON true/false stay booleans. An absent flag
+leaves metadata untouched; setting a flag normalizes malformed/non-object metadata
+to an object, matching the former command preparation fallback.
+
 Text/link save-as-new prepares the edited record in
 `commands/clipboard/operations/duplicate.rs`, then persists it through
 `repository/transactions.rs::Database::save_item_as_new`. Hash collision checks

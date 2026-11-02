@@ -132,7 +132,7 @@ fn outbox_batch_coalesces_repeated_changes_to_current_state() {
                 text_content: text,
                 content_hash: hash,
                 size_bytes: text.len() as u64,
-                metadata_json: None,
+                custom_title: None,
             })
             .unwrap();
     }

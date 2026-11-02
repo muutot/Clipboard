@@ -82,7 +82,14 @@ impl ClipboardRepository for Database {
                      text_content = ?4,
                      content_hash = ?5,
                      size_bytes = ?6,
-                     metadata_json = COALESCE(?7, metadata_json),
+                     metadata_json = CASE WHEN ?7 IS NULL THEN metadata_json
+                         ELSE json_set(
+                             CASE WHEN json_valid(metadata_json) THEN
+                                 CASE WHEN json_type(metadata_json) = 'object'
+                                     THEN metadata_json ELSE '{}' END
+                                 ELSE '{}' END,
+                             '$.customTitle', json(?7)
+                         ) END,
                      html_content = NULL,
                      rtf_content = NULL
                  WHERE id = ?1
@@ -95,7 +102,10 @@ impl ClipboardRepository for Database {
                     update.text_content,
                     update.content_hash,
                     size_bytes,
-                    update.metadata_json,
+                    // JSON booleans must remain booleans, not SQLite 0/1.
+                    update
+                        .custom_title
+                        .map(|value| if value { "true" } else { "false" }),
                 ],
             )?;
             Ok(changed == 1)

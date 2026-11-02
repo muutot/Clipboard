@@ -316,6 +316,14 @@ The CLI `paste` command and the local API `POST /paste` are manual text-ingestio
 
 `duplicate_clipboard_item(id)` creates a metadata-only second row that still shares the source's `resource_path`/`preview_path`. Both `id` and `content_hash` are namespaced with a random UUID suffix so `UNIQUE (kind, content_hash)` admits the copy and two rapid duplicates never collapse into one upsert.
 
+`update_clipboard_text` keeps its IPC arguments/result. The internal
+`TextItemUpdate.custom_title: Option<bool>` owns only the `customTitle` metadata
+key; a single UPDATE merges it into current stored metadata while replacing the
+textual payload. Editing must retain later tag/code-language changes and removals,
+keeping metadata and `item_tags` consistent. Hash collisions reject the complete
+edit, including the flag. None preserves metadata; a supplied flag is a JSON
+boolean and normalizes malformed/non-object metadata to an object.
+
 `save_clipboard_item_as_new(id, newTitle, newTextContent)` is the atomic text/link "Save as new" path (formerly frontend `duplicate_clipboard_item` + `update_clipboard_text`). It validates non-empty text and text/link kind in one command, clears stale `html_content`/`rtf_content`, and when the proposed content hash already exists (including unchanged text saved beside its source) stores `{hash}-{uuid}` instead of failing the unique constraint. Failure cannot leave a half-created duplicate.
 
 Distinct persistence uses `Database::save_item_as_new`: collision checks, UUID

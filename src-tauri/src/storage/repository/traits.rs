@@ -99,7 +99,9 @@ pub struct TextItemUpdate<'a> {
     pub text_content: &'a str,
     pub content_hash: &'a str,
     pub size_bytes: u64,
-    pub metadata_json: Option<&'a str>,
+    /// Only this metadata field belongs to text editing. Other keys retain
+    /// their current database values, including later tag/language changes.
+    pub custom_title: Option<bool>,
 }
 
 pub trait ClipboardRepository {
@@ -119,6 +121,8 @@ pub trait ClipboardRepository {
     /// The stale `html_content`/`rtf_content` are cleared as well: after a
     /// plain-text edit they no longer represent the payload and would
     /// otherwise be written back verbatim on the next format paste.
+    /// An optional custom-title flag is merged into current object metadata
+    /// in the same UPDATE; callers never replace a stale metadata snapshot.
     fn update_text_item(&self, update: &TextItemUpdate<'_>) -> Result<bool, StorageError>;
     fn get_item(&self, id: &str) -> Result<Option<ClipboardItem>, StorageError>;
     fn get_items_by_ids(&self, ids: &[String]) -> Result<Vec<ClipboardItem>, StorageError>;
