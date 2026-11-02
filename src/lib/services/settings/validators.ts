@@ -63,6 +63,13 @@ export function validTheme(
   return value === "dark" || value === "light" || value === "custom" ? value : fallback;
 }
 
+export function validUiFontFamily(
+  value: unknown,
+  fallback: GeneralSettings["uiFontFamily"],
+): GeneralSettings["uiFontFamily"] {
+  return value === "mono" || value === "system" ? value : fallback;
+}
+
 export function validHexColor(value: unknown, fallback: string): string {
   return typeof value === "string" && /^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(value)
     ? value

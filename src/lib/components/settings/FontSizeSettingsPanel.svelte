@@ -2,8 +2,12 @@
   import SettingEntry from "$lib/components/settings/SettingEntry.svelte";
   import { messages, resolvePath } from "$lib/i18n";
   import { generalSettings } from "$lib/services/settings";
-  import { applyFontSizesToDocument } from "$lib/services/settings-bootstrap";
+  import {
+    applyFontSizesToDocument,
+    applyUiFontToDocument,
+  } from "$lib/services/settings-bootstrap";
   import type { SettingEntryConfig } from "$lib/types/settings-entry";
+  import type { UiFontFamily } from "$lib/types/clipboard";
   import { emit } from "@tauri-apps/api/event";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
@@ -64,7 +68,25 @@
     };
   }
 
-  const interfaceSliders: SettingEntryConfig[] = $derived([
+  const interfaceEntries: SettingEntryConfig[] = $derived([
+    {
+      type: "select",
+      id: "font.family",
+      icon: "type",
+      label: _t("general.uiFontFamilyLabel"),
+      desc: _t("general.uiFontFamilyDescription"),
+      get: () => s.uiFontFamily,
+      set: (v) => {
+        generalSettings.updateSetting("uiFontFamily", v as UiFontFamily);
+        emit("settings-font-changed", { uiFontFamily: v }).catch((err) =>
+          console.warn("settings-font-changed emit failed:", err),
+        );
+      },
+      options: [
+        { value: "mono", label: _t("general.uiFontFamilyMono") },
+        { value: "system", label: _t("general.uiFontFamilySystem") },
+      ],
+    },
     sliderEntry(
       "font.base",
       "base",
@@ -136,6 +158,10 @@
   $effect(() => {
     applyFontSizesToDocument(s.fontSizes);
   });
+
+  $effect(() => {
+    applyUiFontToDocument(s.uiFontFamily);
+  });
 </script>
 
 {#if showHeader}
@@ -163,8 +189,8 @@
   </nav>
 
   {#if currentFontSection === "interface"}
-    {#each interfaceSliders as slider}
-      <SettingEntry config={slider} />
+    {#each interfaceEntries as entry}
+      <SettingEntry config={entry} />
     {/each}
   {:else}
     {#each cardSliders as slider}

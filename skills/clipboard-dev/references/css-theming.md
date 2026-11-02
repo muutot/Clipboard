@@ -92,15 +92,16 @@ The optional color-icon mode (`general.colorIcons`) is an intentional fixed-pale
 
 ## Global font and display variables
 
-| Variable                  | Current default | Use                   |
-| ------------------------- | --------------- | --------------------- |
-| `--font-size-base`        | `14px`          | general UI/body       |
-| `--font-size-secondary`   | `11px`          | metadata/descriptions |
-| `--font-size-tiny`        | `10px`          | smallest notes        |
-| `--font-size-cardTitle`   | `13px`          | card title            |
-| `--font-size-cardPreview` | `11px`          | card preview          |
+| Variable                  | Current default            | Use                                                                                                                                                                   |
+| ------------------------- | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--font-ui-family`        | mono stack (see `app.css`) | interface font family; set only by `applyUiFontToDocument` from the `general.uiFontFamily` setting (`mono` \| `system`); code previews keep their dedicated mono font |
+| `--font-size-base`        | `14px`                     | general UI/body                                                                                                                                                       |
+| `--font-size-secondary`   | `11px`                     | metadata/descriptions                                                                                                                                                 |
+| `--font-size-tiny`        | `10px`                     | smallest notes                                                                                                                                                        |
+| `--font-size-cardTitle`   | `13px`                     | card title                                                                                                                                                            |
+| `--font-size-cardPreview` | `11px`                     | card preview                                                                                                                                                          |
 
-`settings-bootstrap.ts` applies these and the 20 theme variables at startup. Live settings panels must update the same contract; do not create alternate variable names for the same meaning.
+`settings-bootstrap.ts` applies these and the 20 theme variables at startup. Live settings panels must update the same contract; do not create alternate variable names for the same meaning. Cross-window live preview of `uiFontFamily` rides the dedicated `settings-font-changed` event (same channel as the font sizes).
 
 First paint: `applyThemeColors` also snapshots the applied colors into `localStorage` (`THEME_CACHE_KEY`), and `static/theme-init.js` — loaded synchronously from `<head>` in `src/app.html` — re-applies that snapshot before the browser paints. This keeps a light theme from flashing the dark `app.html`/`app.css` defaults in the main, settings, and float windows. The snapshot is a hint only (the hydrated settings store re-applies the real colors); keep the key and variable mapping in sync with that script, and never treat it as the source of truth.
 

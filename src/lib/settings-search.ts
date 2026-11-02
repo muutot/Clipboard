@@ -273,6 +273,20 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
     ["搜索历史", "recent search"],
   ),
   entry(
+    "general.clear-search-on-blur",
+    { section: "general_search" },
+    i18n("general.clearSearchOnBlur"),
+    i18n("general.clearSearchOnBlurDescription"),
+    ["失焦", "隐藏", "清空搜索", "blur", "auto clear"],
+  ),
+  entry(
+    "general.clear-search-on-blur-seconds",
+    { section: "general_search" },
+    i18n("general.clearSearchOnBlurSeconds"),
+    i18n("general.clearSearchOnBlurSecondsDescription"),
+    ["清空延迟", "延迟", "秒", "delay", "seconds"],
+  ),
+  entry(
     "general.search-placeholder",
     { section: "general_search" },
     i18n("general.searchPlaceholder"),
@@ -525,6 +539,13 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
     ["圆角", "radius"],
   ),
 
+  entry(
+    "font.family",
+    { section: "font", fontSection: "interface" },
+    i18n("general.uiFontFamilyLabel"),
+    i18n("general.uiFontFamilyDescription"),
+    ["字体族", "等宽", "系统字体", "font family", "mono", "system ui"],
+  ),
   entry(
     "font.base",
     { section: "font", fontSection: "interface" },

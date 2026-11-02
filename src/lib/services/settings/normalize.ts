@@ -31,6 +31,7 @@ import {
   validSearchSuggestionMode,
   validSortRules,
   validTheme,
+  validUiFontFamily,
   validUpdateSource,
   validWindowEffect,
   type UnknownRecord,
@@ -80,6 +81,10 @@ export function normalizeGeneralSettings(
   };
 
   result.language = validLanguage(source.language ?? fallback("language"), "system");
+  result.uiFontFamily = validUiFontFamily(
+    source.uiFontFamily ?? fallback("uiFontFamily"),
+    defaultSettings.uiFontFamily,
+  );
   result.fontSizes.base = integerInRange(
     sourceFontSizes.base ?? fallbackFont("base"),
     defaultSettings.fontSizes.base,
@@ -275,6 +280,16 @@ export function normalizeGeneralSettings(
   result.searchHistoryEnabled = booleanValue(
     source.searchHistoryEnabled ?? fallback("searchHistoryEnabled"),
     defaultSettings.searchHistoryEnabled,
+  );
+  result.clearSearchOnBlur = booleanValue(
+    source.clearSearchOnBlur ?? fallback("clearSearchOnBlur"),
+    defaultSettings.clearSearchOnBlur,
+  );
+  result.clearSearchOnBlurSeconds = integerInRange(
+    source.clearSearchOnBlurSeconds ?? fallback("clearSearchOnBlurSeconds"),
+    defaultSettings.clearSearchOnBlurSeconds,
+    1,
+    3600,
   );
   result.searchPlaceholder = validSearchPlaceholder(
     source.searchPlaceholder ?? fallback("searchPlaceholder"),

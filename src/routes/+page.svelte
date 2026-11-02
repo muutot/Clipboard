@@ -19,6 +19,7 @@
   import { hydrateClipboardItem } from "$lib/services/clipboard";
   import type { SavedSearch } from "$lib/utils/settings/saved-searches";
   import type { HistoryDateFilter } from "$lib/utils/search/history-filter";
+  import { createSearchAutoClear } from "$lib/utils/search/search-auto-clear";
   import Toast from "$lib/components/common/Toast.svelte";
   import { demoClipboardItems } from "$lib/data/demo-items";
   import {
@@ -101,12 +102,16 @@
     persistSearchHistory as persistStoredSearchHistory,
     suggestionCandidate,
   } from "$lib/utils/search/search-history";
-  import { applyFontSizesToDocument } from "$lib/services/settings-bootstrap";
+  import {
+    applyFontSizesToDocument,
+    applyUiFontToDocument,
+  } from "$lib/services/settings-bootstrap";
   import { listen } from "@tauri-apps/api/event";
   import type {
     ClipboardItemsChangedPayload,
     PersistedClipboardItem,
     TagsChangedPayload,
+    UiFontFamily,
   } from "$lib/types/clipboard";
   import { generalSettings } from "$lib/services/settings";
   import { iconsDir } from "$lib/services/paths";
@@ -307,6 +312,14 @@
   let searchSuggestionsOpen = $state(false);
   let searchSuggestionIndex = $state(-1);
   let searchBlurTimer: number | undefined;
+  // Hiding the window fires the same focus-lost event as an ordinary blur,
+  // so one listener covers "hidden" and "unfocused".
+  const searchAutoClear = createSearchAutoClear({
+    enabled: () => $generalSettings.clearSearchOnBlur,
+    delaySeconds: () => $generalSettings.clearSearchOnBlurSeconds,
+    hasQuery: () => query.length > 0,
+    onClear: handleSearchAutoClear,
+  });
   // The spare-result cache is never rendered directly: its records and its
   // insertion/access order live in the store (`cacheIds`), and only
   // `updateSearchCache`/`promoteFromCache` touch it.
@@ -970,20 +983,27 @@
       onboardingOpen = true;
     }
 
-    const windowLifecycle = createMainWindowController(loadKeyboardShortcuts);
+    const windowLifecycle = createMainWindowController((focused) => {
+      searchAutoClear.handleWindowFocus(focused);
+      return loadKeyboardShortcuts();
+    });
 
     const unsubFontEvent = listen<{
-      fontSizes: {
+      fontSizes?: {
         base: number;
         secondary: number;
         tiny: number;
         cardTitle: number;
         cardPreview: number;
       };
+      uiFontFamily?: UiFontFamily;
     }>("settings-font-changed", (event) => {
-      const { fontSizes } = event.payload;
+      const { fontSizes, uiFontFamily } = event.payload;
       if (fontSizes) {
         applyFontSizesToDocument(fontSizes);
+      }
+      if (uiFontFamily) {
+        applyUiFontToDocument(uiFontFamily);
       }
     });
 
@@ -1069,6 +1089,7 @@
       if (heightRafId) cancelAnimationFrame(heightRafId);
       if (scrollRaf) cancelAnimationFrame(scrollRaf);
       if (searchBlurTimer !== undefined) window.clearTimeout(searchBlurTimer);
+      searchAutoClear.dispose();
       pendingHeights.clear();
     };
   });
@@ -1222,6 +1243,15 @@
         searchSuggestionIndex = -1;
       }
     }, 0);
+  }
+
+  // Auto-clear path: unlike the blur timer above it must not refocus the
+  // search input — the window is hidden or unfocused when it fires.
+  function handleSearchAutoClear() {
+    query = "";
+    search.pendingSearchHistoryQuery = "";
+    searchSuggestionIndex = -1;
+    searchSuggestionsOpen = false;
   }
   let settingsWindowOpening = $state(false);
   let floatWindowOpening = $state(false);

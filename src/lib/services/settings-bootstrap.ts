@@ -3,7 +3,24 @@ import { applyThemeColors } from "$lib/utils/settings/theme";
 import { applyCustomCss } from "$lib/utils/settings/custom-css";
 import { applyCodeTheme } from "$lib/utils/content/code-theme";
 import { isTauriRuntime } from "$lib/services/runtime";
-import type { FontSizeSettings, GeneralSettings, WindowEffect } from "$lib/types/clipboard";
+import type {
+  FontSizeSettings,
+  GeneralSettings,
+  UiFontFamily,
+  WindowEffect,
+} from "$lib/types/clipboard";
+
+/** Interface font stacks keyed by the `uiFontFamily` setting; the app.css
+    fallback mirrors the mono stack so first paint needs no script. */
+const UI_FONT_STACKS: Record<UiFontFamily, string> = {
+  mono: `"Cascadia Code", "SFMono-Regular", Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif`,
+  system: `"Segoe UI Variable Text", "Segoe UI", Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Microsoft YaHei", sans-serif`,
+};
+
+export function applyUiFontToDocument(fontFamily: UiFontFamily): void {
+  if (typeof document === "undefined") return;
+  document.documentElement.style.setProperty("--font-ui-family", UI_FONT_STACKS[fontFamily]);
+}
 
 export function applyFontSizesToDocument(fontSizes: FontSizeSettings): void {
   if (typeof document === "undefined") return;

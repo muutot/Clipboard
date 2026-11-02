@@ -928,6 +928,11 @@ const en: LocaleDefinition = {
     fontSizeCardTitleDescription: "Font size for item titles on list cards",
     fontSizeCardPreviewLabel: "Preview",
     fontSizeCardPreviewDescription: "Font size for item preview content on list cards",
+    uiFontFamilyLabel: "Interface Font",
+    uiFontFamilyDescription:
+      "Switch the interface font family; code previews keep their dedicated mono font",
+    uiFontFamilyMono: "Mono (default)",
+    uiFontFamilySystem: "System UI",
     windowTransparency: "Window Opacity",
     windowTransparencyDescription: "Applied to the window immediately",
     windowOpacityAffectsText: "Text Depends on Opacity",
@@ -1002,6 +1007,13 @@ const en: LocaleDefinition = {
       "Always show the #N marks on every item without focusing them first; the first nine items show Ctrl+1-Ctrl+9 quick copy marks",
     searchHistory: "Recent Search Terms",
     searchHistoryDescription: "Show and record queries that you submit from the search box",
+    clearSearchOnBlur: "Clear Search on Hide or Blur",
+    clearSearchOnBlurDescription:
+      "Automatically clear the search box after the main window is hidden or loses focus",
+    clearSearchOnBlurSeconds: "Clear Delay",
+    clearSearchOnBlurSecondsDescription:
+      "Seconds to wait after the window is hidden or loses focus before clearing the search box",
+    clearSearchOnBlurSecondsUnit: "s",
     searchPlaceholder: "Search Box Hint",
     searchPlaceholderDescription:
       "Placeholder text of the main search box; leave empty to use the default",

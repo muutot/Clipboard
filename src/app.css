@@ -19,7 +19,8 @@
   --danger-color: #e85d5d;
   --warning-color: #e2c05d;
   --scrollbar-color: #858585;
-  font-family:
+  font-family: var(
+    --font-ui-family,
     "Cascadia Code",
     "SFMono-Regular",
     Inter,
@@ -29,7 +30,8 @@
     BlinkMacSystemFont,
     "Segoe UI",
     "Microsoft YaHei",
-    sans-serif;
+    sans-serif
+  );
   font-size: var(--font-size-base, 14px);
   color: var(--text-primary);
   font-synthesis: none;

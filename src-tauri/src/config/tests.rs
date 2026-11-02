@@ -438,6 +438,40 @@ fn existing_general_settings_default_to_visible_settings_close_button() {
 }
 
 #[test]
+fn existing_general_settings_default_to_mono_ui_font_family() {
+    let project = temporary_test_directory("ui-font-family-default");
+    let config_directory = project.join("conf");
+    fs::create_dir_all(&config_directory).unwrap();
+    fs::write(
+        config_directory.join("conf.json"),
+        serde_json::to_vec_pretty(&json!({
+            "general": {
+                "language": "en"
+            }
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+
+    let store = ConfigStore::load(&project).unwrap();
+    assert_eq!(store.general_settings().ui_font_family, "mono");
+    fs::remove_dir_all(project).unwrap();
+}
+
+#[test]
+fn persists_ui_font_family_in_the_general_settings_group() {
+    let project = temporary_test_directory("ui-font-family-roundtrip");
+    let mut store = ConfigStore::load(&project).unwrap();
+    let mut settings = store.general_settings().clone();
+    settings.ui_font_family = "system".to_owned();
+    store.set_general_settings(settings).unwrap();
+
+    let reloaded = ConfigStore::load(&project).unwrap();
+    assert_eq!(reloaded.general_settings().ui_font_family, "system");
+    fs::remove_dir_all(project).unwrap();
+}
+
+#[test]
 fn persists_ocr_runtime_settings_as_one_configuration_group() {
     let project = temporary_test_directory("ocr-settings");
     let mut store = ConfigStore::load(&project).unwrap();

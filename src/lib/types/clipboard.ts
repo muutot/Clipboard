@@ -364,8 +364,13 @@ export type WindowEffect = "off" | "acrylic" | "mica";
 /** Minimum severity written to the diagnostics log; lower levels are dropped. */
 export type LogLevel = "error" | "warn" | "info" | "debug";
 
+/** 界面字体族：mono 等宽（默认）| system 跟随系统 UI 字体 */
+export type UiFontFamily = "mono" | "system";
+
 export interface GeneralSettings {
   language: Language;
+  /** 界面字体族；代码预览/编辑器始终使用专用等宽字体 */
+  uiFontFamily: UiFontFamily;
   fontSizes: FontSizeSettings;
   display: DisplaySettings;
   windowTransparency: number;
@@ -410,6 +415,10 @@ export interface GeneralSettings {
   floatPanelMiddleClick: FloatPanelClickAction;
   searchSuggestionMode: SearchSuggestionMode;
   searchHistoryEnabled: boolean;
+  /** 主窗口隐藏或失焦 N 秒后自动清空搜索框；false 表示不清空 */
+  clearSearchOnBlur: boolean;
+  /** 失焦后清空搜索框的延迟秒数 */
+  clearSearchOnBlurSeconds: number;
   /** 搜索框自定义占位文案；空字符串表示使用默认（随语言本地化）文案 */
   searchPlaceholder: string;
   cardActionsDisplay: CardActionsDisplay;

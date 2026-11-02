@@ -74,6 +74,9 @@ impl Default for DisplayConfig {
 #[serde(default, rename_all = "camelCase")]
 pub struct GeneralConfig {
     pub language: String,
+    /// Interface font family: "mono" (default) or "system". The frontend owns
+    /// validation and CSS application; the config only persists the choice.
+    pub ui_font_family: String,
     pub font_sizes: FontSizeConfig,
     pub display: DisplayConfig,
     pub window_transparency: u8,
@@ -111,6 +114,10 @@ pub struct GeneralConfig {
     pub float_panel_position: String,
     pub search_suggestion_mode: String,
     pub search_history_enabled: bool,
+    /// Clear the main-window search box N seconds after the window loses
+    /// focus (hiding a focused window also fires the focus-lost event).
+    pub clear_search_on_blur: bool,
+    pub clear_search_on_blur_seconds: u32,
     pub show_settings_close_button: bool,
     pub page_size_limit: u32,
     pub search_page_size_limit: u32,
@@ -129,6 +136,7 @@ impl Default for GeneralConfig {
             // everything else → en. Keep in sync with the frontend default
             // (DEFAULT_GENERAL_SETTINGS.language).
             language: "system".to_owned(),
+            ui_font_family: "mono".to_owned(),
             font_sizes: FontSizeConfig::default(),
             display: DisplayConfig::default(),
             window_transparency: 95,
@@ -157,6 +165,8 @@ impl Default for GeneralConfig {
             float_panel_position: "bottomRight".to_owned(),
             search_suggestion_mode: "off".to_owned(),
             search_history_enabled: false,
+            clear_search_on_blur: false,
+            clear_search_on_blur_seconds: 5,
             show_settings_close_button: true,
             page_size_limit: 500,
             search_page_size_limit: 500,

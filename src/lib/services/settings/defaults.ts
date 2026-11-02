@@ -7,6 +7,7 @@ import { DEFAULT_CODE_THEME } from "$lib/utils/content/code-theme";
 
 export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   language: "system",
+  uiFontFamily: "mono",
   fontSizes: { base: 14, secondary: 11, tiny: 10, cardTitle: 13, cardPreview: 11 },
   display: { showSecondaryText: true, maxTextLines: 3, pageSize: 100, searchPageSize: 100 },
   windowTransparency: 95,
@@ -45,6 +46,8 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   floatPanelRightClick: "none",
   floatPanelMiddleClick: "none",
   searchHistoryEnabled: false,
+  clearSearchOnBlur: false,
+  clearSearchOnBlurSeconds: 5,
   searchPlaceholder: "",
   cardActionsDisplay: "hover",
   quickCopyBadgeAlwaysVisible: true,

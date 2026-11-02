@@ -860,6 +860,10 @@ export interface LocaleDefinition {
     fontSizeCardTitleDescription: string;
     fontSizeCardPreviewLabel: string;
     fontSizeCardPreviewDescription: string;
+    uiFontFamilyLabel: string;
+    uiFontFamilyDescription: string;
+    uiFontFamilyMono: string;
+    uiFontFamilySystem: string;
     windowTransparency: string;
     windowTransparencyDescription: string;
     windowOpacityAffectsText: string;
@@ -923,6 +927,11 @@ export interface LocaleDefinition {
     quickCopyBadgeDescription: string;
     searchHistory: string;
     searchHistoryDescription: string;
+    clearSearchOnBlur: string;
+    clearSearchOnBlurDescription: string;
+    clearSearchOnBlurSeconds: string;
+    clearSearchOnBlurSecondsDescription: string;
+    clearSearchOnBlurSecondsUnit: string;
     searchPlaceholder: string;
     searchPlaceholderDescription: string;
     searchPlaceholderDefault: string;
