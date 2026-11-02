@@ -157,6 +157,13 @@ commit failures and restores foreign keys after releasing the transaction.
 Current-version ordinary opens do not acquire this reset/upgrade reservation.
 No schema-version, config or IPC change accompanies this concurrency fix.
 
+Device identity initialization similarly reserves the SQLite writer and re-reads
+missing/invalid `sync_metadata.device_id` before generating a UUID. A concurrent
+opener's valid committed UUID wins. Already-valid identities remain read-only, so
+current databases can open during a storage migration writer reservation. Writer
+refusal leaves the missing/invalid value unchanged and can be retried; no schema
+or identity format changes accompany this initialization fix.
+
 Current schema v2 fills only NULL `last_used_at_ms` values with each row's
 `created_at_ms`, preserving existing usage timestamps and all content. It creates
 `clipboard_items_deleted_last_used_idx` on `(deleted, last_used_at_ms DESC, id DESC)`

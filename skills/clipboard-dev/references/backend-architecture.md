@@ -120,6 +120,13 @@ writer reservation. Real dual-connection UTs retain committed rows/tags/OCR,
 reject late future versions, skip completed backfills, exercise a SQLite page-cap
 failure/rollback, and permit a seeded current database to open during a writer.
 
+`sync_state/device.rs::ensure_sync_device_id` returns a persisted valid UUID
+without a writer reservation. Missing/invalid identities take an immediate
+transaction and re-read before creating a UUID, so a concurrent opener's first
+committed identity is reused rather than promoting a stale WAL read transaction
+and failing with SQLITE_BUSY_SNAPSHOT. Reservation failures retain the previous
+state and permit retry; migration identity forking remains a separate operation.
+
 Startup recovery distinguishes confirmed invalidity from unavailable inspection.
 Only a missing database, SQLite CORRUPT/NOTADB, failed integrity messages or a
 missing core table authorize backup selection. Busy, permission/open and other

@@ -56,8 +56,33 @@ impl Database {
     /// Ensures one stable UUID identity for the current database. Invalid
     /// values are replaced directly; no historical identity alias is kept.
     pub fn ensure_sync_device_id(&self) -> Result<String, StorageError> {
+        self.ensure_sync_device_id_after_read(|| {})
+    }
+
+    fn ensure_sync_device_id_after_read(
+        &self,
+        after_read: impl FnOnce(),
+    ) -> Result<String, StorageError> {
         self.with_connection(|connection| {
-            let transaction = connection.transaction()?;
+            let existing: Option<String> = connection
+                .query_row(
+                    "SELECT value FROM sync_metadata WHERE key = 'device_id'",
+                    [],
+                    |row| row.get(0),
+                )
+                .optional()?;
+            after_read();
+            // A persisted valid identity needs no writer reservation. Normal
+            // opens must still work while a storage migration holds the writer.
+            if let Some(existing) = existing.filter(|value| Uuid::parse_str(value).is_ok()) {
+                return Ok(existing);
+            }
+
+            // A deferred read transaction cannot be promoted after another
+            // connection commits in WAL mode (SQLITE_BUSY_SNAPSHOT). Reserve
+            // the writer first and re-read so the first committed UUID wins.
+            let transaction =
+                connection.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
             let existing: Option<String> = transaction
                 .query_row(
                     "SELECT value FROM sync_metadata WHERE key = 'device_id'",
@@ -273,5 +298,106 @@ impl Database {
                 record_count,
             })
         })
+    }
+}
+
+#[cfg(test)]
+mod identity_tests {
+    use super::*;
+
+    #[test]
+    fn concurrent_identity_initialization_reuses_the_first_committed_uuid() {
+        for old_identity in [None, Some("legacy-device")] {
+            let root = std::env::temp_dir()
+                .join(format!("clipboard-concurrent-identity-{}", Uuid::new_v4()));
+            std::fs::create_dir(&root).unwrap();
+            let path = root.join("history.sqlite3");
+            let delayed = Database::open(&path).unwrap();
+            let winner = Database::open(&path).unwrap();
+            delayed
+                .with_connection(|connection| {
+                    connection.execute("DELETE FROM sync_metadata WHERE key='device_id'", [])?;
+                    if let Some(value) = old_identity {
+                        connection.execute(
+                            "INSERT INTO sync_metadata (key,value) VALUES ('device_id', ?1)",
+                            [value],
+                        )?;
+                    }
+                    Ok(())
+                })
+                .unwrap();
+            let mut committed = None;
+            let result = delayed.ensure_sync_device_id_after_read(|| {
+                committed = Some(winner.ensure_sync_device_id().unwrap());
+            });
+            let stored = winner.get_sync_device_id().unwrap();
+            drop(winner);
+            drop(delayed);
+            std::fs::remove_dir_all(&root).unwrap();
+            assert!(result.is_ok(), "delayed initialization failed: {result:?}");
+            let committed = committed.unwrap();
+            assert_eq!(result.unwrap(), committed);
+            assert_eq!(stored, committed);
+            assert_eq!(stored.len(), 36);
+            assert!(Uuid::parse_str(&stored).is_ok());
+        }
+    }
+
+    #[test]
+    fn valid_identity_reads_do_not_require_a_writer_reservation() {
+        let root = std::env::temp_dir().join(format!("clipboard-identity-read-{}", Uuid::new_v4()));
+        std::fs::create_dir(&root).unwrap();
+        let path = root.join("history.sqlite3");
+        let database = Database::open(&path).unwrap();
+        let expected = database.get_sync_device_id().unwrap();
+        let writer = rusqlite::Connection::open(&path).unwrap();
+        writer.execute_batch("BEGIN IMMEDIATE").unwrap();
+        let result = database.ensure_sync_device_id();
+        writer.execute_batch("ROLLBACK").unwrap();
+        assert_eq!(result.unwrap(), expected);
+        drop(writer);
+        drop(database);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn refused_identity_writer_leaves_no_partial_identity_and_can_retry() {
+        let root =
+            std::env::temp_dir().join(format!("clipboard-identity-retry-{}", Uuid::new_v4()));
+        std::fs::create_dir(&root).unwrap();
+        let path = root.join("history.sqlite3");
+        let database = Database::open(&path).unwrap();
+        database
+            .with_connection(|connection| {
+                connection.execute("DELETE FROM sync_metadata WHERE key='device_id'", [])?;
+                connection.busy_timeout(std::time::Duration::from_millis(30))?;
+                Ok(())
+            })
+            .unwrap();
+        let writer = rusqlite::Connection::open(&path).unwrap();
+        writer.execute_batch("BEGIN IMMEDIATE").unwrap();
+        let result = database.ensure_sync_device_id();
+        assert!(
+            matches!(result, Err(StorageError::Sqlite(error)) if error.sqlite_error_code() == Some(rusqlite::ErrorCode::DatabaseBusy))
+        );
+        database
+            .with_connection(|connection| {
+                assert!(connection.is_autocommit());
+                let count: i64 = connection.query_row(
+                    "SELECT COUNT(*) FROM sync_metadata WHERE key='device_id'",
+                    [],
+                    |row| row.get(0),
+                )?;
+                assert_eq!(count, 0);
+                Ok(())
+            })
+            .unwrap();
+        writer.execute_batch("ROLLBACK").unwrap();
+        let created = database.ensure_sync_device_id().unwrap();
+        assert_eq!(created, database.get_sync_device_id().unwrap());
+        assert!(Uuid::parse_str(&created).is_ok());
+        drop(writer);
+        drop(database);
+        std::fs::remove_dir_all(root).unwrap();
     }
 }
