@@ -488,8 +488,8 @@
     display: grid;
     place-items: center;
     padding: 16px;
-    background: rgba(0, 0, 0, 0.52);
-    backdrop-filter: blur(2px);
+    background: var(--modal-scrim);
+    backdrop-filter: var(--modal-scrim-filter);
   }
 
   .icon-replace-dialog {

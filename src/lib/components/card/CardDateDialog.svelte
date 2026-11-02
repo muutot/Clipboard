@@ -96,11 +96,6 @@
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
   }
 
-  .date-action-dialog::backdrop {
-    background: rgba(0, 0, 0, 0.52);
-    backdrop-filter: blur(2px);
-  }
-
   .date-action-content {
     position: relative;
     display: flex;

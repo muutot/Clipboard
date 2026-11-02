@@ -773,8 +773,8 @@
     position: fixed;
     z-index: 51;
     inset: 0;
-    background: rgba(0, 0, 0, 0.52);
-    backdrop-filter: blur(2px);
+    background: var(--modal-scrim);
+    backdrop-filter: var(--modal-scrim-filter);
   }
 
   .detail-panel {

@@ -164,9 +164,6 @@
     color: var(--text-primary);
     background: var(--surface-bg);
   }
-  dialog::backdrop {
-    background: color-mix(in srgb, var(--bg-app) 60%, transparent);
-  }
   header,
   form,
   .saved-row {

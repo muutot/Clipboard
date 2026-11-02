@@ -72,11 +72,6 @@
     width: min(320px, calc(100vw - 32px));
   }
 
-  .confirm-dialog::backdrop {
-    background: rgba(0, 0, 0, 0.52);
-    backdrop-filter: blur(2px);
-  }
-
   .confirm-content {
     display: flex;
     flex-direction: column;

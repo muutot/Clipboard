@@ -45,12 +45,22 @@
   --font-size-tiny: 10px;
   --font-size-cardTitle: 13px;
   --font-size-cardPreview: 11px;
+  --modal-scrim: rgba(0, 0, 0, 0.52);
+  --modal-scrim-filter: blur(2px);
 }
 
 * {
   box-sizing: border-box;
   scrollbar-width: thin;
   scrollbar-color: var(--scrollbar-color) transparent;
+}
+
+/* Shared modal scrim: <dialog> backdrops and div-based overlays all read the
+   same tokens. Full-screen shells (settings dialog, onboarding) deliberately
+   keep stronger local scrims. */
+dialog::backdrop {
+  background: var(--modal-scrim);
+  backdrop-filter: var(--modal-scrim-filter);
 }
 
 *::-webkit-scrollbar {

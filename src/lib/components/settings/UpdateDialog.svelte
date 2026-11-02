@@ -118,11 +118,6 @@
     overflow: hidden;
   }
 
-  .update-dialog::backdrop {
-    background: rgba(0, 0, 0, 0.52);
-    backdrop-filter: blur(2px);
-  }
-
   .update-dialog-header {
     display: flex;
     align-items: flex-start;

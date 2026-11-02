@@ -174,11 +174,6 @@
     width: min(300px, calc(100vw - 32px));
   }
 
-  .tag-edit-dialog::backdrop {
-    background: rgba(0, 0, 0, 0.52);
-    backdrop-filter: blur(2px);
-  }
-
   .tag-edit-content {
     display: flex;
     flex-direction: column;
