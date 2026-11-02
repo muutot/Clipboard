@@ -177,8 +177,8 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 27px;
-    height: 27px;
+    width: 30px;
+    height: 30px;
     padding: 0;
     border: 0;
     border-radius: 6px;

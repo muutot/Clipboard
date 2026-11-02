@@ -106,7 +106,8 @@
   }
 
   .confirm-actions button {
-    padding: 5px 14px;
+    height: 30px;
+    padding: 0 14px;
     border: 1px solid var(--border-color);
     border-radius: 6px;
     color: var(--text-primary);

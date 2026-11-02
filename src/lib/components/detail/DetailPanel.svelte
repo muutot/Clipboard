@@ -1022,7 +1022,8 @@
     align-items: center;
     justify-content: center;
     gap: 6px;
-    padding: 8px 14px;
+    height: 30px;
+    padding: 0 14px;
     border: 1px solid var(--border-color);
     border-radius: 7px;
     color: var(--text-secondary);

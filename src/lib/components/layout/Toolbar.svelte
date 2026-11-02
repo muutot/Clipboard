@@ -326,7 +326,7 @@
 
   .filters button {
     gap: 5px;
-    height: 31px;
+    height: 30px;
     padding: 3px 8px;
     border-radius: 6px;
     font-size: 12px;
@@ -456,8 +456,8 @@
   }
 
   .toolbar-actions button {
-    width: 28px;
-    height: 28px;
+    width: 30px;
+    height: 30px;
     padding: 0;
     border-radius: 6px;
     color: var(--text-faint);

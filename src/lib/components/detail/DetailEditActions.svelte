@@ -42,7 +42,8 @@
     align-items: center;
     justify-content: center;
     gap: 4px;
-    padding: 5px 12px;
+    height: 30px;
+    padding: 0 12px;
     border: 1px solid var(--border-color);
     border-radius: 5px;
     color: var(--text-muted);
