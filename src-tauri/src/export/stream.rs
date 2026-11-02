@@ -37,15 +37,10 @@ fn write_escaped_plain_text<W: Write>(writer: &mut W, text: &str) -> Result<(), 
         };
         // A final bare CR can pair with the separator's LF, so protect that
         // delimiter-looking line too.
-        if content.strip_suffix('\r').unwrap_or(content) == "---" {
+        if content.strip_suffix('\r').unwrap_or(content) == "---" || content.starts_with('\\') {
             writer.write_all(b"\\")?;
-            writer.write_all(content.as_bytes())?;
-        } else if content.starts_with('\\') {
-            writer.write_all(b"\\")?;
-            writer.write_all(content.as_bytes())?;
-        } else {
-            writer.write_all(content.as_bytes())?;
         }
+        writer.write_all(content.as_bytes())?;
         writer.write_all(ending.as_bytes())?;
     }
     Ok(())
