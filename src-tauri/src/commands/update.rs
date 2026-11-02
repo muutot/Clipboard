@@ -7,6 +7,10 @@ use std::sync::Mutex;
 
 use crate::config::{ConfigStore, UpdateSource};
 
+// Release notes plus provider asset metadata fit comfortably within this
+// budget. The response timeout alone cannot bound retained body memory.
+const MAX_RELEASE_RESPONSE_BYTES: usize = 2 * 1024 * 1024;
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateInfo {
@@ -74,17 +78,37 @@ async fn fetch_release(url: String) -> Result<Release, String> {
         .build()
         .map_err(|e| format!("create client: {e}"))?;
 
-    let response = client
+    let mut response = client
         .get(url)
         .send()
         .await
         .map_err(|e| format!("request release: {e}"))?
         .error_for_status()
         .map_err(|e| format!("fetch release failed: {e}"))?;
-    let body = response
-        .text()
+    if response
+        .content_length()
+        .is_some_and(|length| length > MAX_RELEASE_RESPONSE_BYTES as u64)
+    {
+        return Err(format!(
+            "release response exceeds the {MAX_RELEASE_RESPONSE_BYTES} byte limit"
+        ));
+    }
+    let mut bytes = Vec::new();
+    while let Some(chunk) = response
+        .chunk()
         .await
-        .map_err(|e| format!("read response: {e}"))?;
+        .map_err(|e| format!("read response: {e}"))?
+    {
+        if chunk.len() > MAX_RELEASE_RESPONSE_BYTES.saturating_sub(bytes.len()) {
+            return Err(format!(
+                "release response exceeds the {MAX_RELEASE_RESPONSE_BYTES} byte limit"
+            ));
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    // Matches reqwest's text() decoding with the configured charset feature
+    // disabled, retaining its UTF-8 replacement behavior within the budget.
+    let body = String::from_utf8_lossy(&bytes);
     serde_json::from_str(&body).map_err(|e| format!("parse release: {e}"))
 }
 
@@ -175,6 +199,175 @@ fn is_newer(remote: &str, current: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::{
+        io::{Read, Write},
+        net::TcpListener,
+        sync::{
+            atomic::{AtomicBool, Ordering},
+            mpsc, Arc,
+        },
+        time::Duration,
+    };
+
+    struct ReleaseServer {
+        url: String,
+        stop: Arc<AtomicBool>,
+        release: mpsc::Sender<()>,
+        thread: Option<std::thread::JoinHandle<()>>,
+    }
+
+    impl Drop for ReleaseServer {
+        fn drop(&mut self) {
+            self.stop.store(true, Ordering::SeqCst);
+            let _ = self.release.send(());
+            if let Some(thread) = self.thread.take() {
+                thread.join().unwrap();
+            }
+        }
+    }
+
+    fn release_server(framing: String, body: Vec<u8>, hold_eof: bool) -> ReleaseServer {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let url = format!("http://{}/release", listener.local_addr().unwrap());
+        let stop = Arc::new(AtomicBool::new(false));
+        let stopping = stop.clone();
+        let (release, receiver) = mpsc::channel();
+        let thread = std::thread::spawn(move || {
+            while !stopping.load(Ordering::SeqCst) {
+                let mut stream = match listener.accept() {
+                    Ok((stream, _)) => stream,
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        std::thread::sleep(Duration::from_millis(2));
+                        continue;
+                    }
+                    Err(error) => panic!("release fixture accept failed: {error}"),
+                };
+                // Windows can inherit the listener's nonblocking mode.
+                stream.set_nonblocking(false).unwrap();
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(5)))
+                    .unwrap();
+                stream
+                    .set_write_timeout(Some(Duration::from_secs(5)))
+                    .unwrap();
+                let mut request = Vec::new();
+                let mut byte = [0; 1];
+                while !request.ends_with(b"\r\n\r\n") {
+                    if stream.read(&mut byte).unwrap_or(0) == 0 {
+                        return;
+                    }
+                    request.push(byte[0]);
+                    assert!(request.len() < 8192);
+                }
+                let chunked = framing.contains("chunked");
+                let _ = write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n{framing}Connection: close\r\n\r\n");
+                if chunked {
+                    let _ = write!(stream, "{:x}\r\n", body.len());
+                }
+                let _ = stream.write_all(&body);
+                if chunked {
+                    let _ = stream.write_all(b"\r\n");
+                }
+                let _ = stream.flush();
+                if hold_eof {
+                    let _ = receiver.recv_timeout(Duration::from_secs(5));
+                }
+                if chunked {
+                    let _ = stream.write_all(b"0\r\n\r\n");
+                }
+                return;
+            }
+        });
+        ReleaseServer {
+            url,
+            stop,
+            release,
+            thread: Some(thread),
+        }
+    }
+
+    fn oversized_release_scenario(framing: String, body: Vec<u8>) {
+        let server = release_server(framing, body, true);
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let result = runtime.block_on(async {
+            tokio::time::timeout(Duration::from_secs(2), fetch_release(server.url.clone())).await
+        });
+        drop(server);
+        assert!(
+            result
+                .as_ref()
+                .is_ok_and(|result| result.as_ref().is_err_and(|error| error.contains("limit"))),
+            "release response was not bounded before EOF: {result:?}"
+        );
+    }
+
+    #[test]
+    fn oversized_declared_release_response_is_rejected_before_eof() {
+        oversized_release_scenario(
+            format!("Content-Length: {}\r\n", MAX_RELEASE_RESPONSE_BYTES + 1),
+            b"{".to_vec(),
+        );
+    }
+
+    #[test]
+    fn oversized_chunked_release_response_is_rejected_before_eof() {
+        oversized_release_scenario(
+            "Transfer-Encoding: chunked\r\n".to_owned(),
+            vec![b' '; MAX_RELEASE_RESPONSE_BYTES + 1],
+        );
+    }
+
+    #[test]
+    fn oversized_close_delimited_release_response_is_rejected_before_eof() {
+        oversized_release_scenario(String::new(), vec![b' '; MAX_RELEASE_RESPONSE_BYTES + 1]);
+    }
+
+    #[test]
+    fn valid_release_responses_at_the_budget_preserve_provider_fields() {
+        for (framing, timestamp) in [
+            (
+                format!("Content-Length: {MAX_RELEASE_RESPONSE_BYTES}\r\n"),
+                "published_at",
+            ),
+            ("Transfer-Encoding: chunked\r\n".to_owned(), "created_at"),
+            (String::new(), "published_at"),
+        ] {
+            let notes = "中文发布说明\n- preserve Unicode and newlines";
+            let mut bytes = serde_json::to_vec(&serde_json::json!({
+                "tag_name": "v1.8.2",
+                "name": "Clipboard 中文",
+                "body": notes,
+                "html_url": "https://example.invalid/releases/v1.8.2",
+                (timestamp): "2026-11-02T00:00:00Z",
+                "assets": [{"name": "fixture.exe", "size": 1024}]
+            }))
+            .unwrap();
+            bytes.resize(MAX_RELEASE_RESPONSE_BYTES, b' ');
+            let server = release_server(framing, bytes, false);
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap();
+            let result = runtime.block_on(fetch_release(server.url.clone()));
+            drop(server);
+            let release = result.expect("valid response at the budget must parse");
+            assert_eq!(release.tag_name, "v1.8.2");
+            assert_eq!(release.name.as_deref(), Some("Clipboard 中文"));
+            assert_eq!(release.body.as_deref(), Some(notes));
+            assert_eq!(
+                release.html_url.as_deref(),
+                Some("https://example.invalid/releases/v1.8.2")
+            );
+            assert_eq!(
+                release.published_at.or(release.created_at).as_deref(),
+                Some("2026-11-02T00:00:00Z")
+            );
+        }
+    }
 
     #[test]
     fn parse_version_handles_prefix_and_missing_parts() {
