@@ -263,6 +263,130 @@ mod tests {
     fn save_as_new_does_not_resurrect_a_concurrent_deleted_capture() {
         save_as_new_capture_interleave(ClipboardKind::Text, true);
     }
+
+    fn save_as_new_source_cleanup_interleave(kind: ClipboardKind, reject_save: bool) {
+        let root = std::env::temp_dir().join(format!(
+            "clipboard-save-new-cleanup-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = StoragePaths::initialize(root.clone()).unwrap();
+        let database = Database::open(&paths.database).unwrap();
+        let cleaner = Database::open(&paths.database).unwrap();
+        let icons = paths.storage.join("icons");
+        std::fs::create_dir_all(&icons).unwrap();
+        let icon = icons.join("source.png");
+        let orphan = icons.join("orphan.png");
+        image::RgbaImage::new(1, 1).save(&icon).unwrap();
+        let icon_bytes = std::fs::read(&icon).unwrap();
+        std::fs::write(&orphan, b"unreferenced fixture").unwrap();
+        for path in [&icon, &orphan] {
+            std::fs::File::options()
+                .write(true)
+                .open(path)
+                .unwrap()
+                .set_modified(std::time::UNIX_EPOCH + std::time::Duration::from_secs(3600))
+                .unwrap();
+        }
+        let source = ClipboardItem {
+            id: "source".into(),
+            kind,
+            title: "source title".into(),
+            text_content: Some("source fixture".into()),
+            html_content: None,
+            rtf_content: None,
+            resource_path: None,
+            preview_path: None,
+            content_hash: "source-fixture".into(),
+            source_app: None,
+            size_bytes: 14,
+            created_at_ms: 1,
+            last_used_at_ms: Some(1),
+            is_favorite: false,
+            icon_path: Some(icon.display().to_string()),
+            metadata_json: None,
+        };
+        database.save_item(&source).unwrap();
+        if reject_save {
+            database
+                .with_connection(|connection| {
+                    connection.execute_batch(
+                        "CREATE TRIGGER reject_new_save BEFORE INSERT ON clipboard_items
+                         BEGIN SELECT RAISE(FAIL, 'fixture refuses new save'); END;",
+                    )?;
+                    Ok(())
+                })
+                .unwrap();
+        }
+        let created = save_clipboard_item_as_new_record_with_save(
+            &database,
+            "source",
+            "edited title",
+            "edited fixture",
+            |prepared| {
+                // A second connection removes the source after its icon path
+                // was read, then runs ordinary cleanup before the new row commits.
+                assert_eq!(prepared.icon_path, source.icon_path);
+                assert!(cleaner.soft_delete("source").unwrap());
+                assert!(cleaner.permanently_delete("source").unwrap());
+                crate::commands::cleanup::cleanup_orphan_storage_files_with_grace(
+                    &cleaner,
+                    &paths,
+                    crate::commands::cleanup::ORPHAN_FILE_GRACE,
+                )?;
+                persist_save_as_new_record(&database, prepared)
+            },
+        );
+        let stored = created
+            .as_ref()
+            .ok()
+            .map(|item| database.get_item(&item.id).unwrap().unwrap());
+        let saved_icon = stored
+            .as_ref()
+            .map(|item| std::fs::read(item.icon_path.as_ref().unwrap()));
+        let source_after = cleaner.get_item("source").unwrap();
+        let later_cleanup = crate::commands::cleanup::cleanup_orphan_storage_files_with_grace(
+            &cleaner,
+            &paths,
+            crate::commands::cleanup::ORPHAN_FILE_GRACE,
+        )
+        .unwrap();
+        let orphan_retained = orphan.exists();
+        drop(cleaner);
+        drop(database);
+        std::fs::remove_dir_all(root).unwrap();
+        assert!(source_after.is_none());
+        if reject_save {
+            assert!(created.is_err_and(|error| error.contains("fixture refuses new save")));
+            assert_eq!(later_cleanup.removed_files, 2);
+        } else {
+            assert_eq!(stored, Some(created.unwrap()));
+            assert_eq!(
+                saved_icon.unwrap().unwrap(),
+                icon_bytes,
+                "saved icon became unreadable"
+            );
+            assert_eq!(later_cleanup.removed_files, 1);
+        }
+        assert!(
+            !orphan_retained,
+            "completed save must release its cleanup guard"
+        );
+    }
+
+    #[test]
+    fn save_as_new_text_retains_icon_after_source_cleanup() {
+        save_as_new_source_cleanup_interleave(ClipboardKind::Text, false);
+    }
+
+    #[test]
+    fn save_as_new_link_retains_icon_after_source_cleanup() {
+        save_as_new_source_cleanup_interleave(ClipboardKind::Link, false);
+    }
+
+    #[test]
+    fn failed_save_as_new_releases_icon_cleanup_guard() {
+        save_as_new_source_cleanup_interleave(ClipboardKind::Text, true);
+    }
 }
 
 /// Insert a new text/link record from an edited copy of `id` in one step.
@@ -310,6 +434,8 @@ fn save_clipboard_item_as_new_record_with_save(
     if new_text_content.trim().is_empty() {
         return Err("text content cannot be empty".to_owned());
     }
+    // Protect inherited paths from source lookup through the new row's commit.
+    let _resource_publication = database.begin_resource_write().map_err(|e| e.to_string())?;
     let items = database
         .get_items_by_ids(&[id.to_owned()])
         .map_err(|e| e.to_string())?;
