@@ -47,7 +47,7 @@ event forward (anything else)     event with the action id payload
 | `platform/windows/hotkey/`        | Real `RegisterHotKey` message loop + low-level double-modifier hook + quick-paste tracking; split into `message_loop.rs`, `double_tap.rs`, `paste_target.rs`, `manager.rs`. A refused chord is logged and emitted as a `hotkey-registration-failed` event.           |
 | `platform/windows/hotkey_stub.rs` | Non-Windows manager: native_hotkeys / wayland_hotkeys registration, joined dispatch thread, UI work posted to main.                                                                                                                                                  |
 | `lib.rs`                          | `resolve_global_hotkey_plan` (registry → chords/doubles) + `refresh_hotkey_registrations` (single rebuild) + startup wiring with bundled-default toggle fallback.                                                                                                    |
-| `commands/config/misc.rs`         | `get/configure/delete/reset_keyboard_config`; configure/delete refresh the OS loop only when `is_global_action(&action)`.                                                                                                                                            |
+| `commands/config/misc.rs`         | `get/configure/delete/reset_keyboard_config`; configure/delete refresh the OS loop only when `is_global_action(&action)`. Every successful save/delete/reset then emits `keyboard-config-changed` with the full config.                                              |
 
 `HotkeyManager` stores chords per registry action (`global_chords` parallel to
 `global_action_ids()` order) plus the toggle-only `toggle_doubles`. Its
@@ -78,7 +78,7 @@ action id — listeners need no manager changes.
 | <br />                                                     | <br />                                                                                                                                                                                                                                           |
 | `src/lib/utils/keyboard/keyboard.ts`                       | Target guards (`isEditableKeyboardTarget`, `isItemActionShortcut`, `isActivatableKeyboardTarget`) and `shortcutMatchesEvent` (exact modifier set, canonical format).                                                                             |
 | `src/lib/utils/keyboard/keyboard-actions.ts`               | Pure `resolveKeyAction` decision table (branch order is load-bearing; unit-tested), ending in the type-to-search fallback.                                                                                                                       |
-| `src/routes/+page.svelte`                                  | `executeKeyAction` handler switch; loads `keyboardShortcuts` on mount and window focus.                                                                                                                                                          |
+| `src/routes/+page.svelte`                                  | `executeKeyAction` handler switch; loads `keyboardShortcuts` on mount and window focus, and applies `keyboard-config-changed` broadcasts.                                                                                                        |
 | `src/lib/components/settings/KeyboardSettingsPanel.svelte` | Renders cards from `HOTKEY_ACTIONS` (no per-action markup); recording, add/remove binding, reset. Listens for `hotkey-registration-failed` to show occupied-chord conflicts.                                                                     |
 
 ## Add a shortcut
@@ -109,6 +109,18 @@ Window-only (main window focused):
   the chord and both action ids. `KeyboardSettingsPanel` localizes that sentence
   and the registry labels; never display or parse the backend's English error
   prose as conflict feedback. Other failures retain localized retry feedback.
+
+- Each window keeps its own copy of the config, and the main window only
+  re-reads it on focus — hovering a toolbar tab while the settings window owns
+  the focus never triggers that reload. Every persisted save/delete/reset
+  therefore broadcasts `keyboard-config-changed` with the full `KeyboardConfig`
+  (same shape as `general-settings-changed`). `+page.svelte::applyKeyboardConfig`
+  replaces the binding table from the payload and bumps the read generation so
+  a focus-time `get_keyboard_config` still in flight cannot overwrite it; the
+  toolbar tab hint shows only the first binding of a multi-chord action.
+  `main-keyboard-sync.test.ts` pins the live update, the empty-list disable,
+  the stale-read guard (the test fails when the guard is removed) and listener
+  teardown.
 
 - `KeyboardConfigStore` restores the previous complete config when binding
   save/delete/reset fails. `KeyboardManager` rebuilds its matcher only after

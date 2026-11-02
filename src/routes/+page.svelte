@@ -47,7 +47,7 @@
   } from "$lib/services/runtime";
   import { showToast } from "$lib/services/toast";
   import { onContextMenuOpenChanged } from "$lib/services/context-menu";
-  import { getKeyboardConfig } from "$lib/services/keyboard";
+  import { getKeyboardConfig, type KeyboardConfig } from "$lib/services/keyboard";
   import { defaultShortcutsFor } from "$lib/keyboard-defaults";
   import type { ClipboardFilter, ClipboardItem } from "$lib/types/clipboard";
   import type { IconName } from "$lib/types/clipboard";
@@ -578,13 +578,29 @@
     resolveActionBindings(keyboardShortcuts, "focusSearch", defaultShortcutsFor("focusSearch")),
   );
 
+  // The settings window persists bindings through the backend, which then
+  // broadcasts `keyboard-config-changed`; the payload is applied directly so
+  // the toolbar tooltips and the keydown table update while this window is
+  // unfocused (hovering a tab never focuses it). The request id retires any
+  // focus-time read still in flight so its older snapshot cannot overwrite
+  // the broadcast config.
+  let keyboardShortcutsRequestId = 0;
+
+  function applyKeyboardConfig(config: KeyboardConfig | null) {
+    keyboardShortcutsRequestId += 1;
+    keyboardShortcuts = config?.shortcuts ?? {};
+  }
+
   async function loadKeyboardShortcuts() {
+    const requestId = ++keyboardShortcutsRequestId;
+    let config: KeyboardConfig | null = null;
     try {
-      const config = await getKeyboardConfig();
-      keyboardShortcuts = config?.shortcuts ?? {};
+      config = await getKeyboardConfig();
     } catch {
-      keyboardShortcuts = {};
+      config = null;
     }
+    if (requestId !== keyboardShortcutsRequestId) return;
+    keyboardShortcuts = config?.shortcuts ?? {};
   }
 
   // --- Date range resolution ---
@@ -988,6 +1004,10 @@
       return loadKeyboardShortcuts();
     });
 
+    const unlistenKeyboardConfig = listen<KeyboardConfig>("keyboard-config-changed", (event) => {
+      applyKeyboardConfig(event.payload);
+    });
+
     const unsubFontEvent = listen<{
       fontSizes?: {
         base: number;
@@ -1084,6 +1104,7 @@
       void unlistenOpenDetail.then((fn) => fn()).catch(() => {});
       void unlistenTrayRestartBlocked.then((fn) => fn()).catch(() => {});
       void unlistenOnboardingReplay.then((fn) => fn()).catch(() => {});
+      void unlistenKeyboardConfig.then((fn) => fn()).catch(() => {});
       void unsubFontEvent.then((fn) => fn()).catch(() => {});
       void unsubTagsChanged.then((fn) => fn()).catch(() => {});
       if (heightRafId) cancelAnimationFrame(heightRafId);

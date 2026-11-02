@@ -210,6 +210,7 @@ Events currently crossing windows/runtime include:
 - `clipboard-item-added`
 - `clipboard-history-invalidated`
 - `general-settings-changed`
+- `keyboard-config-changed`
 - `source-mapping-rules-changed`
 - `settings-font-changed`
 - `tray-open-settings`

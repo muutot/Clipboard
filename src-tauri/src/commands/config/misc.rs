@@ -396,6 +396,23 @@ impl From<String> for KeyboardConfigCommandError {
     }
 }
 
+/// Every window keeps its own copy of `conf/keyboard.json` (the main route's
+/// keydown table and toolbar tooltips, the settings cards). The main window
+/// only re-reads it on focus, and hovering a toolbar tab while the settings
+/// window owns the focus never triggers that reload, so each persisted change
+/// is broadcast like `general-settings-changed`; listeners apply the payload
+/// directly instead of issuing another read.
+fn announce_keyboard_config_changed(
+    app: &tauri::AppHandle,
+    keyboard: &tauri::State<'_, Mutex<KeyboardManager>>,
+) -> Result<KeyboardConfig, String> {
+    let config = lock_state(keyboard, "keyboard configuration lock is poisoned")?.config();
+    if let Err(error) = app.emit("keyboard-config-changed", &config) {
+        crate::log_warn!("[keyboard] failed to emit keyboard-config-changed: {error}");
+    }
+    Ok(config)
+}
+
 #[tauri::command]
 pub fn configure_keyboard_shortcuts(
     app: tauri::AppHandle,
@@ -411,6 +428,7 @@ pub fn configure_keyboard_shortcuts(
     if is_global_action(&action) {
         crate::refresh_hotkey_registrations(&keyboard, &hotkey_manager, &app)?;
     }
+    announce_keyboard_config_changed(&app, &keyboard)?;
 
     Ok(normalized)
 }
@@ -431,6 +449,7 @@ pub fn delete_keyboard_action(
     if is_global_action(&action) {
         crate::refresh_hotkey_registrations(&keyboard, &hotkey_manager, &app)?;
     }
+    announce_keyboard_config_changed(&app, &keyboard)?;
     Ok(())
 }
 
@@ -444,9 +463,8 @@ pub fn reset_keyboard_config(
         let mut km = lock_state(&keyboard, "keyboard configuration lock is poisoned")?;
         km.reset_to_defaults().map_err(|error| error.to_string())?;
     }
-    let config = lock_state(&keyboard, "keyboard configuration lock is poisoned")?.config();
     crate::refresh_hotkey_registrations(&keyboard, &hotkey_manager, &app)?;
-    Ok(config)
+    announce_keyboard_config_changed(&app, &keyboard)
 }
 
 #[tauri::command]
