@@ -2,6 +2,7 @@ import { flushSync, mount, unmount } from "svelte";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import OcrSettingsPanel from "./OcrSettingsPanel.svelte";
 import IgnoredAppsSettingsPanel from "./IgnoredAppsSettingsPanel.svelte";
+import StorageLimitsPanel from "./StorageLimitsPanel.svelte";
 
 const bridge = vi.hoisted(() => ({ invoke: vi.fn(), storage: vi.fn(), feedback: vi.fn() }));
 vi.mock("@tauri-apps/api/core", () => ({
@@ -13,7 +14,11 @@ vi.mock("$lib/services/settings", async () => {
   const { writable } = await import("svelte/store");
   return { generalSettings: writable({ colorIcons: false, maxTextCaptureBytes: 512000 }) };
 });
-vi.mock("$lib/services/storage", () => ({ getStorageConfig: bridge.storage }));
+vi.mock("$lib/services/storage", () => ({
+  getStorageConfig: bridge.storage,
+  getStorageKindStats: vi.fn().mockResolvedValue({ itemCount: 0, sizeBytes: 0 }),
+  permanentlyDeleteStorageKind: vi.fn(),
+}));
 vi.mock("$lib/services/capture", () => ({
   getApplicationFilterSettings: vi
     .fn()
@@ -55,12 +60,15 @@ async function settle() {
     flushSync();
   }
 }
-function render(kind: "ocr" | "files") {
+function render(kind: "ocr" | "files" | "history") {
   const target = document.createElement("div");
   document.body.append(target);
   const app =
-    kind === "ocr"
-      ? mount(OcrSettingsPanel, { target, props: { onfeedback: bridge.feedback } })
+    kind !== "files"
+      ? mount(kind === "ocr" ? OcrSettingsPanel : StorageLimitsPanel, {
+          target,
+          props: { onfeedback: bridge.feedback },
+        })
       : mount(IgnoredAppsSettingsPanel, {
           target,
           props: { onclose: () => {}, showHeader: false },
@@ -163,4 +171,73 @@ it("keeps task polling from replacing an edited detection threshold", async () =
   } finally {
     vi.useRealTimers();
   }
+});
+
+const savedHistory = { maxItems: 42000, retentionDays: 240, recycleBinDays: 120 };
+it.each(["rejected", "null"])(
+  "keeps history limits inaccessible after %s hydration and retries with all saved fields",
+  async (failure) => {
+    bridge.invoke.mockResolvedValue(savedHistory);
+    if (failure === "rejected")
+      bridge.invoke.mockRejectedValueOnce(new Error("fixture history failure"));
+    else bridge.invoke.mockResolvedValueOnce(null);
+    const target = render("history");
+    await settle();
+    expect(target.querySelector('input[type="number"]')).toBeNull();
+    expect(
+      target.querySelector('[data-settings-search-id="storage.delete-by-kind"]'),
+    ).not.toBeNull();
+    expect(target.querySelector('.settings-state [type="button"]')).not.toBeNull();
+    expect(bridge.invoke.mock.calls.some(([command]) => command === "set_history_config")).toBe(
+      false,
+    );
+    retry(target);
+    await settle();
+    const inputs = Array.from(target.querySelectorAll<HTMLInputElement>('input[type="number"]'));
+    expect(inputs.map((input) => Number(input.value))).toEqual([240, 42000, 120]);
+    inputs[0].value = "200";
+    inputs[0].dispatchEvent(new Event("input", { bubbles: true }));
+    inputs[0].dispatchEvent(new Event("change", { bubbles: true }));
+    await settle();
+    expect(bridge.invoke).toHaveBeenCalledWith("set_history_config", {
+      maxItems: 42000,
+      retentionDays: 200,
+      recycleBinDays: 120,
+    });
+  },
+);
+
+it("shows saved history limits only after pending hydration completes", async () => {
+  let resolve!: (value: typeof savedHistory) => void;
+  bridge.invoke.mockImplementation(
+    () =>
+      new Promise((done) => {
+        resolve = done;
+      }),
+  );
+  const target = render("history");
+  await settle();
+  expect(target.querySelector('input[type="number"]')).toBeNull();
+  resolve(savedHistory);
+  await settle();
+  expect(
+    Array.from(target.querySelectorAll<HTMLInputElement>('input[type="number"]')).map((input) =>
+      Number(input.value),
+    ),
+  ).toEqual([240, 42000, 120]);
+});
+
+it("does not publish late history load failures after teardown", async () => {
+  let reject!: (error: Error) => void;
+  bridge.invoke.mockImplementation(
+    () =>
+      new Promise((_, fail) => {
+        reject = fail;
+      }),
+  );
+  render("history");
+  await cleanups.pop()!();
+  reject(new Error("late fixture history failure"));
+  await settle();
+  expect(bridge.feedback).not.toHaveBeenCalled();
 });

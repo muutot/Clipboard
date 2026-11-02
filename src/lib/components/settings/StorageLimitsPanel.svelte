@@ -40,6 +40,8 @@
   // Hold the number inputs until the stored history config arrives so they do
   // not render the placeholder defaults and then jump to the real values.
   let historyConfigLoaded = $state(false);
+  let historyConfigLoading = $state(false);
+  let historyConfigLoadFailed = $state(false);
   let storageKindStats = $state<Record<StorageKind, StorageKindStats>>({
     text: { itemCount: 0, sizeBytes: 0 },
     link: { itemCount: 0, sizeBytes: 0 },
@@ -83,25 +85,32 @@
   });
 
   async function loadHistoryConfig() {
+    if (disposed || historyConfigLoading) return;
+    historyConfigLoading = true;
+    historyConfigLoadFailed = false;
     try {
       const result = await invoke<{
         maxItems: number;
         retentionDays: number;
         recycleBinDays: number;
       }>("get_history_config");
-      if (result) {
-        maxItemCount = result.maxItems;
-        retentionPeriodDays = result.retentionDays;
-        recycleBinDays = result.recycleBinDays;
-      }
-    } catch (error) {
-      console.error("Unable to load history config", error);
-    } finally {
+      if (disposed) return;
+      if (!result) throw new Error("History configuration is unavailable");
+      maxItemCount = result.maxItems;
+      retentionPeriodDays = result.retentionDays;
+      recycleBinDays = result.recycleBinDays;
       historyConfigLoaded = true;
+    } catch (error) {
+      if (disposed) return;
+      console.error("Unable to load history config", error);
+      historyConfigLoadFailed = true;
+    } finally {
+      if (!disposed) historyConfigLoading = false;
     }
   }
 
   async function saveHistoryConfig() {
+    if (disposed || !historyConfigLoaded) return;
     // HTML min/max attributes never block typed values; normalize here so
     // the inputs show the value that is actually persisted. The backend
     // setters clamp again as the authoritative guard.
@@ -238,7 +247,19 @@
 
 <div class="settings-scroll">
   {#if !historyConfigLoaded}
-    <div class="settings-state">{_t("storage.readingConfig")}</div>
+    <div class="settings-state" role="status">
+      {#if historyConfigLoadFailed}
+        <p>{_t("storage.configLoadFailed")}</p>
+        <button
+          type="button"
+          class="settings-action-btn"
+          disabled={historyConfigLoading}
+          onclick={loadHistoryConfig}>{_t("storage.retryLoad")}</button
+        >
+      {:else}
+        {_t("storage.readingConfig")}
+      {/if}
+    </div>
   {:else}
     <section
       class="setting-card setting-card-row"
