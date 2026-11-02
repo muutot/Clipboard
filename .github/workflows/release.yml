@@ -193,7 +193,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev \
             librsvg2-dev patchelf libssl-dev libgtk-3-dev libdbus-1-dev \
-            libjavascriptcoregtk-4.1-dev libsoup-3.0-dev mold
+            libjavascriptcoregtk-4.1-dev libsoup-3.0-dev mold zsync
 
       - name: Install dependencies
         run: npm ci
@@ -323,8 +323,14 @@ jobs:
             "https://github.com/AppImage/AppImageKit/releases/download/13/obsolete-appimagetool-x86_64.AppImage"
           echo "df3baf5ca5facbecfc2f3fa6713c29ab9cefa8fd8c1eac5d283b79cab33e4acb  $work/appimagetool.AppImage" | sha256sum -c -
           chmod +x "$work/appimagetool.AppImage"
+          update_information=$(node scripts/appimage-update-info.mjs "$GITHUB_REPOSITORY" "$appimage")
           "$work/appimagetool.AppImage" --appimage-extract-and-run \
-            "$work/squashfs-root" "$appimage"
+            -u "$update_information" "$work/squashfs-root" "$appimage"
+          # Set the output path explicitly: zsyncmake defaults vary by toolchain.
+          zsyncmake "$appimage" -u "$(basename "$appimage")" -o "$appimage.zsync"
+          test -s "$appimage.zsync" || { echo "::error::AppImage update file was not generated"; exit 1; }
+          test "$("$appimage" --appimage-updateinformation)" = "$update_information" || {
+            echo "::error::AppImage update information did not survive repacking"; exit 1; }
           rm -rf "$work"
           echo "appimage=$appimage" >> "$GITHUB_OUTPUT"
 
@@ -335,6 +341,7 @@ jobs:
         run: |
           set -euo pipefail
           gh release upload "$RELEASE_TAG" "${{ steps.appimage_repack.outputs.appimage }}" --clobber \
+            "${{ steps.appimage_repack.outputs.appimage }}.zsync" \
             --repo "$GITHUB_REPOSITORY"
           echo "Repacked $(basename "${{ steps.appimage_repack.outputs.appimage }}") with normalized modes and replaced the draft asset."
 
@@ -392,7 +399,7 @@ jobs:
           # `-r` keeps an empty result from producing an empty-but-valid file.
           find src-tauri/target -type f \( \
             -name '*.msi' -o -name '*-setup.exe' -o -name '*.dmg' -o \
-            -name '*.app.tar.gz' -o -name '*.AppImage' -o \
+            -name '*.app.tar.gz' -o -name '*.AppImage' -o -name '*.AppImage.zsync' -o \
             -name '*.deb' -o -name '*.rpm' \) \
             -not -path '*/deps/*' -not -path '*/build/*' -print0 \
           | xargs -0 -r sha256sum \

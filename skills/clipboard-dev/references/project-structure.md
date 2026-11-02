@@ -106,6 +106,14 @@ to validate the requested tag tree and pass one immutable SHA to verify/build jo
 Its dispatch, tag, commit-scope and version regressions run with
 `node --test scripts/test-release-identity.mjs` in temporary Git repositories.
 
+Linux release repacking uses `scripts/appimage-update-info.mjs` to generate a
+GitHub Releases zsync selector for the current product and architecture across
+versions. The pinned appimagetool receives `-u`; CI checks the final image's
+embedded information and nonempty `.zsync`, uploads both, and checksums both.
+`node --test scripts/test-appimage-update-info.mjs` verifies selector isolation,
+version changes, CLI paths and malformed input. Actual AppImage packing remains
+the Linux release workflow gate; local selector tests do not prove an artifact.
+
 ## High-coupling files
 
 Treat these as integration points and avoid concurrent edits:
