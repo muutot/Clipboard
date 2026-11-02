@@ -812,6 +812,15 @@ Window opacity/effects are posted to the UI thread. `apply_webview_transparency`
 
 ## CLI and loopback API
 
+The HTTP reader accepts an optional single decimal `Content-Length`, bounded by
+the existing body limit. Duplicate lengths (even identical), malformed/overflowing
+values, invalid header names/lines and any `Transfer-Encoding` are rejected before
+authorization or endpoint dispatch. Chunked bodies are unsupported; never interpret
+encoded framing or a conflicting length as clipboard text. Read/framing failures
+use the existing connection-close/error-log path and cannot emit mutation events.
+Loopback UTs check HTTP status, exact stored bytes and callbacks for valid requests,
+plus no database writes for rejected framing and truncated bodies.
+
 API query parameters use form decoding: raw `+` becomes a space before percent
 decoding, while `%2B` remains a literal plus. This supports conventional HTTP
 client encoders for multi-word searches. Path segments use percent decoding

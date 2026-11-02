@@ -352,17 +352,44 @@ pub(super) fn read_request_with_deadline(
         .ok_or_else(|| "missing HTTP target".to_owned())?
         .to_owned();
     let mut header_fields = Vec::new();
-    let mut content_length = 0usize;
+    let mut content_length = None;
     for line in lines {
-        let Some((name, value)) = line.split_once(':') else {
-            continue;
-        };
-        let value = value.trim();
-        if name.eq_ignore_ascii_case("content-length") {
-            content_length = value.parse().unwrap_or(0);
+        if line.is_empty() {
+            break;
         }
-        header_fields.push((name.trim().to_owned(), value.to_owned()));
+        let Some((name, value)) = line.split_once(':') else {
+            return Err("invalid request header".to_owned());
+        };
+        if name.is_empty()
+            || !name
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || b"!#$%&'*+-.^_`|~".contains(&byte))
+        {
+            return Err("invalid request header name".to_owned());
+        }
+        let value = value.trim();
+        // This server accepts only an optional, single decimal body length.
+        // Never guess a boundary from conflicting lengths or encoded framing:
+        // POST /paste would persist the guessed prefix as a successful record.
+        if name.eq_ignore_ascii_case("transfer-encoding") {
+            return Err("transfer-encoding is not supported".to_owned());
+        }
+        if name.eq_ignore_ascii_case("content-length") {
+            if content_length.is_some() {
+                return Err("duplicate content-length".to_owned());
+            }
+            if value.is_empty() || !value.bytes().all(|byte| byte.is_ascii_digit()) {
+                return Err("invalid content-length".to_owned());
+            }
+            content_length = Some(
+                value
+                    .parse::<usize>()
+                    .map_err(|_| "invalid content-length".to_owned())?,
+            );
+        }
+        header_fields.push((name.to_owned(), value.to_owned()));
     }
+    let content_length = content_length.unwrap_or(0);
     if content_length > MAX_REQUEST_BYTES {
         return Err("request body is too large".to_owned());
     }

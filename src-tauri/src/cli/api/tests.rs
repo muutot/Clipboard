@@ -1,7 +1,7 @@
 //! Unit and loopback tests for the `api` module.
 
 use std::io::{BufRead, BufReader, Read, Write};
-use std::net::{TcpListener, TcpStream};
+use std::net::{Shutdown, TcpListener, TcpStream};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{mpsc, Arc};
 use std::thread;
@@ -326,6 +326,150 @@ fn expired_read_deadline_rejects_without_blocking() {
         read_request_with_deadline(&mut server_side, Instant::now() - Duration::from_secs(1))
             .expect_err("expired deadline must reject the request");
     assert!(error.contains("timed out"), "unexpected error: {error}");
+}
+
+fn run_framed_paste(headers: &str, body: &str) -> (Result<u16, String>, Vec<ClipboardItem>, usize) {
+    let database = Database::open_in_memory().unwrap();
+    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let mut client = TcpStream::connect(("127.0.0.1", port)).unwrap();
+    write!(client, "POST /paste HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nAuthorization: Bearer test\r\n{headers}\r\n{body}").unwrap();
+    client.shutdown(Shutdown::Write).unwrap();
+    let (stream, _) = listener.accept().unwrap();
+    let changes = AtomicUsize::new(0);
+    let result = handle_connection(
+        stream,
+        &database,
+        500,
+        500,
+        "test",
+        port,
+        &CopyContext::default(),
+        Some(&gated_capture_state(false, 500_000)),
+        &|| {
+            changes.fetch_add(1, Ordering::SeqCst);
+        },
+    );
+    let result = result.map(|()| {
+        let mut reply = BufReader::new(client);
+        let mut line = String::new();
+        reply.read_line(&mut line).unwrap();
+        let status = line.split_whitespace().nth(1).unwrap().parse().unwrap();
+        let mut length = None;
+        loop {
+            line.clear();
+            assert!(reply.read_line(&mut line).unwrap() > 0);
+            if line == "\r\n" {
+                break;
+            }
+            if let Some(value) = line.strip_prefix("Content-Length:") {
+                length = Some(value.trim().parse::<usize>().unwrap());
+            }
+        }
+        let mut body = vec![0; length.unwrap()];
+        reply.read_exact(&mut body).unwrap();
+        let _: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        status
+    });
+    let items = database
+        .list_recent(10, 0, &crate::storage::HistoryFilter::default())
+        .unwrap();
+    (result, items, changes.load(Ordering::SeqCst))
+}
+
+#[test]
+fn request_framing_rejects_duplicate_lengths_before_paste_mutates() {
+    for headers in [
+        "Content-Length: 6\r\nContent-Length: 3\r\n",
+        "Content-Length: 3\r\ncOnTeNt-LeNgTh: 6\r\n",
+        "Content-Length: 6\r\nContent-Length: 6\r\n",
+    ] {
+        let (result, items, changes) = run_framed_paste(headers, "sample");
+        assert!(
+            items.is_empty(),
+            "ambiguous framing saved {:?} with status {result:?}",
+            items[0].text_content
+        );
+        assert!(
+            result.is_err(),
+            "ambiguous framing was accepted: {headers:?}"
+        );
+        assert_eq!(changes, 0);
+    }
+}
+
+#[test]
+fn request_framing_rejects_transfer_encoding_before_paste_mutates() {
+    for headers in [
+        "Transfer-Encoding: chunked\r\nContent-Length: 3\r\n",
+        "Transfer-Encoding: chunked\r\n",
+        "transfer-encoding: identity\r\nContent-Length: 6\r\n",
+    ] {
+        let (result, items, changes) = run_framed_paste(headers, "6\r\nsample\r\n0\r\n\r\n");
+        assert!(
+            items.is_empty(),
+            "encoded framing saved {:?} with status {result:?}",
+            items[0].text_content
+        );
+        assert!(
+            result.is_err(),
+            "unsupported framing was accepted: {headers:?}"
+        );
+        assert_eq!(changes, 0);
+    }
+}
+
+#[test]
+fn request_framing_rejects_invalid_lengths_and_malformed_headers() {
+    for headers in [
+        "Content-Length: +6\r\n",
+        "Content-Length: -1\r\n",
+        "Content-Length: invalid\r\n",
+        "Content-Length: \r\n",
+        "Content-Length: 999999999999999999999999999999999\r\n",
+        "Content-Length: 6, 6\r\n",
+        "Content-Length : 6\r\n",
+        "Content-Length 6\r\n",
+    ] {
+        let (result, items, changes) = run_framed_paste(headers, "sample");
+        assert!(
+            result.is_err(),
+            "malformed framing was accepted: {headers:?}"
+        );
+        assert!(items.is_empty());
+        assert_eq!(changes, 0);
+    }
+}
+
+#[test]
+fn request_framing_keeps_valid_lengths_and_body_bytes() {
+    for body in [
+        "\n  中文 note\r\n".to_owned(),
+        "中文 payload\r\n".repeat(1000),
+    ] {
+        let (result, items, changes) =
+            run_framed_paste(&format!("cOnTeNt-LeNgTh: {}\r\n", body.len()), &body);
+        assert_eq!(result.unwrap(), 201);
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].text_content.as_deref(), Some(body.as_str()));
+        assert_eq!(changes, 1);
+    }
+
+    // Zero-length and absent-length requests still reach the endpoint's empty-body rejection.
+    for headers in ["Content-Length: 0\r\n", ""] {
+        let (result, items, changes) = run_framed_paste(headers, "");
+        assert_eq!(result.unwrap(), 400);
+        assert!(items.is_empty());
+        assert_eq!(changes, 0);
+    }
+}
+
+#[test]
+fn request_framing_rejects_truncated_body_before_paste_mutates() {
+    let (result, items, changes) = run_framed_paste("Content-Length: 10\r\n", "sample");
+    assert!(result.unwrap_err().contains("before sending the body"));
+    assert!(items.is_empty());
+    assert_eq!(changes, 0);
 }
 
 #[test]
