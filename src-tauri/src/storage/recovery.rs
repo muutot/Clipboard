@@ -25,6 +25,8 @@ pub fn previous_backup_path(database_path: &Path) -> PathBuf {
 /// A schema reset deliberately discards historical rows, so old recovery
 /// copies must not survive and reintroduce them on a later startup.
 pub fn discard_database_backups(database_path: &Path) -> Result<(), StorageError> {
+    let _lock =
+        acquire_backup_lock(database_path).map_err(|error| recovery_error(database_path, error))?;
     for path in [
         backup_path(database_path),
         previous_backup_path(database_path),
@@ -61,6 +63,18 @@ pub fn discard_database_quarantine(quarantined_database: &Path) -> Result<(), St
 pub fn recover_database_if_needed(
     database_path: &Path,
 ) -> Result<Option<DatabaseRecoveryReport>, StorageError> {
+    recover_database_with_hook(database_path, || {})
+}
+
+fn recover_database_with_hook(
+    database_path: &Path,
+    after_staging: impl FnOnce(),
+) -> Result<Option<DatabaseRecoveryReport>, StorageError> {
+    // Selection and staging must belong to the same owner as installation.
+    // Another recovery must not install an older staged DB after this one has
+    // finished and accepted new writes; refresh/discard must retain our source.
+    let _lock =
+        acquire_backup_lock(database_path).map_err(|error| recovery_error(database_path, error))?;
     let current_error = if database_path
         .try_exists()
         .map_err(|error| recovery_error(database_path, error))?
@@ -132,7 +146,7 @@ pub fn recover_database_if_needed(
         });
     };
 
-    let quarantined_database = restore_from_backup(database_path, backup)?;
+    let quarantined_database = restore_from_backup(database_path, backup, after_staging)?;
     Ok(Some(DatabaseRecoveryReport {
         restored_from: backup.to_path_buf(),
         quarantined_database,
@@ -151,40 +165,10 @@ fn refresh_database_backup_with_hook(
     database_path: &Path,
     after_validation: impl FnOnce(),
 ) -> Result<PathBuf, StorageError> {
-    // The connection mutex protects VACUUM only. Keep the temporary file and
-    // both generations exclusive through validation, rotation and rollback,
-    // including other connections/processes. Never unlink this lock file.
-    let canonical = fs::canonicalize(database_path)
-        .or_else(|error| {
-            if error.kind() != std::io::ErrorKind::NotFound {
-                return Err(error);
-            }
-            // An in-memory source may use a backup base without a live DB file.
-            let parent = database_path
-                .parent()
-                .filter(|p| !p.as_os_str().is_empty())
-                .unwrap_or(Path::new("."));
-            Ok(fs::canonicalize(parent)?.join(database_path.file_name().ok_or(error)?))
-        })
-        .map_err(|error| backup_error(database_path, error))?;
-    let lock = fs::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create(true)
-        .truncate(false)
-        .open(sibling_with_suffix(&canonical, ".backup.lock"))
-        .map_err(|error| backup_error(database_path, error))?;
-    lock.try_lock().map_err(|error| {
-        backup_error(
-            database_path,
-            match error {
-                fs::TryLockError::WouldBlock => {
-                    "database backup refresh is already in progress".to_owned()
-                }
-                fs::TryLockError::Error(error) => format!("lock database backup refresh: {error}"),
-            },
-        )
-    })?;
+    // The connection mutex protects VACUUM only. Coordinate generations with
+    // recovery and discard, including other connections/processes.
+    let _lock =
+        acquire_backup_lock(database_path).map_err(|error| backup_error(database_path, error))?;
     let backup = backup_path(database_path);
     let previous = previous_backup_path(database_path);
     let temporary = sibling_with_suffix(database_path, ".backup.tmp");
@@ -227,6 +211,38 @@ fn refresh_database_backup_with_hook(
     }
 
     Ok(backup)
+}
+
+// Persistent lock-file identity is shared by every operation that selects or
+// changes recovery generations. Close the handle to release; never unlink it.
+fn acquire_backup_lock(database_path: &Path) -> Result<fs::File, String> {
+    let canonical = fs::canonicalize(database_path)
+        .or_else(|error| {
+            if error.kind() != std::io::ErrorKind::NotFound {
+                return Err(error);
+            }
+            // Recovery of a missing DB and detached backups have no live file.
+            let parent = database_path
+                .parent()
+                .filter(|p| !p.as_os_str().is_empty())
+                .unwrap_or(Path::new("."));
+            Ok(fs::canonicalize(parent)?.join(database_path.file_name().ok_or(error)?))
+        })
+        .map_err(|error| format!("resolve database backup coordination path: {error}"))?;
+    let lock = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(sibling_with_suffix(&canonical, ".backup.lock"))
+        .map_err(|error| format!("open database backup coordination lock: {error}"))?;
+    lock.try_lock().map_err(|error| match error {
+        fs::TryLockError::WouldBlock => {
+            "database recovery, backup refresh or backup discard is already in progress".to_owned()
+        }
+        fs::TryLockError::Error(error) => format!("lock database backup coordination: {error}"),
+    })?;
+    Ok(lock)
 }
 
 pub fn quarantine_search_index(search_index: &Path) -> Result<Option<PathBuf>, StorageError> {
@@ -332,6 +348,7 @@ fn validate_database_file(path: &Path) -> Result<(), DatabaseValidationError> {
 fn restore_from_backup(
     database_path: &Path,
     backup: &Path,
+    after_staging: impl FnOnce(),
 ) -> Result<Option<PathBuf>, StorageError> {
     let temporary = unique_sibling(database_path, ".restore-tmp");
     // A recovery copy is a new writable database, even when the retained
@@ -359,6 +376,8 @@ fn restore_from_backup(
             format!("backup became invalid while copying: {error}"),
         ));
     }
+
+    after_staging();
 
     let quarantined = unique_sibling(database_path, ".corrupt");
     let sidecars = [
@@ -614,6 +633,104 @@ mod tests {
     }
 
     #[test]
+    fn overlapping_recovery_cannot_replace_a_newly_restored_database() {
+        for missing in [false, true] {
+            let root = temporary_path("overlapping-recovery");
+            let database_path = root.join("clipboard.sqlite3");
+            let database = Database::open(&database_path).unwrap();
+            database.save_item(&item("safe")).unwrap();
+            refresh_database_backup(&database, &database_path).unwrap();
+            drop(database);
+            if missing {
+                fs::remove_file(&database_path).unwrap();
+            } else {
+                fs::write(&database_path, b"corrupt current database").unwrap();
+            }
+            let mut contender_refused = false;
+            let mut other_operations_refused = false;
+            let first = super::recover_database_with_hook(&database_path, || {
+                let contender = recover_database_if_needed(&root.join("./clipboard.sqlite3"));
+                contender_refused = matches!(contender,
+                    Err(crate::storage::StorageError::DatabaseRecoveryFailed { ref reason, .. })
+                        if reason.contains("already in progress"));
+                // Check exclusion in the reverse direction too. A detached
+                // source uses the same public backup path without opening the
+                // damaged live file; it is only a lock-boundary control.
+                let source = Database::open_in_memory().unwrap();
+                other_operations_refused = refresh_database_backup(&source, &database_path)
+                    .is_err()
+                    && discard_database_backups(&database_path).is_err();
+                if contender.is_ok() {
+                    // A second startup can finish recovery and commit a CLI write
+                    // while the first startup still holds a staged older snapshot.
+                    let restored = Database::open(&database_path).unwrap();
+                    restored.save_item(&item("new-after-recovery")).unwrap();
+                }
+            });
+            first.unwrap();
+            let restored = Database::open(&database_path).unwrap();
+            let newer_survived = restored.get_item("new-after-recovery").unwrap().is_some();
+            assert!(restored.get_item("safe").unwrap().is_some());
+            // Subsequent writes/recovery retries remain valid after lock release.
+            restored.save_item(&item("after-owner-finished")).unwrap();
+            drop(restored);
+            assert!(recover_database_if_needed(&database_path)
+                .unwrap()
+                .is_none());
+            let restored = Database::open(&database_path).unwrap();
+            assert!(restored.get_item("after-owner-finished").unwrap().is_some());
+            drop(restored);
+            fs::remove_dir_all(root).unwrap();
+            assert!(
+                contender_refused && other_operations_refused,
+                "overlapping recovery was accepted; missing={missing}, newer row survived={newer_survived}"
+            );
+        }
+    }
+
+    #[test]
+    fn overlapping_backup_discard_cannot_remove_an_active_refresh() {
+        let root = temporary_path("overlapping-discard");
+        let database_path = root.join("clipboard.sqlite3");
+        let database = Database::open(&database_path).unwrap();
+        database.save_item(&item("first")).unwrap();
+        refresh_database_backup(&database, &database_path).unwrap();
+        database.save_item(&item("second")).unwrap();
+        refresh_database_backup(&database, &database_path).unwrap();
+        database.save_item(&item("third")).unwrap();
+        let backup_before = fs::read(backup_path(&database_path)).unwrap();
+        let previous_before = fs::read(previous_backup_path(&database_path)).unwrap();
+        let temporary = super::sibling_with_suffix(&database_path, ".backup.tmp");
+        let mut discard_refused = false;
+        let mut generations_preserved = false;
+        let refresh = super::refresh_database_backup_with_hook(&database, &database_path, || {
+            let temporary_before = fs::read(&temporary).unwrap();
+            discard_refused = discard_database_backups(&root.join("./clipboard.sqlite3")).is_err();
+            generations_preserved = fs::read(backup_path(&database_path)).ok().as_ref()
+                == Some(&backup_before)
+                && fs::read(previous_backup_path(&database_path)).ok().as_ref()
+                    == Some(&previous_before)
+                && fs::read(&temporary).ok().as_ref() == Some(&temporary_before);
+        });
+        let refresh_succeeded = refresh.is_ok();
+        if refresh_succeeded {
+            let backup = Database::open(backup_path(&database_path)).unwrap();
+            assert!(backup.get_item("third").unwrap().is_some());
+            drop(backup);
+        }
+        discard_database_backups(&database_path).unwrap();
+        assert!(!backup_path(&database_path).exists());
+        assert!(!previous_backup_path(&database_path).exists());
+        assert!(!temporary.exists());
+        drop(database);
+        fs::remove_dir_all(root).unwrap();
+        assert!(
+            discard_refused && generations_preserved && refresh_succeeded,
+            "discard refused={discard_refused}, generations preserved={generations_preserved}, refresh succeeded={refresh_succeeded}"
+        );
+    }
+
+    #[test]
     fn backup_lock_errors_and_failed_rotation_preserve_generations_and_release_ownership() {
         let root = temporary_path("backup-lock-failures");
         let database_path = root.join("clipboard.sqlite3");
@@ -653,6 +770,41 @@ mod tests {
         drop(detached);
         drop(other);
         drop(database);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn recovery_coordination_failure_preserves_files_and_allows_retry() {
+        let root = temporary_path("recovery-lock-failure");
+        let database_path = root.join("clipboard.sqlite3");
+        let database = Database::open(&database_path).unwrap();
+        database.save_item(&item("safe")).unwrap();
+        refresh_database_backup(&database, &database_path).unwrap();
+        drop(database);
+        fs::write(&database_path, b"damaged").unwrap();
+        let backup_before = fs::read(backup_path(&database_path)).unwrap();
+        let lock_path = super::sibling_with_suffix(&database_path, ".backup.lock");
+        fs::remove_file(&lock_path).unwrap();
+        fs::create_dir(&lock_path).unwrap();
+        assert!(recover_database_if_needed(&database_path).is_err());
+        assert!(discard_database_backups(&database_path).is_err());
+        assert_eq!(fs::read(&database_path).unwrap(), b"damaged");
+        assert_eq!(
+            fs::read(backup_path(&database_path)).unwrap(),
+            backup_before
+        );
+        assert!(!fs::read_dir(&root).unwrap().any(|entry| {
+            let name = entry.unwrap().file_name();
+            let name = name.to_string_lossy();
+            name.contains(".restore-tmp") || name.contains(".corrupt")
+        }));
+        fs::remove_dir(&lock_path).unwrap();
+        assert!(recover_database_if_needed(&database_path)
+            .unwrap()
+            .is_some());
+        let restored = Database::open(&database_path).unwrap();
+        assert!(restored.get_item("safe").unwrap().is_some());
+        drop(restored);
         fs::remove_dir_all(root).unwrap();
     }
 
@@ -719,11 +871,15 @@ mod tests {
             std::thread::sleep(Duration::from_millis(10));
         }
         let overlapping = refresh_database_backup(&database, &database_path);
+        let recovery = recover_database_if_needed(&database_path);
+        let discard = discard_database_backups(&database_path);
         let backup_during = fs::read(backup_path(&database_path)).unwrap();
         let previous_during = previous_backup_path(&database_path).exists();
         fs::write(root.join("child.release"), b"release").unwrap();
         assert!(child.wait().unwrap().success());
         assert!(overlapping.is_err());
+        assert!(recovery.is_err());
+        assert!(discard.is_err());
         assert_eq!(backup_during, backup_before);
         assert!(!previous_during);
         assert!(previous_backup_path(&database_path).is_file());

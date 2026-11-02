@@ -125,14 +125,19 @@ writes. Copy failures remove only a successfully created stage and leave the
 current database/quarantine state untouched. Missing/corrupt-current regressions
 verify retained rows, new writes and unchanged backup bytes/permissions.
 
-Backup refresh holds a nonblocking exclusive OS lock on the canonical database's
-`.backup.lock` sibling before touching `.backup.tmp`, through validation, rotation
-and rollback. Other connections/processes receive a backup error before file effects;
-success/failure releases ownership by closing the handle. Never unlink the lock file.
-Different database paths are independent; an absent backup base resolves its parent
-canonically. This lock covers refresh, not startup recovery or schema-reset deletion.
-Focused SQLite regressions control the post-validation interleaving and use a
-gracefully exiting child process to verify cross-process exclusion.
+Recovery, backup refresh and schema-reset backup deletion share a nonblocking
+exclusive OS lock on the canonical database's `.backup.lock` sibling. Recovery
+holds it before current/backup inspection through staging, quarantine, installation
+and final validation; refresh holds it through validation, rotation and rollback;
+discard holds it across all generation deletions. Overlapping operations or
+coordination errors return an error before file effects, including healthy-current
+recovery checks. Success/failure releases ownership by closing the handle. Never
+unlink the lock file. Different database paths are independent; a missing database
+base resolves its parent canonically. This coordinates these recovery APIs, not
+ordinary SQL writers, schema initialization, storage migration or external tools.
+Focused SQLite regressions reproduce late recovery replacing newly committed rows,
+discard destroying a staged refresh, both exclusion directions, failed-lock retry
+and cross-process refusal with a gracefully exiting child fixture.
 
 Corrupt configuration is moved to a UUID-suffixed quarantine before defaults are
 loaded. A failed move returns an error with the original untouched; it must not
