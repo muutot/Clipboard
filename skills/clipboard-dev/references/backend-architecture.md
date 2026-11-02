@@ -108,6 +108,18 @@ and failure release the guard so subsequent cleanup can reclaim unreferenced fil
 
 `storage/recovery.rs` validates SQLite integrity, rotates current/previous backups, quarantines damaged files, restores the first valid backup, and causes the derived search index to be quarantined/rebuilt after recovery. A deliberate schema reset deletes obsolete backup generations before writing a fresh v1 backup, so discarded rows cannot return through recovery. Persistence changes must preserve atomic config writes, recovery, backup refresh, and rebuildability of derived data.
 
+Schema reset/upgrade re-reads `PRAGMA user_version` after acquiring an immediate
+SQLite writer transaction. That version decides the baseline reset or remaining
+migration chain; a competing opener's completed reset is never replayed, and a
+newer-than-supported version is rejected again before effects. `migrations.rs`
+owns the RAII transaction helper; schema initialization calls the migration chain
+inside it, including final schema/foreign-key validation. Failed actions/commits
+drop the transaction before foreign keys are restored, releasing the writer for
+retry. Current-version normal opens retain their existing path without a new
+writer reservation. Real dual-connection UTs retain committed rows/tags/OCR,
+reject late future versions, skip completed backfills, exercise a SQLite page-cap
+failure/rollback, and permit a seeded current database to open during a writer.
+
 Startup recovery distinguishes confirmed invalidity from unavailable inspection.
 Only a missing database, SQLite CORRUPT/NOTADB, failed integrity messages or a
 missing core table authorize backup selection. Busy, permission/open and other

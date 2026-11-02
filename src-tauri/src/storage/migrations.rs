@@ -38,13 +38,65 @@ pub(super) fn migrate_to_current(
     target_version: i64,
     finalize_schema: MigrationAction,
 ) -> Result<(), StorageError> {
-    run_migration_chain(
+    // Schema initialization owns the writer transaction and reads from_version
+    // while holding it. Keep every migration/finalization in that transaction.
+    let chain = resolve_migration_chain(from_version, target_version, REGISTERED_MIGRATIONS)?;
+    apply_migration_chain(
         connection,
         from_version,
         target_version,
-        REGISTERED_MIGRATIONS,
+        &chain,
         finalize_schema,
     )
+}
+
+pub(super) fn with_schema_transaction<T>(
+    connection: &Connection,
+    action: impl FnOnce(&Connection) -> Result<T, StorageError>,
+) -> Result<T, StorageError> {
+    connection.pragma_update(None, "foreign_keys", false)?;
+    let result = (|| {
+        let transaction = rusqlite::Transaction::new_unchecked(
+            connection,
+            rusqlite::TransactionBehavior::Immediate,
+        )?;
+        let value = action(&transaction)?;
+        transaction.commit()?;
+        Ok(value)
+    })();
+    // The RAII transaction has committed or rolled back before re-enabling FK
+    // enforcement. Failed actions and failed commits also release the writer.
+    let restored = connection.pragma_update(None, "foreign_keys", true);
+    match result {
+        Ok(value) => {
+            restored?;
+            Ok(value)
+        }
+        Err(error) => {
+            let _ = restored;
+            Err(error)
+        }
+    }
+}
+
+#[cfg(test)]
+fn run_migration_chain(
+    connection: &Connection,
+    from_version: i64,
+    target_version: i64,
+    migrations: &[Migration],
+    finalize_schema: MigrationAction,
+) -> Result<(), StorageError> {
+    let chain = resolve_migration_chain(from_version, target_version, migrations)?;
+    with_schema_transaction(connection, |connection| {
+        apply_migration_chain(
+            connection,
+            from_version,
+            target_version,
+            &chain,
+            finalize_schema,
+        )
+    })
 }
 
 pub(super) fn validate_registered_plan(
@@ -57,52 +109,29 @@ pub(super) fn validate_registered_plan(
     resolve_migration_chain(from_version, target_version, REGISTERED_MIGRATIONS).map(|_| ())
 }
 
-fn run_migration_chain(
+fn apply_migration_chain(
     connection: &Connection,
     from_version: i64,
     target_version: i64,
-    migrations: &[Migration],
+    chain: &[Migration],
     finalize_schema: MigrationAction,
 ) -> Result<(), StorageError> {
-    let chain = resolve_migration_chain(from_version, target_version, migrations)?;
-
-    connection.execute_batch("PRAGMA foreign_keys = OFF;")?;
-    if let Err(error) = connection.execute_batch("BEGIN IMMEDIATE;") {
-        let _ = connection.execute_batch("PRAGMA foreign_keys = ON;");
-        return Err(error.into());
-    }
-
-    let result = (|| {
-        for migration in chain {
-            (migration.apply)(connection).map_err(|error| {
-                StorageError::DatabaseMigrationFailed {
-                    from_version: migration.to_version - 1,
-                    to_version: migration.to_version,
-                    reason: format!("{}: {error}", migration.description),
-                }
-            })?;
-            connection.pragma_update(None, "user_version", migration.to_version)?;
-        }
-
-        finalize_schema(connection).map_err(|error| StorageError::DatabaseMigrationFailed {
-            from_version,
-            to_version: target_version,
-            reason: format!("final schema validation failed: {error}"),
+    for migration in chain {
+        (migration.apply)(connection).map_err(|error| StorageError::DatabaseMigrationFailed {
+            from_version: migration.to_version - 1,
+            to_version: migration.to_version,
+            reason: format!("{}: {error}", migration.description),
         })?;
-        ensure_foreign_keys_are_valid(connection, from_version, target_version)?;
-        Ok::<(), StorageError>(())
-    })();
-
-    match result {
-        Ok(()) => {
-            connection.execute_batch("COMMIT; PRAGMA foreign_keys = ON;")?;
-            Ok(())
-        }
-        Err(error) => {
-            let _ = connection.execute_batch("ROLLBACK; PRAGMA foreign_keys = ON;");
-            Err(error)
-        }
+        connection.pragma_update(None, "user_version", migration.to_version)?;
     }
+
+    finalize_schema(connection).map_err(|error| StorageError::DatabaseMigrationFailed {
+        from_version,
+        to_version: target_version,
+        reason: format!("final schema validation failed: {error}"),
+    })?;
+    ensure_foreign_keys_are_valid(connection, from_version, target_version)?;
+    Ok(())
 }
 
 fn resolve_migration_chain(

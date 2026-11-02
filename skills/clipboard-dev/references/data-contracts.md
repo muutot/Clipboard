@@ -130,12 +130,15 @@ Short repository read-modify-write transactions (`save_item`, `save_items_transa
 
 ## SQLite schema
 
-Database backup refresh coordinates complete temporary-file/rotation/rollback
-ownership through a persistent `<canonical database path>.backup.lock` sibling.
-Busy or unavailable locks return a backup error before modifying generations.
+Recovery, backup refresh and schema-reset backup deletion coordinate through a
+persistent `<canonical database path>.backup.lock` sibling. Recovery holds it from
+inspection through final installation validation; refresh holds it through
+temporary-file/rotation/rollback; discard holds it across generation deletion.
+Busy or unavailable locks return an error before modifying database/generations.
 The empty lock file contains no clipboard data and is not part of portable
-archives, the SQLite schema or IPC. Refresh never removes it; handle closure
-releases ownership. Startup recovery/schema-reset operations remain separate.
+archives, the SQLite schema or IPC. These APIs never remove it; handle closure
+releases ownership. Ordinary SQL writers, schema initialization and data-directory
+migration have their separate coordination; this lock does not fence them.
 
 `storage/repository/transactions.rs::validate_clipboard_text` owns the shared UTF-8 byte bounds: title ≤4,096; text, HTML and RTF each ≤10,000,000. `save_item`, `update_text_item`, imports and portable archive validation use it. Both editor commands validate before hashing or constructing a new record; oversized inputs return an error without changing rows, metadata or the search outbox. The reported `size_bytes` is not trusted for this validation. Boundary tests cover multi-byte payloads and a successful `.clipbackup` creation/preview after an edit at the limits.
 
@@ -145,6 +148,14 @@ forward, every schema bump must register exactly one adjacent migration in
 `storage/migrations.rs`; the entire chain runs in one transaction, advances `user_version` after
 each step, validates foreign keys, and rolls back all steps on failure. A database newer than the
 binary's current schema is rejected without modification rather than downgraded or reset.
+
+Reset/upgrade decisions use `user_version` re-read inside the immediate SQLite
+writer transaction, after any competing opener has finished. A completed baseline
+reset/backfill is not replayed; a newly unsupported version is rejected before
+effects. The shared migration transaction helper uses RAII rollback for action or
+commit failures and restores foreign keys after releasing the transaction.
+Current-version ordinary opens do not acquire this reset/upgrade reservation.
+No schema-version, config or IPC change accompanies this concurrency fix.
 
 Current schema v2 fills only NULL `last_used_at_ms` values with each row's
 `created_at_ms`, preserving existing usage timestamps and all content. It creates

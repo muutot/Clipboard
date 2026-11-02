@@ -12,7 +12,50 @@ pub(super) struct SchemaInitResult {
 /// Schema v1 is the clean baseline. Pre-v1 databases are reset once for this
 /// redesign; later versions are migrated sequentially and are never reset.
 pub(super) fn initialize(connection: &Connection) -> Result<SchemaInitResult, StorageError> {
+    initialize_after_version_read(connection, || {})
+}
+
+fn initialize_after_version_read(
+    connection: &Connection,
+    after_version_read: impl FnOnce(),
+) -> Result<SchemaInitResult, StorageError> {
     let version: i64 = connection.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+    validate_schema_version(version)?;
+    migrations::validate_registered_plan(1, SCHEMA_VERSION)?;
+    after_version_read();
+
+    // Current-schema opens must remain possible while storage migration holds
+    // a writer reservation. Only reset/upgrade needs a new writer transaction.
+    if version == SCHEMA_VERSION {
+        create_current_schema(connection)?;
+        return Ok(SchemaInitResult { was_reset: false });
+    }
+
+    migrations::with_schema_transaction(connection, |connection| {
+        // Another opener may have initialized/upgraded since the first read.
+        // Decide destructive reset and the migration chain under the same writer
+        // reservation as their effects, never from the pre-lock version.
+        let version: i64 = connection.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+        validate_schema_version(version)?;
+        if version == 0 {
+            reset_to_current_schema(connection)?;
+            return Ok(SchemaInitResult { was_reset: true });
+        }
+        if version < SCHEMA_VERSION {
+            migrations::migrate_to_current(
+                connection,
+                version,
+                SCHEMA_VERSION,
+                create_current_schema,
+            )?;
+        } else {
+            create_current_schema(connection)?;
+        }
+        Ok(SchemaInitResult { was_reset: false })
+    })
+}
+
+fn validate_schema_version(version: i64) -> Result<(), StorageError> {
     if version < 0 {
         return Err(StorageError::InvalidStoredValue {
             field: "PRAGMA user_version",
@@ -26,44 +69,14 @@ pub(super) fn initialize(connection: &Connection) -> Result<SchemaInitResult, St
         });
     }
 
-    migrations::validate_registered_plan(1, SCHEMA_VERSION)?;
-    if version == 0 {
-        reset_to_current_schema(connection)?;
-        return Ok(SchemaInitResult { was_reset: true });
-    }
-    if version < SCHEMA_VERSION {
-        migrations::migrate_to_current(connection, version, SCHEMA_VERSION, create_current_schema)?;
-        return Ok(SchemaInitResult { was_reset: false });
-    }
-
-    create_current_schema(connection)?;
-    Ok(SchemaInitResult { was_reset: false })
+    Ok(())
 }
 
 fn reset_to_current_schema(connection: &Connection) -> Result<(), StorageError> {
-    connection.execute_batch("PRAGMA foreign_keys = OFF;")?;
-    if let Err(error) = connection.execute_batch("BEGIN IMMEDIATE;") {
-        let _ = connection.execute_batch("PRAGMA foreign_keys = ON;");
-        return Err(error.into());
-    }
-
-    let result = (|| {
-        drop_all_user_objects(connection)?;
-        create_current_schema(connection)?;
-        connection.pragma_update(None, "user_version", SCHEMA_VERSION)?;
-        Ok::<(), StorageError>(())
-    })();
-
-    match result {
-        Ok(()) => {
-            connection.execute_batch("COMMIT; PRAGMA foreign_keys = ON;")?;
-            Ok(())
-        }
-        Err(error) => {
-            let _ = connection.execute_batch("ROLLBACK; PRAGMA foreign_keys = ON;");
-            Err(error)
-        }
-    }
+    drop_all_user_objects(connection)?;
+    create_current_schema(connection)?;
+    connection.pragma_update(None, "user_version", SCHEMA_VERSION)?;
+    Ok(())
 }
 
 fn drop_all_user_objects(connection: &Connection) -> Result<(), StorageError> {
@@ -532,6 +545,202 @@ mod tests {
                 |row| row.get(0),
             )
             .unwrap()
+    }
+
+    #[test]
+    fn stale_pre_v1_initialization_preserves_another_openers_committed_rows() {
+        let root = std::env::temp_dir().join(format!(
+            "clipboard-schema-concurrent-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir(&root).unwrap();
+        let path = root.join("history.sqlite3");
+        let delayed = Connection::open(&path).unwrap();
+        delayed
+            .execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")
+            .unwrap();
+        let outcome = initialize_after_version_read(&delayed, || {
+            let winner = crate::storage::Database::open(&path).unwrap();
+            assert!(winner.schema_was_reset());
+            winner.with_connection(|connection| {
+                connection.execute_batch(
+                    "INSERT INTO clipboard_items (id, kind, title, content_hash, size_bytes, created_at_ms)
+                     VALUES ('committed-after-initialization', 'text', 'keep', 'keep', 4, 1);
+                     INSERT INTO item_tags (item_id, tag) VALUES ('committed-after-initialization', 'keep-tag');
+                     INSERT INTO ocr_results (item_id, status, image_hash, created_at_ms)
+                     VALUES ('committed-after-initialization', 'completed', 'keep-hash', 1);"
+                )?;
+                Ok(())
+            }).unwrap();
+        }).unwrap();
+        let counts: (i64, i64, i64) = delayed
+            .query_row(
+                "SELECT (SELECT COUNT(*) FROM clipboard_items), (SELECT COUNT(*) FROM item_tags),
+                    (SELECT COUNT(*) FROM ocr_results)",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+        drop(delayed);
+        std::fs::remove_dir_all(root).unwrap();
+        assert_eq!(
+            counts,
+            (1, 1, 1),
+            "late initialization must not repeat the completed baseline reset"
+        );
+        assert!(!outcome.was_reset);
+    }
+
+    #[test]
+    fn version_advanced_before_reset_is_rejected_without_touching_future_data() {
+        let root =
+            std::env::temp_dir().join(format!("clipboard-schema-future-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir(&root).unwrap();
+        let path = root.join("history.sqlite3");
+        let delayed = Connection::open(&path).unwrap();
+        delayed
+            .execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")
+            .unwrap();
+        let result = initialize_after_version_read(&delayed, || {
+            let newer = Connection::open(&path).unwrap();
+            newer
+                .execute_batch(
+                    "CREATE TABLE future_data (value TEXT NOT NULL);
+                INSERT INTO future_data VALUES ('keep'); PRAGMA user_version=3;",
+                )
+                .unwrap();
+        });
+        let version: i64 = delayed
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .unwrap();
+        let future_value = delayed
+            .query_row("SELECT value FROM future_data", [], |row| {
+                row.get::<_, String>(0)
+            })
+            .ok();
+        let foreign_keys: i64 = delayed
+            .query_row("PRAGMA foreign_keys", [], |row| row.get(0))
+            .unwrap();
+        drop(delayed);
+        std::fs::remove_dir_all(root).unwrap();
+        assert!(
+            matches!(
+                result,
+                Err(StorageError::UnsupportedDatabaseSchemaVersion { found: 3, .. })
+            ),
+            "newer schema accepted by a stale initializer: {result:?}"
+        );
+        assert_eq!(version, 3);
+        assert_eq!(future_value.as_deref(), Some("keep"));
+        assert_eq!(foreign_keys, 1);
+    }
+
+    #[test]
+    fn stale_v1_initialization_does_not_repeat_an_already_completed_backfill() {
+        let root =
+            std::env::temp_dir().join(format!("clipboard-schema-upgrade-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir(&root).unwrap();
+        let path = root.join("history.sqlite3");
+        let delayed = Connection::open(&path).unwrap();
+        delayed
+            .execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")
+            .unwrap();
+        initialize(&delayed).unwrap();
+        delayed.pragma_update(None, "user_version", 1).unwrap();
+        let outcome = initialize_after_version_read(&delayed, || {
+            let winner = Connection::open(&path).unwrap();
+            initialize(&winner).unwrap();
+            // A schema-valid NULL created after v2 commits is a sentinel:
+            // opening v2 must not replay v1's data transformation on new rows.
+            winner
+                .execute_batch(
+                    "INSERT INTO clipboard_items
+                (id, kind, title, content_hash, size_bytes, created_at_ms, last_used_at_ms)
+                VALUES ('after-upgrade', 'text', 'keep', 'keep', 4, 100, NULL);",
+                )
+                .unwrap();
+        })
+        .unwrap();
+        let usage: Option<i64> = delayed
+            .query_row(
+                "SELECT last_used_at_ms FROM clipboard_items
+            WHERE id='after-upgrade'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        drop(delayed);
+        std::fs::remove_dir_all(root).unwrap();
+        assert_eq!(usage, None);
+        assert!(!outcome.was_reset);
+    }
+
+    #[test]
+    fn failed_baseline_creation_rolls_back_and_allows_retry() {
+        let connection = Connection::open_in_memory().unwrap();
+        connection
+            .execute_batch(
+                "PRAGMA foreign_keys=ON;
+            CREATE TABLE legacy_data (value TEXT NOT NULL);
+            INSERT INTO legacy_data VALUES ('keep'); PRAGMA max_page_count=2;",
+            )
+            .unwrap();
+        let result = initialize(&connection);
+        assert!(
+            result.is_err(),
+            "bounded SQLite pages must fail schema creation"
+        );
+        assert!(connection.is_autocommit());
+        assert_eq!(
+            connection
+                .query_row("SELECT value FROM legacy_data", [], |row| row
+                    .get::<_, String>(0))
+                .unwrap(),
+            "keep"
+        );
+        assert!(!table_exists(&connection, "clipboard_items"));
+        assert_eq!(
+            connection
+                .query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
+                .unwrap(),
+            0
+        );
+        assert_eq!(
+            connection
+                .query_row("PRAGMA foreign_keys", [], |row| row.get::<_, i64>(0))
+                .unwrap(),
+            1
+        );
+        connection
+            .pragma_update(None, "max_page_count", 100_000)
+            .unwrap();
+        assert!(initialize(&connection).unwrap().was_reset);
+    }
+
+    #[test]
+    fn current_schema_can_open_during_an_independent_writer_reservation() {
+        let root =
+            std::env::temp_dir().join(format!("clipboard-schema-read-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir(&root).unwrap();
+        let path = root.join("history.sqlite3");
+        let writer = Connection::open(&path).unwrap();
+        writer
+            .execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")
+            .unwrap();
+        initialize(&writer).unwrap();
+        // A real previously initialized Database already has its device ID.
+        // Seed it before the reservation so the reader needs no identity write.
+        drop(crate::storage::Database::open(&path).unwrap());
+        writer.execute_batch("BEGIN IMMEDIATE").unwrap();
+        let reader = crate::storage::Database::open(&path);
+        writer.execute_batch("ROLLBACK").unwrap();
+        assert!(
+            reader.is_ok(),
+            "current-schema reads must not need the reset/upgrade reservation"
+        );
+        drop(reader);
+        drop(writer);
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
