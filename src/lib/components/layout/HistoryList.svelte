@@ -259,7 +259,7 @@
 
   .empty-state strong {
     color: var(--text-secondary);
-    font-size: 14px;
+    font-size: var(--font-size-base);
   }
 
   .empty-state p {

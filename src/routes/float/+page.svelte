@@ -507,7 +507,10 @@
     {#if loading}
       <p class="float-empty">{_t("status.searching")}</p>
     {:else if items.length === 0}
-      <p class="float-empty">{_t("float.empty")}</p>
+      <div class="float-empty">
+        <span class="float-empty-icon"><AppIcon name="clipboard" size={22} /></span>
+        <strong>{_t("float.empty")}</strong>
+      </div>
     {:else}
       {#each items as item (item.id)}
         <button
@@ -617,9 +620,22 @@
   }
 
   .float-empty {
-    padding: 16px 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 24px 8px;
     color: var(--text-faint);
     text-align: center;
+  }
+
+  .float-empty-icon {
+    display: inline-flex;
+  }
+
+  .float-empty strong {
+    color: var(--text-secondary);
+    font-size: var(--font-size-cardTitle);
   }
 
   .float-row {
