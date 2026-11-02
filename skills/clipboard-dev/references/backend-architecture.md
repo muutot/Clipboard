@@ -63,6 +63,8 @@ successful no-ops. Other destinations use sibling staging, flush and atomic
 replacement; hard-linked source aliases cannot truncate the captured body, and
 copy/publication errors preserve an existing destination and remove staging.
 Windows UTs include a handle that denies deletion; Unix behavior needs its CI gate.
+Staging is exclusively created and receives streamed bytes without inheriting
+source permissions, so read-only resources remain exportable before the flush.
 
 Ordinary text edits pass an optional typed `TextItemUpdate.custom_title`, rather
 than a copied metadata JSON object. `update_text_item` merges only `customTitle`

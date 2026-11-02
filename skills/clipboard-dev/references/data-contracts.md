@@ -362,6 +362,8 @@ it. Other saves copy to a sibling temporary file, flush, then atomically replace
 the destination entry. This preserves a hard-linked source and an existing
 destination on failure; replacing a destination symlink replaces its entry.
 The source/id/absolute-destination IPC contract is unchanged.
+The sibling stage is exclusively created with its own write permissions; saves
+stream bytes from read-only sources without changing the source permissions.
 
 The CLI `paste` command and the local API `POST /paste` are manual text-ingestion paths that write to the database directly instead of going through the clipboard-worker pipeline, so they enforce the capture privacy rules themselves through `CaptureState::reject_manual_text`: a paused capture, a text above `max_text_capture_bytes`, or a sensitive-pattern match refuses the write (HTTP status 403, or 413 for the size ceiling). Every production entry point must pass the live `CaptureState` — the in-app command and the API server take it from managed state, and the standalone CLI process rebuilds it from the persisted configuration; `None` is only for in-memory test harnesses.
 

@@ -274,6 +274,25 @@ fn save_clipboard_item_file_copies_to_new_and_existing_other_destinations() {
 }
 
 #[test]
+fn save_clipboard_item_file_can_export_a_read_only_resource() {
+    let (root, paths, database) = save_as_fixture();
+    let source = paths.files.join("captured.bin");
+    let destination = root.join("saved.bin");
+    let original_permissions = std::fs::metadata(&source).unwrap().permissions();
+    let mut read_only = original_permissions.clone();
+    read_only.set_readonly(true);
+    std::fs::set_permissions(&source, read_only).unwrap();
+    let result =
+        save_clipboard_item_file_blocking(&database, &paths, "id", &destination.to_string_lossy());
+    std::fs::set_permissions(&source, original_permissions).unwrap();
+    let destination_bytes = std::fs::read(&destination);
+    drop(database);
+    std::fs::remove_dir_all(root).unwrap();
+    assert!(result.is_ok(), "read-only resource save: {result:?}");
+    assert_eq!(destination_bytes.unwrap(), b"synthetic captured bytes");
+}
+
+#[test]
 fn save_clipboard_item_file_preserves_a_hard_linked_source() {
     let (root, paths, database) = save_as_fixture();
     let source = paths.files.join("captured.bin");
