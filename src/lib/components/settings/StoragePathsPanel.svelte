@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onDestroy, onMount } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import AppIcon from "$lib/components/card/AppIcon.svelte";
   import EntryHeading from "$lib/components/settings/settings-entries/EntryHeading.svelte";
@@ -42,9 +42,15 @@
   let ownershipEnabled = $state(false);
   let togglingOwnership = $state(false);
   let markerRestartNeeded = $state(false);
+  let disposed = false;
+  const confirmationOwner = new AbortController();
+
+  onDestroy(() => {
+    disposed = true;
+    confirmationOwner.abort();
+  });
 
   onMount(() => {
-    let disposed = false;
     void getStorageConfig()
       .then((config) => {
         if (disposed) return;
@@ -59,9 +65,6 @@
         resourcePathsLoadFailed = true;
         onfeedback(error instanceof Error ? error.message : String(error), false);
       });
-    return () => {
-      disposed = true;
-    };
   });
 
   $effect(() => {
@@ -159,18 +162,23 @@
   }
 
   async function toggleOwnership(next: boolean) {
-    if (!status?.resourceOwnershipRequired || togglingOwnership) return;
-    if (
-      next &&
-      !(await confirmDialog({
-        title: _t("confirm.title"),
-        message: _t("storage.ownershipMarkerEnableConfirm"),
-      }))
-    )
-      return;
+    if (disposed || !status?.resourceOwnershipRequired || togglingOwnership) return;
     togglingOwnership = true;
     try {
+      if (
+        next &&
+        !(await confirmDialog(
+          {
+            title: _t("confirm.title"),
+            message: _t("storage.ownershipMarkerEnableConfirm"),
+          },
+          confirmationOwner.signal,
+        ))
+      )
+        return;
+      if (disposed || !status?.resourceOwnershipRequired) return;
       const result = await setResourceOwnership(next);
+      if (disposed) return;
       ownershipEnabled = next;
       markerRestartNeeded = result.restartRequired;
       onfeedback(
@@ -184,10 +192,11 @@
         true,
       );
     } catch (error) {
+      if (disposed) return;
       console.error("Unable to change resource ownership markers", error);
       onfeedback(error instanceof Error ? error.message : String(error), false);
     } finally {
-      togglingOwnership = false;
+      if (!disposed) togglingOwnership = false;
     }
   }
 </script>

@@ -286,6 +286,13 @@ deletion remains backend-owned, while late results trigger no panel refresh or
 feedback. Mounted StorageLimitsPanel tests use the real confirmation singleton,
 host and storage wrappers with synthetic IPC; they do not delete user data.
 
+StoragePathsPanel similarly owns its ownership-marker enable confirmation.
+Its busy guard covers confirmation and writing; teardown cancels only its own
+dialog, and acceptance checks lifetime before submitting the marker change.
+Already submitted marker writes remain backend-owned; late results produce no
+panel state/feedback. Mounted ownership tests use the real confirmation host and
+storage wrapper with synthetic IPC, without changing user directories or markers.
+
 ### `HistoryList.svelte` ownership
 
 Main-route history list (`.history-panel`): the section shell, the virtual/non-virtual `ClipboardCard` loop (rendered through one `historyCard` snippet), and the empty state. Props are the list state (`items` = visible page slice, `hasItems` = filtered-result count > 0, `useVirtualScroll`, `virtualList`, `indexById`, `currentTime`, `selectedIds`, `selectedId`, `splitDetail`), the card layout values from `GeneralSettings`, `cardHeightFor`/`cardLayoutSignature`, `tagColors`/`tagAddSignal` (the latter is `{ seq, itemId } | null` from the route: the targeted card receives `seq`, every other card receives `0`, so the press stays an edge for exactly one card), `panelLabel`/`emptyTitle`/`emptyHint`, and the same controlled callbacks as `ClipboardCard`. The list-vs-empty-state branch must use `hasItems`, never `items.length`: the virtual page slice is empty until the container is measured, so keying the branch off it would render the empty state forever and never mount the scroll element to be measured. The scroll element is exposed via `bind:listEl` so the route keeps `historyListEl` for scroll reset and container measurement; `onscroll`/`onheightchange` stay route-side. The route's split-detail grid rule uses `:global(*:last-child)` because the target is the child `DetailPanel` root — a plain scoped selector gets pruned as unused once the first grid child is itself a component.

@@ -192,6 +192,10 @@ backend until completion or explicit cancellation.
   Unmount cancels only that request; delayed statistics/acceptance cannot submit
   deletion after teardown. Already submitted work completes in the backend, and
   late results do not refresh the disposed panel or report feedback.
+- Ownership-marker enabling in StoragePathsPanel also owns its confirmation
+  signal and checks lifetime after acceptance. The local busy guard covers the
+  confirmation as well as the write; cancellation remains retryable. Teardown
+  does not cancel already submitted marker writes, but ignores their late feedback.
 - Import capacity warnings use `maxItems` and `pendingTruncation` from the same
   completed `ImportSummary`. Every completed result replaces the warning snapshot,
   so zero risk removes an older warning; cancellation or rejection retains it.
