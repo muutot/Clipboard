@@ -349,17 +349,19 @@
     outline: none;
   }
 
+  /* Icon hues follow the fixed filter order (all/text/link/image/file/favorite);
+     favorite reads its dedicated token, the rest are fixed category tones. */
   .filters button:nth-child(2) :global(svg) {
-    color: var(--warning-color);
-  }
-  .filters button:nth-child(3) :global(svg) {
     color: #a8b7c9;
   }
-  .filters button:nth-child(4) :global(svg) {
+  .filters button:nth-child(3) :global(svg) {
     color: #6bbfc5;
   }
-  .filters button:nth-child(5) :global(svg) {
+  .filters button:nth-child(4) :global(svg) {
     color: #8fc7de;
+  }
+  .filters button:nth-child(5) :global(svg) {
+    color: #f5c842;
   }
   .filters button:nth-child(6) :global(svg) {
     color: var(--favorite-color);
