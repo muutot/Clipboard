@@ -784,7 +784,10 @@ children, Unicode/long paths and cleanup; Unix mode/runtime remains a platform g
 
 `content::file_store::store_atomically` exclusively creates its empty sibling
 temporary file before invoking a writer. Callbacks open/write/copy to that reserved
-file; they must not use `create_new`. A collision fails before population or cleanup,
+file; they must not use `create_new`. Its short process/sequence name does not
+include the target basename, keeping legal long target components usable.
+NUL-containing target paths are rejected before staging or callback invocation.
+A collision fails before population or cleanup,
 preserving the preexisting entry and target. Population failures (including partial
 writes) and flush/publication failures remove only the owned stage and retain the
 target. This reserves ownership against preexisting entries; it does not fence

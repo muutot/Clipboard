@@ -334,16 +334,17 @@ pub(crate) fn store_atomically(
     target: &Path,
     populate: impl FnOnce(&Path) -> std::io::Result<()>,
 ) -> Result<(), StorageError> {
+    if target.as_os_str().as_encoded_bytes().contains(&0) {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "target path contains NUL",
+        )
+        .into());
+    }
     let sequence = TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
-    let temporary_name = format!(
-        ".{}.tmp-{}-{}",
-        target
-            .file_name()
-            .map(|name| name.to_string_lossy().into_owned())
-            .unwrap_or_else(|| "clipboard-resource".to_owned()),
-        std::process::id(),
-        sequence,
-    );
+    // Do not append to the target component: a legal 255-byte filename can
+    // exceed the filesystem limit once staging suffixes are added.
+    let temporary_name = format!(".clipboard-resource.tmp-{}-{sequence}", std::process::id());
     let temporary = target.with_file_name(temporary_name);
     // Establish ownership before handing the path to callbacks using write,
     // create or copy. In particular, their errors cannot authorize deleting a
@@ -391,6 +392,48 @@ mod tests {
     use super::*;
 
     #[test]
+    fn atomic_store_rejects_nul_targets_before_population() {
+        let directory =
+            std::env::temp_dir().join(format!("clipboard-invalid-target-{}", uuid::Uuid::new_v4()));
+        fs::create_dir(&directory).unwrap();
+        let target = directory.join("target");
+        fs::write(&target, b"old destination").unwrap();
+        let mut called = false;
+        let result = store_atomically(&directory.join("target\0suffix"), |temporary| {
+            called = true;
+            fs::write(temporary, b"new destination")
+        });
+        let bytes = fs::read(&target).unwrap();
+        let entries = fs::read_dir(&directory).unwrap().count();
+        fs::remove_dir_all(&directory).unwrap();
+        assert!(result.is_err());
+        assert!(!called);
+        assert_eq!(bytes, b"old destination");
+        assert_eq!(entries, 1);
+    }
+
+    #[test]
+    fn atomic_store_accepts_long_legal_target_file_names() {
+        let directory =
+            std::env::temp_dir().join(format!("clipboard-long-target-{}", uuid::Uuid::new_v4()));
+        fs::create_dir(&directory).unwrap();
+        // Canonical Windows parents have a verbatim prefix, isolating the
+        // component-length limit from legacy Win32 MAX_PATH handling.
+        let directory = fs::canonicalize(&directory).unwrap();
+        let target = directory.join(format!("{}.bin", "x".repeat(240)));
+        fs::write(&target, b"old destination").unwrap();
+        let result = store_atomically(&target, |temporary| {
+            fs::write(temporary, b"new destination")
+        });
+        let bytes = fs::read(&target).unwrap();
+        let entries = fs::read_dir(&directory).unwrap().count();
+        fs::remove_dir_all(&directory).unwrap();
+        assert!(result.is_ok(), "legal target name rejected: {result:?}");
+        assert_eq!(bytes, b"new destination");
+        assert_eq!(entries, 1);
+    }
+
+    #[test]
     fn atomic_store_preserves_preexisting_staging_files() {
         let root = std::env::temp_dir().join(format!(
             "clipboard-staging-collision-{}",
@@ -406,7 +449,7 @@ mod tests {
             let collisions: Vec<_> = (first..first + 128)
                 .map(|sequence| {
                     let path = parent.join(format!(
-                        ".resource.png.tmp-{}-{sequence}",
+                        ".clipboard-resource.tmp-{}-{sequence}",
                         std::process::id()
                     ));
                     fs::write(&path, b"unrelated preexisting bytes").unwrap();
