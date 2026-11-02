@@ -10,7 +10,7 @@ import {
 import { DEFAULT_GENERAL_SETTINGS } from "$lib/services/settings/defaults";
 import { applyGeneralSettingsToDocument } from "$lib/services/settings-bootstrap";
 import { normalizeGeneralSettings } from "$lib/services/settings/normalize";
-import { readFileSync } from "node:fs";
+import themeInit from "../../../../static/theme-init.js?raw";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -46,8 +46,7 @@ describe("system theme defaults", () => {
       "matchMedia",
       vi.fn(() => ({ matches: dark })),
     );
-    const init = readFileSync("static/theme-init.js", "utf8");
-    new Function(init)();
+    new Function(themeInit)();
     expect(document.documentElement.style.getPropertyValue("--bg-app")).toBe(
       dark ? DARK_THEME_COLORS.bg : LIGHT_THEME_COLORS.bg,
     );
@@ -66,14 +65,14 @@ describe("system theme defaults", () => {
       "matchMedia",
       vi.fn(() => ({ matches: dark })),
     );
-    new Function(readFileSync("static/theme-init.js", "utf8"))();
+    new Function(themeInit)();
     const expected = dark ? DARK_THEME_COLORS : LIGHT_THEME_COLORS;
     expect(document.documentElement.style.getPropertyValue("--bg-app")).toBe(expected.bg);
     expect(document.documentElement.style.colorScheme).toBe(dark ? "dark" : "light");
     applyThemeColors(expected, "system");
     const vars = JSON.parse(window.localStorage.getItem(THEME_CACHE_KEY)!);
     document.documentElement.removeAttribute("style");
-    new Function(readFileSync("static/theme-init.js", "utf8"))();
+    new Function(themeInit)();
     for (const [name, value] of Object.entries(vars)) {
       expect(document.documentElement.style.getPropertyValue(name)).toBe(value);
     }
@@ -94,7 +93,7 @@ describe("system theme defaults", () => {
       expect(document.documentElement.style.getPropertyValue("--bg-app")).toBe(colors.bg);
       expect(document.documentElement.style.colorScheme).toBe(mode === "dark" ? "dark" : "light");
       document.documentElement.removeAttribute("style");
-      new Function(readFileSync("static/theme-init.js", "utf8"))();
+      new Function(themeInit)();
       expect(document.documentElement.style.getPropertyValue("--bg-app")).toBe(colors.bg);
     },
   );
@@ -112,7 +111,7 @@ describe("system theme defaults", () => {
     applyThemeColors(DARK_THEME_COLORS);
     window.localStorage.removeItem(THEME_MODE_CACHE_KEY);
     document.documentElement.removeAttribute("style");
-    new Function(readFileSync("static/theme-init.js", "utf8"))();
+    new Function(themeInit)();
     expect(document.documentElement.style.getPropertyValue("--bg-app")).toBe(DARK_THEME_COLORS.bg);
     expect(document.documentElement.style.colorScheme).toBe("dark");
   });
@@ -127,7 +126,7 @@ describe("system theme defaults", () => {
     );
     expect(document.documentElement.style.colorScheme).toBe("dark");
     document.documentElement.removeAttribute("style");
-    new Function(readFileSync("static/theme-init.js", "utf8"))();
+    new Function(themeInit)();
     expect(document.documentElement.style.colorScheme).toBe("dark");
   });
 
@@ -137,13 +136,13 @@ describe("system theme defaults", () => {
       vi.fn(() => ({ matches: false })),
     );
     window.localStorage.setItem(THEME_CACHE_KEY, "{bad json");
-    new Function(readFileSync("static/theme-init.js", "utf8"))();
+    new Function(themeInit)();
     expect(document.documentElement.style.getPropertyValue("--bg-app")).toBe(LIGHT_THEME_COLORS.bg);
     document.documentElement.removeAttribute("style");
     vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
       throw new Error("blocked");
     });
-    new Function(readFileSync("static/theme-init.js", "utf8"))();
+    new Function(themeInit)();
     expect(document.documentElement.style.getPropertyValue("--bg-app")).toBe(LIGHT_THEME_COLORS.bg);
   });
 
@@ -154,7 +153,7 @@ describe("system theme defaults", () => {
     );
     window.localStorage.setItem(THEME_MODE_CACHE_KEY, "light");
     window.localStorage.setItem(THEME_CACHE_KEY, JSON.stringify({ "--accent": "#123456" }));
-    new Function(readFileSync("static/theme-init.js", "utf8"))();
+    new Function(themeInit)();
     expect(document.documentElement.style.getPropertyValue("--bg-app")).toBe(LIGHT_THEME_COLORS.bg);
     expect(document.documentElement.style.getPropertyValue("--accent")).toBe("#123456");
     expect(document.documentElement.style.colorScheme).toBe("light");
