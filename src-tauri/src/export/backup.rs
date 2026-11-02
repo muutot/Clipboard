@@ -107,6 +107,7 @@ fn file_resource_source(file: &serde_json::Value) -> Option<&str> {
     file["storagePath"]
         .as_str()
         .filter(|s| !s.is_empty())
+        .or_else(|| file["path"].as_str().filter(|s| !s.is_empty()))
         .or_else(|| file["originalPath"].as_str())
 }
 
@@ -214,6 +215,9 @@ fn remap_item(
                     file["storagePath"] = path.clone().into();
                     file["originalPath"] = path.into();
                     file["copied"] = true.into();
+                    if let Some(object) = file.as_object_mut() {
+                        object.remove("path");
+                    }
                 }
             }
         }
@@ -946,6 +950,95 @@ mod tests {
         assert_eq!(
             fs::read(metadata["files"][0]["storagePath"].as_str().unwrap()).unwrap(),
             b"original-only body"
+        );
+    }
+
+    #[test]
+    fn portable_backup_preserves_imported_legacy_file_list_resources() {
+        let root = Scratch::at(&std::env::temp_dir()).unwrap();
+        let first = root.0.join("first.txt");
+        let second = root.0.join("second.txt");
+        fs::write(&first, b"first legacy body").unwrap();
+        fs::write(&second, b"second legacy body").unwrap();
+        let mut legacy = item("legacy", ClipboardKind::File, None);
+        legacy.metadata_json = Some(serde_json::json!({
+            "tags": ["keep"],
+            "files": [{"name": "first.txt", "path": first}, {"name": "second.txt", "path": second}]
+        }).to_string());
+        let source = Database::open_in_memory().unwrap();
+        let source_paths = StoragePaths::initialize(root.0.join("source")).unwrap();
+        let summary =
+            super::super::import_from_json(&serde_json::to_string(&[legacy]).unwrap(), &source)
+                .unwrap();
+        assert_eq!(summary.imported_count, 1);
+        let before = source.get_item("legacy").unwrap().unwrap();
+        let copy_paths = crate::item_operations::resolve_clipboard_file_paths(
+            &before,
+            &source_paths,
+            Some(&source),
+        )
+        .unwrap();
+        assert_eq!(copy_paths, vec![first.clone(), second.clone()]);
+
+        let archive = root.0.join("bundle.clipbackup");
+        create(&source, &archive).unwrap();
+        let target = Database::open_in_memory().unwrap();
+        let checked = preview(&archive, &target).unwrap();
+        assert_eq!((checked.item_count, checked.resource_count), (1, 2));
+        fs::remove_file(first).unwrap();
+        fs::remove_file(second).unwrap();
+        let target_paths = StoragePaths::initialize(root.0.join("target")).unwrap();
+        restore(&archive, &checked.fingerprint, &target, &target_paths).unwrap();
+        let restored = target.get_item("legacy").unwrap().unwrap();
+        let copy_paths = crate::item_operations::resolve_clipboard_file_paths(
+            &restored,
+            &target_paths,
+            Some(&target),
+        )
+        .unwrap();
+        assert_eq!(copy_paths.len(), 2);
+        assert_eq!(fs::read(&copy_paths[0]).unwrap(), b"first legacy body");
+        assert_eq!(fs::read(&copy_paths[1]).unwrap(), b"second legacy body");
+        let metadata: serde_json::Value =
+            serde_json::from_str(restored.metadata_json.as_ref().unwrap()).unwrap();
+        assert_eq!(metadata["tags"], serde_json::json!(["keep"]));
+        assert!(metadata["files"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|file| file.get("path").is_none()));
+    }
+
+    #[test]
+    fn portable_backup_prefers_canonical_storage_over_legacy_aliases() {
+        let root = Scratch::at(&std::env::temp_dir()).unwrap();
+        let captured = root.0.join("captured.txt");
+        let legacy = root.0.join("legacy.txt");
+        fs::write(&captured, b"captured body").unwrap();
+        fs::write(&legacy, b"different legacy body").unwrap();
+        let mut entry = item("canonical", ClipboardKind::File, None);
+        entry.metadata_json = Some(
+            serde_json::json!({"files": [{
+                "storagePath": captured, "path": legacy, "originalPath": legacy
+            }]})
+            .to_string(),
+        );
+        let source = Database::open_in_memory().unwrap();
+        source.save_item(&entry).unwrap();
+        let archive = root.0.join("bundle.clipbackup");
+        create(&source, &archive).unwrap();
+        let target = Database::open_in_memory().unwrap();
+        let checked = preview(&archive, &target).unwrap();
+        assert_eq!(checked.resource_count, 1);
+        let target_paths = StoragePaths::initialize(root.0.join("target")).unwrap();
+        restore(&archive, &checked.fingerprint, &target, &target_paths).unwrap();
+        let restored = target.get_item("canonical").unwrap().unwrap();
+        let metadata: serde_json::Value =
+            serde_json::from_str(restored.metadata_json.as_ref().unwrap()).unwrap();
+        assert!(metadata["files"][0].get("path").is_none());
+        assert_eq!(
+            fs::read(metadata["files"][0]["storagePath"].as_str().unwrap()).unwrap(),
+            b"captured body"
         );
     }
 

@@ -752,12 +752,15 @@ preview RSS/time with synthetic archives; see `docs/PERFORMANCE_V1_8.md` for lim
 `export::backup` implements version-1 `.clipbackup` ZIP bundles of active records and original resource bytes. Before archiving, creation drops path references that are not regular files (directory-valued file captures, missing/imported placeholders) while preserving tags/other metadata; a valid history row must not abort the whole bundle. Export uses the snapshot visitor, streams binaries and spools JSONL to disk. Derived previews/icons and configuration are excluded. Restore first copies the archive to private scratch space, validates entry names/counts, SHA-256, expanded sizes and record constraints, then remaps every known resource reference to newly published flat files under the matching managed image/file root. A strict SQLite transaction skips duplicate content and rolls back on any other failure; rollback removes the newly published files. The Tauri restore command holds storage_maintenance_lock against cleanup, clears the search result cache and invalidates history/tags after success. It reports retention limits without truncating during restore. The snapshot visitor holds the DB mutex during export; very large exports may delay capture.
 
 Per-file backup filtering and remapping share source priority: a nonempty
-`storagePath` selects the captured body; `originalPath` is a fallback only when
-that field is absent/empty. If the selected body is missing or a directory,
+`storagePath` selects the captured body, then the legacy `path` alias;
+`originalPath` is a fallback only when both are absent/empty. If the selected body is missing or a directory,
 creation drops the file slot and preserves the row. A surviving, possibly edited
 original cannot substitute for an unavailable captured copy. Other available
 multi-file bodies still archive with their own bytes; original-only entries retain
-their existing fallback. Later open/read errors still fail atomically.
+their existing fallback. Remapping normalizes per-file legacy `path` to
+`storagePath` and removes the alias, so archive/restore cannot retain old machine
+paths. This matches JSON import/copy support for legacy file lists. Later open/read
+errors still fail atomically.
 
 `FileStore::save_file` now hashes while streaming source bytes into an exclusively created staging file (64 KiB buffer), avoiding a second full read. Hash and size describe exactly the bytes written when the file is published. If a live source grows past the copy cap, staging stops at/below that cap and the remaining source is hashed for the existing pass-through fallback; the partial stage is removed. Flush/fsync and atomic publication remain unchanged. Read/write failures remove only the owned stage. This bounds staging writes, not the lifetime or total reads of an unbounded growing source.
 
