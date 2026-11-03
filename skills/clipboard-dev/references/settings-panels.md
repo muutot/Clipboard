@@ -223,6 +223,9 @@ backend until completion or explicit cancellation.
 - IconCacheSettingsPanel applies the same boundary to cache listing, deletion,
   replacement and the image picker. A dialog that resolves after teardown must
   not start a replacement from the disposed panel.
+- SourceMappingSettingsPanel also checks its lifetime after initial load, save
+  and authoritative refresh. It hydrates the editor only from the refreshed
+  shared cache and publishes success/failure feedback only while mounted.
 - Database repair feedback uses the shared English/Chinese storage keys with
   placeholders, including page/free counts, integrity diagnostics and errors;
   do not concatenate English UI text inside the panel.

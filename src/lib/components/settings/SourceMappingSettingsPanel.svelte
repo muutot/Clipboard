@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onDestroy, onMount } from "svelte";
   import { messages, resolvePath } from "$lib/i18n";
   import { isTauriRuntime } from "$lib/services/runtime";
   import EntryHeading from "$lib/components/settings/settings-entries/EntryHeading.svelte";
@@ -27,19 +27,28 @@
   let rules = $state<SourceMappingRule[]>([]);
   let loading = $state(true);
   let rulesSaving = $state(false);
+  let disposed = false;
   const busy = $derived(rulesSaving);
 
   onMount(() => {
     void loadRules();
   });
 
+  onDestroy(() => {
+    disposed = true;
+  });
+
   async function loadRules() {
+    if (disposed) return;
     try {
-      rules = (await getSourceMappingRules()) ?? [];
+      const loaded = (await getSourceMappingRules()) ?? [];
+      if (disposed) return;
+      rules = loaded;
     } catch (error) {
+      if (disposed) return;
       console.error("Unable to load source mapping rules", error);
     } finally {
-      loading = false;
+      if (!disposed) loading = false;
     }
   }
 
@@ -52,7 +61,7 @@
   }
 
   async function saveRules() {
-    if (busy) return;
+    if (disposed || busy) return;
     rulesSaving = true;
     try {
       const snapshot = rules.map((rule) => ({
@@ -61,16 +70,19 @@
         name: rule.name.trim(),
       }));
       await setSourceMappingRules(snapshot);
+      if (disposed) return;
       // Another window may have saved newer rules while this response was in
       // flight. Refresh from the backend rather than publishing this snapshot,
       // then hydrate the editor from that same authoritative cache.
       await refreshSourceMappingRules();
+      if (disposed) return;
       rules = readSourceMappingRules();
       onfeedback(_t("sourceMapping.saved"), true);
     } catch (error) {
+      if (disposed) return;
       onfeedback(error instanceof Error ? error.message : String(error), false);
     } finally {
-      rulesSaving = false;
+      if (!disposed) rulesSaving = false;
     }
   }
 </script>
