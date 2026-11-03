@@ -50,6 +50,8 @@
   });
   let storageKindStatsAvailable = $state(false);
   let deletingStorageKind = $state<StorageKind | null>(null);
+  let historySaveInFlight = false;
+  let historySavePending = false;
 
   onMount(() => {
     void loadHistoryConfig();
@@ -112,27 +114,42 @@
     }
   }
 
-  async function saveHistoryConfig() {
+  async function saveHistoryConfig(): Promise<void> {
     if (disposed || !historyConfigLoaded) return;
-    // HTML min/max attributes never block typed values; normalize here so
-    // the inputs show the value that is actually persisted. The backend
-    // setters clamp again as the authoritative guard.
-    maxItemCount = clampHistoryNumber(maxItemCount, 100, 1_000_000, 100);
-    retentionPeriodDays = clampHistoryNumber(retentionPeriodDays, 1, 365, 1);
-    recycleBinDays = clampHistoryNumber(recycleBinDays, 0, 365, 0);
-    try {
-      await invoke("set_history_config", {
-        maxItems: maxItemCount,
-        retentionDays: retentionPeriodDays,
-        recycleBinDays: recycleBinDays,
-      });
-    } catch (error) {
-      console.error("Unable to save history config", error);
-      if (disposed) return;
-      onfeedback(error instanceof Error ? error.message : String(error), false);
-    }
-  }
+    historySavePending = true;
+    if (historySaveInFlight) return;
 
+    historySaveInFlight = true;
+    let lastError: unknown;
+    try {
+      while (historySavePending && !disposed) {
+        historySavePending = false;
+        // HTML min/max attributes never block typed values; normalize here so
+        // the inputs show the value that is actually persisted. A request
+        // snapshots all three fields only after the previous write settles.
+        maxItemCount = clampHistoryNumber(maxItemCount, 100, 1_000_000, 100);
+        retentionPeriodDays = clampHistoryNumber(retentionPeriodDays, 1, 365, 1);
+        recycleBinDays = clampHistoryNumber(recycleBinDays, 0, 365, 0);
+        const snapshot = {
+          maxItems: maxItemCount,
+          retentionDays: retentionPeriodDays,
+          recycleBinDays: recycleBinDays,
+        };
+        try {
+          await invoke("set_history_config", snapshot);
+          lastError = undefined;
+        } catch (error) {
+          lastError = error;
+        }
+      }
+    } finally {
+      historySaveInFlight = false;
+    }
+
+    if (disposed || lastError === undefined) return;
+    console.error("Unable to save history config", lastError);
+    onfeedback(lastError instanceof Error ? lastError.message : String(lastError), false);
+  }
   function clampHistoryNumber(value: number, min: number, max: number, fallback: number): number {
     if (!Number.isFinite(value)) return fallback;
     return Math.min(max, Math.max(min, Math.round(value)));

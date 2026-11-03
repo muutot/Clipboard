@@ -91,6 +91,37 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
+it("serializes history saves and persists the latest snapshot", async () => {
+  const requests = [deferred<unknown>(), deferred<unknown>()];
+  let requestIndex = 0;
+  bridge.invoke.mockImplementation((command) => {
+    if (command === "set_history_config") return requests[requestIndex++].promise;
+    return Promise.resolve(response(command));
+  });
+  const inputs = target.querySelectorAll<HTMLInputElement>('input[type="number"]');
+
+  inputs[0].value = "120";
+  inputs[0].dispatchEvent(new Event("input", { bubbles: true }));
+  inputs[0].dispatchEvent(new Event("change", { bubbles: true }));
+  await settle();
+  inputs[1].value = "20000";
+  inputs[1].dispatchEvent(new Event("input", { bubbles: true }));
+  inputs[1].dispatchEvent(new Event("change", { bubbles: true }));
+  await settle();
+
+  expect(historySaves()).toEqual([
+    ["set_history_config", { maxItems: 10000, retentionDays: 120, recycleBinDays: 30 }],
+  ]);
+
+  requests[0].resolve({});
+  await settle();
+  expect(historySaves()).toEqual([
+    ["set_history_config", { maxItems: 10000, retentionDays: 120, recycleBinDays: 30 }],
+    ["set_history_config", { maxItems: 20000, retentionDays: 120, recycleBinDays: 30 }],
+  ]);
+  requests[1].resolve({});
+  await settle();
+});
 it("does not publish a failed history save after panel teardown", async () => {
   const pending = deferred<unknown>();
   bridge.invoke.mockImplementation((command) =>
