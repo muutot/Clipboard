@@ -5,7 +5,7 @@ import Panel from "./IgnoredAppsSettingsPanel.svelte";
 const bridge = vi.hoisted(() => ({ configure: vi.fn() }));
 vi.mock("$lib/services/capture", () => ({
   getApplicationFilterSettings: vi.fn().mockResolvedValue({
-    discoveredApplications: [],
+    discoveredApplications: ["alpha.exe"],
     discoveredApplicationsWithIcons: [],
     ignoredApplications: [],
   }),
@@ -79,4 +79,26 @@ it("does not start overlapping manual application saves from Enter", async () =>
   finishes[0](["alpha.exe"]);
   await settle();
   expect(bridge.configure).toHaveBeenCalledTimes(1);
+});
+
+it("retains a manual draft when its save fails", async () => {
+  bridge.configure.mockRejectedValueOnce(new Error("fixture failure"));
+
+  setManualApplication("alpha.exe");
+  submitManualApplication();
+  await settle();
+
+  expect(target.querySelector<HTMLInputElement>(".manual-add input")!.value).toBe("alpha.exe");
+});
+
+it("retains selected applications when their save fails", async () => {
+  bridge.configure.mockRejectedValueOnce(new Error("fixture failure"));
+  const available = target.querySelector<HTMLButtonElement>(".application-row")!;
+  available.click();
+  await settle();
+  expect(available.classList.contains("selected")).toBe(true);
+
+  target.querySelector<HTMLButtonElement>(".transfer-column button")!.click();
+  await settle();
+  expect(available.classList.contains("selected")).toBe(true);
 });

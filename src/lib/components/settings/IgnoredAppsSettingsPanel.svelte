@@ -172,8 +172,9 @@
 
   async function ignoreSelected() {
     if (!settings || selectedAvailable.length === 0) return;
-    await saveIgnored([...settings.ignoredApplications, ...selectedAvailable]);
-    selectedAvailable = [];
+    if (await saveIgnored([...settings.ignoredApplications, ...selectedAvailable])) {
+      selectedAvailable = [];
+    }
   }
 
   async function removeIgnored(application: string) {
@@ -186,12 +187,13 @@
   async function addManualApplication() {
     const application = manualApplication.trim();
     if (saving || !settings || !application) return;
-    await saveIgnored([...settings.ignoredApplications, application]);
-    manualApplication = "";
+    if (await saveIgnored([...settings.ignoredApplications, application])) {
+      manualApplication = "";
+    }
   }
 
-  async function saveIgnored(applications: string[]) {
-    if (saving || !settings) return;
+  async function saveIgnored(applications: string[]): Promise<boolean> {
+    if (saving || !settings) return false;
     saving = true;
     feedback = "";
     feedbackSuccess = false;
@@ -201,9 +203,11 @@
       settings = { ...settings, ignoredApplications };
       feedback = _t("capture.saved", { count: ignoredApplications.length });
       feedbackSuccess = true;
+      return true;
     } catch (error) {
       console.error("Unable to save ignored applications", error);
       feedback = error instanceof Error ? error.message : String(error);
+      return false;
     } finally {
       saving = false;
     }
