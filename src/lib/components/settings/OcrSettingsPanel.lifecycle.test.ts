@@ -30,7 +30,7 @@ const config = {
 
 let target: HTMLDivElement;
 let component: ReturnType<typeof mount> | null;
-let feedback: ReturnType<typeof vi.fn>;
+let feedback: (message: string, success: boolean) => void;
 
 async function settle() {
   for (let index = 0; index < 20; index++) {
@@ -74,7 +74,7 @@ function choose(triggerSelector: string, option: string) {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  feedback = vi.fn();
+  feedback = vi.fn<(message: string, success: boolean) => void>();
   vi.mocked(listen).mockResolvedValue(vi.fn());
   vi.mocked(invoke).mockImplementation(async (command) => {
     if (command === "get_ocr_status") return { ...status };
