@@ -932,7 +932,9 @@ embedded SQLite database. `export/ppaste.rs::ExtractedDatabase` owns one exclusi
 UUID directory and its `PPaste2.db3` PathBuf; write/read errors and normal drop
 remove that directory including SQLite sidecars. Drop the guard after reading,
 before materializing imported rows, to minimize temporary-data lifetime.
-No conversion through a lossy path string is needed. Native Windows DACL UTs
+Image rows that omit width or height read only the encoded image header with
+`ImageReader::into_dimensions()`; they must not decode the full pixel buffer
+during import. No conversion through a lossy path string is needed. Native Windows DACL UTs
 cover the DB/WAL/SHM under a public parent; Unix permission tests need Unix CI.
 Abrupt process exit and OS refusal to delete are outside drop cleanup guarantees.
 

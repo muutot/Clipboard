@@ -331,8 +331,11 @@ fn build_item(
 
         let (width, height) = match (row.width, row.height) {
             (Some(w), Some(h)) if w > 0 && h > 0 => (w, h),
-            _ => image::load_from_memory(&bytes)
-                .map(|image| (i64::from(image.width()), i64::from(image.height())))
+            _ => image::ImageReader::new(std::io::Cursor::new(&bytes))
+                .with_guessed_format()
+                .ok()
+                .and_then(|reader| reader.into_dimensions().ok())
+                .map(|(width, height)| (i64::from(width), i64::from(height)))
                 .unwrap_or((0, 0)),
         };
 
@@ -717,6 +720,42 @@ mod tests {
         backup
     }
 
+    fn make_image_backup_without_dimensions(temp: &Path, image: &[u8]) -> PathBuf {
+        let db_path = temp.join("source-large-image.db3");
+        let conn = Connection::open(&db_path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE PPaste_Main (
+                PUID TEXT PRIMARY KEY,
+                TYPE TEXT, TYPE_CHILD TEXT, VALUE TEXT, SEARCH TEXT,
+                FAVORITE INTEGER, CREATE_TIME DATETIME,
+                SOURCEPATH TEXT, WIDTH INTEGER, HEIGHT INTEGER
+            );",
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO PPaste_Main
+                (PUID, TYPE, TYPE_CHILD, VALUE, SEARCH, FAVORITE, CREATE_TIME, SOURCEPATH, WIDTH, HEIGHT)
+             VALUES
+                ('I1', 'Image', 'Image', 'large.png', NULL, 0, '2026-04-27 12:15:25', 'Zen', NULL, NULL);",
+            [],
+        )
+        .unwrap();
+        drop(conn);
+        let db_bytes = std::fs::read(&db_path).unwrap();
+
+        let backup = temp.join("large.Pastebackup");
+        let file = std::fs::File::create(&backup).unwrap();
+        let mut writer = zip::ZipWriter::new(file);
+        let options = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Stored);
+        writer.start_file("PPaste2.db3", options).unwrap();
+        writer.write_all(&db_bytes).unwrap();
+        writer.start_file("PasteData/large.png", options).unwrap();
+        writer.write_all(image).unwrap();
+        writer.finish().unwrap();
+        backup
+    }
+
     #[test]
     fn imports_text_and_images_from_ppaste_backup() {
         let temp = std::env::temp_dir().join(format!(
@@ -775,6 +814,51 @@ mod tests {
             image_item.resource_path.as_deref().unwrap()
         );
         assert_eq!(metadata["contentHash"], image_item.content_hash);
+
+        std::fs::remove_dir_all(&temp).unwrap();
+    }
+
+    #[test]
+    fn image_header_dimensions_are_used_without_decoding_pixels() {
+        let temp = std::env::temp_dir().join(format!(
+            "ppaste-large-image-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&temp).unwrap();
+        let backup = make_image_backup_without_dimensions(
+            &temp,
+            include_bytes!("../../tests/fixtures/ppaste-large-dimensions.png"),
+        );
+
+        let database = Database::open_in_memory().unwrap();
+        let paths = StoragePaths::initialize_with_resource_directories_for_configuration(
+            temp.clone(),
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+
+        let summary =
+            import_from_ppaste_backup(backup.to_str().unwrap(), &database, &paths).unwrap();
+        assert_eq!(summary.imported_count, 1);
+        assert_eq!(summary.skipped_count, 0);
+
+        let stored = database
+            .list_recent(10, 0, &crate::storage::HistoryFilter::default())
+            .unwrap();
+        let image_item = stored
+            .iter()
+            .find(|item| item.kind == ClipboardKind::Image)
+            .unwrap();
+        let metadata: serde_json::Value =
+            serde_json::from_str(image_item.metadata_json.as_deref().unwrap()).unwrap();
+        assert_eq!(metadata["width"], 32_768);
+        assert_eq!(metadata["height"], 32_768);
 
         std::fs::remove_dir_all(&temp).unwrap();
     }
