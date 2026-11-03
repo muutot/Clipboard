@@ -216,9 +216,10 @@ backend until completion or explicit cancellation.
 - StorageToolsPanel database repair and search-index rebuild use the same
   lifetime boundary: teardown ignores late success/failure state and shared
   feedback, while the already submitted backend operation continues.
-- Import/export completions in the nested transfer panel follow that lifetime
-  boundary as well: teardown discards late format loads, warnings and shared
-  success/failure feedback without cancelling work already submitted.
+- TransferPanel import/export and its nested BackupPanel create/preview/restore
+  actions follow that lifetime boundary as well: teardown discards late format
+  loads, preview state, warnings and shared success/failure feedback without
+  cancelling work already submitted.
 - Database repair feedback uses the shared English/Chinese storage keys with
   placeholders, including page/free counts, integrity diagnostics and errors;
   do not concatenate English UI text inside the panel.

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onDestroy } from "svelte";
   import { messages, resolvePath } from "$lib/i18n";
   import { isTauriRuntime } from "$lib/services/runtime";
   import {
@@ -27,30 +28,39 @@
   let preview = $state<BackupPreview | null>(null);
   let selectedPath = $state("");
   let truncated = $state(0);
+  let disposed = false;
+
+  onDestroy(() => {
+    disposed = true;
+  });
+
   async function run(action: "create" | "preview" | "restore") {
-    if (unavailable || !isTauriRuntime()) return;
+    if (disposed || unavailable || !isTauriRuntime()) return;
     busy = true;
     try {
       const { open, save } = await import("@tauri-apps/plugin-dialog");
+      if (disposed) return;
       const filters = [{ name: "Clipboard backup", extensions: ["clipbackup"] }];
       if (action === "create") {
         const path = await save({ defaultPath: "clipboard.clipbackup", filters });
-        if (path) {
-          const result = await createResourceBackup(path);
-          onfeedback(
-            _t("storage.exportSuccess", { path, size: formatBytes(result.byteCount) }),
-            true,
-          );
-        }
+        if (disposed || !path) return;
+        const result = await createResourceBackup(path);
+        if (disposed) return;
+        onfeedback(
+          _t("storage.exportSuccess", { path, size: formatBytes(result.byteCount) }),
+          true,
+        );
       } else if (action === "preview") {
         const path = await open({ multiple: false, directory: false, filters });
         if (typeof path === "string") {
-          preview = null;
+          const nextPreview = await previewResourceBackup(path);
+          if (disposed) return;
+          preview = nextPreview;
           selectedPath = path;
-          preview = await previewResourceBackup(path);
         }
       } else if (preview) {
         const result = await restoreResourceBackup(selectedPath, preview.fingerprint);
+        if (disposed) return;
         preview = null;
         truncated = result.pendingTruncation;
         onfeedback(
@@ -64,6 +74,7 @@
         );
       }
     } catch (error) {
+      if (disposed) return;
       onfeedback(
         isOperationCancelled(error)
           ? _t("operations.cancelled")
@@ -73,7 +84,7 @@
         isOperationCancelled(error),
       );
     } finally {
-      busy = false;
+      if (!disposed) busy = false;
       await operation.refresh();
     }
   }
