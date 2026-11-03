@@ -207,6 +207,8 @@
     syncMaxFileBytes = clampSyncBytes(syncMaxFileBytes, 10_485_760);
     syncMaxImageDisplay = toDisplaySize(syncMaxImageBytes, syncMaxImageUnit);
     syncMaxFileDisplay = toDisplaySize(syncMaxFileBytes, syncMaxFileUnit);
+    const submittedS3SecretKey = syncS3SecretKey || null;
+    const submittedEncryptionPassword = syncEncryptPassword || null;
     await setSyncConfig({
       provider: syncProvider,
       endpoint: syncEndpoint || null,
@@ -220,14 +222,16 @@
       s3Region: syncS3Region || null,
       s3Bucket: syncS3Bucket || null,
       s3AccessKey: syncS3AccessKey || null,
-      s3SecretKey: syncS3SecretKey || null,
-      syncPassword: syncEncryptPassword || null,
+      s3SecretKey: submittedS3SecretKey,
+      syncPassword: submittedEncryptionPassword,
     });
     if (disposed) return;
-    if (syncS3SecretKey) syncHasS3SecretKey = true;
-    if (syncEncryptPassword) syncHasEncryptionPassword = true;
-    syncS3SecretKey = "";
-    syncEncryptPassword = "";
+    if (submittedS3SecretKey) syncHasS3SecretKey = true;
+    if (submittedEncryptionPassword) syncHasEncryptionPassword = true;
+    // Keep a draft entered while this request was in flight; it belongs to the
+    // next save rather than being erased by an older successful response.
+    if (syncS3SecretKey === (submittedS3SecretKey ?? "")) syncS3SecretKey = "";
+    if (syncEncryptPassword === (submittedEncryptionPassword ?? "")) syncEncryptPassword = "";
   }
 
   function persistSyncConfig(): Promise<void> {

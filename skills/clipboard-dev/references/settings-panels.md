@@ -252,6 +252,8 @@ backend until completion or explicit cancellation.
   connection test or manual sync. The backend rejects an overlapping
   `set_sync_config` while a sync operation holds the process lock, so queued
   snapshots must be written in order and the later action must wait for them.
+  Credential inputs clear only the draft submitted by that request; a newer S3
+  secret or encryption password typed while it is in flight remains for the next save.
 - Database repair feedback uses the shared English/Chinese storage keys with
   placeholders, including page/free counts, integrity diagnostics and errors;
   do not concatenate English UI text inside the panel.

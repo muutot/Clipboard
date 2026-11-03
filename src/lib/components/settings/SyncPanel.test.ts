@@ -181,6 +181,29 @@ it("serializes an automatic save before the manual sync save", async () => {
   expect(bridge.setConfig.mock.calls[1][0]).toEqual(expect.objectContaining({ autoSync: true }));
 });
 
+it("does not clear a newer S3 secret while an earlier save settles", async () => {
+  let finishFirstSave!: () => void;
+  const firstSave = new Promise<void>((resolve) => (finishFirstSave = resolve));
+  bridge.setConfig.mockReturnValueOnce(firstSave);
+  render();
+  await settle();
+
+  const secret = target.querySelector<HTMLInputElement>("input[aria-label='Secret Key']")!;
+  secret.value = "first-secret";
+  secret.dispatchEvent(new Event("input", { bubbles: true }));
+  secret.dispatchEvent(new Event("blur"));
+  await vi.waitFor(() => expect(bridge.setConfig).toHaveBeenCalledTimes(1));
+
+  secret.value = "new-secret";
+  secret.dispatchEvent(new Event("input", { bubbles: true }));
+  finishFirstSave();
+  await settle();
+  secret.dispatchEvent(new Event("blur"));
+  await vi.waitFor(() => expect(bridge.setConfig).toHaveBeenCalledTimes(2));
+  expect(bridge.setConfig.mock.calls[1][0]).toEqual(
+    expect.objectContaining({ s3SecretKey: "new-secret" }),
+  );
+});
 it("rotates the namespace with the entered password and reloads the configuration", async () => {
   render();
   await settle();
