@@ -213,6 +213,9 @@ backend until completion or explicit cancellation.
 - Path-save completion in StoragePathsPanel checks lifetime before updating
   panel state or shared feedback, including failures. Teardown leaves already
   submitted directory/configuration work in the backend.
+- History-limit saves in StorageLimitsPanel also check lifetime before
+  publishing failure feedback; teardown lets an already submitted backend write
+  finish without presenting its result in the next settings section.
 - StorageToolsPanel database repair and search-index rebuild use the same
   lifetime boundary: teardown ignores late success/failure state and shared
   feedback, while the already submitted backend operation continues.

@@ -128,6 +128,7 @@
       });
     } catch (error) {
       console.error("Unable to save history config", error);
+      if (disposed) return;
       onfeedback(error instanceof Error ? error.message : String(error), false);
     }
   }

@@ -55,6 +55,7 @@ const statsReads = () =>
   bridge.invoke.mock.calls.filter(([cmd]) => cmd === "get_storage_kind_stats");
 const deletes = () =>
   bridge.invoke.mock.calls.filter(([cmd]) => cmd === "permanently_delete_storage_kind");
+const historySaves = () => bridge.invoke.mock.calls.filter(([cmd]) => cmd === "set_history_config");
 function deleteText() {
   target.querySelector<HTMLButtonElement>(".danger-action")!.click();
 }
@@ -90,6 +91,25 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
+it("does not publish a failed history save after panel teardown", async () => {
+  const pending = deferred<unknown>();
+  bridge.invoke.mockImplementation((command) =>
+    command === "set_history_config" ? pending.promise : Promise.resolve(response(command)),
+  );
+  const retention = target.querySelectorAll<HTMLInputElement>('input[type="number"]')[0];
+  retention.value = "120";
+  retention.dispatchEvent(new Event("input", { bubbles: true }));
+  retention.dispatchEvent(new Event("change", { bubbles: true }));
+  await settle();
+  expect(historySaves()).toEqual([
+    ["set_history_config", { maxItems: 10000, retentionDays: 120, recycleBinDays: 30 }],
+  ]);
+
+  await closePanel();
+  pending.reject(new Error("late history save failure"));
+  await settle();
+  expect(bridge.feedback).not.toHaveBeenCalled();
+});
 it("does not replace a newer confirmation when old statistics arrive after panel teardown", async () => {
   const pending = deferred<typeof stats>();
   bridge.invoke.mockImplementation((command) =>
