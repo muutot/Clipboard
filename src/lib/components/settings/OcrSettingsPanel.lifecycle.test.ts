@@ -87,6 +87,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
+  vi.useRealTimers();
   if (component) await unmount(component);
   target.remove();
 });
@@ -156,6 +157,64 @@ it("serializes detection saves so the newest threshold wins", async () => {
   ]);
   requests[1].resolve({});
   await settle();
+});
+it("refreshes full OCR status after applying a model during task polling", async () => {
+  const poll = deferred<typeof status>();
+  let statusReads = 0;
+  let configReads = 0;
+  let storedVariant = "tiny";
+  vi.mocked(invoke).mockImplementation((command, args) => {
+    if (command === "get_ocr_status") {
+      return statusReads++ === 0
+        ? Promise.resolve({ ...status })
+        : poll.promise.then((result) => ({
+            ...result,
+            ppocrModelVariant: storedVariant,
+            installedVariants: [...result.installedVariants, storedVariant],
+          }));
+    }
+    if (command === "get_ocr_config") {
+      configReads += 1;
+      return Promise.resolve({ ...config, ppocrModelVariant: storedVariant });
+    }
+    if (command === "set_ocr_config") {
+      const settings = (args as { settings?: { ppocrModelVariant?: string } }).settings;
+      storedVariant = settings?.ppocrModelVariant ?? storedVariant;
+      return Promise.resolve(undefined);
+    }
+    return Promise.resolve(undefined);
+  });
+  vi.useFakeTimers();
+  component = mount(Panel, { target, props: { onfeedback: feedback } });
+  flushSync();
+  await settle();
+  expect(configReads).toBe(1);
+  expect(target.querySelector('[data-settings-search-id="ocr.engine"]')).not.toBeNull();
+
+  await vi.advanceTimersByTimeAsync(2000);
+  await settle();
+  expect(statusReads).toBe(2);
+
+  try {
+    choose(".ocr-model-select button", "small (~30MB) ✓");
+    [...target.querySelectorAll<HTMLButtonElement>("button")]
+      .find((entry) => entry.textContent?.trim() === t("storage.ocrModelApply"))!
+      .click();
+    await settle();
+    expect(configReads).toBe(2);
+  } finally {
+    poll.resolve({ ...status });
+    await settle();
+  }
+  const modelRow = target.querySelector('[data-settings-search-id="ocr.model"]')!;
+  expect(modelRow.querySelector(".ocr-model-select button")?.textContent).toContain(
+    "small (~30MB) ✓",
+  );
+  expect(
+    [...modelRow.querySelectorAll<HTMLButtonElement>("button")].some(
+      (button) => button.textContent?.trim() === t("storage.ocrModelApplied"),
+    ),
+  ).toBe(true);
 });
 it.each(["succeeded", "failed"] as const)(
   "does not publish an OCR detection save that %s after teardown",

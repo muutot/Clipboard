@@ -241,8 +241,10 @@ backend until completion or explicit cancellation.
   model application and engine changes, including their failure reloads and
   parent feedback. All three writes pass through one panel-local FIFO; detection
   saves snapshot the current thresholds only when their turn starts, so rapid
-  changes cannot race or restore an older value. Its task-status poll also avoids
-  writing its busy flag after teardown.
+  changes cannot race or restore an older value. Its 2-second task poll uses a
+  separate in-flight flag, so polling cannot suppress the full status reload that
+  follows a model apply, install, or engine change; the poll also avoids writing
+  its busy flag after teardown.
 - SourceMappingSettingsPanel also checks its lifetime after initial load, save
   and authoritative refresh. It hydrates the editor only from the refreshed
   shared cache and publishes success/failure feedback only while mounted.

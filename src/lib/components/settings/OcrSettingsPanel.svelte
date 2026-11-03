@@ -22,6 +22,7 @@
   let ocrEngineAvailable = $state(false);
   let ocrHasEngine = $state(false);
   let ocrStatusLoading = $state(false);
+  let ocrTaskStatusLoading = $state(false);
   // The engine/model/detection controls must not render the placeholder
   // defaults and then jump to the stored values once `loadOcrStatus`
   // resolves; gate them until configuration and engine status load successfully.
@@ -107,15 +108,15 @@
   }
 
   async function loadOcrTaskStatus() {
-    if (destroyed || ocrStatusLoading || !ocrReady) return;
-    ocrStatusLoading = true;
+    if (destroyed || ocrTaskStatusLoading || !ocrReady) return;
+    ocrTaskStatusLoading = true;
     try {
       const result = await invoke<OcrStatusResult>("get_ocr_status");
       if (!destroyed) applyOcrTaskStatus(result);
     } catch {
       /* ignore */
     } finally {
-      if (!destroyed) ocrStatusLoading = false;
+      if (!destroyed) ocrTaskStatusLoading = false;
     }
   }
 
