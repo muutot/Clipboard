@@ -243,11 +243,22 @@
     }
   }
 
+  // Opening the dialog and mounting the statistics panel can issue overlapping
+  // status reads. Only the newest request may publish its snapshot; otherwise a
+  // late older read can roll record counts and sizes back on screen.
+  let storageStatusRequest = 0;
+
   async function refreshStorageStats() {
+    const request = ++storageStatusRequest;
     try {
-      status = await getStorageStatus();
+      const nextStatus = await getStorageStatus();
+      if (request === storageStatusRequest) status = nextStatus;
     } catch (error) {
-      console.error("Unable to refresh storage statistics", error);
+      if (request === storageStatusRequest) {
+        console.error("Unable to refresh storage statistics", error);
+      }
+    } finally {
+      if (request === storageStatusRequest) loading = false;
     }
   }
 
@@ -259,21 +270,25 @@
   });
 
   async function loadStatus() {
+    const request = ++storageStatusRequest;
     loading = true;
     feedback = "";
     feedbackSuccess = false;
 
     try {
-      status = await getStorageStatus();
+      const nextStatus = await getStorageStatus();
+      if (request !== storageStatusRequest) return;
+      status = nextStatus;
       if (!status) {
         feedback = _t("storage.systemMessage");
       }
     } catch (error) {
+      if (request !== storageStatusRequest) return;
       console.error("Unable to load storage settings", error);
       status = null;
       feedback = _t("storage.writeFailed");
     } finally {
-      loading = false;
+      if (request === storageStatusRequest) loading = false;
     }
   }
 
