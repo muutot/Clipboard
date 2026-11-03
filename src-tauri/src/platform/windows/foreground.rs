@@ -4,6 +4,60 @@ use super::*;
 
 #[cfg(target_os = "windows")]
 use crate::content::icon_key;
+const QUERY_INITIAL_CAPACITY: usize = 520;
+const QUERY_MAX_CAPACITY: usize = 32 * 1024;
+const ERROR_INSUFFICIENT_BUFFER: i32 = 122;
+
+fn query_process_image_path_with(
+    initial_capacity: usize,
+    mut query: impl FnMut(&mut [u16], &mut u32) -> Result<(), i32>,
+) -> Option<String> {
+    use std::os::windows::ffi::OsStringExt;
+
+    let mut capacity = initial_capacity.clamp(1, QUERY_MAX_CAPACITY);
+    loop {
+        let mut buffer = vec![0u16; capacity];
+        let mut size = u32::try_from(capacity).ok()?;
+        match query(&mut buffer, &mut size) {
+            Ok(()) => {
+                if size as usize > buffer.len() {
+                    return None;
+                }
+                let wide: Vec<u16> = buffer[..size as usize].to_vec();
+                return Some(
+                    std::ffi::OsString::from_wide(&wide)
+                        .to_string_lossy()
+                        .to_string(),
+                );
+            }
+            Err(ERROR_INSUFFICIENT_BUFFER) if capacity < QUERY_MAX_CAPACITY => {
+                capacity = capacity.saturating_mul(2).min(QUERY_MAX_CAPACITY);
+            }
+            Err(_) => return None,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn process_path_query_retries_when_the_path_exceeds_the_initial_buffer() {
+        let expected = format!(r"C:\{}\probe.exe", "x".repeat(640));
+        let encoded: Vec<u16> = expected.encode_utf16().collect();
+        let actual = query_process_image_path_with(QUERY_INITIAL_CAPACITY, |buffer, size| {
+            if encoded.len() > buffer.len() {
+                *size = buffer.len() as u32;
+                return Err(122);
+            }
+            buffer[..encoded.len()].copy_from_slice(&encoded);
+            *size = encoded.len() as u32;
+            Ok(())
+        });
+        assert_eq!(actual.as_deref(), Some(expected.as_str()));
+    }
+}
 #[cfg(target_os = "windows")]
 pub fn get_foreground_app() -> crate::platform::ForegroundApp {
     use std::ffi::OsString;
@@ -59,14 +113,19 @@ pub fn get_foreground_app() -> crate::platform::ForegroundApp {
             };
         }
 
-        let mut path_buf = [0u16; 520];
-        let mut size = 520u32;
-        let result = QueryFullProcessImageNameW(process, 0, path_buf.as_mut_ptr(), &mut size);
+        let full_path = query_process_image_path_with(QUERY_INITIAL_CAPACITY, |buffer, size| {
+            let result = QueryFullProcessImageNameW(process, 0, buffer.as_mut_ptr(), size);
+            if result != 0 {
+                Ok(())
+            } else {
+                Err(std::io::Error::last_os_error()
+                    .raw_os_error()
+                    .unwrap_or_default())
+            }
+        });
         CloseHandle(process);
 
-        if result != 0 {
-            let wide: Vec<u16> = path_buf[..size as usize].to_vec();
-            let full_path = OsString::from_wide(&wide).to_string_lossy().to_string();
+        if let Some(full_path) = full_path {
             let name = std::path::Path::new(&full_path)
                 .file_stem()
                 .map(|s| s.to_string_lossy().to_string())
