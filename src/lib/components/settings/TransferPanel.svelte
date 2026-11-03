@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onDestroy } from "svelte";
   import BackupPanel from "$lib/components/settings/BackupPanel.svelte";
   import Checkbox from "$lib/components/common/Checkbox.svelte";
   import CustomSelect from "$lib/components/common/CustomSelect.svelte";
@@ -49,6 +50,11 @@
   let exporting = $state(false);
   let importing = $state(false);
   let importResult = $state<ImportSummary | null>(null);
+  let disposed = false;
+
+  onDestroy(() => {
+    disposed = true;
+  });
 
   $effect(() => {
     void loadExportFormats();
@@ -73,33 +79,39 @@
   }
 
   async function loadExportFormats(): Promise<void> {
+    if (disposed) return;
     try {
       const formats = await getExportFormats();
+      if (disposed) return;
       exportFormats = formats;
       if (formats.length > 0 && !formats.some((format) => format.id === exportFormat)) {
         exportFormat = formats[0].id;
       }
     } catch (error) {
+      if (disposed) return;
       console.error("Unable to load export formats", error);
       exportFormats = [];
     }
   }
 
   async function loadImportFormats(): Promise<void> {
+    if (disposed) return;
     try {
       const formats = await getImportFormats();
+      if (disposed) return;
       importFormats = formats;
       if (formats.length > 0 && !formats.some((format) => format.id === importFormat)) {
         importFormat = formats[0].id;
       }
     } catch (error) {
+      if (disposed) return;
       console.error("Unable to load import formats", error);
       importFormats = [];
     }
   }
 
   async function handleExport() {
-    if (!isTauriRuntime() || exporting || importing) return;
+    if (disposed || !isTauriRuntime() || exporting || importing) return;
     const format = exportFormats.find((entry) => entry.id === exportFormat);
     if (!format) return;
     exporting = true;
@@ -109,13 +121,14 @@
         defaultPath: `clipboard-export${format.extension}`,
         filters: [{ name: format.label, extensions: [format.extension.slice(1)] }],
       });
-      if (!filePath) return;
+      if (disposed || !filePath) return;
       const result = await exportToFile(filePath, format.id, {
         includeFavorites: exportIncludeFavorites,
         dateFromMs: exportDateToMs(exportDateFrom, false),
         dateToMs: exportDateToMs(exportDateTo, true),
         contentTypes: Array.from(exportContentTypes),
       });
+      if (disposed) return;
       onfeedback(
         _t("storage.exportSuccess", {
           path: result.path,
@@ -124,6 +137,7 @@
         true,
       );
     } catch (error) {
+      if (disposed) return;
       onfeedback(
         _t("storage.exportFailed", {
           error: error instanceof Error ? error.message : String(error),
@@ -131,12 +145,12 @@
         false,
       );
     } finally {
-      exporting = false;
+      if (!disposed) exporting = false;
     }
   }
 
   async function handleImport() {
-    if (!isTauriRuntime() || exporting || importing) return;
+    if (disposed || !isTauriRuntime() || exporting || importing) return;
     const format = importFormats.find((entry) => entry.id === importFormat);
     if (!format) return;
     importing = true;
@@ -152,8 +166,9 @@
           },
         ],
       });
-      if (!filePath) return;
+      if (disposed || !filePath) return;
       const result = await importFromFile(filePath);
+      if (disposed) return;
       importResult = result;
       if (result.errors.length > 0) {
         const detail = `${_t("storage.importErrorsN", {
@@ -177,6 +192,7 @@
         );
       }
     } catch (error) {
+      if (disposed) return;
       onfeedback(
         _t("storage.importFailed", {
           error: error instanceof Error ? error.message : String(error),
@@ -184,7 +200,7 @@
         false,
       );
     } finally {
-      importing = false;
+      if (!disposed) importing = false;
     }
   }
 </script>

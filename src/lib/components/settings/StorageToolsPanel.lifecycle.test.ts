@@ -6,7 +6,9 @@ import Panel from "./StorageToolsPanel.svelte";
 const bridge = vi.hoisted(() => ({
   invoke: vi.fn(),
   open: vi.fn(),
+  save: vi.fn(),
   importFile: vi.fn(),
+  exportFile: vi.fn(),
   feedback: vi.fn(),
   repair: vi.fn(),
   rebuild: vi.fn(),
@@ -17,12 +19,12 @@ vi.mock("$lib/services/settings", async () => {
   const { writable } = await import("svelte/store");
   return { generalSettings: writable({ colorIcons: false }) };
 });
-vi.mock("@tauri-apps/plugin-dialog", () => ({ open: bridge.open, save: vi.fn() }));
+vi.mock("@tauri-apps/plugin-dialog", () => ({ open: bridge.open, save: bridge.save }));
 vi.mock("$lib/services/storage", () => ({
   getImportFormats: vi.fn(async () => [{ id: "json", label: "JSON", extension: ".json" }]),
   getExportFormats: vi.fn(async () => [{ id: "json", label: "JSON", extension: ".json" }]),
   importFromFile: bridge.importFile,
-  exportToFile: vi.fn(),
+  exportToFile: bridge.exportFile,
   createResourceBackup: vi.fn(),
   previewResourceBackup: vi.fn(),
   restoreResourceBackup: vi.fn(),
@@ -45,6 +47,8 @@ beforeEach(async () => {
   bridge.invoke.mockImplementation(async (command) =>
     command === "get_history_config" ? { maxItems: 10_000 } : null,
   );
+  bridge.open.mockResolvedValue("fixture.json");
+  bridge.save.mockResolvedValue("fixture.export.json");
   bridge.importFile.mockResolvedValue({
     importedCount: 0,
     skippedCount: 0,
@@ -52,6 +56,7 @@ beforeEach(async () => {
     pendingTruncation: 0,
     maxItems: 10_000,
   });
+  bridge.exportFile.mockResolvedValue({ path: "fixture.export.json", byteCount: 64 });
   target = document.createElement("div");
   document.body.append(target);
   component = mount(Panel, {
@@ -120,6 +125,48 @@ it.each([
     finish({ integrityOk: true, integrityMessage: "ok", pageCount: 1, freelistCount: 0 });
   } else {
     finish({ processedEvents: 1, upsertedDocuments: 1, deletedDocuments: 0, lastSequence: 1 });
+  }
+  await settle();
+  expect(bridge.feedback).not.toHaveBeenCalled();
+  target.remove();
+});
+
+it.each([
+  ["import", "succeeded"],
+  ["import", "failed"],
+  ["export", "succeeded"],
+  ["export", "failed"],
+] as const)("does not publish an %s that %s after teardown", async (operation, outcome) => {
+  let finish!: (value: unknown) => void;
+  let fail!: (error: Error) => void;
+  const pending = new Promise((resolve, reject) => {
+    finish = resolve;
+    fail = reject;
+  });
+  const service = operation === "import" ? bridge.importFile : bridge.exportFile;
+  service.mockReturnValueOnce(pending);
+  const actionButton = target.querySelector<HTMLButtonElement>(
+    `[data-settings-search-id="storage.${operation}-data"] .transfer-group > button`,
+  )!;
+  await vi.waitFor(async () => {
+    await settle();
+    expect(actionButton.disabled).toBe(false);
+  });
+  actionButton.click();
+  await vi.waitFor(() => expect(service).toHaveBeenCalled());
+
+  await unmount(component);
+  if (outcome === "failed") fail(new Error("late operation failure"));
+  else if (operation === "import") {
+    finish({
+      importedCount: 1,
+      skippedCount: 0,
+      errors: [],
+      pendingTruncation: 0,
+      maxItems: 10_000,
+    });
+  } else {
+    finish({ path: "fixture.export.json", byteCount: 64 });
   }
   await settle();
   expect(bridge.feedback).not.toHaveBeenCalled();
