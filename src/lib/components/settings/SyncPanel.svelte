@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onDestroy } from "svelte";
   import AppIcon from "$lib/components/card/AppIcon.svelte";
   import SelectEntry from "$lib/components/settings/settings-entries/SelectEntry.svelte";
   import TextEntry from "$lib/components/settings/settings-entries/TextEntry.svelte";
@@ -78,6 +79,11 @@
   let rotatePassword = $state("");
   let rotating = $state(false);
   let persistQueue: Promise<void> = Promise.resolve();
+  let disposed = false;
+
+  onDestroy(() => {
+    disposed = true;
+  });
 
   function openRotateDialog() {
     rotatePassword = "";
@@ -89,10 +95,11 @@
   }
 
   async function handleRotateNamespace() {
-    if (!isTauriRuntime() || rotating) return;
+    if (!isTauriRuntime() || rotating || disposed) return;
     rotating = true;
     try {
       await rotateSyncNamespace(rotatePassword);
+      if (disposed) return;
       closeRotateDialog();
       rotatePassword = "";
       onfeedback(_t("storage.syncRotateSuccess"), true);
@@ -100,13 +107,14 @@
       // shows the new values instead of the stale pre-rotation ones.
       await loadSyncConfig();
     } catch (e) {
+      if (disposed) return;
       // A failed rotation leaves the old prefix and password configured, so
       // the panel stays valid; surface the reason and keep the dialog open
       // for a retry.
       console.error("Namespace rotation failed", e);
       onfeedback(String(e), false);
     } finally {
-      rotating = false;
+      if (!disposed) rotating = false;
     }
   }
 
@@ -145,12 +153,14 @@
   }
 
   async function loadSyncConfig() {
+    if (disposed) return;
     if (!isTauriRuntime()) {
       syncConfigLoaded = true;
       return;
     }
     try {
       const cfg: SyncConfig = await getSyncConfig();
+      if (disposed) return;
       syncProvider = cfg.provider;
       syncEndpoint = cfg.endpoint ?? "";
       syncRemotePath = cfg.remotePath ?? "";
@@ -173,10 +183,11 @@
       syncS3SecretKey = "";
       syncEncryptPassword = "";
     } catch (e) {
+      if (disposed) return;
       console.error("Failed to load sync config", e);
       syncConfigError = true;
     } finally {
-      syncConfigLoaded = true;
+      if (!disposed) syncConfigLoaded = true;
     }
   }
 
@@ -189,7 +200,7 @@
   }
 
   async function persistSyncConfigNow() {
-    if (!isTauriRuntime()) return;
+    if (!isTauriRuntime() || disposed) return;
     syncAutoInterval = clampSyncNumber(syncAutoInterval, 10, 86_400, 300);
     syncSegmentMaxEntries = clampSyncNumber(syncSegmentMaxEntries, 16, 10_000, 512);
     syncMaxImageBytes = clampSyncBytes(syncMaxImageBytes, 5_242_880);
@@ -212,6 +223,7 @@
       s3SecretKey: syncS3SecretKey || null,
       syncPassword: syncEncryptPassword || null,
     });
+    if (disposed) return;
     if (syncS3SecretKey) syncHasS3SecretKey = true;
     if (syncEncryptPassword) syncHasEncryptionPassword = true;
     syncS3SecretKey = "";
@@ -228,6 +240,7 @@
     try {
       await persistSyncConfig();
     } catch (e) {
+      if (disposed) return;
       // A silent failure would leave the panel claiming values the backend
       // never stored; surface it through the shared settings feedback.
       console.error("Failed to save sync config", e);
@@ -236,26 +249,31 @@
   }
 
   async function handleTestConnection() {
-    if (!isTauriRuntime() || syncTesting) return;
+    if (!isTauriRuntime() || syncTesting || disposed) return;
 
     syncTesting = true;
     try {
       await persistSyncConfig();
+      if (disposed) return;
       const result = await testSyncConnection();
+      if (disposed) return;
       onfeedback(result.message, result.success);
     } catch (e) {
+      if (disposed) return;
       onfeedback(String(e), false);
     } finally {
-      syncTesting = false;
+      if (!disposed) syncTesting = false;
     }
   }
 
   async function handleSyncNow() {
-    if (!isTauriRuntime() || syncBusy) return;
+    if (!isTauriRuntime() || syncBusy || disposed) return;
     syncing = true;
     try {
       await persistSyncConfig();
+      if (disposed) return;
       const result = await runSync();
+      if (disposed) return;
       if (result.failedPeers > 0) {
         onfeedback(
           _t("storage.syncRunPartial", {
@@ -288,6 +306,7 @@
       syncStatus = result.failedPeers === 0 ? "success" : "partial";
       syncPendingEntries = 0;
     } catch (e) {
+      if (disposed) return;
       const cancelled = isOperationCancelled(e);
       onfeedback(
         cancelled ? _t("operations.cancelled") : _t("storage.syncRunFailed") + `: ${String(e)}`,
@@ -295,8 +314,10 @@
       );
       syncStatus = cancelled ? "cancelled" : "failed";
     } finally {
-      syncing = false;
-      await operation.refresh();
+      if (!disposed) {
+        syncing = false;
+        await operation.refresh();
+      }
     }
   }
 </script>

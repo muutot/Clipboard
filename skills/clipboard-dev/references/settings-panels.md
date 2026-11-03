@@ -223,6 +223,11 @@ backend until completion or explicit cancellation.
 - IconCacheSettingsPanel applies the same boundary to cache listing, deletion,
   replacement and the image picker. A dialog that resolves after teardown must
   not start a replacement from the disposed panel.
+- SyncPanel checks its lifetime after config load/save, connection test,
+  manual sync and namespace rotation. Teardown suppresses late shared feedback,
+  local status writes and post-rotation reload work; backend operations already
+  submitted still run to completion. A save queued but not started after
+  teardown is skipped.
 - SourceMappingSettingsPanel also checks its lifetime after initial load, save
   and authoritative refresh. It hydrates the editor only from the refreshed
   shared cache and publishes success/failure feedback only while mounted.
