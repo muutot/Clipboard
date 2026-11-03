@@ -165,7 +165,7 @@ jobs:
           echo "running cargo" >>"$smoke_log"
 
           run_smoke() {
-            local label="$1" filter="$2" log
+            local label="$1" filter="$2" expected="$3" log
             log="$(mktemp)"
             echo "== $label =="
             # Output goes to the log file first and is printed afterwards:
@@ -184,16 +184,18 @@ jobs:
               echo "::error::$label silently skipped the real server" >&2
               status=1
             fi
-            # Guard 2: a filter that matches nothing also exits 0.
-            if ! grep -qE "test result: ok\. [1-9]" "$log"; then
-              echo "::error::$label executed no test" >&2
+            # Guard 2: cargo exits 0 when a filter matches nothing or when a
+            # rename leaves only a subset of the intended smoke suite. Require
+            # the exact current count so the gate cannot silently shrink.
+            if ! grep -qE "test result: ok\. ${expected} passed;" "$log"; then
+              echo "::error::$label expected $expected passing tests" >&2
               status=1
             fi
           }
-          run_smoke "sync v1 engine smokes" "s3_smoke"
-          run_smoke "clipboard-sync transport round trip" "disposable_s3_round_trip"
-          run_smoke "clipboard-sync transport edge branches" "disposable_s3_edge_branches"
-          run_smoke "clipboard-sync transport connection and streaming" "disposable_s3_connection_and_streaming_paths"
+          run_smoke "sync v1 engine smokes" "s3_smoke" 11
+          run_smoke "clipboard-sync transport round trip" "disposable_s3_round_trip" 1
+          run_smoke "clipboard-sync transport edge branches" "disposable_s3_edge_branches" 1
+          run_smoke "clipboard-sync transport connection and streaming" "disposable_s3_connection_and_streaming_paths" 1
           if [ "$status" -ne 0 ]; then
             echo "::error::real-S3 smoke suite failed" >&2
             exit 1

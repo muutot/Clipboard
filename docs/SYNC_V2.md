@@ -218,25 +218,27 @@ Acceptance candidates (intended gates; no test exists yet):
 
 ### V2-2. Real S3 CI matrix
 
-Status: wired and green. `.github/workflows/sync-s3.yml` runs the eight S3-dependent smokes on
-pushes and pull requests touching the sync paths, weekly, and on dispatch. A first attempt
-used a pinned MinIO docker container and never passed the readiness probe; the job now
-provisions the pinned rustfs release the local `scripts/sync-s3-test.ps1` path already uses,
-verified against the upstream SHA256SUMS, and starts it in the same step as the tests (no
-cross-step background-process assumptions, no docker daemon). First green run 2026-10-13
-(run 38382124322, v1.8.1 at 0d3860b, six smokes): checksum verified, server healthy, both
-smoke invocations executed; the green step also proves the in-step guards accepted the run,
-so no silent skip or empty filter occurred. The encrypted binary-resource smoke and the
-rotation-pointer smoke passed in run 38506261099 (sha a4c30ed), with the main CI green on the
-same tree. Only ubuntu runs (pinned linux-x86_64-musl asset).
+Status: wired and green. `.github/workflows/sync-s3.yml` runs 14 S3-dependent correctness
+smokes on pushes and pull requests touching the sync paths, weekly, and on dispatch: 11 in
+`sync::v1::s3_smoke` and three in `clipboard_sync::s3::tests`. Each invocation requires its
+exact current pass count, so renaming one of the intended tests cannot leave a smaller suite
+that still passes. A first attempt used a pinned MinIO docker container and never passed the
+readiness probe; the job now provisions the pinned rustfs release the local
+`scripts/sync-s3-test.ps1` path already uses, verified against the upstream SHA256SUMS, and
+starts it in the same step as the tests (no cross-step background-process assumptions, no
+docker daemon). Historical green runs include run 38382124322 (six smokes), run 38506261099
+(the encrypted binary-resource and rotation-pointer smokes, sha a4c30ed), and run 41416923866
+on sha 92304ab7 with the main CI green on the same tree. Only ubuntu runs (pinned
+linux-x86_64-musl asset).
 
 Goal: the S3-dependent ignored tests run in CI so their behavior cannot rot between manual runs
 (retires part of the roadmap's Rust ignored-test debt item).
 
-S3-dependent ignored tests today (8):
+S3-dependent ignored tests today (16):
 
-- `sync::v1::s3_smoke::*` × 7 and `clipboard_sync::s3::tests` × 1 (correctness smokes);
-- `sync::v1::scale_bench::s3_*` × 2 (also needs a release-mode runtime).
+- `sync::v1::s3_smoke::*` × 11 and `clipboard_sync::s3::tests` × 3 (14 correctness smokes in
+  the CI gate);
+- `sync::v1::scale_bench::s3_*` × 2 (also needs a release-mode runtime, so these stay opt-in).
 
 Decision: rustfs, not MinIO. The same server family that produced the documented smoke
 evidence, no docker daemon on the runner, pin plus checksum verification, and one step for
