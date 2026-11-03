@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onDestroy, onMount } from "svelte";
   import { convertFileSrc } from "@tauri-apps/api/core";
   import AppIcon from "$lib/components/card/AppIcon.svelte";
   import Checkbox from "$lib/components/common/Checkbox.svelte";
@@ -31,6 +31,7 @@
   let replacingIcon = $state(false);
   let replaceTarget = $state<IconCacheEntry | null>(null);
   let selectedExistingIcon = $state<string | null>(null);
+  let disposed = false;
   let iconReplaceOptions = $derived([
     ...new Map(
       iconFiles.filter((f) => f.iconName && f.contentHash).map((e) => [e.contentHash!, e] as const),
@@ -41,15 +42,23 @@
     void loadIconList();
   });
 
+  onDestroy(() => {
+    disposed = true;
+  });
+
   async function loadIconList() {
+    if (disposed) return;
     loadingIcons = true;
     try {
-      iconFiles = await listIconCache();
+      const files = await listIconCache();
+      if (disposed) return;
+      iconFiles = files;
       selectedIconFiles = new Set();
     } catch (error) {
+      if (disposed) return;
       console.error("Unable to list icon cache", error);
     } finally {
-      loadingIcons = false;
+      if (!disposed) loadingIcons = false;
     }
   }
 
@@ -64,30 +73,34 @@
   }
 
   async function deleteSelectedIcons() {
-    if (selectedIconFiles.size === 0) return;
+    if (disposed || selectedIconFiles.size === 0) return;
     deletingIcons = true;
     try {
       const deleted = await deleteIconFiles([...selectedIconFiles]);
+      if (disposed) return;
       onfeedback(_t("storage.iconsDeleted", { count: deleted }), true);
       await loadIconList();
     } catch (error) {
+      if (disposed) return;
       console.error("Unable to delete icon files", error);
       onfeedback(error instanceof Error ? error.message : String(error), false);
     } finally {
-      deletingIcons = false;
+      if (!disposed) deletingIcons = false;
     }
   }
 
   async function applyIconReplacement(name: string, sourcePath: string) {
-    if (!isTauriRuntime() || replacingIcon) return;
+    if (disposed || !isTauriRuntime() || replacingIcon) return;
     replacingIcon = true;
     onfeedback("", false);
     try {
       await replaceIconFile(name, sourcePath);
+      if (disposed) return;
       onfeedback(_t("storage.iconReplaced", { name }), true);
       await loadIconList();
-      closeReplaceDialog();
+      if (!disposed) closeReplaceDialog();
     } catch (error) {
+      if (disposed) return;
       console.error("Unable to replace icon", error);
       onfeedback(
         _t("storage.iconReplaceFailed", {
@@ -96,11 +109,12 @@
         false,
       );
     } finally {
-      replacingIcon = false;
+      if (!disposed) replacingIcon = false;
     }
   }
 
   async function chooseReplaceFile() {
+    if (disposed) return;
     const name = replaceTarget?.targetIconName;
     if (!name || replacingIcon) return;
     const { open } = await import("@tauri-apps/plugin-dialog");
@@ -109,13 +123,13 @@
       directory: false,
       filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "ico", "webp", "svg"] }],
     });
-    if (!filePath) return;
+    if (disposed || !filePath) return;
     await applyIconReplacement(name, filePath);
   }
 
   async function confirmExistingIcon() {
     const name = replaceTarget?.targetIconName;
-    if (!name || !selectedExistingIcon || replacingIcon) return;
+    if (disposed || !name || !selectedExistingIcon || replacingIcon) return;
     const sourcePath = `${iconsDir}/${selectedExistingIcon}`.replace(/\\/g, "/");
     await applyIconReplacement(name, sourcePath);
   }

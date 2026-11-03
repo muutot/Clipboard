@@ -220,6 +220,9 @@ backend until completion or explicit cancellation.
   actions follow that lifetime boundary as well: teardown discards late format
   loads, preview state, warnings and shared success/failure feedback without
   cancelling work already submitted.
+- IconCacheSettingsPanel applies the same boundary to cache listing, deletion,
+  replacement and the image picker. A dialog that resolves after teardown must
+  not start a replacement from the disposed panel.
 - Database repair feedback uses the shared English/Chinese storage keys with
   placeholders, including page/free counts, integrity diagnostics and errors;
   do not concatenate English UI text inside the panel.
