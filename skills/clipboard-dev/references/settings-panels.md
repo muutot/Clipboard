@@ -186,7 +186,7 @@ across panel remounts/windows. Mounted polling stops on teardown; work continues
 backend until completion or explicit cancellation.
 
 - Use `.settings-feedback`; add `.success` for success and default to error styling otherwise.
-- Clear feedback with a timer whose cleanup is retained when the component can unmount or messages can be replaced.
+- Clear feedback with a timer whose cleanup is retained when the component can unmount or messages can be replaced. `dispose()` is terminal: later `show()`/`clear()` calls are ignored and must not schedule another timer.
 - Disable controls or show a saving/loading state during commands that cannot safely overlap.
 - Per-kind permanent deletion in StorageLimitsPanel owns its confirmation signal.
   Unmount cancels only that request; delayed statistics/acceptance cannot submit

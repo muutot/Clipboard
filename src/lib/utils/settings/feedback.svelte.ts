@@ -16,6 +16,7 @@ export function createFeedback(timeoutMs = 3000): PanelFeedback {
   let message = $state("");
   let success = $state(true);
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let disposed = false;
 
   function clearTimer() {
     if (timer !== undefined) {
@@ -32,6 +33,7 @@ export function createFeedback(timeoutMs = 3000): PanelFeedback {
       return success;
     },
     show(next: string, ok = true) {
+      if (disposed) return;
       message = next;
       success = ok;
       clearTimer();
@@ -41,10 +43,13 @@ export function createFeedback(timeoutMs = 3000): PanelFeedback {
       }, timeoutMs);
     },
     clear() {
+      if (disposed) return;
       clearTimer();
       message = "";
     },
     dispose() {
+      if (disposed) return;
+      disposed = true;
       clearTimer();
     },
   };
