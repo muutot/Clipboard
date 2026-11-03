@@ -26,6 +26,7 @@
 
   let rules = $state<SourceMappingRule[]>([]);
   let loading = $state(true);
+  let loadFailed = $state(false);
   let rulesSaving = $state(false);
   let disposed = false;
   const busy = $derived(rulesSaving);
@@ -40,6 +41,8 @@
 
   async function loadRules() {
     if (disposed) return;
+    loading = true;
+    loadFailed = false;
     try {
       const loaded = (await getSourceMappingRules()) ?? [];
       if (disposed) return;
@@ -47,6 +50,7 @@
     } catch (error) {
       if (disposed) return;
       console.error("Unable to load source mapping rules", error);
+      loadFailed = true;
     } finally {
       if (!disposed) loading = false;
     }
@@ -61,7 +65,7 @@
   }
 
   async function saveRules() {
-    if (disposed || busy) return;
+    if (disposed || busy || loading || loadFailed) return;
     rulesSaving = true;
     try {
       const snapshot = rules.map((rule) => ({
@@ -105,6 +109,13 @@
     <EntryHeading label={_t("sourceMapping.title")} desc={_t("sourceMapping.description")} />
     {#if loading}
       <p class="settings-state">{_t("storage.readingConfig")}</p>
+    {:else if loadFailed}
+      <div class="settings-state" role="alert">
+        <p>{_t("storage.configLoadFailed")}</p>
+        <button class="settings-action-btn" type="button" onclick={() => void loadRules()}>
+          {_t("storage.retryLoad")}
+        </button>
+      </div>
     {:else}
       {#each rules as rule, index (index)}
         <fieldset disabled={busy}>
