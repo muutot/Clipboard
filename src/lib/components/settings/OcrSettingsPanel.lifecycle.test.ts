@@ -290,3 +290,83 @@ it.each(["succeeded", "failed"] as const)(
     expect(feedback).not.toHaveBeenCalled();
   },
 );
+
+it("keeps the latest full OCR refresh when saves overlap", async () => {
+  const staleStatus = deferred<typeof status>();
+  const staleConfig = deferred<typeof config>();
+  let statusReads = 0;
+  let configReads = 0;
+  let storedEngine = "ppocr";
+  let storedVariant = "tiny";
+  let holdFirstRefresh = false;
+
+  vi.mocked(invoke).mockImplementation((command, args) => {
+    if (command === "get_ocr_status") {
+      statusReads += 1;
+      if (holdFirstRefresh && statusReads === 2) return staleStatus.promise;
+      return Promise.resolve({
+        ...status,
+        engine: storedEngine,
+        ppocrModelVariant: storedVariant,
+        engineAvailable: storedEngine === "ppocr",
+      });
+    }
+    if (command === "get_ocr_config") {
+      configReads += 1;
+      if (holdFirstRefresh && configReads === 2) return staleConfig.promise;
+      return Promise.resolve({
+        ...config,
+        engine: storedEngine,
+        ppocrModelVariant: storedVariant,
+      });
+    }
+    if (command === "set_ocr_config") {
+      const settings = (args as { settings?: { engine?: string; ppocrModelVariant?: string } })
+        .settings;
+      if (settings?.engine) storedEngine = settings.engine;
+      if (settings?.ppocrModelVariant) storedVariant = settings.ppocrModelVariant;
+      holdFirstRefresh = settings?.engine === "tesseract";
+      return Promise.resolve(undefined);
+    }
+    return Promise.resolve(undefined);
+  });
+
+  await render();
+  choose(`button[aria-label="${t("storage.ocrEngineLabel")}"]`, "Tesseract");
+  await vi.waitFor(() =>
+    expect(
+      vi.mocked(invoke).mock.calls.filter(([command]) => command === "set_ocr_config"),
+    ).toHaveLength(1),
+  );
+  await settle();
+
+  choose(".ocr-model-select button", "small (~30MB) ✓");
+  [...target.querySelectorAll<HTMLButtonElement>("button")]
+    .find((entry) => entry.textContent?.trim() === t("storage.ocrModelApply"))!
+    .click();
+  await vi.waitFor(() =>
+    expect(
+      vi.mocked(invoke).mock.calls.filter(([command]) => command === "set_ocr_config"),
+    ).toHaveLength(2),
+  );
+
+  staleStatus.resolve({
+    ...status,
+    engine: "tesseract",
+    ppocrModelVariant: "tiny",
+    engineAvailable: false,
+  });
+  staleConfig.resolve({
+    ...config,
+    engine: "tesseract",
+    ppocrModelVariant: "tiny",
+  });
+  await settle();
+
+  const modelRow = target.querySelector('[data-settings-search-id="ocr.model"]')!;
+  expect(
+    [...modelRow.querySelectorAll<HTMLButtonElement>("button")].some(
+      (button) => button.textContent?.trim() === t("storage.ocrModelApplied"),
+    ),
+  ).toBe(true);
+});

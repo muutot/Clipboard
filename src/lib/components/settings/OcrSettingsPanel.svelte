@@ -23,6 +23,7 @@
   let ocrHasEngine = $state(false);
   let ocrStatusLoading = $state(false);
   let ocrTaskStatusLoading = $state(false);
+  let ocrStatusRefreshGeneration = 0;
   // The engine/model/detection controls must not render the placeholder
   // defaults and then jump to the stored values once `loadOcrStatus`
   // resolves; gate them until configuration and engine status load successfully.
@@ -91,10 +92,10 @@
   });
 
   $effect(() => {
-    // Load once on mount. The call must be untracked: its synchronous guard
-    // reads/writes `ocrStatusLoading`, which would otherwise register a
-    // self-dependency, re-running this effect after every IPC round-trip and
-    // collapsing the 2 s task poll into an IPC-speed reload loop.
+    // Load once on mount. The call must be untracked because it updates
+    // loading and data state that would otherwise register a self-dependency,
+    // re-running this effect after every IPC round-trip and collapsing the
+    // 2 s task poll into an IPC-speed reload loop.
     untrack(() => void loadOcrStatus());
     const interval = setInterval(() => void loadOcrTaskStatus(), 2000);
     return () => clearInterval(interval);
@@ -121,7 +122,8 @@
   }
 
   async function loadOcrStatus() {
-    if (destroyed || ocrStatusLoading) return;
+    if (destroyed) return;
+    const generation = ++ocrStatusRefreshGeneration;
     ocrStatusLoading = true;
     ocrLoadFailed = false;
     try {
@@ -129,7 +131,7 @@
         invoke<OcrStatusResult>("get_ocr_status"),
         invoke<OcrConfigResult>("get_ocr_config"),
       ]);
-      if (destroyed) return;
+      if (destroyed || generation !== ocrStatusRefreshGeneration) return;
       if (statusResult.status === "rejected") throw statusResult.reason;
       if (configResult.status === "rejected") throw configResult.reason;
       if (!statusResult.value || !configResult.value) throw new Error("Missing OCR configuration");
@@ -167,12 +169,14 @@
       }
       ocrReady = true;
     } catch (error) {
-      if (destroyed) return;
+      if (destroyed || generation !== ocrStatusRefreshGeneration) return;
       ocrReady = false;
       ocrLoadFailed = true;
       onfeedback(error instanceof Error ? error.message : String(error), false);
     } finally {
-      if (!destroyed) ocrStatusLoading = false;
+      if (!destroyed && generation === ocrStatusRefreshGeneration) {
+        ocrStatusLoading = false;
+      }
     }
   }
 

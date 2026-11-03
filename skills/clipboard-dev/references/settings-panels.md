@@ -244,7 +244,9 @@ backend until completion or explicit cancellation.
   changes cannot race or restore an older value. Its 2-second task poll uses a
   separate in-flight flag, so polling cannot suppress the full status reload that
   follows a model apply, install, or engine change; the poll also avoids writing
-  its busy flag after teardown.
+  its busy flag after teardown. Overlapping full refreshes use a generation
+  counter: only the newest request may publish configuration/status, report a
+  failure, or clear loading, so an older snapshot cannot replace the saved state.
 - SourceMappingSettingsPanel also checks its lifetime after initial load, save
   and authoritative refresh. It hydrates the editor only from the refreshed
   shared cache and publishes success/failure feedback only while mounted.
