@@ -27,6 +27,11 @@
 
   let { activeTab, status, loading, onrefreshStatus, onclose }: Props = $props();
 
+  // The lazy wrapper rewrites the whole props record when status changes. A
+  // derived tab keeps unchanged strings from restarting refresh listeners or
+  // the memory poll on every published snapshot.
+  const currentTab = $derived(activeTab);
+
   let perfMetrics = $state<PerformanceMetrics | null>(null);
   let memoryDiagnostics = $state<MemoryDiagnostics | null>(null);
   let memoryLoading = $state(false);
@@ -101,9 +106,12 @@
 
   $effect(() => {
     let refreshVisibleStatistics: (() => Promise<void>) | undefined;
-    if (activeTab === "storage") {
-      refreshVisibleStatistics = onrefreshStatus;
-    } else if (activeTab === "performance") {
+    if (currentTab === "storage") {
+      // Parent status updates replace the callback prop on each render. Reading
+      // it inside untrack keeps this effect triggered by the visible tab rather
+      // than by the refresh result it publishes.
+      refreshVisibleStatistics = untrack(() => onrefreshStatus);
+    } else if (currentTab === "performance") {
       refreshVisibleStatistics = loadPerformanceMetrics;
     }
     if (!refreshVisibleStatistics) return;
@@ -138,7 +146,7 @@
   });
 
   $effect(() => {
-    if (activeTab !== "memory") return;
+    if (currentTab !== "memory") return;
     void untrack(() => loadMemoryDiagnostics());
     const interval = setInterval(() => void loadMemoryDiagnostics(), 3000);
     return () => clearInterval(interval);
@@ -146,7 +154,7 @@
 </script>
 
 <div class="settings-scroll stats-scroll">
-  {#if activeTab === "storage"}
+  {#if currentTab === "storage"}
     {#if status}
       <section class="setting-card stats-metric-card">
         <EntryHeading
@@ -241,7 +249,7 @@
       </div>
     {/if}
     <p class="auto-save-note">{_t("storage.statsNote")}</p>
-  {:else if activeTab === "performance"}
+  {:else if currentTab === "performance"}
     {#if perfMetrics}
       <section class="setting-card stats-metric-card">
         <EntryHeading

@@ -138,4 +138,37 @@ describe("StorageSettingsDialog storage statistics ordering", () => {
     await settle();
     expect(target.querySelector<HTMLElement>(".stats-metric-value")?.textContent?.trim()).toBe("3");
   });
+  it("stops refreshing after publishing a storage snapshot", async () => {
+    let snapshot = 0;
+    bridge.getStorageStatus.mockImplementation(async () => {
+      snapshot += 1;
+      return snapshot <= 8 ? status(snapshot) : new Promise<StorageStatus>(() => {});
+    });
+
+    const target = document.createElement("div");
+    document.body.append(target);
+    const app = mount(StorageSettingsDialog, {
+      target,
+      props: { open: true, onclose: () => {} },
+    });
+    cleanups.push(async () => {
+      await unmount(app);
+      target.remove();
+    });
+
+    const statisticsButton = await waitFor(
+      () =>
+        Array.from(target.querySelectorAll<HTMLButtonElement>(".settings-primary-nav button")).find(
+          (button) => button.textContent?.trim() === t("storage.statisticsTab"),
+        ) ?? null,
+    );
+    statisticsButton.click();
+    await waitFor(() => target.querySelector<HTMLElement>(".stats-metric-value"));
+
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    const settledCalls = bridge.getStorageStatus.mock.calls.length;
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(bridge.getStorageStatus.mock.calls.length).toBe(settledCalls);
+    expect(settledCalls).toBeLessThanOrEqual(2);
+  });
 });

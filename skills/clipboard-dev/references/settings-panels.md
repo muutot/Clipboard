@@ -101,6 +101,8 @@ Every child panel — including the four General section panels, `StorageLimitsP
 
 `StorageSettingsDialog` owns one request generation for storage status. Its initial shell load and the statistics-panel refreshes can overlap, so only the newest request may publish a snapshot or finish the loading state; otherwise a late older reply can roll record counts, category totals, and byte sizes backward.
 
+`StatisticsSettingsPanel` must derive its active tab before effect dependencies. The lazy wrapper rewrites the full props record when status changes; reading raw props inside the refresh and memory effects restarted those effects after each reply and created an unbounded status-request loop.
+
 `StorageSettingsDialog` closes on Escape via a bubble-phase `window` keydown listener registered before any child mounts, so a child modal that also uses Escape (keyboard shortcut recording in `KeyboardSettingsPanel`, the icon replace dialog in `IconCacheSettingsPanel`) must consume it in the capture phase with `stopImmediatePropagation`; otherwise the whole settings window closes along with the child dialog.
 
 `LayoutSettingsPanel.svelte` is the minimal structure reference because it uses shared styles without a local style block. Use other panels only for their genuinely specific controls.
