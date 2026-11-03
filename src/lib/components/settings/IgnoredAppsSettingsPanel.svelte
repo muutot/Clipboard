@@ -185,13 +185,13 @@
 
   async function addManualApplication() {
     const application = manualApplication.trim();
-    if (!settings || !application) return;
+    if (saving || !settings || !application) return;
     await saveIgnored([...settings.ignoredApplications, application]);
     manualApplication = "";
   }
 
   async function saveIgnored(applications: string[]) {
-    if (!settings) return;
+    if (saving || !settings) return;
     saving = true;
     feedback = "";
     feedbackSuccess = false;
@@ -377,6 +377,7 @@
         <div class="manual-add">
           <input
             bind:value={manualApplication}
+            disabled={saving}
             placeholder={_t("capture.addManual")}
             onkeydown={(event) => event.key === "Enter" && addManualApplication()}
           />
