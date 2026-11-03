@@ -235,8 +235,10 @@ backend until completion or explicit cancellation.
   teardown is skipped.
 - OcrSettingsPanel applies the same late-result boundary to detection saves,
   model application and engine changes, including their failure reloads and
-  parent feedback. Its task-status poll also avoids writing its busy flag after
-  teardown.
+  parent feedback. All three writes pass through one panel-local FIFO; detection
+  saves snapshot the current thresholds only when their turn starts, so rapid
+  changes cannot race or restore an older value. Its task-status poll also avoids
+  writing its busy flag after teardown.
 - SourceMappingSettingsPanel also checks its lifetime after initial load, save
   and authoritative refresh. It hydrates the editor only from the refreshed
   shared cache and publishes success/failure feedback only while mounted.

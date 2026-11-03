@@ -46,6 +46,16 @@
   let detScoreThreshold = $state(0.3);
   let detBoxThreshold = $state(0.6);
   let detUnclipRatio = $state(1.5);
+  let ocrConfigSaveTail: Promise<void> = Promise.resolve();
+
+  function queueOcrConfigWrite<T>(write: () => Promise<T>): Promise<T> {
+    const request = ocrConfigSaveTail.then(write, write);
+    ocrConfigSaveTail = request.then(
+      () => undefined,
+      () => undefined,
+    );
+    return request;
+  }
 
   interface OcrStatusResult {
     totalTasks: number;
@@ -217,12 +227,16 @@
       onfeedback(_t("storage.ocrModelAlreadyApplied"), true);
       return;
     }
+    const requestedVariant = modelVariant;
     try {
-      await invoke("set_ocr_config", {
-        settings: {
-          engine: "ppocr",
-          ppocrModelVariant: modelVariant,
-        },
+      await queueOcrConfigWrite(async () => {
+        if (destroyed) return;
+        await invoke("set_ocr_config", {
+          settings: {
+            engine: "ppocr",
+            ppocrModelVariant: requestedVariant,
+          },
+        });
       });
       if (destroyed) return;
       await loadOcrStatus();
@@ -239,12 +253,16 @@
 
   async function saveOcrEngine(engine: string) {
     if (destroyed) return;
+    const requestedVariant = modelVariant;
     try {
-      await invoke("set_ocr_config", {
-        settings: {
-          engine,
-          ...(engine === "ppocr" ? { ppocrModelVariant: modelVariant } : {}),
-        },
+      await queueOcrConfigWrite(async () => {
+        if (destroyed) return;
+        await invoke("set_ocr_config", {
+          settings: {
+            engine,
+            ...(engine === "ppocr" ? { ppocrModelVariant: requestedVariant } : {}),
+          },
+        });
       });
       if (destroyed) return;
       ocrEngine = engine;
@@ -268,13 +286,16 @@
   async function saveDetConfig() {
     if (destroyed) return;
     try {
-      await invoke("set_ocr_config", {
-        settings: {
-          engine: ocrEngine,
-          detScoreThreshold,
-          detBoxThreshold,
-          detUnclipRatio,
-        },
+      await queueOcrConfigWrite(async () => {
+        if (destroyed) return;
+        await invoke("set_ocr_config", {
+          settings: {
+            engine: ocrEngine,
+            detScoreThreshold,
+            detBoxThreshold,
+            detUnclipRatio,
+          },
+        });
       });
       if (destroyed) return;
       onfeedback(_t("storage.ocrDetectionSaved"), true);

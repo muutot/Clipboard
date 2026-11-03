@@ -91,6 +91,72 @@ afterEach(async () => {
   target.remove();
 });
 
+it("serializes detection saves so the newest threshold wins", async () => {
+  const requests = [deferred<unknown>(), deferred<unknown>()];
+  let requestIndex = 0;
+  vi.mocked(invoke).mockImplementation((command) => {
+    if (command === "get_ocr_status") return Promise.resolve({ ...status });
+    if (command === "get_ocr_config") return Promise.resolve({ ...config });
+    if (command === "set_ocr_config") return requests[requestIndex++].promise;
+    return Promise.resolve(undefined);
+  });
+  await render();
+  const slider = target.querySelector<HTMLInputElement>('input[type="range"]')!;
+
+  slider.value = "0.4";
+  slider.dispatchEvent(new Event("input", { bubbles: true }));
+  slider.dispatchEvent(new Event("change", { bubbles: true }));
+  await settle();
+  slider.value = "0.5";
+  slider.dispatchEvent(new Event("input", { bubbles: true }));
+  slider.dispatchEvent(new Event("change", { bubbles: true }));
+  await settle();
+
+  const saves = () =>
+    vi.mocked(invoke).mock.calls.filter(([command]) => command === "set_ocr_config");
+  expect(saves()).toEqual([
+    [
+      "set_ocr_config",
+      {
+        settings: {
+          engine: "ppocr",
+          detScoreThreshold: 0.4,
+          detBoxThreshold: 0.6,
+          detUnclipRatio: 1.5,
+        },
+      },
+    ],
+  ]);
+
+  requests[0].resolve({});
+  await settle();
+  expect(saves()).toEqual([
+    [
+      "set_ocr_config",
+      {
+        settings: {
+          engine: "ppocr",
+          detScoreThreshold: 0.4,
+          detBoxThreshold: 0.6,
+          detUnclipRatio: 1.5,
+        },
+      },
+    ],
+    [
+      "set_ocr_config",
+      {
+        settings: {
+          engine: "ppocr",
+          detScoreThreshold: 0.5,
+          detBoxThreshold: 0.6,
+          detUnclipRatio: 1.5,
+        },
+      },
+    ],
+  ]);
+  requests[1].resolve({});
+  await settle();
+});
 it.each(["succeeded", "failed"] as const)(
   "does not publish an OCR detection save that %s after teardown",
   async (outcome) => {
