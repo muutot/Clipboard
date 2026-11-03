@@ -31,6 +31,7 @@
 
   let rules = $state<AutoTagRule[]>([]);
   let loading = $state(true);
+  let loadFailed = $state(false);
   let rulesSaving = $state(false);
   const operation = createOperationMonitor("tags");
   const busy = $derived(rulesSaving || operation.active);
@@ -98,10 +99,13 @@
   });
 
   async function loadRules() {
+    loading = true;
+    loadFailed = false;
     try {
       rules = (await getAutoTagRules()) ?? [];
     } catch (error) {
       console.error("Unable to load auto-tag rules", error);
+      loadFailed = true;
     } finally {
       loading = false;
     }
@@ -116,7 +120,7 @@
   }
 
   async function saveRules() {
-    if (busy) return;
+    if (busy || loading || loadFailed) return;
     rulesSaving = true;
     try {
       const saved = await setAutoTagRules(snapshotRules());
@@ -148,6 +152,13 @@
     <EntryHeading label={_t("tags.autoTagTitle")} desc={_t("tags.autoTagDescription")} />
     {#if loading}
       <p class="settings-state">{_t("storage.readingConfig")}</p>
+    {:else if loadFailed}
+      <div class="settings-state" role="alert">
+        <p>{_t("tags.loadFailed")}</p>
+        <button class="settings-action-btn" type="button" onclick={() => void loadRules()}>
+          {_t("storage.retryLoad")}
+        </button>
+      </div>
     {:else}
       {#each rules as rule, index (index)}
         <fieldset disabled={busy}>
@@ -210,7 +221,7 @@
     {/if}
   </section>
 
-  {#if !loading}
+  {#if !loading && !loadFailed}
     <section class="setting-card" data-settings-search-id="tags.auto-tag-preview">
       <EntryHeading label={_t("autoTags.previewTitle")} desc={_t("autoTags.conditionsHint")} />
       <textarea
