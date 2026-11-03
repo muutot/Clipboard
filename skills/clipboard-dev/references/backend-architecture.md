@@ -527,6 +527,12 @@ Relative-week search subtracts calendar dates before resolving local midnight; i
 
 `search_clipboard_items` and `rebuild_search_index` are async commands whose SQLite/Tantivy work runs inside `tauri::async_runtime::spawn_blocking`; neither may block the main event loop.
 
+Manual rebuild clears the sorted `SearchResultCache` on entry and after the
+rebuild returns, for success or error. The final invalidation rejects intermediate
+pages and delayed cache writes, then the command emits `search-index-changed` to
+refresh displayed queries. Empty rebuilds notify too; the frontend already owns
+the search epoch/retry behavior. Tantivy's ID-cache invalidation is separate.
+
 Tantivy uses the schema/query modules and a CJK-friendly n-gram tokenizer. SQLite search triggers append `search_outbox` operations; `SearchSynchronizer` drains them. Outbox draining runs lazily inside `search_clipboard_items` by default or in a live-switchable `SearchSyncWorker` when `GeneralConfig.search_index_sync_mode` is `background`; the worker also retries a required full rebuild (`SearchIndex::requires_full_rebuild`) each tick. The outbox is mutated only by the synchronizer: history cleanup must never prune it, because deleting the `delete` events for hard-deleted rows would leave their Tantivy documents indexed forever. Full rebuild clears/recreates derived index state and repopulates from SQLite. ``SearchIndex::open`retries a failed open once after a short delay before falling back to delete-and-recreate, so transient interference (antivirus locks, permission hiccups) does not trigger a minutes-long full re-index.`SearchIndexLayout::prepare`applies the same distinction to the manifest:`read_manifest`returns`Err`for "present but unreadable" and`Ok(None)`for "absent", and only a manifest that could actually be read (or an index directory that is already gone) may authorize`remove_dir_all`. An unreadable manifest with a healthy index is logged and deferred instead of deleting the index. Read `search-cache-strategy.md` before changing pagination or query caching.
 
 ## OCR

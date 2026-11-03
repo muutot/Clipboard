@@ -581,6 +581,11 @@ bin. Explicit `deletedIds`/`restoredIds` take precedence after content replaceme
 
 `usedIds` identifies reused rows; `usageUpdates` carries `{id, lastUsedAtMs}` read back from SQLite without record bodies. Receivers patch timestamps in every loaded view and, when `general.pinCopiedToTop` is enabled, order history by timestamp/id. Search results are refreshed according to their configured rules instead of directly promoted. Disabling immediate promotion does not suppress timestamp persistence or reload-time ordering. Background index commits emit `search-index-changed` after clearing the result cache, so a displayed query refreshes after indexing catches up.
 
+Manual `rebuild_search_index` also emits `search-index-changed` after its final
+sorted-cache invalidation on success or error, including an empty rebuild. The
+event retains its unit payload; command arguments and summary/error results are
+unchanged. A failed rebuild may already have changed the derived index.
+
 `utils/store/item-changes.ts::applyItemsChangedEvent` is the only consumer shape both
 windows use: content first, then the flag flips, then removals, then the promotion
 of used rows, so a removal always wins — a removed id cannot be pulled back to the

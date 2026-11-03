@@ -90,7 +90,11 @@ cannot emit, which is how this drifted for so long.
 - Hit: slice `[offset..offset+limit]` directly from the cached vector and return it with the stored total/truncation; no DB or index access needed.
 - Miss: re-run the full search pipeline (Tantivy → SQL fetch → sort) and cache the result.
 - Usage stamps clear this cache explicitly: `record_item_usage` (called by the `set_clipboard_item_last_used` command and the tray copy path) drops the cached result after `set_last_used` succeeds, because usage is device-local, writes no `search_outbox` event, and would otherwise leave a cached `lastUsedAt` page serving the pre-usage order.
-- `rebuild_search_index` clears this cache along with Tantivy's `cached_ids`.
+- `rebuild_search_index` clears this cache before and after rebuilding, including
+  a returned error after a partial index change. The final clear fences pages
+  and write tokens obtained during the rebuild; then `search-index-changed`
+  refreshes displayed queries, even for an empty rebuild. Tantivy independently
+  invalidates its `cached_ids` around each reader update.
 - `search_clipboard_items` also clears this cache when it applies pending outbox events, so stale pages are not served after a mutation; see lazy sync below.
 - Each cache miss captures a generation/day token before querying candidates. Cache publication checks that token under the same mutex used by `clear`; an in-flight request cannot repopulate a cache invalidated by usage, synchronization, or a local midnight boundary.
 - A sorted-result cache hit requires an exact `max_results` match. Both increasing and decreasing the candidate cap invalidate it: slicing a sorted vector cannot reproduce a smaller relevance-selected candidate set.
