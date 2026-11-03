@@ -2,7 +2,9 @@
 //! commands.
 
 use super::clipboard::{managed_source_path, save_clipboard_item_file_blocking};
-use super::icons::{app_icon_file_name, build_icon_cache, icon_reference_matches};
+use super::icons::{
+    app_icon_file_name, build_icon_cache, delete_icon_files_for, icon_reference_matches,
+};
 use super::replace::{replace_icon_file_at, validate_replace_source, REPLACE_MAX_SOURCE_BYTES};
 use super::shell::{open_external_url, openable_scheme};
 
@@ -839,6 +841,53 @@ fn merged_entries_distinguish_apps_with_icon_orphans_and_iconless_apps() {
     assert_eq!(entries[2].display_name, "Notepad");
     assert_eq!(entries[3].app_name, None);
 
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn recorded_non_png_icon_is_listed_by_its_stored_file_name() {
+    let dir =
+        std::env::temp_dir().join(format!("icon-cache-non-png-test-{}", uuid::Uuid::new_v4()));
+    touch(&dir, "firefox.svg", b"<svg></svg>");
+
+    let entries = build_icon_cache(
+        &dir,
+        vec![("Firefox".to_owned(), Some("firefox.svg".to_owned()))],
+    );
+
+    let firefox = entries
+        .iter()
+        .find(|entry| entry.display_name == "Firefox")
+        .unwrap();
+    assert_eq!(firefox.icon_name.as_deref(), Some("firefox.svg"));
+    assert_eq!(firefox.size_bytes, 11);
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn deleting_icon_cache_removes_unreferenced_non_png_files_and_preserves_references() {
+    let dir = std::env::temp_dir().join(format!(
+        "icon-cache-delete-non-png-test-{}",
+        uuid::Uuid::new_v4()
+    ));
+    touch(&dir, "firefox.svg", b"referenced");
+    touch(&dir, "orphan.svg", b"orphan");
+    let database = Database::open_in_memory().unwrap();
+    let mut record = item(ClipboardKind::Text, None, None);
+    record.icon_path = Some("firefox.svg".to_owned());
+    database.save_item(&record).unwrap();
+
+    let deleted = delete_icon_files_for(
+        &database,
+        &dir,
+        vec!["firefox.svg".to_owned(), "orphan.svg".to_owned()],
+    )
+    .unwrap();
+
+    assert_eq!(deleted, 1);
+    assert!(dir.join("firefox.svg").exists());
+    assert!(!dir.join("orphan.svg").exists());
     let _ = std::fs::remove_dir_all(&dir);
 }
 

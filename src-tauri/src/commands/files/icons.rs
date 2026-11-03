@@ -6,6 +6,8 @@ use serde::Serialize;
 use crate::content::{compute_content_hash, compute_normalized_media_hash, icon_key};
 use crate::storage::{ClipboardRepository, Database, StoragePaths};
 
+const ICON_FILE_EXTENSIONS: &[&str] = &["png", "ico", "svg", "jpg", "jpeg", "webp", "xpm"];
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IconCacheEntry {
@@ -57,19 +59,31 @@ pub(super) fn build_icon_cache(
     let mut owned_files = std::collections::HashSet::new();
     let mut entries = Vec::new();
 
-    for (app, _db_icon) in apps {
+    for (app, db_icon) in apps {
         let key_name = app_icon_file_name(&app);
         owned_files.insert(key_name.clone());
 
         let mut icon_name: Option<String> = None;
         let mut size_bytes: u64 = 0;
+        let recorded_icon = db_icon.as_deref().and_then(|reference| {
+            let name = std::path::Path::new(reference.trim())
+                .file_name()
+                .and_then(|name| name.to_str())?;
+            let path = icons_dir.join(name);
+            (path.is_file() && icon_reference_matches(reference, name, icons_dir))
+                .then(|| (name.to_owned(), path))
+        });
         let key_path = icons_dir.join(&key_name);
-        if key_path.is_file() {
+        if let Some((name, path)) = recorded_icon {
+            owned_files.insert(name.clone());
+            icon_name = Some(name);
+            size_bytes = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
+        } else if key_path.is_file() {
             icon_name = Some(key_name.clone());
             size_bytes = std::fs::metadata(&key_path).map(|m| m.len()).unwrap_or(0);
         } else {
             let hash = compute_content_hash("icon", &icon_key(&app), None);
-            for ext in ["png", "ico", "svg", "jpg", "jpeg", "webp"] {
+            for ext in ICON_FILE_EXTENSIONS {
                 let candidate = icons_dir.join(format!("{hash}.{ext}"));
                 if candidate.is_file() {
                     let name = candidate
@@ -103,7 +117,7 @@ pub(super) fn build_icon_cache(
     if let Ok(dir) = std::fs::read_dir(icons_dir) {
         for entry in dir.flatten() {
             let path = entry.path();
-            if path.extension().is_none_or(|e| e != "png") {
+            if !icon_extension_is_supported(&path) {
                 continue;
             }
             let name = path
@@ -181,13 +195,30 @@ pub(super) fn icon_reference_matches(
         .is_some_and(|(resolved, root)| resolved.starts_with(root))
 }
 
+fn icon_extension_is_supported(path: &std::path::Path) -> bool {
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| {
+            ICON_FILE_EXTENSIONS
+                .iter()
+                .any(|candidate| extension.eq_ignore_ascii_case(candidate))
+        })
+}
+
 #[tauri::command]
 pub fn delete_icon_files(
     database: tauri::State<'_, Database>,
     paths: tauri::State<'_, StoragePaths>,
     names: Vec<String>,
 ) -> Result<u64, String> {
-    let icons_dir = paths.storage.join("icons");
+    delete_icon_files_for(&database, &paths.storage.join("icons"), names)
+}
+
+pub(super) fn delete_icon_files_for(
+    database: &Database,
+    icons_dir: &std::path::Path,
+    names: Vec<String>,
+) -> Result<u64, String> {
     let Some(publication) = database.resource_cleanup_snapshot() else {
         // A capture is publishing a resource right now, so the reference
         // snapshot below could race it; defer the user-visible delete.
@@ -200,8 +231,8 @@ pub fn delete_icon_files(
     for name in &names {
         // Names arrive from the webview: strip any directory components and
         // verify the resolved file stays inside the managed icons directory
-        // before deleting, so `..\..\x.png` or absolute paths cannot remove
-        // arbitrary `.png` files on disk.
+        // before deleting, so `..\..\x.svg` or absolute paths cannot remove
+        // arbitrary icon files on disk.
         let Some(file_name) = std::path::Path::new(name)
             .file_name()
             .and_then(|n| n.to_str())
@@ -221,11 +252,11 @@ pub fn delete_icon_files(
         if referenced
             .icon_paths
             .iter()
-            .any(|reference| icon_reference_matches(reference, file_name, &icons_dir))
+            .any(|reference| icon_reference_matches(reference, file_name, icons_dir))
         {
             continue;
         }
-        if path.extension().is_some_and(|e| e == "png") && path.exists() {
+        if icon_extension_is_supported(&path) && path.exists() {
             // Serialize the unlink against an in-flight publication: a new
             // capture may have started reusing this content-addressed icon
             // since the reference snapshot was taken.

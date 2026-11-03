@@ -784,9 +784,12 @@ writes before its deadline. Portable fixture tests cover orchestration/cleanup;
 native macOS tools and process-group behavior still require macOS CI/runtime.
 
 Linux icon caching also stages source bytes with `copy_file_atomically`; failed
-copies cannot leave a partial final cache file for later lookups to reuse.
-Existing icon-lookup fixtures and shared partial-write regressions cover this path's
-portable contracts. Native theme lookup remains a Linux runtime check.
+copies cannot leave a partial final cache file for later lookups to reuse. Cache
+inventory resolves an app's recorded icon reference before the legacy keyed or
+hashed names, and the same supported extension set drives orphan listing and user
+deletion for PNG, ICO, SVG, JPEG/WebP and XPM files. Existing icon-lookup fixtures
+and shared partial-write regressions cover these portable contracts. Native theme
+lookup and WebView rendering remain Linux runtime checks.
 
 The Linux ONNX compatibility shim's `_M_replace_cold` exports must accept the
 implicit C++ `this` pointer before their five explicit arguments, for both char
