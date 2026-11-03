@@ -38,26 +38,6 @@ fn query_process_image_path_with(
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn process_path_query_retries_when_the_path_exceeds_the_initial_buffer() {
-        let expected = format!(r"C:\{}\probe.exe", "x".repeat(640));
-        let encoded: Vec<u16> = expected.encode_utf16().collect();
-        let actual = query_process_image_path_with(QUERY_INITIAL_CAPACITY, |buffer, size| {
-            if encoded.len() > buffer.len() {
-                *size = buffer.len() as u32;
-                return Err(122);
-            }
-            buffer[..encoded.len()].copy_from_slice(&encoded);
-            *size = encoded.len() as u32;
-            Ok(())
-        });
-        assert_eq!(actual.as_deref(), Some(expected.as_str()));
-    }
-}
 #[cfg(target_os = "windows")]
 pub fn get_foreground_app() -> crate::platform::ForegroundApp {
     use std::ffi::OsString;
@@ -447,4 +427,25 @@ pub fn extract_app_icon(
     _exe_path: &str,
 ) -> Option<String> {
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn process_path_query_retries_when_the_path_exceeds_the_initial_buffer() {
+        let expected = format!(r"C:\{}\probe.exe", "x".repeat(640));
+        let encoded: Vec<u16> = expected.encode_utf16().collect();
+        let actual = query_process_image_path_with(QUERY_INITIAL_CAPACITY, |buffer, size| {
+            if encoded.len() > buffer.len() {
+                *size = buffer.len() as u32;
+                return Err(122);
+            }
+            buffer[..encoded.len()].copy_from_slice(&encoded);
+            *size = encoded.len() as u32;
+            Ok(())
+        });
+        assert_eq!(actual.as_deref(), Some(expected.as_str()));
+    }
 }
