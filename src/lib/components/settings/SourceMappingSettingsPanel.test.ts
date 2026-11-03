@@ -83,4 +83,5 @@ it("refreshes names from the backend when an older save response arrives late", 
   expect(resolveWebSourceName({ sourceApp: "Chrome", webSource: { domain: "github.com" } })).toBe(
     latest.name,
   );
+  expect(target.querySelector<HTMLInputElement>(".mapping-name")!.value).toBe(latest.name);
 });

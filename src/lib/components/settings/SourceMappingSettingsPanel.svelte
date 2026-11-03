@@ -8,7 +8,10 @@
     setSourceMappingRules,
     type SourceMappingRule,
   } from "$lib/services/clipboard";
-  import { refreshSourceMappingRules } from "$lib/services/source-mapping.svelte";
+  import {
+    readSourceMappingRules,
+    refreshSourceMappingRules,
+  } from "$lib/services/source-mapping.svelte";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);
@@ -57,11 +60,12 @@
         titleKeyword: rule.titleKeyword.trim(),
         name: rule.name.trim(),
       }));
-      const saved = await setSourceMappingRules(snapshot);
-      rules = saved ?? rules;
+      await setSourceMappingRules(snapshot);
       // Another window may have saved newer rules while this response was in
-      // flight. Refresh from the backend rather than publishing this snapshot.
+      // flight. Refresh from the backend rather than publishing this snapshot,
+      // then hydrate the editor from that same authoritative cache.
       await refreshSourceMappingRules();
+      rules = readSourceMappingRules();
       onfeedback(_t("sourceMapping.saved"), true);
     } catch (error) {
       onfeedback(error instanceof Error ? error.message : String(error), false);

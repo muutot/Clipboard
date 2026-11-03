@@ -166,6 +166,9 @@ export function createSourceMappingStore() {
     initialize,
     refresh,
     destroy,
+    get rules() {
+      return rules.map((rule) => ({ ...rule }));
+    },
     resolveWebSourceName: (item: WebSourceItem) => resolveName(item, rules),
   };
 }
@@ -177,5 +180,6 @@ const sourceMapping = createSourceMappingStore();
 export const ensureSourceMappingRules = sourceMapping.initialize;
 /** Re-reads authoritative rules; save responses never replace the shared cache. */
 export const refreshSourceMappingRules = sourceMapping.refresh;
+export const readSourceMappingRules = () => sourceMapping.rules;
 export const destroySourceMappingRules = sourceMapping.destroy;
 export const resolveWebSourceName = sourceMapping.resolveWebSourceName;

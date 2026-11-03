@@ -148,7 +148,9 @@ The root `+layout.ts` awaits `ensureSourceMappingRules` before first render;
 registers `source-mapping-rules-changed` before reading `sourceMapping.rules`
 through `get_source_mapping_rules`. The event carries only an invalidation;
 `refreshSourceMappingRules()` also re-reads the backend after a panel save,
-so a late save response cannot roll the shared cache back. Reads coalesce,
+so a late save response cannot roll the shared cache back;
+`readSourceMappingRules()` returns a clone of that refreshed cache so the
+settings editor can display the same authoritative snapshot. Reads coalesce,
 and a notification during a read discards that snapshot and requests a fresh
 one before awaiting callers settle. Failed loads/listener registrations can
 be retried; a new registration rehydrates changes missed while disconnected.
