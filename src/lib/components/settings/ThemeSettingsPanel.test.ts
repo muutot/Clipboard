@@ -83,9 +83,10 @@ it("clears the active preset when custom colors are edited manually", () => {
   color.dispatchEvent(new Event("input", { bubbles: true }));
   flushSync();
 
-  expect(get(generalSettings).themeColors.bg).toBe("#123456");
+  expect(get(generalSettings).themeColors?.bg).toBe("#123456");
   expect(get(generalSettings).activePresetId).toBeUndefined();
 });
+
 it("starts custom editing from the currently displayed system palette", () => {
   media.matches = true;
   media.dispatchEvent(new Event("change"));
