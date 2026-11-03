@@ -226,6 +226,10 @@ backend until completion or explicit cancellation.
 - SourceMappingSettingsPanel also checks its lifetime after initial load, save
   and authoritative refresh. It hydrates the editor only from the refreshed
   shared cache and publishes success/failure feedback only while mounted.
+- SyncPanel serializes every config save, including saves requested by a
+  connection test or manual sync. The backend rejects an overlapping
+  `set_sync_config` while a sync operation holds the process lock, so queued
+  snapshots must be written in order and the later action must wait for them.
 - Database repair feedback uses the shared English/Chinese storage keys with
   placeholders, including page/free counts, integrity diagnostics and errors;
   do not concatenate English UI text inside the panel.

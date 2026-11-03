@@ -17,7 +17,18 @@ const bridge = vi.hoisted(() => ({
 }));
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: bridge.invoke }));
-vi.mock("$lib/services/runtime", () => ({ isTauriRuntime: () => true }));
+vi.mock("$lib/services/runtime", () => ({
+  invokeTauri: bridge.invoke,
+  invokeTauriRequired: bridge.invoke,
+  isTauriRuntime: () => true,
+  getRuntimeInfo: vi.fn(async () => null),
+  openDevtools: vi.fn(),
+  isDevtoolsHotkey: () => false,
+}));
+vi.mock("$lib/services/settings", async () => {
+  const { writable } = await import("svelte/store");
+  return { generalSettings: writable({ colorIcons: false }) };
+});
 vi.mock("$lib/services/storage", () => ({
   getSyncConfig: bridge.getConfig,
   setSyncConfig: bridge.setConfig,
@@ -66,7 +77,17 @@ beforeEach(() => {
   bridge.getConfig.mockReset().mockResolvedValue({ ...syncConfig });
   bridge.setConfig.mockReset().mockResolvedValue(undefined);
   bridge.testConnection.mockReset().mockResolvedValue({ success: true, message: "ok" });
-  bridge.runSync.mockReset();
+  bridge.runSync.mockReset().mockResolvedValue({
+    uploadedEntries: 0,
+    downloadedEntries: 0,
+    appliedEntries: 0,
+    failedPeers: 0,
+    uploadedResources: 0,
+    downloadedResources: 0,
+    deletedRemoteObjects: 0,
+    bytesUploaded: 0,
+    bytesDownloaded: 0,
+  });
   bridge.rotate.mockReset().mockResolvedValue(undefined);
   feedback.mockReset();
   // jsdom has no modal dialog plumbing; the repo stubs the two methods.
@@ -138,6 +159,26 @@ it("blocks editing when the configuration load fails", async () => {
   expect(target.querySelector("input[aria-label='Service Endpoint']")).toBeNull();
   expect(bridge.setConfig).not.toHaveBeenCalled();
   expect(bridge.rotate).not.toHaveBeenCalled();
+});
+
+it("serializes an automatic save before the manual sync save", async () => {
+  let finishFirstSave!: () => void;
+  const firstSave = new Promise<void>((resolve) => (finishFirstSave = resolve));
+  bridge.setConfig.mockReturnValueOnce(firstSave);
+  render("cloud");
+  await settle();
+
+  target.querySelector<HTMLButtonElement>('button[role="switch"]')!.click();
+  await vi.waitFor(() => expect(bridge.setConfig).toHaveBeenCalledTimes(1));
+  button("Sync Now").click();
+  await settle();
+
+  expect(bridge.setConfig).toHaveBeenCalledTimes(1);
+  expect(bridge.runSync).not.toHaveBeenCalled();
+  finishFirstSave();
+  await vi.waitFor(() => expect(bridge.runSync).toHaveBeenCalled());
+  expect(bridge.setConfig).toHaveBeenCalledTimes(2);
+  expect(bridge.setConfig.mock.calls[1][0]).toEqual(expect.objectContaining({ autoSync: true }));
 });
 
 it("rotates the namespace with the entered password and reloads the configuration", async () => {

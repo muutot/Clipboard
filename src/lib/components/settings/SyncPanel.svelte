@@ -77,6 +77,7 @@
   let rotateDialogEl = $state<HTMLDialogElement | null>(null);
   let rotatePassword = $state("");
   let rotating = $state(false);
+  let persistQueue: Promise<void> = Promise.resolve();
 
   function openRotateDialog() {
     rotatePassword = "";
@@ -187,7 +188,7 @@
     return Math.min(max, Math.max(min, Math.round(value)));
   }
 
-  async function persistSyncConfig() {
+  async function persistSyncConfigNow() {
     if (!isTauriRuntime()) return;
     syncAutoInterval = clampSyncNumber(syncAutoInterval, 10, 86_400, 300);
     syncSegmentMaxEntries = clampSyncNumber(syncSegmentMaxEntries, 16, 10_000, 512);
@@ -215,6 +216,12 @@
     if (syncEncryptPassword) syncHasEncryptionPassword = true;
     syncS3SecretKey = "";
     syncEncryptPassword = "";
+  }
+
+  function persistSyncConfig(): Promise<void> {
+    const request = persistQueue.then(persistSyncConfigNow, persistSyncConfigNow);
+    persistQueue = request.catch(() => {});
+    return request;
   }
 
   async function saveSyncConfig() {
