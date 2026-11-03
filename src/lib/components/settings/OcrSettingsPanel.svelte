@@ -105,7 +105,7 @@
     } catch {
       /* ignore */
     } finally {
-      ocrStatusLoading = false;
+      if (!destroyed) ocrStatusLoading = false;
     }
   }
 
@@ -212,6 +212,7 @@
   }
 
   async function applyModel() {
+    if (destroyed) return;
     if (activeVariant === modelVariant) {
       onfeedback(_t("storage.ocrModelAlreadyApplied"), true);
       return;
@@ -223,16 +224,21 @@
           ppocrModelVariant: modelVariant,
         },
       });
+      if (destroyed) return;
       await loadOcrStatus();
+      if (destroyed) return;
       ocrEngine = "ppocr";
       onfeedback(_t("storage.ocrModelApplied"), true);
     } catch (e) {
+      if (destroyed) return;
       await loadOcrStatus();
+      if (destroyed) return;
       onfeedback(_t("storage.ocrModelApplyFailed", { error: String(e) }), false);
     }
   }
 
   async function saveOcrEngine(engine: string) {
+    if (destroyed) return;
     try {
       await invoke("set_ocr_config", {
         settings: {
@@ -240,8 +246,10 @@
           ...(engine === "ppocr" ? { ppocrModelVariant: modelVariant } : {}),
         },
       });
+      if (destroyed) return;
       ocrEngine = engine;
       await loadOcrStatus();
+      if (destroyed) return;
       onfeedback(
         _t("storage.ocrEngineChanged", {
           engine: engine === "ppocr" ? "PP-OCRv6" : "Tesseract",
@@ -249,13 +257,16 @@
         true,
       );
     } catch (error) {
+      if (destroyed) return;
       console.error("Unable to save OCR config", error);
       await loadOcrStatus();
+      if (destroyed) return;
       onfeedback(_t("storage.ocrEngineChangeFailed", { error: String(error) }), false);
     }
   }
 
   async function saveDetConfig() {
+    if (destroyed) return;
     try {
       await invoke("set_ocr_config", {
         settings: {
@@ -265,10 +276,13 @@
           detUnclipRatio,
         },
       });
+      if (destroyed) return;
       onfeedback(_t("storage.ocrDetectionSaved"), true);
     } catch (error) {
+      if (destroyed) return;
       console.error("Unable to save detection config", error);
       await loadOcrStatus();
+      if (destroyed) return;
       onfeedback(_t("storage.ocrDetectionSaveFailed", { error: String(error) }), false);
     }
   }

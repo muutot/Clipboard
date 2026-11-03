@@ -228,6 +228,10 @@ backend until completion or explicit cancellation.
   local status writes and post-rotation reload work; backend operations already
   submitted still run to completion. A save queued but not started after
   teardown is skipped.
+- OcrSettingsPanel applies the same late-result boundary to detection saves,
+  model application and engine changes, including their failure reloads and
+  parent feedback. Its task-status poll also avoids writing its busy flag after
+  teardown.
 - SourceMappingSettingsPanel also checks its lifetime after initial load, save
   and authoritative refresh. It hydrates the editor only from the refreshed
   shared cache and publishes success/failure feedback only while mounted.
