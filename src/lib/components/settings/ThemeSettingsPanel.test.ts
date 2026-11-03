@@ -63,6 +63,29 @@ it("selects system as one coherent edit while clearing the active preset", () =>
   expect(get(generalSettings).themeColors).toEqual(LIGHT_THEME_COLORS);
 });
 
+it("clears the active preset when custom colors are edited manually", () => {
+  generalSettings.merge({
+    theme: "custom",
+    activePresetId: "fixture",
+    themeColors: { ...DARK_THEME_COLORS },
+    customPresets: [
+      {
+        id: "fixture",
+        name: "Fixture",
+        colors: { ...DARK_THEME_COLORS },
+      },
+    ],
+  });
+  flushSync();
+
+  const color = target.querySelector<HTMLInputElement>('input[type="color"]')!;
+  color.value = "#123456";
+  color.dispatchEvent(new Event("input", { bubbles: true }));
+  flushSync();
+
+  expect(get(generalSettings).themeColors.bg).toBe("#123456");
+  expect(get(generalSettings).activePresetId).toBeUndefined();
+});
 it("starts custom editing from the currently displayed system palette", () => {
   media.matches = true;
   media.dispatchEvent(new Event("change"));

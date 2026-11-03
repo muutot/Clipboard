@@ -69,17 +69,26 @@
     const cleaned = value.startsWith("#") ? value : "#" + value;
     if (!/^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(cleaned)) return;
     themeColors = { ...themeColors, [key]: cleaned };
-    generalSettings.updateSetting("themeColors", { ...themeColors, [key]: cleaned });
+    generalSettings.merge({
+      themeColors: { ...themeColors, [key]: cleaned },
+      activePresetId: undefined,
+    });
   }
 
   function resetToDark() {
     themeColors = { ...DARK_THEME_COLORS };
-    generalSettings.updateSetting("themeColors", { ...DARK_THEME_COLORS });
+    generalSettings.merge({
+      themeColors: { ...DARK_THEME_COLORS },
+      activePresetId: undefined,
+    });
   }
 
   function resetToLight() {
     themeColors = { ...LIGHT_THEME_COLORS };
-    generalSettings.updateSetting("themeColors", { ...LIGHT_THEME_COLORS });
+    generalSettings.merge({
+      themeColors: { ...LIGHT_THEME_COLORS },
+      activePresetId: undefined,
+    });
   }
 
   const colorEntries: { key: keyof ThemeColors; label: string; desc: string }[] = [

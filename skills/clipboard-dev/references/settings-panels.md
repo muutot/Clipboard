@@ -45,7 +45,7 @@ The app theme selector offers system/dark/light/custom. System is the default;
 its readonly colors follow the current OS preference without saving each change.
 Selecting a mode merges mode, palette and active-preset clear as one store edit.
 Switching from system to custom starts from the currently displayed palette.
-The panel owns and releases its system-appearance listener.
+The panel owns and releases its system-appearance listener. Editing a custom color or using the Dark/Light reset clears `activePresetId` because those actions no longer represent the named preset; applying, creating, or overwriting a preset still sets or preserves its active state.
 
 Appearance also includes the `custom_css` secondary section, implemented by the lazy
 `CustomCssSettingsPanel`. Its searchable card is `appearance.custom-css`; the parent
