@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onDestroy } from "svelte";
   import AppIcon from "$lib/components/card/AppIcon.svelte";
   import TransferPanel from "$lib/components/settings/TransferPanel.svelte";
   import EntryHeading from "$lib/components/settings/settings-entries/EntryHeading.svelte";
@@ -18,12 +19,20 @@
   let rebuilding = $state(false);
   let repairLoading = $state(false);
   let repairResult = $state<RepairResult | null>(null);
+  let disposed = false;
+
+  onDestroy(() => {
+    disposed = true;
+  });
 
   async function doRepair() {
+    if (disposed || repairLoading) return;
     repairLoading = true;
     repairResult = null;
     try {
-      repairResult = await repairDatabase();
+      const result = await repairDatabase();
+      if (disposed) return;
+      repairResult = result;
       if (repairResult) {
         onfeedback(
           repairResult.integrityOk
@@ -33,20 +42,23 @@
         );
       }
     } catch (error) {
+      if (disposed) return;
       console.error("Database repair failed", error);
       onfeedback(
         "Database repair failed: " + (error instanceof Error ? error.message : String(error)),
         false,
       );
     } finally {
-      repairLoading = false;
+      if (!disposed) repairLoading = false;
     }
   }
 
   async function rebuildIndex() {
+    if (disposed || rebuilding) return;
     rebuilding = true;
     try {
       const summary = await rebuildSearchIndex();
+      if (disposed) return;
       onfeedback(
         _t("storage.rebuildComplete", {
           events: summary.processedEvents,
@@ -55,10 +67,11 @@
         true,
       );
     } catch (error) {
+      if (disposed) return;
       console.error("Unable to rebuild search index", error);
       onfeedback(error instanceof Error ? error.message : String(error), false);
     } finally {
-      rebuilding = false;
+      if (!disposed) rebuilding = false;
     }
   }
 </script>

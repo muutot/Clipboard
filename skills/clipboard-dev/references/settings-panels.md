@@ -213,6 +213,9 @@ backend until completion or explicit cancellation.
 - Path-save completion in StoragePathsPanel checks lifetime before updating
   panel state or shared feedback, including failures. Teardown leaves already
   submitted directory/configuration work in the backend.
+- StorageToolsPanel database repair and search-index rebuild use the same
+  lifetime boundary: teardown ignores late success/failure state and shared
+  feedback, while the already submitted backend operation continues.
 - State a platform limitation in the panel, not only in the README. Read the authoritative
   `get_runtime_info` capability (`capabilities.globalShortcut`,
   `capabilities.quickPaste`) rather than inferring from `operatingSystem`:
