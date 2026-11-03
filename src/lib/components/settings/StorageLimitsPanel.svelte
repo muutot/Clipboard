@@ -50,6 +50,7 @@
   });
   let storageKindStatsAvailable = $state(false);
   let deletingStorageKind = $state<StorageKind | null>(null);
+  let storageKindStatsGeneration = 0;
   let historySaveInFlight = false;
   let historySavePending = false;
 
@@ -169,6 +170,7 @@
 
   async function loadStorageKindStats(): Promise<boolean> {
     if (disposed) return false;
+    const generation = ++storageKindStatsGeneration;
     try {
       const entries = await Promise.all(
         storageKinds.map(async ({ kind }) => {
@@ -177,12 +179,12 @@
           return [kind, stats] as const;
         }),
       );
-      if (disposed) return false;
+      if (disposed || generation !== storageKindStatsGeneration) return false;
       storageKindStats = Object.fromEntries(entries) as Record<StorageKind, StorageKindStats>;
       storageKindStatsAvailable = true;
       return true;
     } catch (error) {
-      if (disposed) return false;
+      if (disposed || generation !== storageKindStatsGeneration) return false;
       console.error("Unable to load storage kind statistics", error);
       storageKindStats = {
         text: { itemCount: 0, sizeBytes: 0 },
@@ -209,6 +211,7 @@
       const freshStats = await getStorageKindStats(kind);
       if (disposed) return;
       if (!freshStats) throw new Error(_t("storage.storageUnavailable"));
+      storageKindStatsGeneration += 1;
       storageKindStats = { ...storageKindStats, [kind]: freshStats };
       storageKindStatsAvailable = true;
       if (freshStats.itemCount === 0) {
@@ -237,6 +240,7 @@
       try {
         const updatedStats = await getStorageKindStats(kind);
         if (disposed) return;
+        storageKindStatsGeneration += 1;
         storageKindStats = { ...storageKindStats, [kind]: updatedStats };
       } catch (error) {
         if (disposed) return;

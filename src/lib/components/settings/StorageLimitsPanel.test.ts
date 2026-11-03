@@ -6,8 +6,14 @@ import Panel from "./StorageLimitsPanel.svelte";
 import ConfirmHost from "../common/ConfirmDialog.svelte";
 
 const bridge = vi.hoisted(() => ({ invoke: vi.fn(), feedback: vi.fn() }));
+const events = vi.hoisted(() => ({ handlers: new Map<string, () => void>() }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: bridge.invoke }));
-vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}) }));
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn(async (name: string, handler: () => void) => {
+    events.handlers.set(name, handler);
+    return () => {};
+  }),
+}));
 vi.mock("$lib/services/settings", async () => {
   const { writable } = await import("svelte/store");
   return { generalSettings: writable({ colorIcons: false }) };
@@ -27,6 +33,24 @@ function response(command: string) {
   if (command === "get_storage_kind_stats") return stats;
   if (command === "permanently_delete_storage_kind") return result;
   throw new Error(`Unexpected fixture command: ${command}`);
+}
+function statsBatch() {
+  return {
+    text: deferred<typeof stats>(),
+    link: deferred<typeof stats>(),
+    image: deferred<typeof stats>(),
+    file: deferred<typeof stats>(),
+  };
+}
+function resolveStatsBatch(
+  batch: ReturnType<typeof statsBatch>,
+  itemCount: number,
+  sizeBytes: number,
+) {
+  for (const pending of Object.values(batch)) pending.resolve({ itemCount, sizeBytes });
+}
+function waitForRefresh() {
+  return new Promise((resolve) => setTimeout(resolve, 280));
 }
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -69,6 +93,7 @@ beforeEach(async () => {
   vi.stubGlobal("__TAURI_INTERNALS__", {});
   bridge.invoke.mockReset().mockImplementation(async (command) => response(command));
   bridge.feedback.mockReset();
+  events.handlers.clear();
   settleConfirm(false);
   locale.set("en");
   target = document.createElement("div");
@@ -140,6 +165,63 @@ it("does not publish a failed history save after panel teardown", async () => {
   pending.reject(new Error("late history save failure"));
   await settle();
   expect(bridge.feedback).not.toHaveBeenCalled();
+});
+it("keeps the newest per-kind statistics when refreshes finish out of order", async () => {
+  const older = statsBatch();
+  const newer = statsBatch();
+  let refreshRead = 0;
+  bridge.invoke.mockImplementation((command, args) => {
+    if (command !== "get_storage_kind_stats") return Promise.resolve(response(command));
+    const kind = (args as { kind: keyof typeof older }).kind;
+    const batch = refreshRead++ < 4 ? older : newer;
+    return batch[kind].promise;
+  });
+
+  events.handlers.get("clipboard-item-added")!();
+  await waitForRefresh();
+  expect(statsReads()).toHaveLength(8);
+
+  events.handlers.get("clipboard-item-added")!();
+  await waitForRefresh();
+  expect(statsReads()).toHaveLength(12);
+
+  resolveStatsBatch(newer, 9, 900);
+  await settle();
+  const textStats = target.querySelector(".storage-kind-delete-row")!;
+  expect(textStats.textContent).toContain("9 items");
+
+  resolveStatsBatch(older, 3, 100);
+  await settle();
+  expect(textStats.textContent).toContain("9 items");
+});
+it("keeps a delete-time snapshot when an older refresh finishes later", async () => {
+  const older = statsBatch();
+  const fresh = deferred<typeof stats>();
+  let refreshRead = 0;
+  bridge.invoke.mockImplementation((command, args) => {
+    if (command !== "get_storage_kind_stats") return Promise.resolve(response(command));
+    const kind = (args as { kind: keyof typeof older }).kind;
+    return refreshRead++ < 4 ? older[kind].promise : fresh.promise;
+  });
+
+  events.handlers.get("clipboard-item-added")!();
+  await waitForRefresh();
+  expect(statsReads()).toHaveLength(8);
+
+  deleteText();
+  await settle();
+  expect(statsReads()).toHaveLength(9);
+  expect(currentConfirm()).toBeNull();
+
+  fresh.resolve({ itemCount: 5, sizeBytes: 500 });
+  await settle();
+  expect(currentConfirm()?.message).toContain("5 items");
+
+  resolveStatsBatch(older, 3, 100);
+  await settle();
+  const textStats = target.querySelector(".storage-kind-delete-row")!;
+  expect(textStats.textContent).toContain("5 items");
+  settleConfirm(false);
 });
 it("does not replace a newer confirmation when old statistics arrive after panel teardown", async () => {
   const pending = deferred<typeof stats>();
