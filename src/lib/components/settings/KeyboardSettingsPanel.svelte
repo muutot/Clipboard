@@ -207,16 +207,18 @@
     }
   }
 
-  async function handleResetConfig() {
-    try {
-      const resetConfig = await resetKeyboardConfig();
-      if (componentDestroyed) return;
-      config = resetConfig;
-    } catch (error) {
-      if (!componentDestroyed) {
-        feedback.show(error instanceof Error ? error.message : String(error), false);
+  function handleResetConfig(): Promise<void> {
+    return enqueueBindingOperation(async () => {
+      try {
+        const resetConfig = await resetKeyboardConfig();
+        if (componentDestroyed) return;
+        config = resetConfig;
+      } catch (error) {
+        if (!componentDestroyed) {
+          feedback.show(error instanceof Error ? error.message : String(error), false);
+        }
       }
-    }
+    });
   }
 
   // Binding mutations send the full replacement list computed from the local

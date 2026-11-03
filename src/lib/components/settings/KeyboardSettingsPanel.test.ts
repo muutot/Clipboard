@@ -26,8 +26,8 @@ async function settle() {
     flushSync();
   }
 }
-async function open() {
-  panel = mount(Panel, { target, props: { onclose() {}, showHeader: false, category: "switch" } });
+async function open(category: "switch" | "system" = "switch") {
+  panel = mount(Panel, { target, props: { onclose() {}, showHeader: false, category } });
   await settle();
 }
 function allCard() {
@@ -111,4 +111,29 @@ it("accepts a valid binding after a rejected conflict", async () => {
     "Alt+1",
     "Ctrl+F12",
   ]);
+});
+
+it("queues a keyboard reset behind an in-flight binding mutation", async () => {
+  let finishConfigure!: (value: string[]) => void;
+  bridge.configure.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finishConfigure = resolve;
+      }),
+  );
+  bridge.reset.mockResolvedValue({ shortcuts: { switchFilter1: ["Alt+1"] } });
+  await open("system");
+
+  target.querySelector<HTMLButtonElement>(".binding-add")!.click();
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "F12", ctrlKey: true }));
+  await settle();
+  expect(bridge.configure).toHaveBeenCalledTimes(1);
+
+  target.querySelectorAll<HTMLButtonElement>(".config-bar-btn")[1].click();
+  await settle();
+  expect(bridge.reset).not.toHaveBeenCalled();
+
+  finishConfigure(["Ctrl+F12"]);
+  await settle();
+  expect(bridge.reset).toHaveBeenCalledTimes(1);
 });
