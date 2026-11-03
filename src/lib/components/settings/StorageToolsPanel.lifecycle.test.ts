@@ -1,5 +1,6 @@
 import { flushSync, mount, unmount } from "svelte";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { locale } from "$lib/i18n";
 import Panel from "./StorageToolsPanel.svelte";
 
 const bridge = vi.hoisted(() => ({
@@ -64,6 +65,33 @@ beforeEach(async () => {
 afterEach(async () => {
   await unmount(component);
   target.remove();
+});
+
+it("localizes detailed database repair feedback in Chinese", async () => {
+  locale.set("zh-CN");
+  bridge.repair.mockResolvedValueOnce({
+    integrityOk: true,
+    integrityMessage: "ok",
+    pageCount: 12,
+    freelistCount: 3,
+  });
+  target
+    .querySelector<HTMLButtonElement>(
+      '[data-settings-search-id="storage.database-maintenance"] button',
+    )!
+    .click();
+  await settle();
+  expect(bridge.feedback).toHaveBeenCalledWith("数据库完整性正常（12 页，3 个空闲页）", true);
+
+  bridge.feedback.mockClear();
+  bridge.repair.mockRejectedValueOnce(new Error("disk I/O"));
+  target
+    .querySelector<HTMLButtonElement>(
+      '[data-settings-search-id="storage.database-maintenance"] button',
+    )!
+    .click();
+  await settle();
+  expect(bridge.feedback).toHaveBeenCalledWith("数据库修复失败：disk I/O", false);
 });
 
 it.each([

@@ -486,6 +486,9 @@ export interface LocaleDefinition {
     checkingDatabase: string;
     integrityOk: string;
     integrityProblem: string;
+    databaseIntegrityOk: string;
+    databaseRepairNeeded: string;
+    databaseRepairFailed: string;
     settingsSearchLabel: string;
     settingsSearchPlaceholder: string;
     clearSettingsSearch: string;

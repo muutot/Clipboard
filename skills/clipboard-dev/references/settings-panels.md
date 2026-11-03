@@ -216,6 +216,9 @@ backend until completion or explicit cancellation.
 - StorageToolsPanel database repair and search-index rebuild use the same
   lifetime boundary: teardown ignores late success/failure state and shared
   feedback, while the already submitted backend operation continues.
+- Database repair feedback uses the shared English/Chinese storage keys with
+  placeholders, including page/free counts, integrity diagnostics and errors;
+  do not concatenate English UI text inside the panel.
 - State a platform limitation in the panel, not only in the README. Read the authoritative
   `get_runtime_info` capability (`capabilities.globalShortcut`,
   `capabilities.quickPaste`) rather than inferring from `operatingSystem`:

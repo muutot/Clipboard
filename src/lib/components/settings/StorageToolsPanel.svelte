@@ -36,8 +36,11 @@
       if (repairResult) {
         onfeedback(
           repairResult.integrityOk
-            ? `Database integrity OK (${repairResult.pageCount} pages, ${repairResult.freelistCount} free)`
-            : `Database repair needed: ${repairResult.integrityMessage}`,
+            ? _t("storage.databaseIntegrityOk", {
+                pages: repairResult.pageCount,
+                free: repairResult.freelistCount,
+              })
+            : _t("storage.databaseRepairNeeded", { message: repairResult.integrityMessage }),
           repairResult.integrityOk,
         );
       }
@@ -45,7 +48,9 @@
       if (disposed) return;
       console.error("Database repair failed", error);
       onfeedback(
-        "Database repair failed: " + (error instanceof Error ? error.message : String(error)),
+        _t("storage.databaseRepairFailed", {
+          message: error instanceof Error ? error.message : String(error),
+        }),
         false,
       );
     } finally {
