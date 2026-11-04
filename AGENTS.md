@@ -13,7 +13,7 @@ In particular:
 ## Repository audits
 
 For requested codebase audits or structured health reports, use the repository copy at
-`skills/fuck-my-shit-mountain/SKILL.md` and its Clipboard profile. Skill maintenance does not itself
+`skills/code-auditor/SKILL.md` and its Clipboard profile. Skill maintenance does not itself
 start an application audit. Keep this copy independent of the user's global skill installation.
 
 ## Release

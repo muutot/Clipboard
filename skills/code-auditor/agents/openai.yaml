@@ -1,0 +1,4 @@
+interface:
+  display_name: "code-auditor"
+  short_description: "Evidence-based multidimensional codebase audit"
+  default_prompt: "Use $code-auditor to audit this repository in full mode and write a concise report."

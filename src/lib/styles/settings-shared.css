@@ -472,7 +472,9 @@ label.visually-hidden {
 
 /* ── transparency / range slider ── */
 .transparency-slider {
+  display: block;
   width: 100%;
+  margin: 0;
   -webkit-appearance: none;
   appearance: none;
   height: 4px;
