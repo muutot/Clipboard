@@ -90,6 +90,10 @@ wayland-protocols-wlr = { version = "0.3", features = ["client"] }
 global-hotkey = "0.8"
 
 [dev-dependencies]
+# Isolated encrypted-backup format prototype; not exposed by application IPC yet.
+aes-gcm = { version = "0.11", features = ["zeroize"] }
+hmac = "0.13"
+pbkdf2 = "0.13"
 # Exercise calendar boundaries in real DST zones without changing the host timezone.
 chrono-tz = "0.10"
 global-hotkey = "0.8"

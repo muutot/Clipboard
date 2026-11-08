@@ -57,3 +57,9 @@
 5. Windows 原生恢复和 UI 检查；macOS/Linux 仅在匹配环境验收。检查 scratch 及日志中不存在合成秘密正文。
 
 未完成以上验证前，不勾选 E01 实现、兼容、交互或父项。参数或备份格式变更必须同时更新本文件和固定格式测试。
+
+## 分块原型证据
+
+src-tauri/tests/encrypted_backup_codec.rs 为纯测试目标，不是应用模块。原型固定 49 字节头部、1 MiB 数据块、18 GiB 流总量及 1,000,000 帧上限；密文载荷类型为 data/final，最终帧认证字节数、帧数及 SHA-256。salt/nonce 使用可失败的 SysRng；派生密钥与载荷用 Zeroizing，AES-GCM 启用 zeroize feature。五项测试覆盖往返、空流、块边界、错误口令、篡改、截断、追加、乱序、重复、超量长度、随机化和写入失败后拒绝重试；对应 test target Clippy 通过。
+
+解码返回的数据在 final/EOF 前是临时结果，禁止在此之前修改现有数据。原型尚未覆盖记录/资源帧、取消、真实文件、UI 或恢复事务；不能用于读取现有 .clipbackup，也不提供已发布格式兼容承诺。
