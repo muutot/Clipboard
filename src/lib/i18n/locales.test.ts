@@ -121,6 +121,8 @@ describe("i18n locales", () => {
       "capture.sourceMapping",
       "clipboard.clipbackup",
       "clipboard.codeEditor.wrap",
+      // Tauri's local asset host is a URL boundary, not a translated label.
+      "asset.localhost",
     ]);
     const missing: string[] = [];
     for (const [key, files] of collectReferencedKeys()) {
