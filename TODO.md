@@ -1,149 +1,214 @@
-# TODO Roadmap
+# Clipboard TODO
 
-> 勾选规则（按 `skills/clipboard-dev`）：只有直接实现证据 + 相称验证覆盖
-> 完整措辞时才可勾选；stub、配置项、UI 壳不算完成。
+本清单于 2026-11-08 从零重建，仅依据本轮代码审计与竞品对照报告；不沿用旧 TODO 的条目、状态或结构。
 
-## 版本状态
+依据：
 
-- 已发布：1.5.2 → 1.5.3 → 1.6 → 1.7.0–1.7.4 → **1.8.0（2026-10-11）**；当前分支 `v1.8.1` 承载发布后修复（打包元数据、同步脚本、release 存在性校验）。
-- 历史版本映射：原 roadmap v1.6 → **1.5.2**（信任边界收尾），v1.7 → **1.5.3**（性能/可观测余量），v1.8 → **1.6**（结构还债 + 平台渐进）。
-- 1.7 / 1.8 的实现条目与证据：`docs/V1_8_IMPLEMENTATION.md`、`docs/V1_8_FOLLOWUP.md`、`CHANGELOG.md`；后续版本候选见文末「开放项」。
+- [代码审计报告](skills/code-auditor/result/v1.8.4-review/audit-report-Clipboard-2026-11-08.md)：7 项确认问题、2 项待实证风险，以及验证覆盖缺口。
+- [竞品能力对照](skills/code-auditor/result/v1.8.4-review/competitor-review.md)：10 款竞品的官方证据、能力取舍和优先级。
 
-## 已验证完成（审计债已闭环，不再立项）
+报告及探针位于本地忽略目录，不随 Git 分发；下文保留问题、范围与验收条件，便于独立执行。报告结论对应历史快照，开始每个任务前必须核对当前源码与近期提交，避免重复修复。
 
-- [x] 快捷键冲突提示本地化：后端返回组合及两个操作标识，设置页按当前中英语言显示句子和功能名称；失败不改变已保存绑定，并可重试。证据：`KeyboardSettingsPanel.test.ts` 7 项挂载回归、`locales.test.ts` 字典契约、Rust `keyboard_shortcut_conflicts_serialize_for_localized_feedback` 与诊断序列化回归。
+## 执行与完成规则
 
-- [x] 快捷键保存后主窗口即时同步：`configure/delete/reset_keyboard_config` 成功后广播 `keyboard-config-changed`（完整配置），主窗口直接套用并用请求代际丢弃仍在途的焦点读取，分类按钮提示只显示该功能的第一个绑定。证据：`main-keyboard-sync.test.ts` 4 项挂载回归（去掉代际守卫时 stale-read 用例确实失败）；Rust 广播路径为直线代码，本地无 cargo 仅做静态审查，合并前以 Windows `npm run verify` 复核。
+- P0：优先处理隐私与现有核心操作可靠性；P1：后续可靠性和有价值的增强；P2：按证据及收益安排。
+- Confirmed 表示报告已确认问题，不表示当前分支已修复；Suspected 必须先补证，不能直接当已确认缺陷实施。
+- 所有复选框初始为未完成，不因报告完成、已有设置、测试 mock 或平台桩代码而勾选。
+- 每个子项须有实现或调查结论、适当验证与证据记录；父项只有全部适用子项验收后才能完成。调查若排除问题，应记录原因并将条件性修复标为不适用。
+- 每次提交一个最小、可独立验证的单元；修复阶段仅跑相关前后端测试，全部修复结束后运行一次最终集成检查。
+- 保留批准的主页面风格；设置 UI/CSS 变更先执行 style gate，复用语义变量、共享组件及中英文文案。
+- 使用隔离数据和合成敏感文本验证；清理、迁移及路径授权优先保护本地数据。
 
-- [x] 外观 → 自定义 CSS：新增二级分组和显式保存编辑器，内置样式优先级覆盖、跨窗口配置持久化、保留草稿及快捷键停用恢复。证据：CSS/面板/设置持久化和 Rust 配置回归，Edge 双窗口及六种主题/宽度布局验证；实现与竞品依据见 `docs/CUSTOM_CSS.md`。原生 WebView 与 macOS/Linux 交互仍待对应环境验证。
+## P0：隐私保护
 
-- [x] 仓库内审计技能：复制并维护 `skills/code-auditor/`，接入 Clipboard 审计规则，修正目录遍历与项目识别、增量比较语义、JSON/并发模式校验和诊断脱敏。审计文件统一保存到技能的 `result/`，不进入分发包；根目录 4 份历史报告已迁移并核验 SHA-256 不变。证据：`tests/test_helpers.py` 19 项回归通过，技能结构校验、真实仓库画像与临时 ZIP 打包检查通过；不据此宣称应用审计已完成。
+### F01 — 补齐默认敏感文本规则（Confirmed / High）
 
-- [x] SEC-01 本地 API 认证 — `src-tauri/src/cli/api.rs:30-33,258-297` token + Host/Origin 校验 + 回归测试
-- [x] SEC-02 asset scope 去 `"**"` — `src-tauri/tauri.conf.json:34`
-- [x] SEC-03 rename 路径穿越 — `commands/clipboard/operations/rename.rs` sanitize + file_name 断言
-- [x] SEC-04 `copy_file_to` 已删除；`delete_icon_files` 已约束 — `commands/files/icons.rs::delete_icon_files`
-- [x] SEC-06 OCR 下载尊重 localOnly + 超时 — `commands/ocr.rs:180-202`
-- [x] SEC-07/08 open scheme 白名单 + tag 编码 — `commands/files/shell.rs::openable_scheme`，`update.rs` urlencoding
-- [x] STA-02 迁移前停后台 writer — `commands/config/storage.rs:86`
-- [x] STA-03 rename 先写 DB 后改名 + 回滚 — `commands/clipboard/operations/rename.rs`
-- [x] STA-04 捕获 sequence 比对防混合 — `commands/capture.rs:430-441`
-- [x] STA-05 DST midnight 容错 — `search/date_parser.rs:56-69`
-- [x] STA-07 API 每连接独立线程 — `cli/api.rs` serve
-- [x] PERF-01 Windows 内存探针复用 WinAPI — `performance/memory_monitor.rs::current_process_memory_bytes`
-- [x] PERF-02 单遍 raw+normalized hash — `commands/capture.rs:451-468`
-- [x] PERF-03 PPaste 单事务导入 — `export/ppaste.rs:225-230`
-- [x] PERF-04 canvas 测量 memo + 字体失效 — `src/lib/utils/layout/virtual-scroll.ts:105-128`
-- [x] TEST-01 Vitest 基建 + utils 覆盖；TEST-02 命令层补测（capture/operations/files/sync/export/update 均有 `#[test]`）
-- [x] TEST-03 CI 不再忽略依赖清单 — `ci.yml` paths-ignore 仅 CHANGELOG/RELEASE
-- [x] A11Y-01~05 可激活目标排除、toolbar 可达、焦点陷阱、隐藏按钮出 Tab 序、子菜单键盘 — `+page.svelte:2478-2496` 及 `focus.ts` 单测
-- [x] FE-01 OFFSET 去重 + 失效 — `+page.svelte:699-738,985-988`；FE-02 桌面空列表启动
-- [x] MAINT-02 漂移已收敛：`updateItem` 单漏斗同步四副本 — `+page.svelte:130-176`
-- [x] DES-01 OCR 回调代替直接变异；DES-02 密码管理器单一名单
-- [x] CFG-01 conf 损坏隔离重建 — `config/store.rs:26-33`；CFG-02 dbg_log 仅 debug — `lib.rs:8-21`
-- [x] OBS 日志通道 `log_event` + 超限截断；剩余 `eprintln!` 仅 bench/CLI/logging 自身
-- [x] 悬浮窗空闲回收：`commands/float.rs::start_float_idle_reaper` 后台线程每 60s 观测，持续隐藏 10 分钟后销毁悬浮窗 WebView 释放渲染进程（任意可见观测重置计时，重建路径本就按需存在）；销毁前缓存外框位置/尺寸，下次重建经 `position_float_panel` 恢复（阴影 inset 修正 + `WorkArea::clamp_point` 夹取回工作区），不跳回默认角。所有显隐路径与主窗口零改动。证据：float 模块 5 项单测（`corner_position`/`WorkArea::clamp_point`/`FloatIdleTracker`）、workspace clippy `-D warnings`、全量 Rust 测试通过。
-- [x] PRIV-01 非法正则告警；PRIV-02 fail-closed（`state.rs:166-171` into_inner）
-- [x] FB-01 tesseract_languages 回退；FB-02 索引打开重试 + 重建兜底（`search/index.rs:60-89`）；FB-03 tesseract 只出 full_text（`ocr/tesseract.rs:96-106`）
-- [x] TS-01 删除多余 unsafe impl + Send 静态断言（`ocr/ppocr.rs:20,187-195`）
-- [x] REL-01 action pin SHA + 权限收敛 + sha256sum 产物（`release.yml:194`）
+- [ ] 修正默认敏感文本过滤遗漏，并证明正常内容未被过度拦截。
+  - [ ] 在当前源码复核并固化大写凭据、JSON 凭据、PKCS8 与加密私钥类型的遗漏用例，保留现有小写/RSA 对照。
+  - [ ] 扩展内置规则的大小写、JSON 键及标准私钥类型覆盖，保持用户自定义正则语义。
+  - [ ] 验证旧配置如何获得修正后的默认规则；不得覆盖用户自定义模式。
+  - [ ] 核对自动采集与手动添加等入口的过滤策略，验证被拦截内容不进入数据库、搜索索引及同步队列。
+  - [ ] 增加普通代码、一般 JSON 与非敏感文本的误报对照，更新默认过滤的能力边界说明。
 
-## 1.5.2 — 信任边界收尾 + 数据安全
+定位：`src-tauri/src/privacy/mod.rs`、`src-tauri/src/state.rs`。验收以真实规则与采集路径为准，不能承诺识别所有秘密。
 
-- [x] SEC-05 跨平台秘密存储：`platform::secret_store` 门面 + Windows DPAPI（存量）+ macOS login Keychain（`apple-native-keyring-store`）+ Linux Secret Service（`dbus-secret-service-keyring-store`，`crypto-rust`+`vendored` 免系统包）。`conf.json` 只存 `dpapi1:`/`oskey1:` 信封与标记；OS store 不可达时明文回退并打日志（不锁死）；mock-store 回环单测在全平台跑，mac/Linux 完整路径由 CI 覆盖。**`conf/api.token` 经复核后决定不迁入 OS store**：该文件是文档化的对接点（`cli/api.rs` 的 401 文案直接指向它，文件本身的存在意义就是让外部脚本读到稳定凭据），密封后提示与脚本同时失效。改为加固其唯一实际依赖——`commands/api.rs::write_api_token` 用 `OpenOptions::mode(0o600)` 在**创建时**设权限（原先 `fs::write` 后再 chmod 存在世界可读窗口，且 exFAT/网络共享上 chmod 静默失效），两平台权限收窄失败均打日志而非 `let _ =` 吞掉，空/纯空白 token 文件按缺失处理并重新生成。
-- [x] SEC-04 余量：`replace_icon_file` 的 `source_path` 仅 `is_file` 校验。已加三重门（扩展名白名单对齐 dialog 过滤器 + 10MiB 上限 + 光栅可解码校验，`commands/files/replace.rs::validate_replace_source`），4 个负向/正向单测通过；残余风险（被攻破渲染层搬运其他合法图片）已在注释记录，dialog 流程属用户显式同意。
-- [x] REL-01 余量（决议：暂不做 SBOM）：产物已有 sha256sum（`release.yml`），第三方 action 已 pin SHA 且写权限收敛到 build job，`Cargo.lock` 锁定全量依赖。手写非标准 SBOM 价值低、标准工具（cargo-cyclonedx）引入 CI 工具链成本与收益不成比例；若未来进应用商店/企业分发再立项。
-- [x] Linux uri-list 解析回归测试：`platform::parse_uri_list` 共享纯函数被 X11/Wayland 共用（`platform/mod.rs`），`file://` 解码、换行分隔、注释/非法行丢弃单测通过（`platform::tests::parse_uri_list_*`）。
+### F08 — 实证并处理原生保密/瞬态格式（Suspected / High）
 
-## 1.5.3 — 性能 / 可观测余量
+- [ ] 完成原生格式到采集决策的调查，并按实证结论关闭风险。
+  - [ ] Windows 隔离实验分别写入 `ExcludeClipboardContentFromMonitorProcessing`、`CanIncludeInClipboardHistory` 相关格式和合成文本，核实各格式语义及当前采集结果。
+  - [ ] macOS 原生实验分别覆盖 concealed、transient、autoGenerated；记录实际读取和采集行为。
+  - [ ] 记录带标记与无标记内容的数据库、索引和同步队列结果；区分来源应用排除与格式策略。
+  - [ ] 若证实缺口，将采集许可绑定到同一剪贴板序列快照，避免标记与内容跨次读取错配。
+  - [ ] 若需实现，明确手动保存、未知格式、平台不支持时的策略，并验证正常采集不受影响。
+  - [ ] 若问题不成立，保存可复现证据和排除理由；未运行的平台继续标为未验证。
 
-- [x] 排序与动态设置一致性自动化回归：索引同步模式即时切换并在启动/保存失败时回滚；复制/粘贴写入成功后才记录使用；搜索按配置排序并响应内容/使用/索引事件；候选上限与缓存缩容即时生效；历史容量和单页数量变化不再误判分页耗尽或跳过丢弃行；通用设置按嵌套字段合并并保留失败期间的新编辑；关闭文字透明度时的原生 alpha 恢复决策有单测。证据：`main-settings.test.ts`、`clipboard-usage.test.ts`、`settings-persistence.test.ts`、`item-store.test.ts`、`item-changes.test.ts` 及 Rust 设置/搜索回归；Vitest 318 项、Rust 798 项通过，check/build/Clippy 与本次修改格式检查通过。原生剪贴板读取测试因 `OpenClipboard failed` 单独跳过，既有 ignored 测试保持不变；不据此宣称原生交互已验证。
-- [x] 默认历史排序直接使用最后使用时间：采集/CLI/副本创建时初始化为创建时间，导入补齐缺失值，schema v2 只回填旧 NULL；默认列表及收藏列表增加最后使用时间索引，分页使用 `(last_used_at_ms, id)` 游标，搜索 `lastUsedAt` 也直接比较存储值。迁移保留数据/同步版本/队列、查询计划无临时排序且直接定位游标、跨页同时间与使用提序回归已验证；`npm run verify` 通过，Rust 788、Vitest 284 通过。10 万条内存模拟记录、每页 100 条，索引查询约 0.23–0.28 ms（中位数；非界面端到端性能）。
-- [x] PERF-01 余量：macOS 改 `task_info`（`MACH_TASK_BASIC_INFO`）in-process 查询，`ps` 降级为兜底（`performance/memory_monitor.rs`）。绑定形状逐项对锁定的 libc 0.2.189 源码核实（含 `packed(4)` 非对齐读）；mac 一致性单测（原生 vs ps 4x 容差）由 mac CI 跑，Windows 侧回归全过。
-- [x] Windows 主窗显隐路径统一：托盘、关闭到托盘、快捷键、Escape、悬浮窗详情、粘贴回上一个应用和单实例唤醒都走 `platform::hide_main_window` / `platform::restore_main_window`。曾在此实现隐藏时 `TrySuspend`（私有常驻 `205.2 MB → 38.7 MB`），但已回退：WebView2 在宿主窗口隐藏时不渲染，`Resume` 会重建合成表面并在窗口可见后才重绘，亮色主题下表现为稳定复现的一帧内容闪帧，且无法用“页面确认已绘制再显示”补偿（隐藏窗口中 `requestAnimationFrame` 不触发，日志出现 `main window was shown without a paint acknowledgement`）。现在隐藏只调用 `Window::hide()`，恢复时直接显示最后绘制表面；同时保留建窗时的主题底色与 `WS_CLIPCHILDREN`（`platform::enable_child_clipping`）以消除 tao 擦除覆盖。代价是隐藏后内存回到可见时的约 `205 MB` 量级，见 `docs/PERFORMANCE_V1_8.md`。
-- [x] 日志红线复核：全量审计 `log_event!`/`eprintln!`/`dbg_log` 插值——仅 id/路径/计数/配置键/错误展示，无剪贴板正文、OCR 文本、秘密、请求体（唯一例外：非法敏感正则原文的可视化警告，属设计意图）；前端 `console` 仅 DevTools，顺手去掉一处 clipboard 衍生 payload 插值（`ClipboardCard.svelte`）。红线写入 CONTRIBUTING。
-- [x] 同步引擎真实 S3 冒烟：已实现。`sync::v1::s3_smoke`（`#[ignore]`，未设 `CLIPBOARD_S3_TEST_ENDPOINT` 时安静跳过）在真实 S3 兼容服务器上验证两设备收敛、稳态转传计数、条件写入/ETag 契约、内存段读上限；`scripts/sync-s3-test.ps1` 在 Windows 上下载并校验固定版本 rustfs（校验发布 SHA-256）后自动启动、运行、关闭，二进制不入仓。rustfs 1.0.1-preview.11 已验证：真实 SigV4/path-style/412 条件写/ETag 引号形式均与传输契约一致，1001 段分页基准通过（pull 4 次 LIST + 1002 次 GET）。：`MemoryStore` 替身已覆盖已知语义差（etag 引号/list 分页/CAS 失败注入，审计确认"已尽量模拟"）；应用内另有 against 用户真实桶的 `test_sync_connection`（10s 超时）。MinIO CI 矩阵本地无 docker 不可验证，违反"无证据不断言通过"原则；等同步 v2 动大手术时再立项。
+定位：平台剪贴板接口、`ClipboardSnapshot`、采集策略。依赖：先调查，后实施；不能机械复制不同平台的格式名称。
 
-## 架构收敛（v1.6）
+## P0：核心功能与数据契约
 
-- [x] 热键纯逻辑去重：已由并行工作完成（`platform/hotkey_common.rs`，比提案更通用：多动作注册表 + `Forward` 转发），本分支跳过。
-- [x] 服务调用收敛：`invokeTauri`/`invokeTauriRequired`（`services/runtime.ts`），63 处守卫→单行，对象字面量/void/throw 全形态覆盖。
-- [x] 命令锁样板收敛：`commands/lock.rs::lock_state`（Deref 泛型，State/Arc 通吃），69 处→单行，消息逐字保留；`MaterializationStore` 自定义 `lock()` 保持原样。
-- [x] 面板 feedback 收敛：`utils/settings/feedback.svelte.ts` 工厂（Keyboard/Sensitive/General；TagManagement 的 `{message,kind}|null` 形态不同，明确除外）。
-- [x] 部分不做（已决议）：config store 宏化（伤显式错误类型）、`_t` 收敛（丢语言切换响应式）。`sync_state.rs` 拆分已于 v1.8.0 完成：按域拆为 `storage/sync_state/{device,outbox,resources,remote,checkpoints,apply}` + `tests.rs`（纯移动，无签名/行为变更）。
+### F03 — 导入 metadata 与资源清理一致性（Confirmed / Medium）
 
-## 1.6 — 结构还债 + 平台渐进 + 用户功能
+- [ ] 修正异常 metadata 阻断全局资源清理及引用查询的问题。
+  - [ ] 用真实临时数据库复现 files 中的字符串项、非字符串路径、异常根结构及合法 metadata 对照。
+  - [ ] 在导入边界验证 metadata 对象、files 元素和路径字段类型，明确拒绝/修复及错误反馈策略。
+  - [ ] 加固 `list_storage_file_references`、`resource_reference_count` 的 JSON 类型处理，防止 malformed JSON 与字段类型错误。
+  - [ ] 为已有异常记录设计可恢复处理，覆盖活动记录、软删除记录及旧备份；不丢弃无法确认的资源引用后继续删除。
+  - [ ] 验证孤儿清理、重命名、共享资源计数和回收站场景；证明仍被引用的资源未被删除。
+  - [ ] 对齐导入、同步、仓储与清理的 metadata 契约，更新对应类型/维护说明。
 
-> 1.6 功能阈值：除还债外，新增**托盘速粘**、**自动标签规则**与**悬浮剪贴板**（置顶窄窗 + 默认位置五档 + 悬浮显隐 + 标题栏拖拽）三个用户可见功能（标签页新增用户可配规则区，非系统内置）。
+定位：`export/import.rs`、`storage/repository/transactions.rs`、`storage/repository/impls.rs`、`commands/cleanup.rs`。验收必须包含真实 SQL 和文件保护断言。
 
-- [x] MAINT-01 拆分巨型文件：`+page.svelte` ~3854 行、`DetailPanel.svelte` 2121 行、`ClipboardCard.svelte` 1555 行。先补 Vitest 基线再按视图区块拆（列表/筛选/批量/键盘导航），状态经 props/回调下发（与 BulkBar/StatusBar 既有约定一致）。已闭环：主路由拆出 Toolbar/StatusBar/BulkBar/HistoryList/SearchHeader 并下沉 paste/edit/历史合并/过滤等纯逻辑（3854→2535）；DetailPanel 拆出 EditActions/OcrTab/FilePreview/DetailsTab/ImagePreview（2121→755）；ClipboardCard 拆出 CardActions/CardDateDialog 并下沉 quickActionKind（1555→1236）。验收：`npm run verify` 全过、Vitest 189 passed；键盘导航由单测覆盖，真机手工回归未在本环境执行。
-- [x] MAINT-02 单一 source of truth：`Map<id, item>` + 派生 id 视图替代四副本手工同步。`src/lib/utils/store/item-store.ts` 以 `byId: ReadonlyMap<id, ClipboardItem>` 持有唯一记录，四视图（`historyIds`/`indexedIds`/`cacheIds`/`detailId`）只存 id；`item-store-view.svelte.ts` 用 `$state.raw` + `$derived`（getter 转发）持有唯一响应式声明并投影四视图，深代理不参与。验收：并集不变量（`byId` == 四视图并集、视图内无重复、视图不持有 map 已丢失的 id）在每个操作后断言，含 400 步确定性混合走查；rune 契约由 `item-store-view.test.ts` 经 `mount()` 挂载 `item-store-view.probe.svelte` 验证（投影随 store 替换重算、记录保持普通对象、就地写字段不触发更新），深代理/unowned derived/getter 快照三项取舍记录在 `docs/PITFALLS.md`「Svelte 5」。原 `item-sync.ts`/`search-cache.ts` 及其测试并入 `item-store.ts`（`trimLoadedItems`→`trimLoadedHistory`），`setDeletedFlags` 随四副本写入一并删除。
-- [x] 复制源文件 + 复制路径按钮：图片/文件主复制改写 CF_HDROP（Windows，DROPFILES 头 + UTF-16LE 双 NUL 路径表，另写 CF_UNICODETEXT + 自触发标记），资源管理器粘贴即复制源文件；卡片/右键菜单/详情面板新增"复制路径"（图片→存储路径，文件→逐项 originalPath 兜底 storagePath）；新增 `copy_clipboard_item_files(id)` 命令（仅传 id，路径由记录解析 + `is_file` 存在性校验，未重开 `copy_file_to` 任意复制原语）。同一内容改名后再次复制时，旧记录 originalPath 失效回退哈希名副本，现按 storagePath 继承最新一条 file 记录的 originalPath（`latest_file_record_referencing_storage` 由 `copy_clipboard_item_files` 写入时刷新），重复复制同路径亦经 upsert 自动刷新名称。验收：624 主线 + 8 集成 + 44 同步 Rust 单测、199+ Vitest、`svelte-check`/`clippy -D warnings`/`prettier` 全绿。真机 Explorer 粘贴回归已验证（2026-10-11）：CLI copy 走同一 `CopyContext` 写 CF_HDROP 携带原始路径，资源管理器 Ctrl+V 实际粘贴出源文件副本。
-- [x] MAINT-03 公共 API 注释：已闭环（`b1d7a56`），逐函数复核 `capture.rs`/`search/index.rs` 全部 `pub fn` 均有 `///`，无遗漏。
-- [x] 跨窗口条目状态收敛：悬浮窗原先自持一份 `items` 数组自行乐观更新，而 `set_clipboard_item_favorite`/`soft_delete_clipboard_item` 等命令签名里没有 `AppHandle`（物理上无法 emit），主页因此永远看不到悬浮窗的改动，只有切筛选/重载 webview 才全量刷新。现新增 `clipboard-items-changed` 事件（内容变更回读记录随事件下发；软删/恢复/永久删因 `deleted` 非记录列而单独传 id），11 个条目级命令带 `AppHandle` 广播；两个窗口统一经 `utils/store/item-changes.ts` 折叠，悬浮窗也改用 `item-store`（不再有独立写入路径）。验收：`item-changes.test.ts` 8 例（多视图同更、忽略未加载 id、软删标记不清除、恢复清标记、永久删出所有视图含缓存、关闭详情面板、删除优先于同事件内容更新、缺字段容错）、Rust 762 通过、clippy/fmt/prettier/svelte-check 全绿。真机双窗口联动已验证（2026-10-11）：主窗 Ctrl+F 收藏后悬浮窗行内星标实时出现，悬浮窗复制后主窗按 lastUsed 提序置顶，双向均无需手动刷新（截图证据存 `src-tauri/target/tmp/`，属构建产物不入仓）。
-- [x] macOS 文件路径捕获：`NSPasteboard NSFilenamesPboardType` 原生读取已实现（`platform/macos/mod.rs`，缺席回退空列表=旧行为；所用 FFI 形状复用既有模块）+ mac-only 防崩溃冒烟测试。**待 mac CI 变绿后**再把 README 平台矩阵该格从 `❌` 翻为 `✅`（本地无 mac，不可提前宣称）。
-- [x] Linux 图标提取：freedesktop `.desktop` + 图标主题查找已实现并接线 X11/Wayland（`platform/linux/icons.rs`，fixture 单测全平台可跑）。
-- [x] Wayland 写入自触发标记缺失 + 非 Windows 500ms 轮询回环风险：README 平台矩阵与注释已覆盖现状；应用内在采集暂停开关下为非 Windows 桌面显示轮询说明（`GeneralSettingsPanel` + `capture.pollingNote` 中英双语，`getRuntimeInfo().operatingSystem` 判定）。
-- [x] 托盘速粘：托盘"最近复制"子菜单（近 10 条文本/链接，标题单行 40 字截断），点击经后端自触发标记路径写回剪贴板并记 `last_used`；菜单启动/每次采集/暂停翻转时全量重建（pause 复选框恒读实时状态，无句柄持有）；纯函数（标题截断/id 解析）单测通过。仅文本/链接，图片文件仍走主窗口。
-- [x] 自动标签规则（后端）：`tags.autoTagRules` 配置（pattern→tag，用户可配，空/默认[]），采集期对文本/链接匹配打标（非法正则跳过+日志，沿 PRIV-01 模式；`set_tags` 复用手动路径，搜索时序一致），`get/set_auto_tag_rules` 命令已注册（前端 B2 接）。验收：规则匹配/非法跳过/归一化/采集打标单测通过。
-- [x] 自动标签规则（标签页设置项）：标签设置区新增规则编辑器（增删行 + 显式保存 + 后端错误回显，中英双语 `tags.autoTag*`，`settings-search` 关键词扩展），非内置写死。验收：`check` 0 错误 + 双语键齐 + 设置契约（类型/默认/校验/持久化）走完。
-- [x] 悬浮剪贴板：独立置顶窄窗口（`routes/float`，仅全部/收藏分组，点击复制复用 `copyClipboardItem`），托盘 + 快捷键入口。验收：`check`/`build` 通过 + 双语键齐。主窗口复制流已真机回归（2026-10-11）：悬浮窗左键复制文件条目后剪贴板为携带原始路径的 CF_HDROP，主窗列表同步提序、无重复捕获；文本条目复制与全量/收藏分组切换正常。
+### F02 — 批量粘贴目标生命周期（Confirmed / Medium）
 
-## 开放项
+- [ ] 修正逐项消费一次性目标导致批量粘贴部分失败的问题。
+  - [ ] 将真实目标 take/重新武装语义纳入控制器与服务的跨层回归，覆盖至少三项；避免目标始终可用的 mock。
+  - [ ] 明确批次目标的所有权和失效边界，保持每次投递的窗口、PID、焦点及取消校验。
+  - [ ] 对齐前后端逐项投递结果、失败提示与选择集；成功项移除，失败/未投递项保留，避免重试重复投递。
+  - [ ] Windows 原生编辑器验证至少三项内容完整且顺序正确，检查剪贴板覆盖时机与目标读取时机。
+  - [ ] 原生验证用户切焦点、关闭目标窗口、取消、重复触发及部分失败；不得向错误窗口继续投递。
+  - [ ] 分平台记录真实支持与降级行为，更新批次目标契约和验证说明。
 
-> 本节条目在所列验收证据齐全前**不得勾选**（`skills/clipboard-dev`：直接实现证据 +
-> 相称验证）。代码已合入主干不等于完成。
+定位：`bulk.svelte.ts`、剪贴板服务、`commands/config/misc.rs`、Windows `paste_target.rs`。原生投递证据是父项完成条件。
 
-### A. 跨平台能力验收 — 实现已随 v1.8.0 合入；平台 CI 已绿，缺桌面实机证据
+### F04 — 特殊 ID 的键盘与滚动定位（Confirmed / Medium）
 
-证据：`CHANGELOG.md` 1.8.0 功能条目（全局热键、单实例唤醒、macOS RTF、跨平台快速粘贴、窗口透明/毛玻璃）与 `platform/` 适配器源码。**平台 CI 门禁已达成**：`Rust (macos-latest)` 与 `Rust (ubuntu-latest)` job 自 2026-10-15 起常绿（run e9d1163b）——全部 `#[cfg(target_os)]` 平台代码被编译且其单测运行；README 中文矩阵「读取文件路径」macOS 单元格据此按脚注规则由 ⚠️ 改判 ✅，两份 README 已同步。**剩余缺口**：下列各项的真实桌面功能实测（快捷键触发、粘贴注入、窗口特效观感、Finder 复制取路径等），本环境（Windows）无法执行，保持未勾选。
+- [ ] 修正导入 ID 拼接 CSS 选择器造成的异常。
+  - [ ] 统一使用安全转义或按 ID 维护的 DOM 引用，替换所有相关手写选择器。
+  - [ ] 验证引号、反斜线、方括号、Unicode 和普通 ID 的方向键选择、滚动定位及共享调用路径。
+  - [ ] 保持合法历史 ID 可用；长度边界与 CSS 转义分别处理。
 
-- [ ] 多格式竞态防护：macOS changeCount 已接线；Linux 双读一致性校验与三次有限重试已实现，不具备系统序列号的原子保证。平台 CI 已绿（2026-10-15）；待桌面实机验收。
-- [ ] macOS RTF：public.rtf NSData 读取已接线，ANSI 字节转 RTF 十六进制转义；含原始 binary run 的负载保守跳过。平台 CI 已绿（2026-10-15）；待 macOS 桌面实机验收。
-- [ ] macOS/Linux 单实例唤醒：实例锁所有者发布 owner-only 的本地端点与随机令牌，通知线程有停止与 join；UI 操作投递主线程。平台 CI 已绿（2026-10-15）；待桌面激活验收。
-- [ ] 跨平台全局热键：macOS/X11 原生注册与可停止的双击采样，Wayland portal 会话已接线；Wayland 不支持双击修饰键。平台 CI 已绿（2026-10-15）；待权限与桌面实测。
-- [ ] 快速粘贴：macOS 激活 + CGEvent、X11 EWMH + XTest、Sway/Hyprland + wtype 后端已接线；记录外部前台目标并复核身份与焦点。平台 CI 已绿（2026-10-15）；待权限/桌面实测。
-- [ ] 窗口透明/毛玻璃：macOS NSWindow alpha + Vibrancy、Linux GTK alpha、X11 KWin 兼容模糊请求已接线；Wayland 模糊仍依赖合成器。切回仅背景透明时恢复原生 alpha=100%。平台 CI 已绿（2026-10-15）；待视觉验收。
+定位：`src/routes/+page.svelte` 的 `moveSelection` 及其他 `[data-id]` 定位逻辑。
 
-### B. 原生窗口手工回归（v1.8 遗留，依据 `docs/V1_8_FOLLOWUP.md`「Native verification still required」）
+### F05 — 完整 SemVer 更新比较（Confirmed / Medium）
 
-> 审计结论（2026-10-16）：本节四项均为**运行时/视觉证据缺口**，不是缺失功能。底层能力已实现并有
-> 单测/契约测试覆盖——CF_HTML/RTF 读（`platform/windows/html.rs`、`rtf.rs`）、CF_HDROP 写
-> （`platform/windows/write.rs`）、格式化粘贴（`services/clipboard.ts::writeClipboardHtml`）、
-> 远程媒体物化（`commands/sync/mod.rs::materialize_clipboard_item`）、跨窗口设置广播
-> （`commands/config/settings.rs` + `services/settings.ts`）、条目状态事件
-> （`utils/store/item-changes.ts`）、退出取消与等待（`shutdown.rs` +
-> `background_operations.rs`）。CI 不覆盖真实 OS 剪贴板、第二个窗口与合成器，故按
-> 「最小可验证单元」拆子项，逐项实测取证后才能勾选。复现流程见 `docs/NATIVE_VERIFICATION.md`。
+- [ ] 修正丢弃预发布优先级导致漏报更新的问题。
+  - [ ] 使用完整 SemVer 优先级，保留当前合法输入兼容，构建元数据不改变优先级。
+  - [ ] 回归 beta.1→beta.2、beta→同版本正式版、普通版本升级及构建元数据场景。
+  - [ ] 区分渠道选择与版本优先级，验证正式版不会意外降级到预发布版。
+  - [ ] 核对受支持预发布标签与更新源的实际返回格式，更新必要契约说明。
 
-- [ ] 原生窗口手工回归（1.5.3 遗留）：实际双窗口并发修改设置，以及 Windows 文字透明度开关与背景/窗口特效的视觉组合。
-  - [ ] 双窗口并发设置：主窗与悬浮窗同开，一侧改设置另一侧实时生效；两侧并发改不同字段时两个改动都保留。
-  - [ ] 双窗口条目联动：一侧收藏/复制/删除，另一侧对应行实时更新（`clipboard-items-changed`）。
-  - [ ] Windows 文字透明度开关 × 背景/窗口特效（none/acrylic/mica）视觉组合保持可读。
-- [ ] 原生文本、HTML、文件与远程媒体复制粘贴保持完整内容（一次性桌面会话 + 临时应用数据；注意原生 CF_HDROP 测试会覆盖系统剪贴板）。**文本部分已验证（Windows，2026-10-15）**：隔离数据目录运行 CLI（数据目录随可执行文件位置解析，GUI 子系统用 `Start-Process -RedirectStandardOutput` 捕获输出），真实系统剪贴板往返 `paste` 捕获 → `list` → `copy --query <id>` → 逐字节一致（先以占位符覆写排除假阳性）。HTML/文件/远程媒体、双窗口联动仍未验证。
-  - [ ] HTML 富文本：真实 CF_HTML 写入 → 捕获入库 `html_content` 保真 → GUI「格式化粘贴」回写 CF_HTML 后目标应用保留格式。（后端 `copy_clipboard_item` 只写纯文本，富文本回写仅走 format 粘贴，属既定设计。）**捕获段已验证（Windows，2026-10-16）**：`scripts/native-clipboard-verify.ps1` 向真实剪贴板写 `HTML Format`，隔离实例捕获后 `html_content` 精确含标记；GUI「格式化粘贴」回写仍待人工。
-  - [ ] 文件：真实 CF_HDROP 写入 → 捕获为 `file` 记录并物化受管副本 → 复制回 CF_HDROP，资源管理器粘贴出源文件且内容一致。**捕获+物化+回写段已验证（Windows，2026-10-16）**：同一脚本写 CF_HDROP，隔离实例生成 `file` 记录、受管副本落盘存在；CLI `copy` 回写后系统剪贴板 `CF_HDROP` 可用。资源管理器实际粘贴仍待人工。
-  - [ ] 远程媒体：本地无资源的同步记录在复制/预览时经 `materialize_clipboard_item` 下载，落地字节与源 SHA-256 一致。
-- [ ] 标签、恢复与慢速 S3 传输过程中退出：线程 join、留下可重试数据。
-  - [ ] 退出路径：`RunEvent::ExitRequested → stop_runtime_services` 先取消并等待 `BackgroundOperations`（≤30s），再停各 worker（`shutdown.rs`）。
-  - [ ] 标签应用中途退出：未提交事务回滚，重跑不重复、不丢行。
-  - [ ] 恢复中途退出：导入事务回滚或整体提交，隔离快照保留，重跑可完成。
-  - [ ] 慢速 S3 传输中途退出：已发布 head 不前进，pending 保留，重启后重试收敛。
-- [ ] 最终分支拿到 Windows/macOS/Linux CI 成功结果。
-- [ ] 深色/浅色/自定义主题 × 常规/窄宽度（含 Windows 文字透明度与背景/窗口特效组合）保持可读。**部分证据（Windows，2026-10-15）**：隔离数据目录 + 预置 conf.json（注意 PowerShell `Set-Content -Encoding utf8` 会写 BOM 导致配置被隔离成 corrupt，须用 `[System.IO.File]::WriteAllText` 无 BOM 写入）启动原生 GUI，验证配置被真实读取（应用回写的 `general.theme` / `privacy.paused` 与种子一致）与主窗口正常创建（746x709，标题 Clipboard）。**未取到有效视觉证据**：空状态为全幅背景图、与主题无关；且 `MainWindowHandle` 就绪时序不可靠，一次截图捕到了屏幕上的其他窗口。主题可读性对比与 520px 窄宽度仍未验证。
-  - [x] 深色/浅色/自定义主题 × 常规（746）与强制最小（730）宽度真实窗口截图，卡片操作栏/工具栏/状态栏完整可读。证据：`scripts/theme-screenshot-matrix.ps1` 6 张真实窗口截图（Windows，2026-10-16），隔离 profile + 预置 `themeColors`。
-  - [x] 修正验收口径：520px 是详情面板 CSS 断点（`DetailPanel.svelte` 的 `width: min(520px, 100vw)` 与 `@media (max-width: 520px)`），主窗口强制 `minWidth: 730`（`tauri.conf.json` + `MAIN_WINDOW_MIN_WIDTH` + `geometry.rs`），原生主窗口无法到达 520px。脚本保留一张 below-min 520px 压力截图，证实越界后卡片操作栏被 `.app-shell{min-width:710px}` 裁剪——该状态不在契约内，不是回归。
-  - [ ] 文字透明度开关 + 背景/窗口特效（off/acrylic/mica）组合：脚本已产出 acrylic/mica 截图，但 `PrintWindow` 不渲染窗口背后的桌面，透明/毛玻璃观感需在受控背景下用屏幕截图复核（light+mica+文字 85% 实测对比度明显下降，待确认是真实观感还是截图方式所致）。
-  - [ ] 320px 悬浮窗（真正的窄原生 surface）三主题截图。
+定位：`src-tauri/src/commands/update.rs`。此项不包含版本号升级或发布操作。
 
-### C. 下一版本候选（未立项；按「最小可验证单元」排期，取自各文档已记录的决议）
+### F06 — 外部引用文件的另存为（Confirmed / Medium）
 
-- [ ] 同步 v2（大病一场）：立项范围见 `docs/SYNC_V2.md`——V2-1 密码/加密模式轮换流程、V2-2 真实 S3 CI 矩阵、V2-3 WAN 中断与原生退出集成证据；MinIO CI 矩阵的决议来源：1.5.3 节「等同步 v2 动大手术时再立项」。
-- [x] 搜索尾部成本测量：真实管线中的 `get_items_by_ids`（≤500 条 SQLite 读取，`docs/SEARCH_OPTIMIZATION_REPORT.md`「后续可留档的候选」）。证据：`search_bench.rs::id_hydration_benchmark` 实测（20k/80k，1/20/100/500 四种批量，40 次 P50/P95）——20k×500 为 6.78/7.19ms、80k×500 为 20.35/20.99ms；`EXPLAIN QUERY PLAN` 为逐 id 索引寻路（无表扫描），计划已最优，毫秒级来自 Rust 侧每次 prepare 与行解码（本地 opt-level 0 profile 偏悲观）；结论：不提议 SQL 层优化，已回写报告 §3.5 与 §7。
-- [ ] 搜索增强：拼写纠错、编辑距离、拼音（`docs/SEARCH.md`：属后续增强能力，需先定方案再立项）。
-- [x] Rust 忽略测试债（已闭环；行首 `#[ignore]` 属性共 24 项，另有 2 项 env 门控真实剪贴板测试）：S3 相关共 16 项——`sync::v1::s3_smoke` 11 项由 CI 的 `s3_smoke` 筛选器全部执行，`clipboard-sync` transport 3 项由 CI 精确筛选器执行，S3 规模/分页 benchmark 2 项维持 opt-in 手动运行（`docs/SYNC_V1.md` 明确需要 release 模式与真实服务器，属既定设计非疏漏）；非 S3 搜索/备份性能 benchmark 4 项维持 opt-in；子进程夹具 4 项由正常父测试调用；2 项 env 门控的真实剪贴板测试（CF_HDROP 读取与原生读写回环）由 Windows CI 覆盖。历史门禁证据：S3 首次全绿 2026-10-13 run 38382124322；含加密资源用例的全绿 run 38506261099（sha a4c30ed）；主 CI 同步全绿。本地脚本 pin 的 rustfs 版本已随发布下架修复（`scripts/sync-s3-test.ps1` repin 1.0.1）。
-  - [x] 为 S3 冒烟（当前 11 项）接 CI：`.github/workflows/sync-s3.yml`（push/PR 路径触发 + 每周定时，ubuntu + rustfs 1.0.1 musl 资产 + SHA-256 校验，精确计数护栏防静默跳过、空跑和筛选漂移，提交 7351b536）。历史证据：run [38506261099](https://github.com/muutot/Clipboard/actions/runs/38506261099) 全绿（sha a4c30ed；此前 6 项首绿为 run 38382124322）。
-  - [x] CONTRIBUTING.md「测试」节补约定：真实 S3 冒烟的运行方式（CI 自动跑 + 本地 `scripts/sync-s3-test.ps1` + 直接跑所需的 env 契约与静默跳过陷阱）。证据：CONTRIBUTING.md 测试节新增段落。
-  - [x] 加密二进制资源真实线覆盖：`real_s3_encrypted_resource_materializes_across_devices`（3MiB+1234 跨 4 个 1MiB 加密块、拉取不下载正文、物化字节一致）。证据：run 38506261099 全绿。
-  - [x] 轮换全流程真实线覆盖：`real_s3_namespace_rotation_moves_state_and_tombstones`（物化全部资源→新 prefix 加密重发布→墓碑内容→旧命名空间删除→字节一致的本地正文→二次轮换拒绝）。证据：smoke run 38662706953 全绿（sha e9d1163b）。
-- [x] 仓库卫生决策：`.worktree-experience/` 为注册中的活动工作树（分支 `experience`），保留并加入 `.gitignore` 消除状态噪音（与 `.prettierignore` 排除先例一致）；`uv.lock` 维持未跟踪——`.gitignore` 已将 `pyproject.toml` 归类为「Stray local tooling stubs (untracked)」，Python 工具链条目按既定约定保持本地。证据：`.gitignore` 提交 `757f0862`。
+- [ ] 统一外部文件引用的保存能力与 UI 入口。
+  - [ ] 复核大文件直通、拷贝失败回退及托管文件三种资源状态，固化当前 Save As 失败用例。
+  - [ ] 选择记录绑定的受约束保存方案，或在选择目的地前明确禁用并解释；保留托管路径授权边界。
+  - [ ] 对齐服务结果、UI 可用状态、错误提示及中英文文案，避免选完目的地才发现不支持。
+  - [ ] 验证外部/托管/缺失源、符号链接、路径越界和目的地覆盖策略；不能开放任意 src 路径复制。
+  - [ ] 原生验证合法大文件保存或明确降级提示，更新资源来源与操作能力契约。
+
+定位：`content/file_store.rs`、`commands/files/clipboard.rs`、主页面 `saveItem`。
+
+## P1：预览可靠性与测试可信度
+
+### F07 — Markdown 图片与隐私策略（Confirmed / Low）
+
+- [ ] 使 Markdown 远程图片的展示符合生产 CSP 和隐私策略。
+  - [ ] 为被策略阻止的远程图片显示清晰占位/说明，保持本地及已支持图片正常展示。
+  - [ ] 若提供按需加载，先定义用户授权、受控资源获取和缓存策略；不得直接放宽全局 CSP。
+  - [ ] 在真实桌面验证占位、本地图、恶意 URL 拒绝及无后台追踪请求，补齐中英文文案。
+
+定位：Markdown 渲染器、`MarkdownPreview.svelte`、`tauri.conf.json`。jsdom 通过不能替代桌面 CSP 验证。
+
+### F09 — 有界命令测试超时调查（Suspected / Low）
+
+- [ ] 定位全量运行失败、独立运行通过的超时原因。
+  - [ ] 先核对近期修复与当前测试，避免重复修改；在空闲及可控负载下重复运行并记录启动/退出时间。
+  - [ ] 区分夹具启动成本、输出处理和生产执行预算，确认是测试波动还是真实命令缺陷。
+  - [ ] 按结论修正夹具或实现，保留生产超时、输出上限与取消保护，不以放宽生产限制换绿灯。
+  - [ ] 在匹配平台测试及最终集成检查中复核；无法复现时记录范围与未确认根因。
+
+定位：`src-tauri/src/platform/bounded_command.rs`。独立复跑通过不是问题根因已解决的证据。
+
+## P1：竞品中值得吸收的能力
+
+以下为增强方向，不代表缺陷，也不重复把已有 OCR、标签、收藏、保存搜索、转换、浮窗、多窗口或 S3 同步列为待开发功能。
+
+### E01 — 加密可携备份
+
+来源：EcoPaste、Raycast 的隐私和加密能力对照。依赖：F03 的导入/恢复数据契约先可靠。
+
+- [ ] 在现有备份能力上设计并实现可验证的加密备份。
+  - [ ] 定义威胁模型、加密格式、完整性认证、版本标识、密钥/口令来源与遗失恢复边界。
+  - [ ] 实现加密导出与受约束恢复，避免临时明文和日志泄漏；损坏/错误口令不得覆盖现有数据。
+  - [ ] 验证旧版未加密备份兼容、版本迁移、错误口令、篡改、截断和中途取消。
+  - [ ] 交付清楚的隐私/恢复说明及中英文交互，不把 S3 加密宣称为本地数据库加密。
+
+### E02 — 本地静态加密可行性评估
+
+- [ ] 完成本地数据库、资源、索引及缓存的静态加密方案评估。
+  - [ ] 盘点明文持久化面及密钥存储能力，明确保护范围和无法保护的运行时内容。
+  - [ ] 评估搜索/OCR、启动、便携模式、迁移、密钥丢失和恢复的成本与风险。
+  - [ ] 提交可复现原型结果与采用/暂缓决定；只有通过恢复和性能验证才进入独立实施计划。
+
+### E03 — 片段集合与键盘复用
+
+来源：CopyQ、Paste、Alfred、PastePal。依赖：F02/F04 的投递与定位可靠性。
+
+- [ ] 基于现有收藏/标签实现最小片段集合工作流。
+  - [ ] 明确集合与标签/收藏的关系、持久化及备份兼容，避免重复状态和同名入口。
+  - [ ] 提供创建、整理、快速检索和键盘选用入口，保持批准的主页面风格。
+  - [ ] 验证焦点、快捷键冲突、空状态、错误状态和已有收藏/标签数据兼容。
+- [ ] 增加受约束的确定性模板变量。
+  - [ ] 定义有限变量、输入校验、展开预览和取消，不执行任意脚本。
+  - [ ] 验证重复变量、缺失值、特殊字符及预览到投递的一致性。
+  - [ ] 提供可撤销的编辑/展开流程；自动展开须另行确认触发与冲突策略。
+- [ ] 改善已有常用转换和片段操作的键盘可发现性，验证不与全局/窗口快捷键冲突。
+
+## P2：检索与平台体验
+
+### E04 — 模糊、拼音与容错检索
+
+来源：竞品对照建议；从本报告的新任务定义开展，不依赖旧 TODO。
+
+- [ ] 完成检索增强及可量化验收。
+  - [ ] 建立 10k/100k 合成数据集，先测现有准确率、延时、索引体积和更新成本。
+  - [ ] 分别定义错字、拼音及模糊匹配的排序、启用方式和误匹配边界。
+  - [ ] 最小实现并对比基线，验证分页、缓存、增删改、OCR 检索及索引恢复一致性。
+  - [ ] 记录目标与实测性能；未达到目标时调整或暂缓，不凭演示效果认定完成。
+
+### E05 — 资源与平台能力的明确展示
+
+来源：竞品对照与 F06 的能力契约。依赖：先完成 F06，复用其能力表示。
+
+- [ ] 让 UI 根据实际能力展示可用操作及降级原因。
+  - [ ] 建立托管/外部/缺失资源和平台粘贴支持的能力映射，保持前后端一致。
+  - [ ] 在相关入口显示不可用原因，避免用户操作后才发现平台或资源状态不支持。
+  - [ ] 分平台验证键盘、复制/粘贴、Save As、资源预览及多窗口状态，未实测项明确标记。
+
+## P2：审计验证缺口与依赖维护
+
+### V01 — 原生与跨平台证据补齐
+
+- [ ] 对关键链路建立隔离原生验证记录，优先复用 F02/F06/F07/F08 的证据，避免重复执行。
+  - [ ] 验证文本、富文本、图像及多文件采集/复制/粘贴的格式保真。
+  - [ ] 在匹配 OS 的 CI/原生环境验证平台专属路径，不用 Windows 绿灯代替 macOS/Linux 完成。
+  - [ ] 验证多窗口、焦点、快捷键、窄窗口与主题，补充键盘/屏幕阅读器检查。
+  - [ ] 验证备份恢复、可选 S3 同步和删除后的派生数据处理；不操作用户真实数据库或做激进远端 GC。
+  - [ ] 使用正常本地配置或远端 CI 验证安装/升级路径，记录缺失环境和未覆盖项；禁止本地 extreme-release 构建。
+
+### V02 — 依赖公告可达性与维护
+
+- [ ] 复核 4 个 npm advisory 及 Rust 依赖风险，按可达性处理。
+  - [ ] 核对 GHSA-pfhg-q3qv-9q6r、GHSA-27mw-82g8-phjj、GHSA-pxg6-pf52-xh8x、GHSA-gcqx-w48m-w2h4 对当前版本的适用性。
+  - [ ] 追踪静态桌面中的 server/enhance/prerender/cookie/deepmerge 调用与不可信输入，记录可达或不可达证据。
+  - [ ] 对当前 Cargo.lock 执行适当 advisory 检查，区分运行/构建/测试依赖。
+  - [ ] 对确有必要的依赖更新逐项验证兼容性；未证明可利用的扫描结果不包装成已确认产品漏洞。
+
+### V03 — 最终树集成验收
+
+- [ ] 在本轮实际修复完成后的固定 HEAD 上运行最终验收。
+  - [ ] 记录分支、HEAD、工作区和锁文件状态，避免复用历史快照测试作为最终树结论。
+  - [ ] 确认格式扫描范围；对 `.openidea/changelists.json` 的阻断记录处理结论，不擅自格式化用户 IDE 文件。
+  - [ ] 按仓库流程运行一次 `npm run verify`，处理真实失败并记录跳过的验证。
+  - [ ] 将直接实现证据、相关测试与原生/平台验证记录到对应子项；只勾完整验收的任务。
+  - [ ] 如后续另行发布，先对最终树运行 format/check/lint gate；格式修改单独提交，发布文档生成后复查 Prettier。此清单本身不触发发布。
+
+## 暂不纳入实施范围
+
+- 默认上传全部历史、强制账号/遥测、默认无限保留。
+- LLM 自动读取全部剪贴板历史、任意脚本或扩展执行引擎。
+- 仅因竞品布局而重做主页面，或绕过设置 style gate。
+- 为远程图片放宽全局 CSP、为外部引用开放任意路径复制、丢弃不明引用后继续清理、激进删除远端恢复数据。
+- 已排除的索引漏 reload、命令未注册、配置回退自动上传等候选；大文件、unwrap 或缺少注释本身不构成修复任务。
