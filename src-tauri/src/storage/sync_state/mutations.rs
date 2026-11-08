@@ -10,6 +10,10 @@ pub(super) fn apply_mutations(
 ) -> Result<u64, StorageError> {
     let mut applied = 0u64;
     for replicated in &mutations.upserts {
+        crate::content::resource_metadata::validate_metadata_json(
+            replicated.item.metadata_json.as_deref(),
+        )
+        .map_err(StorageError::InvalidSyncState)?;
         validate_record_version(&replicated.version)?;
         let kind = kind_to_storage(replicated.item.kind);
         let target_id = resolve_sync_item_id(

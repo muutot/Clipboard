@@ -1002,3 +1002,9 @@ window reads its native theme after creation and aligns both surfaces before
 reveal. Frontend media listeners own live app/code-theme changes and are released
 on teardown. Native GTK/OS delivery and visual first frames require the matching
 platform; focused config UTs verify temporary-file persistence and resolution.
+
+### Imported resource metadata validation and legacy references
+
+`content/resource_metadata.rs::validate_metadata_json` validates an optional JSON object/null, string/null root paths and object-only `files` arrays with string/null path fields. JSON import validates before path sanitization and reports invalid rows; transactional import/restore and incoming sync mutation apply use the same validator. Sync failure rolls back rows and cursor together. Unknown non-path extension fields are retained; no schema/IPC change is needed.
+
+Cleanup and resource reference counts decode metadata row by row in Rust, avoiding SQLite JSON extraction of raw string slots. Valid shapes include the legacy per-file `path` alias. Already-stored structurally invalid but parseable JSON retains all nonempty string leaves as possible resource references, including recycled records. This conservative recovery can retain extra files, never removes stored metadata, and does not infer unknown strings are safely discardable. Unparseable JSON returns an error and defers deletion/reference-based rename; repair requires an explicit reviewed correction of that record. The ancillary latest-file lookup guards JSON input and object-slot extraction. Native/real SQLite tests cover orphan reclamation beside a retained malformed shared reference.

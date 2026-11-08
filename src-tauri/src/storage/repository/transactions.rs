@@ -331,6 +331,7 @@ pub(crate) fn validate_clipboard_text(
 /// index. The bounds are intentionally independent of the replication version:
 /// `created_at_ms` is validated because it becomes that version.
 fn validate_imported_item(item: &ClipboardItem, upper_bound_ms: i64) -> Result<(), String> {
+    crate::content::resource_metadata::validate_metadata_json(item.metadata_json.as_deref())?;
     if item.created_at_ms < 0 {
         return Err(format!("created_at_ms {} is negative", item.created_at_ms));
     }

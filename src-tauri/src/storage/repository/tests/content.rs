@@ -442,3 +442,68 @@ fn latest_file_record_referencing_storage_returns_most_recent_file_owner() {
         .unwrap()
         .is_none());
 }
+
+#[test]
+fn legacy_malformed_metadata_preserves_possible_references_without_sql_errors() {
+    let database = Database::open_in_memory().unwrap();
+    let path = "C:\\managed\\preserved.bin";
+    for (index, metadata) in [
+        serde_json::json!({"files":[path]}),
+        serde_json::json!({"storagePath":{"legacy":path}}),
+        serde_json::json!({"resourcePath":42}),
+        serde_json::json!({"files":[{"path":path}]}),
+    ]
+    .iter()
+    .enumerate()
+    {
+        let mut item = text_item(&format!("legacy-{index}"), &format!("hash-{index}"), 100);
+        item.kind = ClipboardKind::File;
+        item.metadata_json = Some(metadata.to_string());
+        database.save_item(&item).unwrap();
+    }
+    database.soft_delete("legacy-0").unwrap();
+    assert!(database
+        .list_storage_file_references()
+        .unwrap()
+        .resource_paths
+        .contains(&path.to_owned()));
+    assert_eq!(
+        database
+            .resource_reference_count(path, "unrelated")
+            .unwrap(),
+        3
+    );
+    assert_eq!(
+        database.resource_reference_count(path, "legacy-3").unwrap(),
+        2
+    );
+    assert!(database
+        .latest_file_record_referencing_storage(path, "unrelated")
+        .unwrap()
+        .is_none());
+}
+
+#[test]
+fn invalid_json_metadata_defers_reference_based_operations() {
+    let database = Database::open_in_memory().unwrap();
+    let mut item = text_item("invalid", "hash-invalid", 100);
+    item.metadata_json = Some("{broken".into());
+    database.save_item(&item).unwrap();
+    assert!(database.list_storage_file_references().is_err());
+    assert!(database
+        .resource_reference_count("anything", "other")
+        .is_err());
+}
+
+#[test]
+fn transactional_import_rejects_metadata_shape() {
+    let database = Database::open_in_memory().unwrap();
+    let mut item = text_item("invalid", "hash-invalid", 100);
+    item.metadata_json = Some(r#"{"files":["unexpected"]}"#.into());
+    let summary = database
+        .save_items_transactional(&[("invalid".into(), item)])
+        .unwrap();
+    assert_eq!(summary.imported_count, 0);
+    assert_eq!(summary.errors.len(), 1);
+    assert_eq!(database.item_count().unwrap(), 0);
+}

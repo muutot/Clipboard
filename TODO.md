@@ -52,15 +52,17 @@
 
 ### F03 — 导入 metadata 与资源清理一致性（Confirmed / Medium）
 
-- [ ] 修正异常 metadata 阻断全局资源清理及引用查询的问题。
-  - [ ] 用真实临时数据库复现 files 中的字符串项、非字符串路径、异常根结构及合法 metadata 对照。
-  - [ ] 在导入边界验证 metadata 对象、files 元素和路径字段类型，明确拒绝/修复及错误反馈策略。
-  - [ ] 加固 `list_storage_file_references`、`resource_reference_count` 的 JSON 类型处理，防止 malformed JSON 与字段类型错误。
-  - [ ] 为已有异常记录设计可恢复处理，覆盖活动记录、软删除记录及旧备份；不丢弃无法确认的资源引用后继续删除。
-  - [ ] 验证孤儿清理、重命名、共享资源计数和回收站场景；证明仍被引用的资源未被删除。
-  - [ ] 对齐导入、同步、仓储与清理的 metadata 契约，更新对应类型/维护说明。
+- [x] 修正异常 metadata 阻断全局资源清理及引用查询的问题。
+  - [x] 用真实临时数据库复现 files 中的字符串项、非字符串路径、异常根结构及合法 metadata 对照。
+  - [x] 在导入边界验证 metadata 对象、files 元素和路径字段类型，明确拒绝/修复及错误反馈策略。
+  - [x] 加固 `list_storage_file_references`、`resource_reference_count` 的 JSON 类型处理（逐行 Rust 解析取代不安全的 SQL 提取），防止 malformed JSON 与字段类型错误。
+  - [x] 为已有异常记录设计可恢复处理，覆盖活动记录、软删除记录及旧备份；不丢弃无法确认的资源引用后继续删除。
+  - [x] 验证孤儿清理、重命名、共享资源计数和回收站场景；证明仍被引用的资源未被删除。
+  - [x] 对齐导入、同步、仓储与清理的 metadata 契约，更新对应类型/维护说明。
 
 定位：`export/import.rs`、`storage/repository/transactions.rs`、`storage/repository/impls.rs`、`commands/cleanup.rs`。验收必须包含真实 SQL 和文件保护断言。
+
+完成证据：`metadata` 40 项、导入/备份 67 项、清理 11 项、同步 apply 8 项、资源引用相关 4 项测试通过；真实 SQLite 验证异常结构、软删除引用与事务回滚，真实临时文件验证孤儿删除且被引用文件保留。完全不可解析的 JSON 保持保守拒绝，并需显式修复记录。
 
 ### F02 — 批量粘贴目标生命周期（Confirmed / Medium）
 

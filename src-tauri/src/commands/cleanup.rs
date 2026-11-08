@@ -124,6 +124,46 @@ mod tests {
     use super::*;
 
     #[test]
+    fn cleanup_recovers_legacy_metadata_shape_and_retains_shared_body() {
+        use crate::domain::{ClipboardItem, ClipboardKind};
+        let paths = policy_paths();
+        let database = Database::open(&paths.database).unwrap();
+        let body = paths.files.join("legacy.bin");
+        let orphan = paths.files.join("orphan.bin");
+        std::fs::write(&body, b"retained").unwrap();
+        std::fs::write(&orphan, b"orphan").unwrap();
+        database
+            .save_item(&ClipboardItem {
+                id: "legacy".into(),
+                kind: ClipboardKind::File,
+                title: "legacy".into(),
+                text_content: None,
+                html_content: None,
+                rtf_content: None,
+                resource_path: None,
+                preview_path: None,
+                content_hash: "legacy-hash".into(),
+                source_app: None,
+                icon_path: None,
+                size_bytes: 8,
+                created_at_ms: 100,
+                last_used_at_ms: None,
+                is_favorite: false,
+                metadata_json: Some(
+                    serde_json::json!({"files":[body.to_string_lossy()]}).to_string(),
+                ),
+            })
+            .unwrap();
+        database.soft_delete("legacy").unwrap();
+        let result = cleanup_orphan_storage_files(&database, &paths).unwrap();
+        assert_eq!(result.removed_files, 1);
+        assert!(body.is_file());
+        assert!(!orphan.exists());
+        drop(database);
+        std::fs::remove_dir_all(paths.project).unwrap();
+    }
+
+    #[test]
     fn cleanup_retains_bodies_when_database_claims_are_unavailable_or_invalid() {
         for invalid in [None, Some(b"{ broken".to_vec()), Some(vec![b' '; 65_537])] {
             let paths = policy_paths();

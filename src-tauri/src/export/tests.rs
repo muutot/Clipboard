@@ -798,3 +798,24 @@ fn plain_text_import_retains_legacy_padding_rules_and_accepts_crlf_framing() {
         ["first\r\n", "\r\nsecond\r\n"].into_iter().collect()
     );
 }
+
+#[test]
+fn json_import_rejects_invalid_resource_metadata_before_sanitizing() {
+    for metadata in [
+        r#"{"files":["unexpected"]}"#,
+        r#"{"resourcePath":42}"#,
+        r#"{"storagePath":{"unexpected":true}}"#,
+        "[]",
+        "invalid JSON",
+    ] {
+        let database = Database::open_in_memory().unwrap();
+        let mut items = sample_items();
+        items[0].metadata_json = Some(metadata.into());
+        let summary = import_from_json(&serde_json::to_string(&items).unwrap(), &database).unwrap();
+        assert_eq!(summary.imported_count, 1);
+        assert_eq!(summary.errors.len(), 1);
+        assert!(summary.errors[0].contains("metadata"));
+        assert!(database.get_item("item-1").unwrap().is_none());
+        assert!(database.get_item("item-2").unwrap().is_some());
+    }
+}

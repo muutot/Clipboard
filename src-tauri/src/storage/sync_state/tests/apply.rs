@@ -410,3 +410,29 @@ fn failed_remote_batch_rolls_back_rows_suppression_and_cursor() {
         .unwrap();
     assert_eq!(database.count_sync_outbox().unwrap(), 1);
 }
+
+#[test]
+fn invalid_resource_metadata_rolls_back_sync_rows_and_cursor() {
+    let database = Database::open_in_memory().unwrap();
+    database.initialize_sync().unwrap();
+    let version = RecordVersion {
+        modified_at_ms: 200,
+        writer_device_id: REMOTE_DEVICE.to_string(),
+    };
+    let valid = replicated("valid", "hash-valid", "valid", version.clone());
+    let mut invalid = replicated("invalid", "hash-invalid", "invalid", version);
+    invalid.item.metadata_json = Some(r#"{"files":["unexpected"]}"#.to_string());
+    let mutations = MutationBatch {
+        upserts: vec![valid, invalid],
+        tombstones: vec![],
+    };
+    assert!(database
+        .apply_sync_snapshot(REMOTE_SCOPE, &cursor(0, None), &"c".repeat(64), &mutations)
+        .is_err());
+    assert_eq!(database.item_count().unwrap(), 0);
+    assert_eq!(database.count_sync_outbox().unwrap(), 0);
+    assert!(database
+        .get_sync_cursor(REMOTE_SCOPE, REMOTE_DEVICE)
+        .unwrap()
+        .is_none());
+}

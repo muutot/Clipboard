@@ -1015,35 +1015,13 @@ impl ClipboardRepository for Database {
                 }
             }
 
-            let mut metadata_paths = connection.prepare(
-                "SELECT json_extract(metadata_json, '$.resourcePath')
-                   FROM clipboard_items
-                  WHERE metadata_json IS NOT NULL AND json_valid(metadata_json)
-                 UNION ALL
-                 SELECT json_extract(metadata_json, '$.storagePath')
-                   FROM clipboard_items
-                  WHERE metadata_json IS NOT NULL AND json_valid(metadata_json)
-                 UNION ALL
-                 SELECT json_extract(metadata_json, '$.originalPath')
-                   FROM clipboard_items
-                  WHERE metadata_json IS NOT NULL AND json_valid(metadata_json)
-                 UNION ALL
-                 SELECT json_extract(value, '$.storagePath')
-                   FROM clipboard_items, json_each(clipboard_items.metadata_json, '$.files')
-                  WHERE metadata_json IS NOT NULL AND json_valid(metadata_json)
-                 UNION ALL
-                 SELECT json_extract(value, '$.originalPath')
-                   FROM clipboard_items, json_each(clipboard_items.metadata_json, '$.files')
-                  WHERE metadata_json IS NOT NULL AND json_valid(metadata_json)",
+            let mut metadata = connection.prepare(
+                "SELECT metadata_json FROM clipboard_items WHERE metadata_json IS NOT NULL",
             )?;
-            let metadata_paths =
-                metadata_paths.query_map([], |row| row.get::<_, Option<String>>(0))?;
-            for path in metadata_paths {
-                if let Some(path) = path? {
-                    if !path.trim().is_empty() {
-                        paths.resource_paths.push(path);
-                    }
-                }
+            for stored in metadata.query_map([], |row| row.get::<_, String>(0))? {
+                paths.resource_paths.extend(
+                    crate::content::resource_metadata::metadata_resource_references(&stored?)?,
+                );
             }
             Ok(paths)
         })
@@ -1051,48 +1029,29 @@ impl ClipboardRepository for Database {
 
     fn resource_reference_count(&self, path: &str, exclude_id: &str) -> Result<u64, StorageError> {
         self.with_connection(|connection| {
-            // Count direct resource/preview references plus the non-first files
-            // of multi-file records, which are referenced only through the
-            // ordered `text_content` JSON list. Missing the latter lets
-            // `rename_item` rename a file out from under another record.
-            Ok(connection.query_row(
-                "SELECT COUNT(*)
-                 FROM clipboard_items
-                 WHERE id <> ?1
-                   AND (
-                       resource_path = ?2
-                       OR preview_path = ?2
-                       OR (
-                           kind = 'file'
-                           AND text_content IS NOT NULL
-                           AND json_valid(text_content)
-                           AND EXISTS (
-                               SELECT 1 FROM json_each(clipboard_items.text_content)
-                               WHERE value = ?2
-                           )
-                       )
-                       OR (
-                           metadata_json IS NOT NULL
-                           AND json_valid(metadata_json)
-                           AND (
-                               json_extract(metadata_json, '$.resourcePath') = ?2
-                               OR json_extract(metadata_json, '$.storagePath') = ?2
-                               OR json_extract(metadata_json, '$.originalPath') = ?2
-                               OR EXISTS (
-                                   SELECT 1
-                                     FROM json_each(clipboard_items.metadata_json, '$.files')
-                                    WHERE json_extract(value, '$.storagePath') = ?2
-                                       OR json_extract(value, '$.originalPath') = ?2
-                               )
-                           )
-                       )
-                   )",
-                params![exclude_id, path],
-                |row| {
-                    let count: i64 = row.get(0)?;
-                    Ok::<_, rusqlite::Error>(count as u64)
-                },
-            )?)
+            let mut statement = connection.prepare(
+                "SELECT kind, resource_path, preview_path, text_content, metadata_json FROM clipboard_items WHERE id <> ?1"
+            )?;
+            let mut rows = statement.query([exclude_id])?;
+            let mut count = 0;
+            while let Some(row) = rows.next()? {
+                let kind: String = row.get(0)?;
+                let resource: Option<String> = row.get(1)?;
+                let preview: Option<String> = row.get(2)?;
+                let text: Option<String> = row.get(3)?;
+                let metadata: Option<String> = row.get(4)?;
+                let file_paths = if kind == "file" {
+                    text.as_deref().and_then(|text| serde_json::from_str::<Vec<String>>(text).ok()).unwrap_or_default()
+                } else { Vec::new() };
+                let metadata_paths = metadata.as_deref()
+                    .map(crate::content::resource_metadata::metadata_resource_references)
+                    .transpose()?.unwrap_or_default();
+                if resource.as_deref() == Some(path) || preview.as_deref() == Some(path)
+                    || file_paths.iter().any(|p| p == path) || metadata_paths.iter().any(|p| p == path) {
+                    count += 1;
+                }
+            }
+            Ok(count)
         })
     }
 
@@ -1110,8 +1069,8 @@ impl ClipboardRepository for Database {
                    AND id <> ?1
                    AND EXISTS (
                        SELECT 1
-                       FROM json_each(clipboard_items.metadata_json, '$.files') AS f
-                       WHERE json_extract(f.value, '$.storagePath') = ?2
+                       FROM json_each(CASE WHEN json_valid(clipboard_items.metadata_json) THEN clipboard_items.metadata_json ELSE '{{}}' END, '$.files') AS f
+                       WHERE json_extract(CASE WHEN f.type = 'object' THEN f.value ELSE '{{}}' END, '$.storagePath') = ?2
                    )
                  ORDER BY created_at_ms DESC
                  LIMIT 1"

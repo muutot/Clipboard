@@ -12,7 +12,14 @@ pub fn import_from_json(json: &str, database: &Database) -> Result<ImportSummary
     // the stored row (title/timestamps/resurrection) via the single-item
     // upsert. This matches the `.Pastebackup` import semantics.
     let mut entries = Vec::with_capacity(items.len());
+    let mut errors = Vec::new();
     for mut item in items {
+        if let Err(error) =
+            crate::content::resource_metadata::validate_metadata_json(item.metadata_json.as_deref())
+        {
+            errors.push(format!("item {}: {error}", item.id));
+            continue;
+        }
         item.icon_path = normalize_imported_icon_key(item.icon_path.as_deref());
         item.resource_path = sanitize_imported_path(item.resource_path.as_deref());
         item.preview_path = sanitize_imported_path(item.preview_path.as_deref());
@@ -24,10 +31,11 @@ pub fn import_from_json(json: &str, database: &Database) -> Result<ImportSummary
         .save_items_transactional(&entries)
         .map_err(|error| error.to_string())?;
 
+    errors.extend(summary.errors);
     Ok(ImportSummary {
         imported_count: summary.imported_count,
         skipped_count: summary.skipped_count,
-        errors: summary.errors,
+        errors,
         pending_truncation: 0,
         max_items: 0,
     })

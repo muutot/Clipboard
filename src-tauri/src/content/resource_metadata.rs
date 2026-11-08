@@ -2,6 +2,110 @@ use std::{fs, io::Read, path::Path, time::SystemTime};
 
 pub const RESOURCE_METADATA_SCHEMA_VERSION: u8 = 2;
 
+/// Validate resource-bearing metadata before accepting foreign records. Other
+/// extension fields stay untouched; null is the legacy absence representation.
+pub(crate) fn validate_metadata_json(metadata: Option<&str>) -> Result<(), String> {
+    let Some(metadata) = metadata else {
+        return Ok(());
+    };
+    let value: serde_json::Value =
+        serde_json::from_str(metadata).map_err(|_| "metadata must be valid JSON".to_owned())?;
+    validate_metadata_value(&value)
+}
+
+fn validate_metadata_value(value: &serde_json::Value) -> Result<(), String> {
+    if value.is_null() {
+        return Ok(());
+    }
+    let object = value.as_object().ok_or("metadata must be an object")?;
+    validate_path_fields(
+        object,
+        &[
+            "resourcePath",
+            "previewPath",
+            "storagePath",
+            "originalPath",
+            "iconPath",
+        ],
+    )?;
+    if let Some(files) = object.get("files").filter(|v| !v.is_null()) {
+        let files = files.as_array().ok_or("metadata files must be an array")?;
+        for file in files {
+            let file = file
+                .as_object()
+                .ok_or("metadata files entries must be objects")?;
+            validate_path_fields(file, &["storagePath", "path", "originalPath"])?;
+        }
+    }
+    Ok(())
+}
+
+fn validate_path_fields(
+    object: &serde_json::Map<String, serde_json::Value>,
+    keys: &[&str],
+) -> Result<(), String> {
+    for key in keys {
+        if object
+            .get(*key)
+            .is_some_and(|v| !v.is_null() && !v.is_string())
+        {
+            return Err(format!("metadata {key} must be a string or null"));
+        }
+    }
+    Ok(())
+}
+
+/// Recover possible resource references from already-stored legacy shapes.
+/// Invalid JSON is an error: callers must defer deletion, never assume no refs.
+/// Unexpected structures retain all string leaves conservatively, including
+/// malformed file slots. False positives only delay reclamation.
+pub(crate) fn metadata_resource_references(
+    metadata: &str,
+) -> Result<Vec<String>, serde_json::Error> {
+    let value: serde_json::Value = serde_json::from_str(metadata)?;
+    let mut paths = Vec::new();
+    if validate_metadata_value(&value).is_err() {
+        collect_string_leaves(&value, &mut paths);
+        return Ok(paths);
+    }
+    if let Some(object) = value.as_object() {
+        for key in [
+            "resourcePath",
+            "previewPath",
+            "storagePath",
+            "originalPath",
+            "iconPath",
+        ] {
+            if let Some(value) = object.get(key) {
+                collect_string_leaves(value, &mut paths);
+            }
+        }
+        if let Some(files) = object.get("files").and_then(serde_json::Value::as_array) {
+            for file in files {
+                for key in ["storagePath", "path", "originalPath"] {
+                    if let Some(value) = file.get(key) {
+                        collect_string_leaves(value, &mut paths);
+                    }
+                }
+            }
+        }
+    }
+    Ok(paths)
+}
+
+fn collect_string_leaves(value: &serde_json::Value, paths: &mut Vec<String>) {
+    match value {
+        serde_json::Value::String(path) if !path.trim().is_empty() => paths.push(path.clone()),
+        serde_json::Value::Array(values) => {
+            values.iter().for_each(|v| collect_string_leaves(v, paths))
+        }
+        serde_json::Value::Object(values) => values
+            .values()
+            .for_each(|v| collect_string_leaves(v, paths)),
+        _ => {}
+    }
+}
+
 pub fn extension_for_path(path: &Path) -> Option<String> {
     path.extension()
         .and_then(|extension| extension.to_str())
