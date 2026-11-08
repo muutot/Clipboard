@@ -279,6 +279,12 @@ fn independent_exports_are_randomized_and_oversized_lengths_fail_before_allocati
     let first = encode(b"same synthetic data");
     let second = encode(b"same synthetic data");
     assert_ne!(first, second);
+    let mut total_limited = Decoder::new(second.as_slice(), "synthetic strong password").unwrap();
+    total_limited.bytes = TOTAL;
+    assert!(total_limited.next().is_err());
+    let mut frame_limited = Decoder::new(second.as_slice(), "synthetic strong password").unwrap();
+    frame_limited.index = MAX_FRAMES;
+    assert!(frame_limited.next().is_err());
     let mut damaged = first;
     damaged[HEADER..HEADER + 4].copy_from_slice(&u32::MAX.to_be_bytes());
     assert!(decode(&damaged, "synthetic strong password").is_err());
