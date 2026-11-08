@@ -1925,7 +1925,6 @@
       showToast(_t("toast.saveFailed"), "error");
       return;
     }
-    if (!item.resourcePath) return;
     if (!isTauriRuntime()) return;
     try {
       const capability = await invoke<"available" | "external" | "missing">(

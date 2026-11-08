@@ -4,10 +4,15 @@ import MainPage from "./+page.svelte";
 import { t } from "$lib/i18n";
 import type { ClipboardItem } from "$lib/types/clipboard";
 
-const bridge = vi.hoisted(() => ({ invoke: vi.fn(), save: vi.fn(), toast: vi.fn() }));
+const bridge = vi.hoisted(() => ({
+  invoke: vi.fn(),
+  save: vi.fn(),
+  toast: vi.fn(),
+  materialize: vi.fn(),
+}));
 vi.mock("$lib/services/clipboard", async (original) => ({
   ...(await original<typeof import("$lib/services/clipboard")>()),
-  materializeClipboardItem: async (item: ClipboardItem) => item,
+  materializeClipboardItem: (item: ClipboardItem) => bridge.materialize(item),
 }));
 vi.mock("@tauri-apps/api/core", async (original) => ({
   ...(await original<typeof import("@tauri-apps/api/core")>()),
@@ -40,6 +45,7 @@ async function settle() {
 }
 beforeEach(async () => {
   vi.clearAllMocks();
+  bridge.materialize.mockImplementation(async (item: ClipboardItem) => item);
   vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
     measureText: (text: string) => ({ width: text.length * 7 }),
   } as unknown as CanvasRenderingContext2D);
@@ -98,4 +104,21 @@ it("saves an available record only after preflight and destination selection", a
       dst: "C:/synthetic/export.bin",
     });
   });
+});
+
+it("explains a missing resource path through the visible save action", async () => {
+  bridge.materialize.mockImplementation(async (item: ClipboardItem) => ({
+    ...item,
+    resourcePath: null,
+  }));
+  bridge.invoke.mockResolvedValue("missing");
+  [...target.querySelectorAll<HTMLButtonElement>("button")]
+    .find((button) => button.getAttribute("aria-label") === t("card.saveAs"))!
+    .click();
+  await settle();
+  expect(bridge.invoke).toHaveBeenCalledWith("get_clipboard_item_save_capability", {
+    id: expect.any(String),
+  });
+  expect(bridge.toast).toHaveBeenCalledWith(t("toast.saveSourceMissing"), "error");
+  expect(bridge.save).not.toHaveBeenCalled();
 });

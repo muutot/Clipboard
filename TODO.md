@@ -174,6 +174,8 @@
 
 证据定位：`src/routes/+page.svelte` 的 `saveItem`、`src-tauri/src/commands/files/clipboard.rs`、`src-tauri/src/platform/platform_info.rs`。预检已有实现，其原生验收归 F06；本项不重复列为新增功能。
 
+修复进度：已用真实主页面测试复现 materialization 返回无 resourcePath 时，点击可见另存为入口没有反馈；移除路径提前返回，统一进入记录 ID 绑定的能力预检。4 项相关测试通过（新增用例修复前失败、修复后通过），类型检查 0 错误、1 项既有测试夹具警告。原生提示及平台降级验收仍待执行，父项不勾选。
+
 ## P2：审计验证缺口与依赖维护
 
 ### V01 — 原生与跨平台证据补齐
