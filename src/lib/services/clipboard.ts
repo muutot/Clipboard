@@ -693,6 +693,8 @@ export type PasteMode = "plain" | "format" | "clean" | "auto";
 export type PasteOutcome = "pasted" | "copied" | "failed";
 
 export interface PasteItemHooks {
+  /** Opaque backend lease shared only by one bulk operation. */
+  batchToken?: string;
   /** Reorder callback (the main list pins the pasted entry to the top). */
   moveToTop?: (id: string) => void;
 }
@@ -731,6 +733,13 @@ async function pasteToPreviousApp(
   const t = (path: string, params?: Record<string, string | number>) =>
     resolvePath(messages, path, params);
 
+  if (hooks.batchToken) {
+    try {
+      await invokeTauri<void>("validate_paste_batch", { token: hooks.batchToken });
+    } catch {
+      return "failed";
+    }
+  }
   let resolvedKeys = keys;
   try {
     resolvedKeys = (await write()) ?? keys;
@@ -752,7 +761,10 @@ async function pasteToPreviousApp(
   }
 
   try {
-    const pasted = await invokeTauri<boolean>("paste_to_previous_application");
+    const pasted = await invokeTauri<boolean>(
+      "paste_to_previous_application",
+      hooks.batchToken ? { batchToken: hooks.batchToken } : undefined,
+    );
     showToast(t(pasted ? resolvedKeys.paste : resolvedKeys.copy), pasted ? "success" : "info");
     return pasted ? "pasted" : "copied";
   } catch (error) {
@@ -919,4 +931,12 @@ export async function pasteClipboardItem(
     );
   }
   return "failed";
+}
+
+/** Reserve the remembered native target once for all items; no target means no writes. */
+export async function beginPasteBatch(): Promise<string | null> {
+  return isTauriRuntime() ? invokeTauri<string | null>("begin_paste_batch") : null;
+}
+export async function endPasteBatch(token: string): Promise<void> {
+  await invokeTauri<void>("end_paste_batch", { token });
 }

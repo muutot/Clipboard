@@ -470,10 +470,15 @@ pub fn reset_keyboard_config(
 #[tauri::command]
 pub async fn paste_to_previous_application(
     app: tauri::AppHandle,
+    batch_token: Option<String>,
     hotkey_manager: tauri::State<'_, Mutex<HotkeyManager>>,
 ) -> Result<bool, String> {
-    let target =
-        lock_state(&hotkey_manager, "hotkey manager lock is poisoned")?.take_quick_paste_target();
+    let target = if let Some(token) = &batch_token {
+        Some(super::paste_batch::acquire(token)?)
+    } else {
+        super::paste_batch::refuse_single_during_batch()?;
+        lock_state(&hotkey_manager, "hotkey manager lock is poisoned")?.take_quick_paste_target()
+    };
     let Some(target) = target else {
         crate::dbg_log("paste_to_previous_application: no target");
         return Ok(false);
@@ -484,15 +489,27 @@ pub async fn paste_to_previous_application(
 
     let main_window = app.get_webview_window("main");
     if let Some(window) = &main_window {
-        platform::hide_main_window(window).map_err(|error| error.to_string())?;
+        if let Err(error) = platform::hide_main_window(window) {
+            if let Some(token) = &batch_token {
+                super::paste_batch::finish(token, false);
+            }
+            return Err(error.to_string());
+        }
     }
 
     // The paste sequence sleeps and injects input; run it on the blocking
     // pool so the synchronous command does not freeze the main thread (and
     // with it every other window operation) for the whole duration.
     let paste_window = main_window.clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    let check_token = batch_token.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
         thread::sleep(Duration::from_millis(40));
+        if check_token
+            .as_deref()
+            .is_some_and(|token| !super::paste_batch::active(token))
+        {
+            return Err("paste batch was cancelled".into());
+        }
         if let Err(error) = platform::windows::hotkey::restore_window_and_paste(target) {
             crate::dbg_log(&format!("paste_to_previous_application: error={error}"));
             if let Some(window) = &paste_window {
@@ -504,7 +521,12 @@ pub async fn paste_to_previous_application(
         Ok(true)
     })
     .await
-    .map_err(|error| format!("paste_to_previous_application task failed: {error}"))?
+    .map_err(|error| format!("paste_to_previous_application task failed: {error}"))
+    .and_then(|result| result);
+    if let Some(token) = &batch_token {
+        super::paste_batch::finish(token, result == Ok(true));
+    }
+    result
 }
 
 #[tauri::command]

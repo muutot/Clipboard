@@ -275,3 +275,9 @@ src/lib/utils/keyboard/keyboard-actions.test.ts` — registry/defaults parity,
   together with the dispatch branch.
 - Update this reference when layers, the add-shortcut flow, id routing,
   event names, or availability constraints change.
+
+### Batch paste target lease
+
+`commands/config/paste_batch.rs` owns one process-local opaque UUID lease. `begin_paste_batch` consumes the remembered target once, rejects a concurrent live batch and returns null without a valid external target. `validate_paste_batch({token})` guards staging; `paste_to_previous_application({batchToken?})` reuses that lease, while omitted tokens retain single-item take-once behavior and reject overlap with an active batch. `end_paste_batch({token})` releases only the matching lease. No config/schema change is needed. Idle leases expire after 30 seconds and every lease has a five-minute absolute limit.
+
+The first item accepts this process's foreground or the captured target; later items require the same target identity/focus. One item is in flight at a time; queued native work rechecks cancellation/focus, and Windows checks foreground/PID again after modifier release before SendInput. Failures invalidate the native lease. The bulk controller snapshots selection, stops after the first failure, keeps failed/unprocessed/newly selected rows, and releases its lease in finally. Existing paste cleaning/format writers remain shared through PasteItemHooks.batchToken. Real bridge tests cover a consumed target across three items, loss of focus before staging and no-target refusal. Native delivery timing and non-Windows focus behavior remain unverified until matching runtime/CI evidence; a returned SendInput success alone is not application-content confirmation.

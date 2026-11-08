@@ -175,7 +175,7 @@ pub fn restore_window_and_paste(target: QuickPasteHandle) -> Result<(), String> 
         thread::sleep(QUICK_PASTE_FOCUS_POLL);
     }
 
-    send_ctrl_v()
+    send_ctrl_v(target)
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -235,7 +235,7 @@ pub(super) struct Input {
 }
 
 #[cfg(target_os = "windows")]
-fn send_ctrl_v() -> Result<(), String> {
+fn send_ctrl_v(target: QuickPasteHandle) -> Result<(), String> {
     const INPUT_KEYBOARD: u32 = 1;
     const KEYEVENTF_KEYUP: u32 = 0x0002;
     const VK_CONTROL: u16 = 0x11;
@@ -279,6 +279,15 @@ fn send_ctrl_v() -> Result<(), String> {
             return Err("release keys before pasting".to_string());
         }
         thread::sleep(Duration::from_millis(10));
+    }
+
+    // Modifier release can take hundreds of milliseconds; recheck the owner
+    // immediately before injecting input rather than relying on earlier focus.
+    if foreground_window_handle() != Some(target.window_handle)
+        || window_process_id(target.window_handle) != target.process_id
+        || target.process_id == 0
+    {
+        return Err("paste target lost focus or changed owner".into());
     }
 
     let inputs = [

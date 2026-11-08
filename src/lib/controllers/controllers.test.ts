@@ -26,6 +26,8 @@ vi.mock("$lib/services/clipboard", async (original) => ({
   persistBatchPermanentDelete: vi.fn(),
   persistBatchRestore: vi.fn(),
   pasteClipboardItem: vi.fn(async () => "pasted" as const),
+  beginPasteBatch: vi.fn(async () => "batch"),
+  endPasteBatch: vi.fn(async () => {}),
 }));
 vi.mock("$lib/services/toast", () => ({ showToast: vi.fn() }));
 const item = (id: string): ClipboardItem => ({
@@ -234,12 +236,8 @@ it("keeps failed rows selected and reports the failure on a partial bulk paste",
     throw new Error("paste denied");
   });
   await out.bulk!.bulkPasteAll();
-  expect(vi.mocked(service.pasteClipboardItem).mock.calls.map((c) => c[0].id)).toEqual([
-    "a",
-    "b",
-    "c",
-  ]);
-  expect([...out.bulk!.selectedIds]).toEqual(["a"]);
+  expect(vi.mocked(service.pasteClipboardItem).mock.calls.map((c) => c[0].id)).toEqual(["a"]);
+  expect([...out.bulk!.selectedIds]).toEqual(["a", "b", "c"]);
   expect(showToast).toHaveBeenCalledWith(expect.anything(), "error");
 });
 it("ignores a bulk paste request while another run is still in flight", async () => {

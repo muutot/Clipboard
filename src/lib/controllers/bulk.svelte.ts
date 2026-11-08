@@ -11,6 +11,8 @@ import {
 import {
   hydrateClipboardItem,
   pasteClipboardItem,
+  beginPasteBatch,
+  endPasteBatch,
   writeClipboardText,
   persistBatchFavorite,
   persistBatchRestore,
@@ -75,20 +77,35 @@ export function createBulkController(deps: BulkDependencies) {
     // A second click while a paste run is in flight would interleave two
     // sequences at the paste target; ignore it until the current run ends.
     if (pasting) return;
-    const items = deps.selectedLoadedItems;
+    const items = [...deps.selectedLoadedItems];
     if (items.length === 0) return;
     pasting = true;
+    let batchToken: string | null = null;
     try {
+      batchToken = await beginPasteBatch();
+      if (!batchToken) {
+        showToast(deps.translate("toast.pasteFailed"), "error");
+        return;
+      }
       const failedIds: string[] = [];
       let succeeded = 0;
+      let stopped = false;
       for (const item of items) {
+        if (stopped) {
+          failedIds.push(item.id);
+          continue;
+        }
         try {
-          const outcome = await pasteClipboardItem(item);
+          const outcome = await pasteClipboardItem(item, "auto", { batchToken });
           if (outcome === "pasted") succeeded++;
-          else failedIds.push(item.id);
+          else {
+            failedIds.push(item.id);
+            stopped = true;
+          }
         } catch (error) {
           console.error("Bulk paste failed", error);
           failedIds.push(item.id);
+          stopped = true;
         }
       }
       // Failed rows stay selected so they can be retried without re-picking;
@@ -105,7 +122,17 @@ export function createBulkController(deps: BulkDependencies) {
       } else {
         showToast(deps.translate("toast.bulkPasteSuccess", { count: succeeded }), "success");
       }
+    } catch (error) {
+      console.error("Unable to start bulk paste", error);
+      showToast(deps.translate("toast.pasteFailed"), "error");
     } finally {
+      if (batchToken) {
+        try {
+          await endPasteBatch(batchToken);
+        } catch (error) {
+          console.error("Unable to release bulk paste target", error);
+        }
+      }
       pasting = false;
     }
   }

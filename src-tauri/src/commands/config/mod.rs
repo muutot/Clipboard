@@ -1,4 +1,6 @@
 pub mod misc;
+mod paste_batch;
+pub use paste_batch::{begin_paste_batch, end_paste_batch, validate_paste_batch};
 pub mod settings;
 pub mod storage;
 
