@@ -797,6 +797,9 @@ const en: LocaleDefinition = {
     filePasteFailed: "Failed to restore the previous application and paste file",
     duplicateSuccess: "Duplicated as new entry",
     saveFailed: "Save failed",
+    saveExternalUnsupported:
+      "Save As is unavailable for external references. Copy the original file in your file manager.",
+    saveSourceMissing: "The source file is missing or unavailable.",
     restoreSuccess: "Restored {count} items",
     resumed: "Restored",
     noRecordsToClear: "Nothing to clear",

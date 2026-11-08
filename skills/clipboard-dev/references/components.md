@@ -504,3 +504,5 @@ Main-page card measurement uses card-measurements.ts: immutable item identity is
 ### Foreign IDs and keyboard card lookup
 
 The main route uses `utils/keyboard/keyboard.ts::findItemElement` for selected-card focus and scroll lookup. It compares data-id attributes exactly across rendered cards rather than interpolating imported IDs into CSS selectors. Quotes, backslashes, brackets and Unicode remain legitimate IDs; offscreen virtual rows retain the existing scroll/tick fallback. Mounted route UTs cover ArrowDown/ArrowUp focus with special IDs. No card markup, style or storage ID format changes are needed.
+
+Main saveItem materializes media, then requests get_clipboard_item_save_capability before opening the native destination chooser. External or missing sources produce localized explanatory feedback; managed save retains its post-dialog authorization. Mounted route tests cover refusing the chooser and the managed flow; native dialog evidence remains pending.

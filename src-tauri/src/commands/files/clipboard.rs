@@ -4,6 +4,47 @@ use crate::commands::clipboard::ClipboardFilesCopyError;
 use crate::state::SelfTriggerState;
 use crate::storage::{ClipboardRepository, Database, StoragePaths};
 
+#[derive(Debug, serde::Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum SaveFileCapability {
+    Available,
+    External,
+    Missing,
+}
+
+pub(super) fn save_file_capability(
+    database: &Database,
+    paths: &StoragePaths,
+    id: &str,
+) -> Result<SaveFileCapability, String> {
+    let Some(source) = database
+        .get_item(id)
+        .map_err(|error| error.to_string())?
+        .and_then(|item| item.resource_path)
+    else {
+        return Ok(SaveFileCapability::Missing);
+    };
+    Ok(match managed_source_path(paths, &source) {
+        Ok(_) => SaveFileCapability::Available,
+        Err(error) if error.contains("outside managed storage") => SaveFileCapability::External,
+        Err(_) => SaveFileCapability::Missing,
+    })
+}
+
+/// Advisory preflight only. Save revalidates the record and path after the dialog.
+#[tauri::command]
+pub async fn get_clipboard_item_save_capability(
+    id: String,
+    app: tauri::AppHandle,
+) -> Result<SaveFileCapability, String> {
+    use tauri::Manager;
+    tauri::async_runtime::spawn_blocking(move || {
+        save_file_capability(&app.state::<Database>(), &app.state::<StoragePaths>(), &id)
+    })
+    .await
+    .map_err(|error| format!("save capability task join failed: {error}"))?
+}
+
 // NOTE: the former `copy_file_to` command (an unrestricted src→dst file copy
 // reachable from the webview) was removed: it had no frontend caller and was
 // an arbitrary-file-copy primitive. `replace_icon_file` is the constrained

@@ -248,6 +248,50 @@ fn save_as_fixture() -> (std::path::PathBuf, StoragePaths, Database) {
 }
 
 #[test]
+fn save_file_capability_uses_record_bound_managed_authorization() {
+    use super::clipboard::{save_file_capability, SaveFileCapability};
+    let (root, paths, database) = save_as_fixture();
+    assert_eq!(
+        save_file_capability(&database, &paths, "id").unwrap(),
+        SaveFileCapability::Available
+    );
+    assert_eq!(
+        save_file_capability(&database, &paths, "absent").unwrap(),
+        SaveFileCapability::Missing
+    );
+    let external = root.join("original.bin");
+    std::fs::write(&external, b"external synthetic bytes").unwrap();
+    database
+        .save_item(&item(
+            ClipboardKind::File,
+            Some(external.to_string_lossy().into_owned()),
+            None,
+        ))
+        .unwrap();
+    assert_eq!(
+        save_file_capability(&database, &paths, "id").unwrap(),
+        SaveFileCapability::External
+    );
+    let destination = root.join("destination.bin");
+    std::fs::write(&destination, b"keep destination").unwrap();
+    assert!(save_clipboard_item_file_blocking(
+        &database,
+        &paths,
+        "id",
+        &destination.to_string_lossy()
+    )
+    .is_err());
+    assert_eq!(std::fs::read(&destination).unwrap(), b"keep destination");
+    std::fs::remove_file(external).unwrap();
+    assert_eq!(
+        save_file_capability(&database, &paths, "id").unwrap(),
+        SaveFileCapability::Missing
+    );
+    drop(database);
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn save_clipboard_item_file_accepts_existing_source_path_spellings_without_rewriting() {
     let (root, paths, database) = save_as_fixture();
     let source = paths.files.join("captured.bin");

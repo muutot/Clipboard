@@ -766,6 +766,8 @@ const zhCN: LocaleDefinition = {
     filePasteFailed: "恢复原应用并粘贴文件失败",
     duplicateSuccess: "已另存为新条目",
     saveFailed: "保存失败",
+    saveExternalUnsupported: "外部引用暂不支持另存为，请在文件管理器中复制原文件。",
+    saveSourceMissing: "源文件已丢失或不可用。",
     restoreSuccess: "已还原 {count} 项",
     resumed: "已还原",
     noRecordsToClear: "没有可清除的记录",

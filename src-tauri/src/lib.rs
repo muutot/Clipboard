@@ -24,6 +24,7 @@ use commands::capture::*;
 use commands::clipboard::*;
 use commands::config::*;
 use commands::export::*;
+use commands::files::get_clipboard_item_save_capability;
 use commands::float::*;
 use commands::ocr::*;
 use commands::sync::*;
@@ -960,6 +961,7 @@ pub fn run() {
             open_external_url,
             reveal_in_explorer,
             save_clipboard_item_file,
+            get_clipboard_item_save_capability,
             rename_item,
             update_clipboard_text,
             save_clipboard_item_as_new,

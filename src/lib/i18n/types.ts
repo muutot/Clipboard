@@ -728,6 +728,8 @@ export interface LocaleDefinition {
     filePasteFailed: string;
     duplicateSuccess: string;
     saveFailed: string;
+    saveExternalUnsupported: string;
+    saveSourceMissing: string;
     restoreSuccess: string;
     resumed: string;
     noRecordsToClear: string;

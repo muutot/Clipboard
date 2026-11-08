@@ -1928,6 +1928,19 @@
     if (!item.resourcePath) return;
     if (!isTauriRuntime()) return;
     try {
+      const capability = await invoke<"available" | "external" | "missing">(
+        "get_clipboard_item_save_capability",
+        { id },
+      );
+      if (capability !== "available") {
+        showToast(
+          _t(
+            capability === "external" ? "toast.saveExternalUnsupported" : "toast.saveSourceMissing",
+          ),
+          "error",
+        );
+        return;
+      }
       const { save } = await import("@tauri-apps/plugin-dialog");
       const defaultName = item.fileName || item.title.split(/[\\/]/).pop() || "file";
       const ext = defaultName.includes(".") ? defaultName.split(".").pop() : "";

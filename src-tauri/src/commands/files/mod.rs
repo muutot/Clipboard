@@ -17,7 +17,9 @@ mod shell;
 #[cfg(test)]
 mod tests;
 
-pub use clipboard::{copy_clipboard_item_files, save_clipboard_item_file};
+pub use clipboard::{
+    copy_clipboard_item_files, get_clipboard_item_save_capability, save_clipboard_item_file,
+};
 pub use icons::{delete_icon_files, list_icon_cache, IconCacheEntry};
 pub use replace::replace_icon_file;
 pub use shell::{open_external_url, reveal_in_explorer};
