@@ -46,6 +46,8 @@
 
 定位：平台剪贴板接口、`ClipboardSnapshot`、采集策略。依赖：先调查，后实施；不能机械复制不同平台的格式名称。
 
+验证进度：2026-11-08，Windows 私有非交互窗口站实验在写入剪贴板前被 `CreateWindowStationW` 拒绝（OS error 5）；当前存在运行中的 Clipboard 实例，未改用用户剪贴板、未写入用户数据库。F08 仍待原生实证；缺少 macOS 环境不阻断后续已确认缺陷修复。
+
 ## P0：核心功能与数据契约
 
 ### F03 — 导入 metadata 与资源清理一致性（Confirmed / Medium）
