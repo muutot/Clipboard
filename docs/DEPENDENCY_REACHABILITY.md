@@ -30,3 +30,13 @@ zstd 0.13.3 与 zstd-safe 7.3.0 分别有 RUSTSEC-2026-0391、0398、0403 以及
 剩余 informational：bincode 2.0.1、paste 1.0.15、proc-macro-error 1.0.4、ttf-parser 0.25.1 为停止维护公告；glib 0.18.5（RUSTSEC-2024-0429）和 lru 0.16.4（RUSTSEC-2026-0253）为 unsound 警告。维护状态不是已证明攻击；glib 是 Linux 平台依赖，当前 Windows 检查不覆盖其运行；lru 的 panic/pop 入口仍需逐个追踪。不得通过忽略列表让扫描变绿。
 
 原始扫描保存为本地 cargo-audit-current.json 与 cargo-audit-zstd-patched.json。Rust 检查不是无风险结论；上述剩余问题保留后续维护范围。
+
+## 本轮收尾复核
+
+在 67a1723a 的锁文件上重新运行 cargo-audit 0.22.2，同一 RustSec 数据库扫描 752 个依赖：4 条 ZIP 漏洞记录、4 条停止维护公告、glib/lru 两条 unsound 警告；无 zstd 公告。此数量为本次扫描结果，不沿用历史 764 个依赖计数，也不代表公告已全部修复。
+
+`cargo tree -e normal -i zip/lru` 确认 ZIP 为应用直接普通依赖，lru 经 Tantivy 0.26.2 引入，均不是仅测试依赖。Tantivy 的 `store/reader.rs::BlockCache` 使用 `LruCache<usize, Block>`，当前调用为 get、put、len、peek_lru；未见 pop 调用。RUSTSEC-2026-0253 所述条件为 pop 时键的 Drop panic、捕获 unwind 后继续使用缓存。当前 usize 键没有这样的析构实现，因此这条实际缓存路径不满足公告触发条件；保留依赖维护事项，后续新增使用点或缓存键类型变化必须复查。
+
+glib 是 Linux 原生界面依赖，当前 Windows 环境不能证明其原生行为。尝试离线解析 Linux 目标依赖树因本机缺少 openssl 0.10.82 缓存失败；不将该失败解释为编译错误或平台验证通过。没有新增公告忽略项或强制跨主版本升级。
+
+本地扫描结果保存于 `skills/code-auditor/result/v1.8.4-review/cargo-audit-final.json`（忽略目录）。
