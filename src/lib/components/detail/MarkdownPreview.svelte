@@ -1,5 +1,6 @@
 <script lang="ts">
   import { parseMarkdown } from "$lib/utils/content/markdown";
+  import { messages, resolvePath } from "$lib/i18n";
 
   interface Props {
     content: string;
@@ -7,7 +8,9 @@
 
   let { content }: Props = $props();
 
-  const html = $derived(parseMarkdown(content));
+  const html = $derived(
+    parseMarkdown(content, resolvePath($messages, "detail.remoteImageBlocked")),
+  );
 </script>
 
 {#if content}

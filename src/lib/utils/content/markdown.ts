@@ -16,7 +16,8 @@ function sanitizeUrl(raw: string, kind: MarkdownUrlKind): string | null {
     const base =
       typeof window === "undefined" ? "https://clipboard.invalid/" : window.location.href;
     const url = new URL(value, base);
-    const allowed = kind === "image" ? ["http:", "https:"] : ["http:", "https:", "mailto:", "tel:"];
+    const allowed =
+      kind === "image" ? ["http:", "https:", "asset:"] : ["http:", "https:", "mailto:", "tel:"];
     return allowed.includes(url.protocol.toLowerCase()) ? escapeHtml(url.href) : null;
   } catch {
     return null;
@@ -25,7 +26,9 @@ function sanitizeUrl(raw: string, kind: MarkdownUrlKind): string | null {
 
 // Match source text once. Generated tags and attributes never re-enter the
 // parser, so markdown in code or image alt text cannot turn into live markup.
-function parseInline(text: string, allowLinks = true): string {
+function renderInline(text: string, remoteImageLabel: string, allowLinks = true): string {
+  const parseInline = (value: string, links = true): string =>
+    renderInline(value, remoteImageLabel, links);
   const tokens =
     /`([^`\n]+)`|!\[([^\]]*)\]\(([^)]+)\)|\[([^\]]+)\]\(([^)]+)\)|\*\*([^*]+)\*\*|\*([^*]+)\*/g;
   const result: string[] = [];
@@ -37,10 +40,11 @@ function parseInline(text: string, allowLinks = true): string {
       result.push(`<code class="md-inline-code">${escapeHtml(code)}</code>`);
     } else if (alt !== undefined) {
       const url = sanitizeUrl(imageUrl, "image");
+      const local = url && isLocalImageUrl(url);
       result.push(
-        url
+        local
           ? `<img src="${url}" alt="${escapeHtml(alt)}" class="md-image" />`
-          : `<span class="md-unsafe-image">${escapeHtml(alt)}</span>`,
+          : `<span class="md-unsafe-image">${url ? escapeHtml(remoteImageLabel) + (alt ? ": " : "") : ""}${escapeHtml(alt)}</span>`,
       );
     } else if (label !== undefined) {
       const url = allowLinks ? sanitizeUrl(linkUrl, "link") : null;
@@ -60,8 +64,24 @@ function parseInline(text: string, allowLinks = true): string {
   return result.join("");
 }
 
+function isLocalImageUrl(value: string): boolean {
+  const url = new URL(value);
+  return (
+    url.protocol === "asset:" ||
+    (["http:", "https:"].includes(url.protocol) &&
+      url.hostname === "asset.localhost" &&
+      !url.port &&
+      !url.username &&
+      !url.password)
+  );
+}
+
 /** Render the preview's supported Markdown subset with raw HTML always escaped. */
-export function parseMarkdown(text: string): string {
+export function parseMarkdown(
+  text: string,
+  remoteImageLabel = "Remote image blocked for privacy",
+): string {
+  const parseInline = (value: string): string => renderInline(value, remoteImageLabel);
   const lines = text.replace(/\r\n?/g, "\n").split("\n");
   const result: string[] = [];
   let paragraph: string[] = [];

@@ -736,6 +736,7 @@ export interface LocaleDefinition {
     clearHistorySuccess: string;
   };
   detail: {
+    remoteImageBlocked: string;
     title: string;
     preview: string;
     details: string;

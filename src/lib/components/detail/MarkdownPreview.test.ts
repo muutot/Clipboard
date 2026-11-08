@@ -1,6 +1,8 @@
 import { flushSync, mount, unmount } from "svelte";
 import { afterEach, describe, expect, it } from "vitest";
 import MarkdownPreview from "./MarkdownPreview.svelte";
+import { t, locale } from "$lib/i18n";
+import { get } from "svelte/store";
 
 const cleanup: Array<() => void> = [];
 afterEach(() => {
@@ -20,6 +22,31 @@ function render(content: string) {
 }
 
 describe("MarkdownPreview", () => {
+  it("renders remote images as localized text without network-bearing elements", () => {
+    const target = render(
+      "![tracking](https://example.com/pixel) ![](//example.com/empty) ![forged](https://asset.localhost.evil/a)",
+    );
+    expect(target.querySelector("img, iframe, object, source")).toBeNull();
+    expect(target.querySelectorAll("[src], [srcset], [style]")).toHaveLength(0);
+    expect(target.textContent).toContain(t("detail.remoteImageBlocked"));
+    const previous = get(locale);
+    try {
+      locale.set(previous === "en" ? "zh-CN" : "en");
+      flushSync();
+      expect(target.textContent).toContain(t("detail.remoteImageBlocked"));
+    } finally {
+      locale.set(previous);
+      flushSync();
+    }
+  });
+
+  it("retains local asset images while rejecting credential and port lookalikes", () => {
+    const target = render(
+      "![local](http://asset.localhost/a.png) ![port](http://asset.localhost:8080/a) ![auth](http://user@asset.localhost/a)",
+    );
+    expect(target.querySelectorAll("img")).toHaveLength(1);
+    expect(target.querySelector("img")?.getAttribute("src")).toBe("http://asset.localhost/a.png");
+  });
   it("renders consecutive quoted lines as a blockquote", () => {
     const target = render("> first\n> **second**");
     expect(target.querySelectorAll("blockquote")).toHaveLength(1);
@@ -49,12 +76,10 @@ describe("MarkdownPreview", () => {
   });
 
   it("escapes raw HTML and image attributes while allowing safe URLs", () => {
-    const target = render(
-      '<script>alert(1)</script>\n![`alt` "quoted"](https://example.com/a.png)',
-    );
+    const target = render('<script>alert(1)</script>\n![`alt` "quoted"](asset://localhost/a.png)');
     expect(target.querySelector("script")).toBeNull();
     expect(target.querySelector("img")?.alt).toBe('`alt` "quoted"');
-    expect(target.querySelector("img")?.getAttribute("src")).toBe("https://example.com/a.png");
+    expect(target.querySelector("img")?.getAttribute("src")).toBe("asset://localhost/a.png");
     expect(target.querySelector("img")?.attributes.length).toBe(3);
   });
 

@@ -806,6 +806,7 @@ const en: LocaleDefinition = {
     clearHistorySuccess: "Cleared {count} items",
   },
   detail: {
+    remoteImageBlocked: "Remote image blocked for privacy",
     title: "Content Details",
     preview: "Preview",
     details: "Details",

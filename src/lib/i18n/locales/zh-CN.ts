@@ -774,6 +774,7 @@ const zhCN: LocaleDefinition = {
     clearHistorySuccess: "已清除 {count} 项",
   },
   detail: {
+    remoteImageBlocked: "为保护隐私，未加载远程图片",
     title: "内容详情",
     preview: "预览",
     details: "详细",
