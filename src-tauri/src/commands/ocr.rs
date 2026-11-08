@@ -418,6 +418,11 @@ async fn download_ppocr_file(
         }
         file.write_all(&chunk).await.map_err(|e| e.to_string())?;
         downloaded += chunk.len() as u64;
+        // tokio's fs File may buffer the write and complete the future before
+        // the bytes reach the filesystem. Flush before reporting progress so
+        // the reported byte count is always visible on disk — resumable
+        // downloads and tests rely on that ordering.
+        file.flush().await.map_err(|e| e.to_string())?;
         let percentage = if total > 0 {
             (downloaded as f64 / total as f64) * 100.0
         } else {
