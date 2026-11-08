@@ -214,10 +214,12 @@
 ### V02 — 依赖公告可达性与维护
 
 - [ ] 复核 4 个 npm advisory 及 Rust 依赖风险，按可达性处理。
-  - [ ] 核对 GHSA-pfhg-q3qv-9q6r、GHSA-27mw-82g8-phjj、GHSA-pxg6-pf52-xh8x、GHSA-gcqx-w48m-w2h4 对当前版本的适用性。
-  - [ ] 追踪静态桌面中的 server/enhance/prerender/cookie/deepmerge 调用与不可信输入，记录可达或不可达证据。
+  - [x] 核对 GHSA-pfhg-q3qv-9q6r、GHSA-27mw-82g8-phjj、GHSA-pxg6-pf52-xh8x、GHSA-gcqx-w48m-w2h4 对当前版本的适用性。
+  - [x] 追踪静态桌面中的 server/enhance/prerender/cookie/deepmerge 调用与不可信输入，记录可达或不可达证据。
   - [ ] 对当前 Cargo.lock 执行适当 advisory 检查，区分运行/构建/测试依赖。
   - [ ] 对确有必要的依赖更新逐项验证兼容性；未证明可利用的扫描结果不包装成已确认产品漏洞。
+
+复核证据：[依赖可达性](docs/DEPENDENCY_REACHABILITY.md) 记录 npm 入口/构建边界、764 个 Rust 锁文件依赖扫描及剩余范围；zstd 兼容补丁消除 3 条漏洞记录和 10 条 unsound 警告，19 项 wire 测试通过。ZIP、glib、lru 的维护/平台边界仍保留，V02 父项不勾选。
 
 ### V03 — 最终树集成验收
 
