@@ -708,3 +708,28 @@ fn server_binds_loopback_and_stops_cleanly() {
     server.stop().unwrap();
     assert!(!server.is_running());
 }
+
+#[test]
+fn api_paste_blocks_default_structured_credentials_before_storage() {
+    let database = Database::open_in_memory().unwrap();
+    let capture = gated_capture_state(false, 500_000);
+    for text in [
+        "PASSWORD=synthetic",
+        r#"{"api_key":"synthetic"}"#,
+        "-----BEGIN ENCRYPTED PRIVATE KEY-----",
+    ] {
+        let body = serde_json::to_vec(&serde_json::json!({"text": text})).unwrap();
+        let paste = request("POST", "/paste", &body);
+        let response = dispatch_with_context(
+            &paste,
+            &database,
+            500,
+            500,
+            &CopyContext::default(),
+            Some(&capture),
+        );
+        assert_eq!(response.status, 403);
+        assert_eq!(database.item_count().unwrap(), 0);
+        assert_eq!(database.count_sync_outbox().unwrap(), 0);
+    }
+}

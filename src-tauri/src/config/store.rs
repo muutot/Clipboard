@@ -85,7 +85,14 @@ impl ConfigStore {
             }
         }
 
-        Ok((serde_json::from_value(raw)?, general_settings_present))
+        let mut config: AppConfig = serde_json::from_value(raw)?;
+        if config.privacy.sensitive_patterns == crate::privacy::LEGACY_SENSITIVE_PATTERNS {
+            config.privacy.sensitive_patterns = crate::privacy::DEFAULT_SENSITIVE_PATTERNS
+                .iter()
+                .map(|pattern| (*pattern).to_owned())
+                .collect();
+        }
+        Ok((config, general_settings_present))
     }
 
     pub fn path(&self) -> &Path {

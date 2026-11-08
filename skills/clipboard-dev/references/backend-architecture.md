@@ -672,6 +672,8 @@ These bounds do not make unrelated native display/filesystem calls preemptible.
 
 ## Privacy and cleanup
 
+Default credential patterns in `privacy/mod.rs` recognize case-insensitive assignment/JSON keys and PKCS8/encrypted key headers as well as legacy key types. Empty/whitespace quoted values are not credential matches; user-defined regexes retain their own semantics. `ConfigStore::parse_saved_config` upgrades only a list equal to the entire ordered legacy default list. Healthy loads remain read-only; upgraded runtime defaults persist at the next successful revision-checked save. Custom, empty, partial and reordered lists remain untouched. CLI/API rejection precedes repository/outbox writes; capture uses the same compiled policy.
+
 `commands/config/misc.rs::apply_privacy_settings` validates patterns first, then
 holds the privacy mutex across persistence and both runtime-policy mirrors.
 Its lock order is privacy -> config, matching pause and getters. A poisoned

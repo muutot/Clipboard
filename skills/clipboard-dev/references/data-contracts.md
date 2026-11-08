@@ -269,6 +269,10 @@ re-reads `get_source_mapping_rules` instead of applying an event or save-respons
 snapshot. Root-layout initialization subscribes before hydration and teardown
 discards pending reads/releases listeners, including late registrations.
 
+### Sensitive-content defaults
+
+`privacy.sensitivePatterns` remains a user-owned string array (same schema and seven default entries). Loading upgrades only exact ordered historical defaults to the case-insensitive credential/JSON and PKCS8/encrypted-key rules. Empty/custom/partial/reordered arrays are not rewritten. Healthy loading changes runtime policy without writing the file; the next successful config save persists the upgrade with the existing file-revision guard. Default patterns are heuristic; custom regex semantics are unchanged.
+
 ### History settings
 
 The separate `set_history_config(maxItems?, retentionDays?, recycleBinDays?)`

@@ -1419,3 +1419,49 @@ fn temporary_test_directory(label: &str) -> PathBuf {
         std::process::id()
     ))
 }
+
+#[test]
+fn upgrades_only_untouched_legacy_sensitive_defaults() {
+    use crate::privacy::{DEFAULT_SENSITIVE_PATTERNS, LEGACY_SENSITIVE_PATTERNS};
+    let project = temporary_test_directory("privacy-default-upgrade");
+    let mut store = ConfigStore::load(&project).unwrap();
+    store
+        .set_sensitive_patterns(
+            LEGACY_SENSITIVE_PATTERNS
+                .iter()
+                .map(|p| p.to_string())
+                .collect(),
+        )
+        .unwrap();
+    let before = fs::read(store.path()).unwrap();
+    let mut loaded = ConfigStore::load(&project).unwrap();
+    assert_eq!(loaded.sensitive_patterns(), DEFAULT_SENSITIVE_PATTERNS);
+    // Load is read-only for an existing healthy config; next successful save persists it.
+    assert_eq!(fs::read(loaded.path()).unwrap(), before);
+    assert_eq!(
+        ConfigStore::load_existing(&project)
+            .unwrap()
+            .sensitive_patterns(),
+        DEFAULT_SENSITIVE_PATTERNS
+    );
+    loaded.set_privacy_paused(true).unwrap();
+    assert_eq!(
+        ConfigStore::load(&project).unwrap().sensitive_patterns(),
+        DEFAULT_SENSITIVE_PATTERNS
+    );
+    for patterns in [
+        vec![],
+        vec!["CaseSensitive=\\S+".to_owned()],
+        LEGACY_SENSITIVE_PATTERNS[1..]
+            .iter()
+            .map(|p| p.to_string())
+            .collect(),
+    ] {
+        loaded.set_sensitive_patterns(patterns.clone()).unwrap();
+        assert_eq!(
+            ConfigStore::load(&project).unwrap().sensitive_patterns(),
+            patterns
+        );
+    }
+    fs::remove_dir_all(project).unwrap();
+}

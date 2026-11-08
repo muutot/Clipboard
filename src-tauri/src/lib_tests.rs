@@ -404,6 +404,23 @@ mod capture_tests {
     }
 
     #[test]
+    fn capture_policy_blocks_default_structured_credentials() {
+        let state = capture_state();
+        for text in [
+            "PASSWORD=synthetic",
+            r#"{"secret":"synthetic"}"#,
+            "-----BEGIN PRIVATE KEY-----",
+        ] {
+            assert!(state.should_skip(Some("Browser"), Some(text)));
+            assert_eq!(
+                state.reject_manual_text(text),
+                Some(crate::state::ManualTextRejection::SensitiveContent)
+            );
+        }
+        assert!(!state.should_skip(Some("Browser"), Some(r#"{"password":""}"#)));
+    }
+
+    #[test]
     fn capture_worker_stop_wakes_and_joins_thread() {
         let stop_flag = Arc::new(AtomicBool::new(false));
         let exited = Arc::new(AtomicBool::new(false));

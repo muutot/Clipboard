@@ -668,6 +668,31 @@ mod tests {
     }
 
     #[test]
+    fn cli_paste_blocks_default_structured_credentials_before_storage() {
+        let database = Database::open_in_memory().unwrap();
+        let capture = gated_capture_state(500_000);
+        let args = args(CliCommand::Paste);
+        for text in [
+            "PASSWORD=synthetic",
+            r#"{"token":"synthetic"}"#,
+            "-----BEGIN PRIVATE KEY-----",
+        ] {
+            let result = run_cli_command_with_clipboard(
+                &args,
+                &database,
+                500,
+                500,
+                || Ok(text.to_owned()),
+                |_| panic!("rejected input must not write clipboard"),
+                Some(&capture),
+            );
+            assert!(result.is_err());
+            assert_eq!(database.item_count().unwrap(), 0);
+            assert_eq!(database.count_sync_outbox().unwrap(), 0);
+        }
+    }
+
+    #[test]
     fn cli_paste_refuses_text_above_the_capture_ceiling() {
         let database = Database::open_in_memory().unwrap();
         let capture = gated_capture_state(8);

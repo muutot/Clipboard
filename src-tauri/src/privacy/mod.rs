@@ -31,6 +31,18 @@ pub fn default_password_manager_apps() -> Vec<String> {
 pub const DEFAULT_SENSITIVE_PATTERNS: &[&str] = &[
     r"\b\d{3}-\d{2}-\d{4}\b",
     r"\b\d{4}[ -]?\d{4}[ -]?\d{4}[ -]?\d{4}\b",
+    r#"(?i)\bpassword["']?\s*[=:]\s*(?:["'][^"'\s][^"']*["']|[^"'\s,}\]]+)"#,
+    r#"(?i)\bsecret["']?\s*[=:]\s*(?:["'][^"'\s][^"']*["']|[^"'\s,}\]]+)"#,
+    r#"(?i)\bapi[_-]?key["']?\s*[=:]\s*(?:["'][^"'\s][^"']*["']|[^"'\s,}\]]+)"#,
+    r#"(?i)\btoken["']?\s*[=:]\s*(?:["'][^"'\s][^"']*["']|[^"'\s,}\]]+)"#,
+    r"-----BEGIN\s+(?:(?:RSA|EC|DSA|OPENSSH|ENCRYPTED)\s+)?PRIVATE\s+KEY-----",
+];
+
+// Only this exact untouched historical list is eligible for replacement.
+// Partial, reordered, empty and custom lists remain user-owned.
+pub(crate) const LEGACY_SENSITIVE_PATTERNS: &[&str] = &[
+    r"\b\d{3}-\d{2}-\d{4}\b",
+    r"\b\d{4}[ -]?\d{4}[ -]?\d{4}[ -]?\d{4}\b",
     r"\bpassword\s*[=:]\s*\S+",
     r"\bsecret\s*[=:]\s*\S+",
     r"\bapi[_-]?key\s*[=:]\s*\S+",
@@ -134,6 +146,43 @@ mod tests {
     fn detects_private_key_patterns() {
         let manager = PrivacyManager::new();
         assert!(manager.is_sensitive_content("-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQE..."));
+    }
+
+    #[test]
+    fn default_patterns_cover_structured_credentials_and_key_types() {
+        let manager = PrivacyManager::new();
+        for text in [
+            "PASSWORD=synthetic",
+            r#"{"password":"synthetic"}"#,
+            r#"{"SECRET": "synthetic"}"#,
+            r#"{"api_key": "synthetic"}"#,
+            "'API-KEY': 'synthetic'",
+            r#"{"token":"synthetic"}"#,
+            "-----BEGIN PRIVATE KEY-----",
+            "-----BEGIN ENCRYPTED PRIVATE KEY-----",
+            "-----BEGIN EC PRIVATE KEY-----",
+        ] {
+            assert!(manager.is_sensitive_content(text), "missed {text:?}");
+        }
+    }
+
+    #[test]
+    fn default_patterns_keep_empty_values_and_ordinary_text() {
+        let manager = PrivacyManager::new();
+        for text in [
+            r#"{"password":""}"#,
+            r#"{"token": " "}"#,
+            "password=",
+            "tokenizer=ordinary",
+            "The password field is required.",
+            r#"{"name":"example","enabled":true}"#,
+            "-----BEGIN PUBLIC KEY-----",
+        ] {
+            assert!(
+                !manager.is_sensitive_content(text),
+                "false positive {text:?}"
+            );
+        }
     }
 
     #[test]
