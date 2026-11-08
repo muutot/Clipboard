@@ -292,6 +292,40 @@ fn save_file_capability_uses_record_bound_managed_authorization() {
 }
 
 #[test]
+fn save_capability_matches_real_capture_size_and_copy_failure_fallbacks() {
+    use super::clipboard::{save_file_capability, SaveFileCapability};
+    use crate::commands::capture::store_captured_file_references;
+    let (root, paths, database) = save_as_fixture();
+    let source = root.join("synthetic-source.txt");
+    std::fs::write(&source, b"synthetic file larger than the test copy limit").unwrap();
+    let blocker = root.join("not-a-directory");
+    std::fs::write(&blocker, b"blocks destination creation").unwrap();
+    for (target, limit, expected, copied) in [
+        (&paths.files, 0, SaveFileCapability::Available, true),
+        (&paths.files, 1, SaveFileCapability::External, false),
+        (&blocker, 0, SaveFileCapability::External, false),
+    ] {
+        let references =
+            store_captured_file_references(&[source.to_string_lossy().into_owned()], target, limit);
+        assert_eq!(references.len(), 1);
+        assert_eq!(references[0].copied, copied);
+        database
+            .save_item(&item(
+                ClipboardKind::File,
+                Some(references[0].storage_path.clone()),
+                None,
+            ))
+            .unwrap();
+        assert_eq!(
+            save_file_capability(&database, &paths, "id").unwrap(),
+            expected
+        );
+    }
+    drop(database);
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn save_clipboard_item_file_accepts_existing_source_path_spellings_without_rewriting() {
     let (root, paths, database) = save_as_fixture();
     let source = paths.files.join("captured.bin");
