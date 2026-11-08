@@ -77,6 +77,7 @@ Do not promote a niche exception into a general rule. Record newly discovered lo
   the full frontend and Rust workspace suites, Svelte/TypeScript checking, frontend build,
   Clippy and formatting. Do not repeat it unless later edits or failures require revalidation.
 - Keep per-commit formatting, Git hooks and the documentation currency gate.
+- `.prettierignore` excludes local IDE-generated `.openidea/` and `.trae/` metadata. Do not reformat their contents to pass the repository gate; source files and tracked project configuration remain in scope.
 - Inspect rendered/runtime behavior for layout, theme, focus, multi-window, platform, or OS integration claims; static checks alone are insufficient.
 - Treat platform-gated code as unverified locally. Anything behind `#[cfg(target_os = ...)]` (the Linux/macOS halves of `src-tauri/src/platform/`) is not compiled by a Windows `npm run verify`, and cross-`cargo check` is not a substitute because native dependencies still need a cross C toolchain. After touching such code, the matching CI job is the only real gate — read its result, and do not treat a green local run as coverage. `docs/PITFALLS.md` ("平台专属代码是本地门禁的盲区") records a branch that stayed red through many green local runs.
 

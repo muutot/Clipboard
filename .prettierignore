@@ -5,6 +5,8 @@ src-tauri/target
 src-tauri/gen
 package-lock.json
 TODO.md
+.openidea/
+.trae/
 skills/code-auditor/result
 .worktree-experience
 .svelte-kit
