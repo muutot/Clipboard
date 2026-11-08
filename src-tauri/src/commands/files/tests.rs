@@ -258,14 +258,14 @@ fn save_clipboard_item_file_accepts_existing_source_path_spellings_without_rewri
         .unwrap()
         .set_modified(old)
         .unwrap();
-    let destinations = vec![
+    let destinations = [
         source.clone(),
         paths.files.join("./captured.bin"),
         source.canonicalize().unwrap(),
     ];
     #[cfg(windows)]
     let destinations = {
-        let mut destinations = destinations;
+        let mut destinations = destinations.to_vec();
         destinations.push(paths.files.join("CAPTURED.BIN"));
         destinations
     };
