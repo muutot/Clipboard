@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  findItemElement,
   isActivatableKeyboardTarget,
   isEditableKeyboardTarget,
   isItemActionShortcut,
@@ -151,4 +152,20 @@ describe("isActivatableKeyboardTarget", () => {
     expect(isActivatableKeyboardTarget(document.createElement("div"))).toBe(false);
     expect(isActivatableKeyboardTarget(null)).toBe(false);
   });
+});
+
+describe("foreign record ID lookup", () => {
+  it.each(['import-"quoted', "import-\\slash", "[brackets]", "中文-😀", "ordinary"])(
+    "locates %s without CSS parsing",
+    (id) => {
+      const root = document.createElement("div");
+      const unrelated = document.createElement("div");
+      unrelated.dataset.id = "other";
+      const card = document.createElement("div");
+      card.dataset.id = id;
+      root.append(unrelated, card);
+      expect(findItemElement(id, root)).toBe(card);
+      expect(findItemElement("missing", root)).toBeNull();
+    },
+  );
 });

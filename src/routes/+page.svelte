@@ -93,7 +93,7 @@
   import { createItemStoreView } from "$lib/utils/store/item-store-view.svelte";
   import { createItemMutations } from "$lib/utils/store/item-mutations";
   import { applyItemsChangedEvent, sortRecentHistory } from "$lib/utils/store/item-changes";
-  import { isEditableKeyboardTarget } from "$lib/utils/keyboard/keyboard";
+  import { isEditableKeyboardTarget, findItemElement } from "$lib/utils/keyboard/keyboard";
   import {
     SEARCH_SUGGESTION_LIMIT,
     loadSearchHistory as loadStoredSearchHistory,
@@ -1626,7 +1626,7 @@
     pendingDetail = null;
     itemStore.current = setDetailItem(itemStore.current, null);
     void tick().then(() => {
-      const el = document.querySelector(`[data-id="${selectedId}"]`);
+      const el = findItemElement(selectedId);
       if (el instanceof HTMLElement) {
         el.focus();
       }
@@ -1961,7 +1961,7 @@
           : filteredItems.length - 1
         : Math.min(filteredItems.length - 1, Math.max(0, selectedIndex + offset));
     selectedId = filteredItems[next].id;
-    const el = document.querySelector(`[data-id="${selectedId}"]`);
+    const el = findItemElement(selectedId);
     if (el instanceof HTMLElement) {
       el.scrollIntoView({ block: "nearest" });
       el.focus();
@@ -1985,7 +1985,7 @@
     scrollTop = Math.max(0, Math.min(target, Math.max(0, virtualList.totalHeight - viewport)));
     historyListEl.scrollTop = scrollTop;
     void tick().then(() => {
-      const rendered = document.querySelector(`[data-id="${selectedId}"]`);
+      const rendered = findItemElement(selectedId);
       if (rendered instanceof HTMLElement) rendered.focus();
     });
   }

@@ -92,3 +92,12 @@ export function shortcutMatchesEvent(canonical: string, event: KeyboardEvent): b
 
   return normalizeKeyLabel(event.key) === normalizeKeyLabel(keys[0]);
 }
+
+/** Match stored IDs as data, never interpolate foreign IDs into CSS syntax.
+ * Only rendered cards are visited, keeping virtual-list lookup bounded. */
+export function findItemElement(id: string, root: ParentNode = document): HTMLElement | null {
+  for (const element of root.querySelectorAll<HTMLElement>("[data-id]")) {
+    if (element.getAttribute("data-id") === id) return element;
+  }
+  return null;
+}

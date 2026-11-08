@@ -16,6 +16,17 @@ const bridge = vi.hoisted(() => ({
   keyboard: vi.fn<() => Promise<KeyboardConfig | null>>(),
 }));
 
+vi.mock("$lib/data/demo-items", async (original) => {
+  const source = await original<typeof import("$lib/data/demo-items")>();
+  return {
+    ...source,
+    demoClipboardItems: source.demoClipboardItems.map((item, index) => ({
+      ...item,
+      id: index === 0 ? 'import-"quoted' : index === 1 ? "import-\\slash" : item.id,
+    })),
+  };
+});
+
 vi.mock("@tauri-apps/api/event", () => ({
   listen: vi.fn(async (name: string, callback: (event: { payload: unknown }) => void) => {
     bridge.listeners.set(name, callback);
@@ -120,4 +131,29 @@ describe("main window keyboard config sync", () => {
     app = undefined;
     expect(bridge.listeners.has("keyboard-config-changed")).toBe(false);
   });
+});
+
+it("moves and focuses the real route across IDs containing CSS delimiters", async () => {
+  await open();
+  const cards = [...target.querySelectorAll<HTMLElement>("[data-id]")];
+  expect(cards.length).toBeGreaterThan(1);
+  const first = cards[0];
+  const second = cards[1];
+  first.scrollIntoView = vi.fn();
+  second.scrollIntoView = vi.fn();
+  first
+    .querySelector<HTMLElement>(".card-select")!
+    .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  flushSync();
+  window.dispatchEvent(
+    new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }),
+  );
+  await settle();
+  expect(second.scrollIntoView).toHaveBeenCalledWith({ block: "nearest" });
+  expect(document.activeElement).toBe(second);
+  window.dispatchEvent(
+    new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true, cancelable: true }),
+  );
+  await settle();
+  expect(document.activeElement).toBe(first);
 });
