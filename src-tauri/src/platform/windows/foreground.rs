@@ -8,6 +8,7 @@ const QUERY_INITIAL_CAPACITY: usize = 520;
 const QUERY_MAX_CAPACITY: usize = 32 * 1024;
 const ERROR_INSUFFICIENT_BUFFER: i32 = 122;
 
+#[cfg(target_os = "windows")]
 fn query_process_image_path_with(
     initial_capacity: usize,
     mut query: impl FnMut(&mut [u16], &mut u32) -> Result<(), i32>,
@@ -429,7 +430,7 @@ pub fn extract_app_icon(
     None
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "windows"))]
 mod tests {
     use super::*;
 
