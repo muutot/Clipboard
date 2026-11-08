@@ -346,10 +346,19 @@ fn read_clipboard_output(
     command: &mut std::process::Command,
     program: &str,
 ) -> Result<String, String> {
-    use crate::platform::bounded_command::BoundedCommandExt;
     // Match the native text-read ceiling and bound selection-owner/helper stalls.
+    read_clipboard_output_with_limit(command, program, 64 * 1024 * 1024)
+}
+
+#[cfg(any(target_os = "macos", target_os = "linux", test))]
+fn read_clipboard_output_with_limit(
+    command: &mut std::process::Command,
+    program: &str,
+    max_bytes: usize,
+) -> Result<String, String> {
+    use crate::platform::bounded_command::BoundedCommandExt;
     let output = command
-        .bounded_output(64 * 1024 * 1024)
+        .bounded_output(max_bytes)
         .map_err(|error| format!("{program}: {error}"))?;
     if !output.status.success() {
         return Err(format!(
@@ -440,12 +449,12 @@ mod tests {
 
     #[test]
     fn cli_reader_rejects_output_above_the_native_text_ceiling() {
+        // Exercise the exceeds-limit branch with a small payload: streaming the
+        // full 64 MiB ceiling must finish inside the shared 600 ms helper
+        // deadline, which is a throughput assumption slower runners violate.
         let mut command = reader_fixture("large");
-        command.env(
-            "CLIPBOARD_HELPER_OUTPUT_BYTES",
-            (64 * 1024 * 1024 + 1).to_string(),
-        );
-        let error = match read_clipboard_output(&mut command, "reader fixture") {
+        command.env("CLIPBOARD_HELPER_OUTPUT_BYTES", (4096 + 1).to_string());
+        let error = match read_clipboard_output_with_limit(&mut command, "reader fixture", 4096) {
             Err(error) => error,
             Ok(text) => panic!("oversized helper returned {} bytes of text", text.len()),
         };
