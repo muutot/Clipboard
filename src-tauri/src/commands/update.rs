@@ -171,27 +171,24 @@ pub async fn get_release(
     })
 }
 
-fn parse_version(version: &str) -> Option<(u64, u64, u64)> {
-    let cleaned = version.trim().trim_start_matches('v');
-    // Ignore pre-release/build metadata before parsing: "1.2.3-beta" must
-    // compare as 1.2.3, not collapse to 1.2.0.
-    let core = cleaned.split(['-', '+']).next().unwrap_or(cleaned);
-    let mut parts = core.split('.');
-    let major = parts.next()?.parse().ok()?;
-    let minor = match parts.next() {
-        Some(part) => part.parse().ok()?,
-        None => 0,
+fn parse_version(version: &str) -> Option<semver::Version> {
+    let trimmed = version.trim();
+    let cleaned = trimmed.strip_prefix('v').unwrap_or(trimmed);
+    // Preserve legacy abbreviated numeric cores without discarding suffixes.
+    let suffix_start = cleaned.find(['-', '+']).unwrap_or(cleaned.len());
+    let (core, suffix) = cleaned.split_at(suffix_start);
+    let normalized = match core.split('.').count() {
+        1 => format!("{core}.0.0{suffix}"),
+        2 => format!("{core}.0{suffix}"),
+        3 => cleaned.to_owned(),
+        _ => return None,
     };
-    let patch = match parts.next() {
-        Some(part) => part.parse().ok()?,
-        None => 0,
-    };
-    Some((major, minor, patch))
+    semver::Version::parse(&normalized).ok()
 }
 
 fn is_newer(remote: &str, current: &str) -> bool {
     match (parse_version(remote), parse_version(current)) {
-        (Some(remote), Some(current)) => remote > current,
+        (Some(remote), Some(current)) => remote.cmp_precedence(&current).is_gt(),
         _ => false,
     }
 }
@@ -371,11 +368,14 @@ mod tests {
 
     #[test]
     fn parse_version_handles_prefix_and_missing_parts() {
-        assert_eq!(parse_version("1.2.3"), Some((1, 2, 3)));
-        assert_eq!(parse_version("v1.2.3"), Some((1, 2, 3)));
-        assert_eq!(parse_version("1.2"), Some((1, 2, 0)));
-        assert_eq!(parse_version("2"), Some((2, 0, 0)));
-        assert_eq!(parse_version("  v1.0.1  "), Some((1, 0, 1)));
+        assert_eq!(parse_version("1.2.3"), Some(semver::Version::new(1, 2, 3)));
+        assert_eq!(parse_version("v1.2.3"), Some(semver::Version::new(1, 2, 3)));
+        assert_eq!(parse_version("1.2"), Some(semver::Version::new(1, 2, 0)));
+        assert_eq!(parse_version("2"), Some(semver::Version::new(2, 0, 0)));
+        assert_eq!(
+            parse_version("  v1.0.1  "),
+            Some(semver::Version::new(1, 0, 1))
+        );
         assert_eq!(parse_version(""), None);
         assert_eq!(parse_version("abc"), None);
         assert_eq!(parse_version("v"), None);
@@ -392,15 +392,51 @@ mod tests {
     }
 
     #[test]
+    fn semver_precedence_preserves_prereleases_and_ignores_build_metadata() {
+        for (remote, current) in [
+            ("v1.8.4-beta.2", "1.8.4-beta.1"),
+            ("1.8.4-beta.10", "1.8.4-beta.2"),
+            ("1.8.4", "1.8.4-beta.2"),
+            ("1.8.5-alpha", "1.8.4"),
+        ] {
+            assert!(is_newer(remote, current), "{remote} > {current}");
+            assert!(!is_newer(current, remote));
+        }
+        assert!(!is_newer("1.8.4+new", "1.8.4+old"));
+        assert!(!is_newer("1.8.4-beta.2", "1.8.4"));
+        for invalid in [
+            "1.2.3.4",
+            "01.2.3",
+            "1.2.3-beta.01",
+            "1.2.3-",
+            "1.2.3+",
+            "vv1.2.3",
+            "1..2",
+        ] {
+            assert!(parse_version(invalid).is_none(), "{invalid}");
+            assert!(!is_newer(invalid, "1.0.0"));
+        }
+    }
+
+    #[test]
     fn parse_version_rejects_unparsable_components() {
         assert_eq!(parse_version("1.2.x"), None);
         assert_eq!(parse_version("1.x.0"), None);
-        assert_eq!(parse_version("1.2.3-beta"), Some((1, 2, 3)));
-        assert_eq!(parse_version("1.2.3+build"), Some((1, 2, 3)));
+        assert_eq!(
+            parse_version("1.2.3-beta"),
+            Some(semver::Version::parse("1.2.3-beta").unwrap())
+        );
+        assert_eq!(
+            parse_version("1.2.3+build"),
+            Some(semver::Version::parse("1.2.3+build").unwrap())
+        );
     }
 
     #[test]
     fn tag_leading_v_is_stripped() {
-        assert_eq!(parse_version("v2.0.0-rc.1"), Some((2, 0, 0)));
+        assert_eq!(
+            parse_version("v2.0.0-rc.1"),
+            Some(semver::Version::parse("2.0.0-rc.1").unwrap())
+        );
     }
 }
