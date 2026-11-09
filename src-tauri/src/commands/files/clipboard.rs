@@ -148,19 +148,29 @@ pub(super) fn save_clipboard_item_file_blocking(
 /// Rejects with a tagged [`ClipboardFilesCopyError`] so the caller can tell a
 /// vanished file from a busy clipboard.
 #[tauri::command]
-pub fn copy_clipboard_item_files(
-    database: tauri::State<'_, Database>,
-    paths: tauri::State<'_, StoragePaths>,
-    self_trigger: tauri::State<'_, SelfTriggerState>,
+pub async fn copy_clipboard_item_files(
+    app: tauri::AppHandle,
     id: String,
 ) -> Result<(), ClipboardFilesCopyError> {
-    let item = database
-        .get_item(&id)
-        .map_err(|error| ClipboardFilesCopyError::Failed(error.to_string()))?
-        .ok_or_else(|| ClipboardFilesCopyError::Failed("clipboard item not found".to_owned()))?;
-    crate::item_operations::CopyContext {
-        paths: Some(paths.inner().clone()),
-        self_trigger: Some(self_trigger.0.clone()),
-    }
-    .write(&database, &item)
+    use tauri::Manager;
+    tauri::async_runtime::spawn_blocking(move || {
+        let database = app.state::<Database>();
+        let paths = app.state::<StoragePaths>();
+        let self_trigger = app.state::<SelfTriggerState>();
+        let item = database
+            .get_item(&id)
+            .map_err(|error| ClipboardFilesCopyError::Failed(error.to_string()))?
+            .ok_or_else(|| {
+                ClipboardFilesCopyError::Failed("clipboard item not found".to_owned())
+            })?;
+        crate::item_operations::CopyContext {
+            paths: Some(paths.inner().clone()),
+            self_trigger: Some(self_trigger.0.clone()),
+        }
+        .write(&database, &item)
+    })
+    .await
+    .map_err(|error| {
+        ClipboardFilesCopyError::Failed(format!("file copy task join failed: {error}"))
+    })?
 }

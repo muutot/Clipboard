@@ -74,26 +74,34 @@ pub fn set_item_code_language(
 }
 
 #[tauri::command]
-pub fn copy_clipboard_item(
+pub async fn copy_clipboard_item(
     app: AppHandle,
-    database: tauri::State<'_, Database>,
-    paths: tauri::State<'_, StoragePaths>,
-    self_trigger: tauri::State<'_, crate::state::SelfTriggerState>,
-    search_cache: tauri::State<'_, SearchResultCache>,
     id: String,
 ) -> Result<bool, crate::commands::clipboard::types::ClipboardFilesCopyError> {
-    let context = crate::item_operations::CopyContext {
-        paths: Some(paths.inner().clone()),
-        self_trigger: Some(self_trigger.0.clone()),
-    };
-    let (_, updated) = crate::item_operations::copy_item_with(&database, &id, |item| {
-        context.write(&database, item)
-    })?;
-    if updated {
-        search_cache.clear();
-        broadcast_item_usage(&app, &database, [id]);
-    }
-    Ok(updated)
+    tauri::async_runtime::spawn_blocking(move || {
+        let database = app.state::<Database>();
+        let paths = app.state::<StoragePaths>();
+        let self_trigger = app.state::<crate::state::SelfTriggerState>();
+        let search_cache = app.state::<SearchResultCache>();
+        let context = crate::item_operations::CopyContext {
+            paths: Some(paths.inner().clone()),
+            self_trigger: Some(self_trigger.0.clone()),
+        };
+        let (_, updated) = crate::item_operations::copy_item_with(&database, &id, |item| {
+            context.write(&database, item)
+        })?;
+        if updated {
+            search_cache.clear();
+            broadcast_item_usage(&app, &database, [id]);
+        }
+        Ok(updated)
+    })
+    .await
+    .map_err(|error| {
+        crate::commands::clipboard::types::ClipboardFilesCopyError::Failed(format!(
+            "copy task join failed: {error}"
+        ))
+    })?
 }
 
 #[tauri::command]

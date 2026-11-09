@@ -214,14 +214,20 @@ File `originalPath` metadata is device-local, like derived previews. Outgoing
 preparation and both incoming resource paths remove it recursively, including
 older peers' metadata; the portable `files[].name` stays available. Remote
 metadata edits with unchanged canonical references preserve the receiver's own
-original path alongside its managed paths. Copy resolution also checks legacy
-stored originals and inherited names against the actual managed body using
-bounded 64 KiB buffers; existence or equal size alone is insufficient. Missing,
-unreadable or different bodies fall back to the managed path, and original-only
-entries cannot authorize a foreign file/directory. Same-path local pass-through
-captures (including directories) remain usable. This adds comparison I/O when
-reusing a separate original name; an edited original uses the captured body
-instead. These checks do not freeze a file against later external changes.
+original path alongside its managed paths. Copy resolution checks originals against the captured snapshot. A valid per-file
+SHA-256 tied to the canonical content-addressed filename inside a managed root
+hashes only the original (64 KiB buffer, opened-handle length plus one EOF byte);
+missing/invalid hashes or renamed/nonmatching storage names retain bounded byte
+comparison. Name inheritance uses the requesting record's digest, not the donor's.
+Same-path local pass-through captures (including directories) remain usable.
+The fast path reads managed metadata but not managed bytes: it assumes the body
+published by capture/materialization remains intact and is not an integrity scan.
+FileStore exact-byte reuse/repair and sync download verification remain unchanged.
+Errors or mismatches fall back to storage; paths are not frozen against later edits.
+`copy_clipboard_item` and `copy_clipboard_item_files` are async commands with
+record lookup, resolution, OS writes and usage/events on `spawn_blocking`; invoke
+payloads and tagged results are unchanged. CLI/API retain their synchronous caller
+threads. Native clipboard timing remains a separate verification gate.
 Real SQLite sync/materialization/copy-resolution UTs cover receiver path
 collisions and preservation of a source's own name after a remote favorite edit.
 No wire field order, schema or IPC signature changes; native clipboard/S3 gates

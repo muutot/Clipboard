@@ -165,16 +165,26 @@ pub(crate) fn resolve_clipboard_file_paths(
                     // donates its recorded original name.
                     if let (Some(original), Some(storage)) = (&original, &storage) {
                         let stored = resolve_stored_path(storage, paths, item.kind);
-                        if original_matches_stored(std::path::Path::new(original), &stored) {
+                        let digest = captured_storage_digest(&item.metadata_json, storage, paths);
+                        if original_matches_stored(
+                            std::path::Path::new(original),
+                            &stored,
+                            digest.as_deref(),
+                        ) {
                             candidates.push(original.clone());
                             continue;
                         }
                     }
                     if let Some(storage) = storage {
                         if let Some(database) = database {
-                            if let Some(inherited) =
-                                latest_copied_original_path(database, &storage, &item.id, paths)
-                            {
+                            if let Some(inherited) = latest_copied_original_path(
+                                database,
+                                &storage,
+                                &item.id,
+                                paths,
+                                captured_storage_digest(&item.metadata_json, &storage, paths)
+                                    .as_deref(),
+                            ) {
                                 candidates.push(inherited.to_string_lossy().to_string());
                                 continue;
                             }
@@ -232,11 +242,44 @@ fn resolve_stored_path(
 /// Existing records can contain a foreign originalPath from older sync clients.
 /// Existence alone cannot authorize using it instead of the captured body.
 /// Pass-through captures (including directories) still refer to one path;
-/// separate originals must be regular files with identical bytes. Errors fall
-/// back to the stored body, and comparisons use constant-size buffers.
-fn original_matches_stored(original: &std::path::Path, stored: &std::path::Path) -> bool {
+/// separate originals must be regular files matching the recorded snapshot.
+/// Valid managed SHA-256 identities hash only the original; legacy entries
+/// compare both bodies. Errors fall back to storage; memory and read lengths are bounded.
+fn original_matches_stored(
+    original: &std::path::Path,
+    stored: &std::path::Path,
+    digest: Option<&str>,
+) -> bool {
     if original == stored {
         return is_copyable_path(original, ClipboardKind::File);
+    }
+    if let Some(digest) = digest {
+        let hash_original = || -> std::io::Result<bool> {
+            use sha2::{Digest, Sha256};
+            use std::io::Read;
+            let mut original = std::fs::File::open(original)?;
+            let original_metadata = original.metadata()?;
+            let stored_metadata = stored.metadata()?;
+            if !original_metadata.is_file()
+                || !stored_metadata.is_file()
+                || original_metadata.len() != stored_metadata.len()
+            {
+                return Ok(false);
+            }
+            let mut remaining = original_metadata.len();
+            let mut buffer = [0u8; 64 * 1024];
+            let mut hash = Sha256::new();
+            while remaining > 0 {
+                let amount = remaining.min(buffer.len() as u64) as usize;
+                original.read_exact(&mut buffer[..amount])?;
+                hash.update(&buffer[..amount]);
+                remaining -= amount as u64;
+            }
+            let mut tail = [0u8; 1];
+            Ok(original.read(&mut tail)? == 0
+                && hex::encode(hash.finalize()).eq_ignore_ascii_case(digest))
+        };
+        return hash_original().unwrap_or(false);
     }
     let compare = || -> std::io::Result<bool> {
         use std::io::Read;
@@ -284,6 +327,7 @@ fn latest_copied_original_path(
     storage: &str,
     exclude_id: &str,
     paths: &StoragePaths,
+    digest: Option<&str>,
 ) -> Option<std::path::PathBuf> {
     let record = database
         .latest_file_record_referencing_storage(storage, exclude_id)
@@ -302,7 +346,44 @@ fn latest_copied_original_path(
         )?;
     let path = std::path::PathBuf::from(&original);
     let stored = resolve_stored_path(storage, paths, ClipboardKind::File);
-    (path.is_file() && original_matches_stored(&path, &stored)).then_some(path)
+    (path.is_file() && original_matches_stored(&path, &stored, digest)).then_some(path)
+}
+
+/// The fast path uses only a recorded SHA-256 tied to a content-addressed
+/// regular file inside managed storage. Legacy/renamed/imported paths retain
+/// byte comparison. The name and metadata identify the published snapshot;
+/// this is not a fresh integrity check of the managed body.
+fn captured_storage_digest(
+    metadata: &Option<String>,
+    storage: &str,
+    paths: &StoragePaths,
+) -> Option<String> {
+    let resolved = resolve_stored_path(storage, paths, ClipboardKind::File);
+    let canonical = resolved.canonicalize().ok()?;
+    if !canonical.is_file()
+        || ![&paths.files, &paths.images].iter().any(|root| {
+            root.canonicalize()
+                .is_ok_and(|root| canonical.starts_with(root))
+        })
+    {
+        return None;
+    }
+    let json: serde_json::Value = serde_json::from_str(metadata.as_deref()?).ok()?;
+    let files = json.get("files")?.as_array()?;
+    let entry = files.iter().find(|entry| {
+        entry
+            .get("storagePath")
+            .or_else(|| entry.get("path"))
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(|value| value.trim() == storage)
+    })?;
+    let digest = entry.get("contentHash")?.as_str()?;
+    if digest.len() != 64 || !digest.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return None;
+    }
+    let stem = canonical.file_stem()?.to_str()?;
+    stem.eq_ignore_ascii_case(digest)
+        .then(|| digest.to_ascii_lowercase())
 }
 
 /// Reads the `(storagePath, originalPath)` pair (legacy `path` for storage) of
@@ -419,6 +500,80 @@ mod tests {
             "test",
         )
     }
+    #[test]
+    fn captured_digest_checks_original_changes_and_legacy_fallback() {
+        let root = std::env::temp_dir().join(format!("copy-sha-{}", uuid::Uuid::new_v4()));
+        let paths = StoragePaths::initialize(root.join("managed")).unwrap();
+        let original = root.join("original.txt");
+        std::fs::write(&original, b"captured").unwrap();
+        let inputs = vec![original.to_string_lossy().into_owned()];
+        let refs =
+            crate::commands::capture::store_captured_file_references(&inputs, &paths.files, 1024);
+        let mut row = record();
+        row.kind = ClipboardKind::File;
+        row.resource_path = Some(refs[0].storage_path.clone());
+        row.metadata_json = Some(crate::commands::capture::captured_file_metadata(&refs));
+        let stored = std::path::PathBuf::from(&refs[0].storage_path);
+        assert!(
+            captured_storage_digest(&row.metadata_json, &refs[0].storage_path, &paths).is_some()
+        );
+        assert_eq!(
+            resolve_clipboard_file_paths(&row, &paths, None).unwrap(),
+            vec![original.clone()]
+        );
+        // Equal size must not hide changed bytes.
+        std::fs::write(&original, b"modified").unwrap();
+        assert_eq!(
+            resolve_clipboard_file_paths(&row, &paths, None).unwrap(),
+            vec![stored.clone()]
+        );
+        std::fs::write(&original, b"captured").unwrap();
+        let mut legacy: serde_json::Value =
+            serde_json::from_str(row.metadata_json.as_deref().unwrap()).unwrap();
+        legacy["files"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("contentHash");
+        row.metadata_json = Some(legacy.to_string());
+        assert_eq!(
+            resolve_clipboard_file_paths(&row, &paths, None).unwrap(),
+            vec![original.clone()]
+        );
+        std::fs::write(&original, b"modified").unwrap();
+        assert_eq!(
+            resolve_clipboard_file_paths(&row, &paths, None).unwrap(),
+            vec![stored]
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn captured_digest_does_not_open_the_stored_body_for_reading() {
+        use std::os::windows::fs::OpenOptionsExt;
+        use windows_sys::Win32::Storage::FileSystem::{FILE_SHARE_DELETE, FILE_SHARE_WRITE};
+        let root = std::env::temp_dir().join(format!("copy-sha-lock-{}", uuid::Uuid::new_v4()));
+        let paths = StoragePaths::initialize(root.join("managed")).unwrap();
+        let original = root.join("original.txt");
+        std::fs::write(&original, b"captured").unwrap();
+        let inputs = vec![original.to_string_lossy().into_owned()];
+        let refs =
+            crate::commands::capture::store_captured_file_references(&inputs, &paths.files, 1024);
+        let metadata = Some(crate::commands::capture::captured_file_metadata(&refs));
+        let stored = std::path::PathBuf::from(&refs[0].storage_path);
+        let digest = captured_storage_digest(&metadata, &refs[0].storage_path, &paths).unwrap();
+        let locked = std::fs::OpenOptions::new()
+            .read(true)
+            .share_mode(FILE_SHARE_WRITE | FILE_SHARE_DELETE)
+            .open(&stored)
+            .unwrap();
+        assert!(std::fs::File::open(&stored).is_err());
+        assert!(original_matches_stored(&original, &stored, Some(&digest)));
+        assert!(!original_matches_stored(&original, &stored, None));
+        drop(locked);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
     #[test]
     fn usage_follows_successful_write_and_metadata_failure_keeps_copy_successful() {
         let db = Database::open_in_memory().unwrap();
