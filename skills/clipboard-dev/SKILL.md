@@ -76,6 +76,17 @@ or platform verification remain human work.
 | Search pagination or cache behavior                                     | [search-cache-strategy.md](references/search-cache-strategy.md)                                                 |
 | Global hotkeys, window shortcuts, keyboard config, or dispatch          | [hotkey-architecture.md](references/hotkey-architecture.md)                                                     |
 | Reviewing a local/niche UI exception                                    | [niche_ui_style.md](references/niche_ui_style.md); treat it as a review queue, never as an approved pattern     |
+| Agent workflow skills, vendored skill maintenance, or `docs/agents/`    | [project-structure.md](references/project-structure.md) and [AGENTS.md](../../AGENTS.md) "Agent skills"         |
+
+The repository also vendors a curated set of third-party engineering skills under
+`skills/` (`tdd`, `diagnosing-bugs`, `codebase-design`, `code-review`,
+`domain-modeling`, `grilling`, pinned to mattpocock/skills
+`4ae2317ddb22b046e26455e4f9c9b3aaaf62212d`). They are reference material only:
+`AGENTS.md` and this SKILL.md override them. Do not run their upstream slash commands
+or setup wizard, and do not reformat their files — `.prettierignore` excludes those
+directories so upstream copies stay byte-for-byte comparable. When vendoring a new
+one, copy the whole upstream skill folder (including `agents/openai.yaml`) unchanged,
+list it in the `## Agent skills` block of `AGENTS.md`, and record the new upstream SHA.
 
 Also read the focused project document when relevant: `docs/PITFALLS.md`, `docs/SEARCH.md`, `docs/OCR.md`, or `docs/DEFAULTS_AND_PRIVACY.md`.
 

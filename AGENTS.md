@@ -35,3 +35,31 @@ The release flow does **not** build anything locally — building is performed r
 If any diffs appear, apply them (`npm run format:prettier` / `npm run format:rust`), then re-run the gate. Commit all formatting-only changes in a **single** `🎨 style[...]: apply formatting` commit **before** the release commit.
 
 Note: `RELEASE.md` and `CHANGELOG.md` are generated **after** this gate runs. Before committing the release (Pass 2), re-run `npm run format:prettier:check` so the freshly curated `RELEASE.md` is also prettier-clean.
+
+## Agent skills
+
+A small, curated set of [mattpocock/skills](https://github.com/mattpocock/skills) is vendored under
+`skills/`: `tdd`, `diagnosing-bugs`, `codebase-design`, `code-review`, `domain-modeling`, and
+`grilling`. They are **reference documents, not slash commands** — no plugin or skills.sh installer
+is wired into this repo. Read the relevant `skills/<name>/SKILL.md` directly when a task matches its
+description, and follow its linked files.
+
+**This file and `skills/clipboard-dev/SKILL.md` override the vendored skills whenever they
+disagree.** In particular: commits still follow the gitmoji format and one verified minimal unit per
+commit, the documentation currency gate still applies before every commit, and planning evidence
+still comes from `TODO.md` and the routed references. The upstream `implement`, `implement-spec`,
+`triage`, `to-tickets`, and setup wizard are deliberately not vendored.
+
+### Issue tracker
+
+GitHub issues in `muutot/Clipboard` via `gh`; `TODO.md` is the primary planning surface. See
+`docs/agents/issue-tracker.md`.
+
+### Domain docs
+
+No `GLOSSARY.md` or `docs/adr/` exists yet; the maintained equivalents are
+`skills/clipboard-dev/references/` and the live docs under `docs/`. See `docs/agents/domain.md`.
+
+### Triage labels
+
+Not applicable — `triage` is not vendored here.
