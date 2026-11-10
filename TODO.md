@@ -4,8 +4,8 @@
 
 依据：
 
-- [代码审计报告](skills/code-auditor/result/v1.8.4-review/audit-report-Clipboard-2026-11-08.md)：7 项确认问题、2 项待实证风险，以及验证覆盖缺口。
-- [竞品能力对照](skills/code-auditor/result/v1.8.4-review/competitor-review.md)：10 款竞品的官方证据、能力取舍和优先级。
+- [代码审计报告](.agents/skills/code-auditor/result/v1.8.4-review/audit-report-Clipboard-2026-11-08.md)：7 项确认问题、2 项待实证风险，以及验证覆盖缺口。
+- [竞品能力对照](.agents/skills/code-auditor/result/v1.8.4-review/competitor-review.md)：10 款竞品的官方证据、能力取舍和优先级。
 
 报告及探针位于本地忽略目录，不随 Git 分发；下文保留问题、范围与验收条件，便于独立执行。报告结论对应历史快照，开始每个任务前必须核对当前源码与近期提交，避免重复修复。
 

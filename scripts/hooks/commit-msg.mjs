@@ -1,5 +1,5 @@
 // Git commit-msg hook for the Clipboard repository.
-// Enforces the gitmoji contract documented in skills/clipboard-dev/SKILL.md.
+// Enforces the gitmoji contract documented in .agents/skills/clipboard-dev/SKILL.md.
 import { readFileSync } from "node:fs";
 import { validateCommitMessage } from "./lib/commit-message.mjs";
 
@@ -15,7 +15,7 @@ for (const warning of result.warnings) console.warn("  commit-msg warning: " + w
 if (result.errors.length === 0) process.exit(0);
 
 console.error("");
-console.error("commit-msg gate (skills/clipboard-dev/SKILL.md): message rejected");
+console.error("commit-msg gate (.agents/skills/clipboard-dev/SKILL.md): message rejected");
 for (const error of result.errors) console.error("  - " + error);
 console.error("");
 console.error("  format: <gitmoji> <type>[<scope>]: <message>");

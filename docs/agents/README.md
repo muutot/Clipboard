@@ -1,7 +1,7 @@
 # Agent skills configuration
 
 This folder is the per-repo configuration consumed by the vendored
-[mattpocock/skills](https://github.com/mattpocock/skills) copies under `skills/`.
+[mattpocock/skills](https://github.com/mattpocock/skills) copies under `.agents/skills/`.
 It is the Clipboard equivalent of running `/setup-matt-pocock-skills`: the files
 were written by hand so the upstream setup wizard does not need to run here.
 
@@ -9,5 +9,5 @@ were written by hand so the upstream setup wizard does not need to run here.
 - [`domain.md`](./domain.md): where glossary and ADR-style decisions live, and
   which Clipboard documents act as the coding standards.
 
-The vendored skills are reference material. `AGENTS.md` and
-`skills/clipboard-dev/SKILL.md` override them whenever they disagree.
+The vendored skills are loadable through the session skill catalog. `AGENTS.md`
+and `.agents/skills/clipboard-dev/SKILL.md` override them whenever they disagree.

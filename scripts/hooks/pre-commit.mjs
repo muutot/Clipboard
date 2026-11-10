@@ -1,4 +1,4 @@
-// Clipboard pre-commit gate. Rules: skills/clipboard-dev/SKILL.md.
+// Clipboard pre-commit gate. Rules: .agents/skills/clipboard-dev/SKILL.md.
 // Installed through core.hooksPath by scripts/install-git-hooks.mjs.
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -135,7 +135,7 @@ if (bumped.length === 0) {
         RELEASE_ALLOWED.join(", ") +
         "\n  also staged: " +
         stray.join(", ") +
-        "\n  commit the other changes first (see skills/version-release/SKILL.md)",
+        "\n  commit the other changes first (see .agents/skills/version-release/SKILL.md)",
     );
   }
   notes.push(
@@ -153,7 +153,7 @@ if (gate.status === "not-applicable") {
 } else if (gate.status === "reminder") {
   notes.push(
     "documentation currency: " +
-      gate.refs.map((ref) => "skills/clipboard-dev/references/" + ref).join(", ") +
+      gate.refs.map((ref) => ".agents/skills/clipboard-dev/references/" + ref).join(", ") +
       " may need an update for the staged source files",
   );
 } else if (process.env.CLIPBOARD_DOC_GATE === "none") {
@@ -161,7 +161,7 @@ if (gate.status === "not-applicable") {
 } else {
   results.push(["fail", "documentation currency"]);
   failures.push(
-    "new or removed source files need a skills/clipboard-dev update:\n  " +
+    "new or removed source files need a .agents/skills/clipboard-dev update:\n  " +
       gate.structural.join("\n  ") +
       "\n  expected reference: " +
       gate.refs.join(", ") +
@@ -170,7 +170,7 @@ if (gate.status === "not-applicable") {
 }
 
 console.log("");
-console.log("pre-commit gate (skills/clipboard-dev/SKILL.md)");
+console.log("pre-commit gate (.agents/skills/clipboard-dev/SKILL.md)");
 for (const [state, label] of results) console.log("  " + state.padEnd(4) + " " + label);
 for (const note of notes) console.log("  note " + note);
 console.log("");

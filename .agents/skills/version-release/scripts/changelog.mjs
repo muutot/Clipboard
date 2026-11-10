@@ -3,10 +3,10 @@
  * changelog.mjs — Generate CHANGELOG.md from gitmoji commit history.
  *
  * Usage:
- *   node skills/version-release/scripts/changelog.mjs                     # generate for latest version
- *   node skills/version-release/scripts/changelog.mjs --from v0.1.0       # from a specific tag
- *   node skills/version-release/scripts/changelog.mjs --all               # full history (first release)
- *   node skills/version-release/scripts/changelog.mjs --preview           # preview without writing
+ *   node .agents/skills/version-release/scripts/changelog.mjs                     # generate for latest version
+ *   node .agents/skills/version-release/scripts/changelog.mjs --from v0.1.0       # from a specific tag
+ *   node .agents/skills/version-release/scripts/changelog.mjs --all               # full history (first release)
+ *   node .agents/skills/version-release/scripts/changelog.mjs --preview           # preview without writing
  */
 
 import { execSync } from "node:child_process";

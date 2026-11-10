@@ -36,8 +36,8 @@ Read it with `gh issue view` as above.
 
 - Most planning work in this repo is tracked in `TODO.md`, not in GitHub issues.
   When a skill asks for a "spec" or "ticket", prefer the `TODO.md` item and the
-  evidence in `skills/code-auditor/result/` unless the user names a GitHub issue.
-- Commits must follow the gitmoji contract in `skills/clipboard-dev/SKILL.md`
+  evidence in `.agents/skills/code-auditor/result/` unless the user names a GitHub issue.
+- Commits must follow the gitmoji contract in `.agents/skills/clipboard-dev/SKILL.md`
   (English only, one verified minimal unit per commit), not the generic commit
   instructions in upstream `implement` / `implement-spec`. Those two skills are
   not vendored here.

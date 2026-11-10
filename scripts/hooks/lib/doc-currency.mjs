@@ -1,8 +1,8 @@
-// Documentation currency gate helpers (skills/clipboard-dev/SKILL.md).
+// Documentation currency gate helpers (.agents/skills/clipboard-dev/SKILL.md).
 // Maps staged source paths to the reference files that probably need an update.
 // The mapping is a heuristic: it names candidates, it does not decide the gate.
 
-const REFERENCE_PREFIX = "skills/clipboard-dev/";
+const REFERENCE_PREFIX = ".agents/skills/clipboard-dev/";
 
 // Every matching rule contributes, so a narrow rule can add to a broad one.
 const ROUTES = [
@@ -23,7 +23,7 @@ const ROUTES = [
 
 const IGNORED_EXTENSIONS = /\.(md|json|lock|toml|txt|snap|svg|png|ico)$/i;
 const TEST_FILE = /\.(test|spec)\.[cm]?[jt]sx?$/i;
-const IGNORED_PREFIXES = ["skills/", "docs/", ".github/", "scripts/", ".githooks/"];
+const IGNORED_PREFIXES = [".agents/skills/", "docs/", ".github/", "scripts/", ".githooks/"];
 
 export function isReferencePath(path) {
   return path.startsWith(REFERENCE_PREFIX);
@@ -52,7 +52,7 @@ export function candidateReferences(paths) {
 /**
  * Classifies the documentation currency gate for one staged change set.
  * - not-applicable: no documented source touched
- * - satisfied: a skills/clipboard-dev path is staged as well
+ * - satisfied: a .agents/skills/clipboard-dev path is staged as well
  * - missing: a source module was added or removed without a reference change
  * - reminder: source edited only; the gate is a judgement call
  */

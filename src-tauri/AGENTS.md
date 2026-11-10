@@ -1,8 +1,8 @@
 # src-tauri/ — Rust backend (Tauri 2)
 
-Read `skills/clipboard-dev/SKILL.md` first. Before editing backend subsystems, read
-`skills/clipboard-dev/references/backend-architecture.md`; contract (command/event/config/schema)
-changes also require `skills/clipboard-dev/references/data-contracts.md`.
+Read `.agents/skills/clipboard-dev/SKILL.md` first. Before editing backend subsystems, read
+`.agents/skills/clipboard-dev/references/backend-architecture.md`; contract (command/event/config/schema)
+changes also require `.agents/skills/clipboard-dev/references/data-contracts.md`.
 
 Hard rules:
 

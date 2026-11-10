@@ -8,7 +8,7 @@ Resolve modes, language, format and scope using the defaults in `SKILL.md`. Ask 
 
 ## Report Template Constraint
 
-All generated audit files belong under `<skill-dir>/result/`, including reports in every format, metadata, remediation plans and evidence attachments. Resolve this directory from the skill location, not the shell working directory. Create it as needed and preserve existing files on name collisions. In Clipboard, use `skills/code-auditor/result/`; do not place audit output in the project root. `stdout` creates no files. See `SKILL.md` for explicit destination overrides and local-output handling.
+All generated audit files belong under `<skill-dir>/result/`, including reports in every format, metadata, remediation plans and evidence attachments. Resolve this directory from the skill location, not the shell working directory. Create it as needed and preserve existing files on name collisions. In Clipboard, use `.agents/skills/code-auditor/result/`; do not place audit output in the project root. `stdout` creates no files. See `SKILL.md` for explicit destination overrides and local-output handling.
 
 The report MUST follow the skill templates:
 

@@ -185,7 +185,7 @@ cargo test --release --test search_bench -- --ignored --nocapture
 #2 的实现与本报告的建议一致（复用 `sync_until_idle`、改 `lib.rs` 生命周期与 worker 启停、单独提交），
 但做成了**用户可选**而非默认：`lazy`（默认，搜索命令自己排空）与 `background`（启动时起后台 worker，
 500ms 轮询，搜索命令完全跳过排空）由 `search_index_sync_mode` 选择，切换需重启。两者语义见
-`skills/clipboard-dev/references/search-cache-strategy.md`「Lazy sync on search」。
+`.agents/skills/clipboard-dev/references/search-cache-strategy.md`「Lazy sync on search」。
 
 因此第 3.4 节测得的 227ms 只在 `lazy` 模式下、且确有积压时才会由首次搜索支付；`background` 模式把它移出热路径。
 README 的搜索性能声明也据此改写为「8 万条 P95 < 0.1ms」并附积压代价，不再使用未经实测的 10 万条数字。

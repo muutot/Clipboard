@@ -17,7 +17,7 @@
 
 验证依据：`svelte.config.js`、`vite.config.js`、`src/routes/+layout.ts`，src 下无 `+server`、`+page.server`、`+layout.server`。没有因这些公告修改 CSP、禁用现有功能或强制跨主版本更新。未来新增服务器部署、enhance、cookies 或外部构建配置后，上述不可达结论不再自动成立。
 
-本地原始扫描记录保存在忽略目录 skills/code-auditor/result/v1.8.4-review/npm-audit-current.json 与 npm-audit-production.json。此文保留可分发的判断依据，不依赖日志长期存在。
+本地原始扫描记录保存在忽略目录 .agents/skills/code-auditor/result/v1.8.4-review/npm-audit-current.json 与 npm-audit-production.json。此文保留可分发的判断依据，不依赖日志长期存在。
 
 ## Rust
 
@@ -39,4 +39,4 @@ zstd 0.13.3 与 zstd-safe 7.3.0 分别有 RUSTSEC-2026-0391、0398、0403 以及
 
 glib 是 Linux 原生界面依赖，当前 Windows 环境不能证明其原生行为。尝试离线解析 Linux 目标依赖树因本机缺少 openssl 0.10.82 缓存失败；不将该失败解释为编译错误或平台验证通过。没有新增公告忽略项或强制跨主版本升级。
 
-本地扫描结果保存于 `skills/code-auditor/result/v1.8.4-review/cargo-audit-final.json`（忽略目录）。
+本地扫描结果保存于 `.agents/skills/code-auditor/result/v1.8.4-review/cargo-audit-final.json`（忽略目录）。

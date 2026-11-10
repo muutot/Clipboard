@@ -47,10 +47,10 @@ what would be deleted and changes nothing.
 
 ```bash
 # 1) See what would be deleted (safe, no changes):
-python skills/delete-remote-release/scripts/delete_remote_release.py --tag v1.4.0
+python .agents/skills/delete-remote-release/scripts/delete_remote_release.py --tag v1.4.0
 
 # 2) Actually delete (IRREVERSIBLE):
-python skills/delete-remote-release/scripts/delete_remote_release.py --tag v1.4.0 --yes
+python .agents/skills/delete-remote-release/scripts/delete_remote_release.py --tag v1.4.0 --yes
 ```
 
 Parameters:

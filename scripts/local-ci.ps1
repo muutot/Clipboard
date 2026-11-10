@@ -1,6 +1,6 @@
 # Local CI harness for Clipboard Desktop — mirrors the GitHub Actions check chain locally
 # so you can catch breakage before pushing. This is a GENERAL verification tool and is
-# intentionally separate from the version-release flow (skills/version-release/scripts/release.mjs),
+# intentionally separate from the version-release flow (.agents/skills/version-release/scripts/release.mjs),
 # which must NOT build anything locally (format + check + lint only, push done by hand).
 #
 # In the WorkBuddy sandbox the safe-delete shim blocks the `.svelte-kit` cleanup performed by

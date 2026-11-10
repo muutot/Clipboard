@@ -16,9 +16,9 @@
  *   (preserving other commits' content and timestamps), then runs normal flow.
  *
  * Usage:
- *   node skills/version-release/scripts/release.mjs <version|patch|minor|major>
- *   node skills/version-release/scripts/release.mjs --regenerate <version>
- *   node skills/version-release/scripts/release.mjs --dry-run <version>
+ *   node .agents/skills/version-release/scripts/release.mjs <version|patch|minor|major>
+ *   node .agents/skills/version-release/scripts/release.mjs --regenerate <version>
+ *   node .agents/skills/version-release/scripts/release.mjs --dry-run <version>
  */
 
 import { execSync } from "node:child_process";
@@ -67,7 +67,7 @@ const versionArg = args.filter((a) => !a.startsWith("--"))[0];
 
 if (!versionArg) {
   console.log(
-    `Usage: node skills/version-release/scripts/release.mjs [--regenerate] [--dry-run] <version|patch|minor|major>`,
+    `Usage: node .agents/skills/version-release/scripts/release.mjs [--regenerate] [--dry-run] <version|patch|minor|major>`,
   );
   console.log(`Current version: ${getVersion()}`);
   exit(1);
@@ -305,7 +305,7 @@ if (unexpectedChanges.length > 0) {
 // Step 1: Bump version
 console.log(`\n[1/6] Bumping version (${BRANCH})...`);
 if (currentVersion !== versionArg) {
-  run(`node skills/version-release/scripts/version.mjs ${versionArg}`);
+  run(`node .agents/skills/version-release/scripts/version.mjs ${versionArg}`);
   currentVersion = getVersion();
   tagVersion = `v${currentVersion}`;
   run("cargo generate-lockfile --manifest-path src-tauri/Cargo.toml", { silent: true });
@@ -355,7 +355,7 @@ console.log("  ✓ Tauri crates and npm packages on the same minor");
 
 // Step 2: Generate changelog
 console.log("\n[2/6] Generating changelog...");
-run("node skills/version-release/scripts/changelog.mjs");
+run("node .agents/skills/version-release/scripts/changelog.mjs");
 
 // Step 3: RELEASE.md check
 console.log("\n[3/6] Checking RELEASE.md...");

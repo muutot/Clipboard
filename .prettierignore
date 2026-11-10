@@ -8,12 +8,12 @@ TODO.md
 .openidea/
 .trae/
 # Vendored third-party skills: keep upstream markdown byte-for-byte
-skills/tdd
-skills/diagnosing-bugs
-skills/codebase-design
-skills/code-review
-skills/domain-modeling
-skills/grilling
-skills/code-auditor/result
+.agents/skills/tdd
+.agents/skills/diagnosing-bugs
+.agents/skills/codebase-design
+.agents/skills/code-review
+.agents/skills/domain-modeling
+.agents/skills/grilling
+.agents/skills/code-auditor/result
 .worktree-experience
 .svelte-kit

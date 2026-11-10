@@ -1,5 +1,5 @@
 // Pure validation of the Clipboard gitmoji commit-message contract.
-// Rules live in skills/clipboard-dev/SKILL.md (Commit message format).
+// Rules live in .agents/skills/clipboard-dev/SKILL.md (Commit message format).
 // No git or filesystem access here so the rules stay unit-testable.
 
 export const TYPES = ["feat", "fix", "docs", "refactor", "style", "perf", "test", "chore"];

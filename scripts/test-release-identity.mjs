@@ -6,7 +6,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
-import { resolveBranchRefs } from "../skills/version-release/scripts/branch-ref.mjs";
+import { resolveBranchRefs } from "../.agents/skills/version-release/scripts/branch-ref.mjs";
 
 const scripts = dirname(fileURLToPath(import.meta.url));
 function fixture(t) {

@@ -1,21 +1,21 @@
-﻿# Release Process
+# Release Process
 
 ## Quick Reference
 
 ```sh
 # Normal release (bump version, generate changelog, tag)
-node skills/version-release/scripts/release.mjs 0.2.0
+node .agents/skills/version-release/scripts/release.mjs 0.2.0
 
 # Semantic version bump
-node skills/version-release/scripts/release.mjs patch       # 0.1.0 → 0.1.1
-node skills/version-release/scripts/release.mjs minor       # 0.1.0 → 0.2.0
-node skills/version-release/scripts/release.mjs major       # 0.1.0 → 1.0.0
+node .agents/skills/version-release/scripts/release.mjs patch       # 0.1.0 → 0.1.1
+node .agents/skills/version-release/scripts/release.mjs minor       # 0.1.0 → 0.2.0
+node .agents/skills/version-release/scripts/release.mjs major       # 0.1.0 → 1.0.0
 
 # Dry run (preview without committing)
-node skills/version-release/scripts/release.mjs --dry-run 0.2.0
+node .agents/skills/version-release/scripts/release.mjs --dry-run 0.2.0
 
 # Re-generate changelog from current content (re-release same version)
-node skills/version-release/scripts/release.mjs --regenerate 0.1.0
+node .agents/skills/version-release/scripts/release.mjs --regenerate 0.1.0
 ```
 
 ## Prerequisites
@@ -56,9 +56,9 @@ Updates version in four files atomically:
 Can also be run standalone:
 
 ```sh
-node skills/version-release/scripts/version.mjs 0.2.0          # to specific version
-node skills/version-release/scripts/version.mjs patch          # semver bump
-node skills/version-release/scripts/version.mjs --current      # show current version
+node .agents/skills/version-release/scripts/version.mjs 0.2.0          # to specific version
+node .agents/skills/version-release/scripts/version.mjs patch          # semver bump
+node .agents/skills/version-release/scripts/version.mjs --current      # show current version
 ```
 
 ### 4. Changelog Generation
@@ -80,10 +80,10 @@ Generates `CHANGELOG.md` from gitmoji commit messages since the last git tag. Co
 Standalone usage:
 
 ```sh
-node skills/version-release/scripts/changelog.mjs              # since last tag
-node skills/version-release/scripts/changelog.mjs --all        # full history
-node skills/version-release/scripts/changelog.mjs --from v0.1.0  # since specific tag
-node skills/version-release/scripts/changelog.mjs --preview    # preview only
+node .agents/skills/version-release/scripts/changelog.mjs              # since last tag
+node .agents/skills/version-release/scripts/changelog.mjs --all        # full history
+node .agents/skills/version-release/scripts/changelog.mjs --from v0.1.0  # since specific tag
+node .agents/skills/version-release/scripts/changelog.mjs --preview    # preview only
 ```
 
 ### 5. Commit & Tag
@@ -122,7 +122,7 @@ Pushing the tag triggers the CI/CD pipeline (`.github/workflows/release.yml`) wh
 `--regenerate` re-releases the specified version with updated content:
 
 ```sh
-node skills/version-release/scripts/release.mjs --regenerate 0.1.0
+node .agents/skills/version-release/scripts/release.mjs --regenerate 0.1.0
 ```
 
 This is useful when:
@@ -167,15 +167,15 @@ git push origin refs/tags/v<version> --force
 | `src-tauri/tauri.conf.json` | `.version` | JSON string |
 | `src-tauri/Cargo.toml`      | `version`  | TOML string |
 
-All four must stay in sync. The `skills/version-release/scripts/version.mjs` script ensures atomic updates.
+All four must stay in sync. The `.agents/skills/version-release/scripts/version.mjs` script ensures atomic updates.
 
 ### Pre-release Versions
 
 Semver pre-release tags are supported:
 
 ```sh
-node skills/version-release/scripts/release.mjs 0.2.0-beta.1
-node skills/version-release/scripts/release.mjs 0.2.0-rc.1
+node .agents/skills/version-release/scripts/release.mjs 0.2.0-beta.1
+node .agents/skills/version-release/scripts/release.mjs 0.2.0-rc.1
 ```
 
 All releases start as draft releases in CI/CD; pre-release tags additionally get `prerelease: true` on publish.
@@ -194,6 +194,6 @@ git tag -d v0.2.0
 git push --delete origin v0.2.0
 
 # Revert to previous version
-node skills/version-release/scripts/version.mjs 0.1.0
+node .agents/skills/version-release/scripts/version.mjs 0.1.0
 git commit -m "🐛 fix[release]: rollback to v0.1.0"
 ```

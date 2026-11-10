@@ -30,7 +30,7 @@ Audit real failure risks with source evidence and proportionate verification. Ke
 ## Output and side effects
 
 - `md`, `html`, `json`, `both` (Markdown + HTML), and `stdout` are supported.
-- Store all generated audit files under `<skill-dir>/result/`, resolved from this `SKILL.md` location rather than the current working directory. In Clipboard this is `skills/code-auditor/result/`. Create it when needed; do not write audit files to the project root.
+- Store all generated audit files under `<skill-dir>/result/`, resolved from this `SKILL.md` location rather than the current working directory. In Clipboard this is `.agents/skills/code-auditor/result/`. Create it when needed; do not write audit files to the project root.
 - Use `audit-report-<project>-<YYYY-MM-DD>.<ext>` inside `result/`. Keep related Markdown/HTML/JSON reports, metadata, remediation plans, evidence exports, screenshots and logs together there, optionally in a run-specific subdirectory. A supplied filename also resolves inside `result/`; use another directory only when the user explicitly requests that destination. Preserve existing reports by adding a descriptive suffix on collisions.
 - JSON follows [templates/audit-report.json](templates/audit-report.json), a schema, not a report instance. HTML reuses the template's CSS and reusable section structure, with content escaped and selected dimensions added/removed as needed.
 - Zero findings is valid. Leave risk lists empty and explain coverage; never invent findings to populate a template.
@@ -89,9 +89,9 @@ Use seven score categories from [rubrics/scoring.md](rubrics/scoring.md), distin
 The repository owns this copy; updating it must not overwrite a global installation. Keep prompts, schemas, templates and lint mode coverage aligned. Run:
 
 ```powershell
-python -X utf8 -B -m unittest discover -s skills/code-auditor/tests -v
-python -X utf8 -B skills/code-auditor/scripts/project_inventory.py . --format text --language zh
-python -X utf8 -B skills/code-auditor/scripts/package_skill.py --dry-run
+python -X utf8 -B -m unittest discover -s .agents/skills/code-auditor/tests -v
+python -X utf8 -B .agents/skills/code-auditor/scripts/project_inventory.py . --format text --language zh
+python -X utf8 -B .agents/skills/code-auditor/scripts/package_skill.py --dry-run
 ```
 
 Use the skill-creator validator when available. The Python helpers use only the standard library. See [references/report-format.md](references/report-format.md) for lint coverage and limitations.

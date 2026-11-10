@@ -8,7 +8,7 @@ describe("documentation currency gate", () => {
       "docs/PITFALLS.md",
       "src/lib/utils/search/demo-search.test.ts",
       "src-tauri/Cargo.lock",
-      "skills/clipboard-dev/references/services.md",
+      ".agents/skills/clipboard-dev/references/services.md",
     ];
     for (const path of ignored) expect(isDocumentedSource(path), path).toBe(false);
   });
@@ -37,7 +37,10 @@ describe("documentation currency gate", () => {
 
   it("accepts the gate once the matching reference is staged", () => {
     const gate = evaluateDocGate({
-      stagedPaths: ["src/lib/services/backup.ts", "skills/clipboard-dev/references/services.md"],
+      stagedPaths: [
+        "src/lib/services/backup.ts",
+        ".agents/skills/clipboard-dev/references/services.md",
+      ],
       addedOrRemovedPaths: ["src/lib/services/backup.ts"],
     });
     expect(gate.status).toBe("satisfied");

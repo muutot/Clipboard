@@ -3,9 +3,9 @@
  * version.mjs — Bump version across all config files in one atomic operation.
  *
  * Usage:
- *   node skills/version-release/scripts/version.mjs <new-version>          # bump to specific version
- *   node skills/version-release/scripts/version.mjs patch|minor|major      # semantic bump
- *   node skills/version-release/scripts/version.mjs --current              # print current version
+ *   node .agents/skills/version-release/scripts/version.mjs <new-version>          # bump to specific version
+ *   node .agents/skills/version-release/scripts/version.mjs patch|minor|major      # semantic bump
+ *   node .agents/skills/version-release/scripts/version.mjs --current              # print current version
  */
 
 import { readFileSync, writeFileSync } from "node:fs";
@@ -131,7 +131,7 @@ if (!arg || arg === "--current") {
 
 if (arg === "--help" || arg === "-h") {
   console.log(
-    `Usage: node skills/version-release/scripts/version.mjs <new-version|patch|minor|major|--current>`,
+    `Usage: node .agents/skills/version-release/scripts/version.mjs <new-version|patch|minor|major|--current>`,
   );
   console.log(`Current version: ${getCurrentVersion()}`);
   process.exit(0);

@@ -4,7 +4,7 @@ Read this profile when auditing Clipboard. Paths below are relative to the repos
 
 ## Repository workflow
 
-Read `AGENTS.md`, `skills/clipboard-dev/SKILL.md` and its maintenance workflow before repository changes. Route focused inspection through the development skill's references; do not load all subsystem references for every audit.
+Read `AGENTS.md`, `.agents/skills/clipboard-dev/SKILL.md` and its maintenance workflow before repository changes. Route focused inspection through the development skill's references; do not load all subsystem references for every audit.
 
 - Inspect Git status and preserve unrelated work, including nested worktrees.
 - TODO completion requires direct implementation evidence plus proportionate verification. An audit report alone does not authorize checking roadmap items.
@@ -21,7 +21,7 @@ Read `AGENTS.md`, `skills/clipboard-dev/SKILL.md` and its maintenance workflow b
 | Search, OCR and sync     | `src-tauri/src/search/`, `ocr/`, `sync/`, `src-tauri/crates/clipboard-sync/`: derived-data invalidation, resource bounds, cancellation, writer shutdown, retries and convergence                    |
 | Privacy                  | `src-tauri/src/privacy/`, config and logging paths: local-only behavior, sensitive-source filtering, clipboard/OCR content in logs, credential storage and export boundaries                        |
 | Native platform          | `src-tauri/src/platform/`: capture sequence consistency, self-trigger suppression, hotkeys, paste targeting, FFI lifetimes, platform degradation and CI coverage                                    |
-| Release                  | `.github/workflows/`, lockfiles, installer and `skills/version-release/SKILL.md`: pinned actions, permissions, artifact verification and final-tree checks                                          |
+| Release                  | `.github/workflows/`, lockfiles, installer and `.agents/skills/version-release/SKILL.md`: pinned actions, permissions, artifact verification and final-tree checks                                  |
 
 Documentation is a navigation aid. Re-check a historical finding against current code before reporting it again. OCR models and installed coding-agent skills do not alone establish an application LLM attack surface.
 

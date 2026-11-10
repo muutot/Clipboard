@@ -50,7 +50,7 @@ Blocking checks:
 - `pre-commit` rejects staged whitespace errors and conflict markers, Prettier violations in
   staged files, `cargo fmt` drift when Rust files are staged, a version bump committed together
   with anything outside the release artifact list, and a new or removed source module that
-  arrives without any `skills/clipboard-dev/` change.
+  arrives without any `.agents/skills/clipboard-dev/` change.
 
 Advisory output (printed, never blocking): the references that probably need an update for the
 staged source files, and the pre-release gate commands when a version bump is staged. Set
@@ -76,14 +76,20 @@ or platform verification remain human work.
 | Search pagination or cache behavior                                     | [search-cache-strategy.md](references/search-cache-strategy.md)                                                 |
 | Global hotkeys, window shortcuts, keyboard config, or dispatch          | [hotkey-architecture.md](references/hotkey-architecture.md)                                                     |
 | Reviewing a local/niche UI exception                                    | [niche_ui_style.md](references/niche_ui_style.md); treat it as a review queue, never as an approved pattern     |
-| Agent workflow skills, vendored skill maintenance, or `docs/agents/`    | [project-structure.md](references/project-structure.md) and [AGENTS.md](../../AGENTS.md) "Agent skills"         |
+| Agent workflow skills, vendored skill maintenance, or `docs/agents/`    | [project-structure.md](references/project-structure.md) and [AGENTS.md](../../../AGENTS.md) "Agent skills"      |
 
-The repository also vendors a curated set of third-party engineering skills under
-`skills/` (`tdd`, `diagnosing-bugs`, `codebase-design`, `code-review`,
-`domain-modeling`, `grilling`, pinned to mattpocock/skills
-`4ae2317ddb22b046e26455e4f9c9b3aaaf62212d`). They are reference material only:
-`AGENTS.md` and this SKILL.md override them. Do not run their upstream slash commands
-or setup wizard, and do not reformat their files — `.prettierignore` excludes those
+All skills for this repository (first-party and vendored) live under
+`.agents/skills/`. DSH discovers this directory automatically: every
+`<name>/SKILL.md` with valid `name` and `description` frontmatter appears in the
+session skill catalog and is loadable with the `skill` tool. Only one level of
+`SKILL.md` is discovered, so `references/` and other bundles stay linked from the
+skill body.
+
+The curated third-party set (`tdd`, `diagnosing-bugs`, `codebase-design`,
+`code-review`, `domain-modeling`, `grilling`) is pinned to mattpocock/skills
+`4ae2317ddb22b046e26455e4f9c9b3aaaf62212d`. `AGENTS.md` and this SKILL.md override
+them whenever they disagree. Do not run their upstream slash commands or setup
+wizard, and do not reformat the vendored files — `.prettierignore` excludes those
 directories so upstream copies stay byte-for-byte comparable. When vendoring a new
 one, copy the whole upstream skill folder (including `agents/openai.yaml`) unchanged,
 list it in the `## Agent skills` block of `AGENTS.md`, and record the new upstream SHA.
@@ -122,7 +128,7 @@ workspace suite, or `npm run verify` between fixes. After all requested fixes ar
 documentation currency gates. If an environment prevents a required runtime, visual, platform, packaging, or performance
 check, report the missing evidence and leave the corresponding TODO unverified.
 
-The pre-release gate runs `format` + `check` + `lint:rust` and does **not** build locally (see `skills/version-release/SKILL.md`); building happens remotely in the GitHub Actions `release.yml` workflow on tag push, so the local build profile stays fast.
+The pre-release gate runs `format` + `check` + `lint:rust` and does **not** build locally (see `.agents/skills/version-release/SKILL.md`); building happens remotely in the GitHub Actions `release.yml` workflow on tag push, so the local build profile stays fast.
 
 ## Local build and run model
 
