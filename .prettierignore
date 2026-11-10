@@ -7,6 +7,13 @@ package-lock.json
 TODO.md
 .openidea/
 .trae/
+# Vendored third-party skills: keep upstream markdown byte-for-byte
+skills/tdd
+skills/diagnosing-bugs
+skills/codebase-design
+skills/code-review
+skills/domain-modeling
+skills/grilling
 skills/code-auditor/result
 .worktree-experience
 .svelte-kit
