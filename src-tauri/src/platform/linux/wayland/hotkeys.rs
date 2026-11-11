@@ -103,10 +103,10 @@ pub fn start(
             return;
         }
         let result = run(registrations, tx, &stop);
-        if let Err(error) = result {
-            if !stop.load(Ordering::SeqCst) {
-                report_registration_failure(&app, "toggleWindow", &error);
-            }
+        if let Err(error) = result
+            && !stop.load(Ordering::SeqCst)
+        {
+            report_registration_failure(&app, "toggleWindow", &error);
         }
     })
 }
@@ -168,10 +168,10 @@ fn run(
     conn.add_match(
         MatchRule::new_signal(INTERFACE, "Activated").with_sender(SERVICE),
         move |(path, id, _, _): (Path<'static>, String, u64, PropMap), _, _| {
-            if path.to_string() == expected_session {
-                if let Some(id) = ids.get(&id) {
-                    let _ = tx.send(action_for_hotkey_id(*id));
-                }
+            if path.to_string() == expected_session
+                && let Some(id) = ids.get(&id)
+            {
+                let _ = tx.send(action_for_hotkey_id(*id));
             }
             true
         },

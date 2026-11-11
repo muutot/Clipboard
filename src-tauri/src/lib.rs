@@ -155,10 +155,10 @@ fn platform_data_directory() -> Option<PathBuf> {
     }
     #[cfg(all(unix, not(target_os = "macos")))]
     {
-        if let Some(xdg) = std::env::var_os("XDG_DATA_HOME") {
-            if !xdg.is_empty() {
-                return Some(PathBuf::from(xdg).join("com.clipboard.desktop"));
-            }
+        if let Some(xdg) = std::env::var_os("XDG_DATA_HOME")
+            && !xdg.is_empty()
+        {
+            return Some(PathBuf::from(xdg).join("com.clipboard.desktop"));
         }
         std::env::var_os("HOME")
             .map(|home| PathBuf::from(home).join(".local/share/com.clipboard.desktop"))

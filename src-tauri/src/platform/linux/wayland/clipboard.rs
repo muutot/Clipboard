@@ -35,14 +35,13 @@ pub fn read_clipboard_image() -> Option<(Vec<u8>, u32, u32)> {
         if let Ok(output) = std::process::Command::new("wl-paste")
             .args(["--type", target])
             .bounded_output(64 * 1024 * 1024)
+            && output.status.success()
+            && !output.stdout.is_empty()
+            && let Some(img) = crate::content::hash::decode_image_bytes(&output.stdout)
         {
-            if output.status.success() && !output.stdout.is_empty() {
-                if let Some(img) = crate::content::hash::decode_image_bytes(&output.stdout) {
-                    let rgba = img.to_rgba8();
-                    let (w, h) = rgba.dimensions();
-                    return Some((rgba.into_raw(), w, h));
-                }
-            }
+            let rgba = img.to_rgba8();
+            let (w, h) = rgba.dimensions();
+            return Some((rgba.into_raw(), w, h));
         }
     }
     None
@@ -59,14 +58,13 @@ pub fn read_clipboard_html() -> Option<String> {
     if let Ok(output) = std::process::Command::new("wl-paste")
         .args(["--type", "text/html"])
         .bounded_output(64 * 1024 * 1024)
+        && output.status.success()
     {
-        if output.status.success() {
-            let text = String::from_utf8(output.stdout).ok()?;
-            if text.trim().is_empty() {
-                return None;
-            }
-            return Some(text);
+        let text = String::from_utf8(output.stdout).ok()?;
+        if text.trim().is_empty() {
+            return None;
         }
+        return Some(text);
     }
     None
 }
@@ -82,14 +80,13 @@ pub fn read_clipboard_rtf() -> Option<String> {
     if let Ok(output) = std::process::Command::new("wl-paste")
         .args(["--type", "text/rtf"])
         .bounded_output(64 * 1024 * 1024)
+        && output.status.success()
     {
-        if output.status.success() {
-            let text = String::from_utf8(output.stdout).ok()?;
-            if text.trim().is_empty() {
-                return None;
-            }
-            return Some(text);
+        let text = String::from_utf8(output.stdout).ok()?;
+        if text.trim().is_empty() {
+            return None;
         }
+        return Some(text);
     }
     None
 }
@@ -105,11 +102,10 @@ pub fn read_clipboard_file_paths() -> Vec<String> {
     if let Ok(output) = std::process::Command::new("wl-paste")
         .args(["--type", "text/uri-list"])
         .bounded_output(64 * 1024 * 1024)
+        && output.status.success()
     {
-        if output.status.success() {
-            let text = String::from_utf8(output.stdout).unwrap_or_default();
-            return crate::platform::linux::parse_uri_list(&text);
-        }
+        let text = String::from_utf8(output.stdout).unwrap_or_default();
+        return crate::platform::linux::parse_uri_list(&text);
     }
     vec![]
 }

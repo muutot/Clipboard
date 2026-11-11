@@ -21,10 +21,10 @@ pub fn replace_file(temporary: &Path, target: &Path) -> Result<(), StorageError>
         // in-memory state on Err, which would fork the runtime state from
         // the (already replaced) file on disk. The fsync is a durability
         // enhancement only; degrade to ignoring the error.
-        if let Some(parent) = target.parent() {
-            if let Ok(directory) = std::fs::File::open(parent) {
-                let _ = directory.sync_all();
-            }
+        if let Some(parent) = target.parent()
+            && let Ok(directory) = std::fs::File::open(parent)
+        {
+            let _ = directory.sync_all();
         }
         Ok(())
     }
