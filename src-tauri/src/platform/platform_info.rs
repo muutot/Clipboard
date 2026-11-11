@@ -265,7 +265,7 @@ impl ForegroundApp {
 
 #[cfg(test)]
 mod tests {
-    use super::{capabilities_for, Platform};
+    use super::{Platform, capabilities_for};
 
     /// Only the running platform may advertise its wired backend. Portal
     /// availability is separately determined after session authorization.

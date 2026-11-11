@@ -109,7 +109,7 @@ pub fn unprotect_secret(stored: &str) -> Option<String> {
 /// round-trip runs on every platform.
 #[cfg(any(test, not(target_os = "windows")))]
 mod os_backend {
-    use super::{SecretAccount, OS_MARKER_PREFIX, SERVICE_NAME};
+    use super::{OS_MARKER_PREFIX, SERVICE_NAME, SecretAccount};
 
     pub(super) fn protect(account: SecretAccount, plain: &str) -> Option<String> {
         ensure_platform_store();

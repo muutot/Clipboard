@@ -43,9 +43,11 @@ fn encrypted_resource_stays_private_and_materializes_only_on_demand() {
         .cloned()
         .unwrap();
     assert_ne!(stored_resource, plaintext);
-    assert!(!stored_resource
-        .windows(b"private-image-fragment".len())
-        .any(|window| window == b"private-image-fragment"));
+    assert!(
+        !stored_resource
+            .windows(b"private-image-fragment".len())
+            .any(|window| window == b"private-image-fragment")
+    );
     store.gets.lock().unwrap().clear();
 
     let pulled = sync_database(
@@ -59,12 +61,14 @@ fn encrypted_resource_stays_private_and_materializes_only_on_demand() {
     .unwrap();
     assert_eq!(pulled.downloaded_resources, 0);
     assert!(!store.gets.lock().unwrap().contains(&resource_key));
-    assert!(target
-        .get_item("encrypted-image")
-        .unwrap()
-        .unwrap()
-        .resource_path
-        .is_none());
+    assert!(
+        target
+            .get_item("encrypted-image")
+            .unwrap()
+            .unwrap()
+            .resource_path
+            .is_none()
+    );
 
     let exported = target.export_sync_snapshot_for_scope(REMOTE_SCOPE).unwrap();
     let forwarded = exported

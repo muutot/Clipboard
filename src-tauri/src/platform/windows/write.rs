@@ -64,10 +64,10 @@ pub fn write_clipboard_text_with_self_trigger(text: &str) -> Result<(), String> 
             return Err("failed to write text to the system clipboard".to_owned());
         }
 
-        if let Some((format, marker_memory)) = marker_memory {
-            if SetClipboardData(format, marker_memory) == 0 {
-                GlobalFree(marker_memory);
-            }
+        if let Some((format, marker_memory)) = marker_memory
+            && SetClipboardData(format, marker_memory) == 0
+        {
+            GlobalFree(marker_memory);
         }
     }
 
@@ -194,20 +194,20 @@ pub fn write_clipboard_html_with_self_trigger(
             return Err("failed to write HTML to the system clipboard".to_owned());
         }
 
-        if let Some(memory) = text_memory {
-            if SetClipboardData(CF_UNICODETEXT, memory) == 0 {
-                GlobalFree(memory);
-            }
+        if let Some(memory) = text_memory
+            && SetClipboardData(CF_UNICODETEXT, memory) == 0
+        {
+            GlobalFree(memory);
         }
-        if let (Some(memory), Some((_, format))) = (rtf_memory, rtf_format.as_ref()) {
-            if SetClipboardData(*format, memory) == 0 {
-                GlobalFree(memory);
-            }
+        if let (Some(memory), Some((_, format))) = (rtf_memory, rtf_format.as_ref())
+            && SetClipboardData(*format, memory) == 0
+        {
+            GlobalFree(memory);
         }
-        if let Some((format, memory)) = marker_memory {
-            if SetClipboardData(format, memory) == 0 {
-                GlobalFree(memory);
-            }
+        if let Some((format, memory)) = marker_memory
+            && SetClipboardData(format, memory) == 0
+        {
+            GlobalFree(memory);
         }
     }
 
@@ -334,16 +334,16 @@ pub fn write_clipboard_files_with_self_trigger(paths: &[String]) -> Result<(), S
         // failure in the text form must not abort with an error: the files
         // would still be pasteable while the caller reports failure. Treat
         // the text form as best-effort instead.
-        if let Some(text_memory) = text_memory {
-            if SetClipboardData(CF_UNICODETEXT, text_memory) == 0 {
-                GlobalFree(text_memory);
-            }
+        if let Some(text_memory) = text_memory
+            && SetClipboardData(CF_UNICODETEXT, text_memory) == 0
+        {
+            GlobalFree(text_memory);
         }
 
-        if let Some((format, marker_memory)) = marker_memory {
-            if SetClipboardData(format, marker_memory) == 0 {
-                GlobalFree(marker_memory);
-            }
+        if let Some((format, marker_memory)) = marker_memory
+            && SetClipboardData(format, marker_memory) == 0
+        {
+            GlobalFree(marker_memory);
         }
     }
 

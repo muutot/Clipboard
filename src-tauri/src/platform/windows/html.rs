@@ -22,7 +22,7 @@ pub(super) fn html_format_id() -> Option<u32> {
     use std::os::windows::ffi::OsStrExt;
     use std::sync::OnceLock;
 
-    extern "system" {
+    unsafe extern "system" {
         fn RegisterClipboardFormatW(name: *const u16) -> u32;
     }
 
@@ -166,7 +166,7 @@ pub(super) fn parse_cf_html_source_url(data: &[u8]) -> Option<String> {
 /// clipboard data is present and within the native size ceiling.
 #[cfg(target_os = "windows")]
 fn read_cf_html_raw() -> Option<Vec<u8>> {
-    extern "system" {
+    unsafe extern "system" {
         fn OpenClipboard(hwnd: isize) -> i32;
         fn CloseClipboard() -> i32;
         fn GetClipboardData(format: u32) -> isize;

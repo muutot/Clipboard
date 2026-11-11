@@ -67,7 +67,9 @@ pub fn parse_uri_list(text: &str) -> Vec<String> {
 mod tests {
     #[test]
     fn parse_uri_list_keeps_only_file_entries() {
-        let parsed = super::parse_uri_list(        "# comment\n\nfile:///home/user/a.txt\n  file:///home/user/b.txt  \nhttp://example.com/x\ntext/plain\n",    );
+        let parsed = super::parse_uri_list(
+            "# comment\n\nfile:///home/user/a.txt\n  file:///home/user/b.txt  \nhttp://example.com/x\ntext/plain\n",
+        );
         assert_eq!(parsed, vec!["/home/user/a.txt", "/home/user/b.txt"]);
     }
     #[test]

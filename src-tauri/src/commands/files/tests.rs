@@ -5,7 +5,7 @@ use super::clipboard::{managed_source_path, save_clipboard_item_file_blocking};
 use super::icons::{
     app_icon_file_name, build_icon_cache, delete_icon_files_for, icon_reference_matches,
 };
-use super::replace::{replace_icon_file_at, validate_replace_source, REPLACE_MAX_SOURCE_BYTES};
+use super::replace::{REPLACE_MAX_SOURCE_BYTES, replace_icon_file_at, validate_replace_source};
 use super::shell::{open_external_url, openable_scheme};
 
 use crate::commands::clipboard::ClipboardFilesCopyError;
@@ -249,7 +249,7 @@ fn save_as_fixture() -> (std::path::PathBuf, StoragePaths, Database) {
 
 #[test]
 fn save_file_capability_uses_record_bound_managed_authorization() {
-    use super::clipboard::{save_file_capability, SaveFileCapability};
+    use super::clipboard::{SaveFileCapability, save_file_capability};
     let (root, paths, database) = save_as_fixture();
     assert_eq!(
         save_file_capability(&database, &paths, "id").unwrap(),
@@ -274,13 +274,10 @@ fn save_file_capability_uses_record_bound_managed_authorization() {
     );
     let destination = root.join("destination.bin");
     std::fs::write(&destination, b"keep destination").unwrap();
-    assert!(save_clipboard_item_file_blocking(
-        &database,
-        &paths,
-        "id",
-        &destination.to_string_lossy()
-    )
-    .is_err());
+    assert!(
+        save_clipboard_item_file_blocking(&database, &paths, "id", &destination.to_string_lossy())
+            .is_err()
+    );
     assert_eq!(std::fs::read(&destination).unwrap(), b"keep destination");
     std::fs::remove_file(external).unwrap();
     assert_eq!(
@@ -293,7 +290,7 @@ fn save_file_capability_uses_record_bound_managed_authorization() {
 
 #[test]
 fn save_capability_matches_real_capture_size_and_copy_failure_fallbacks() {
-    use super::clipboard::{save_file_capability, SaveFileCapability};
+    use super::clipboard::{SaveFileCapability, save_file_capability};
     use crate::commands::capture::store_captured_file_references;
     let (root, paths, database) = save_as_fixture();
     let source = root.join("synthetic-source.txt");
@@ -442,13 +439,10 @@ fn save_clipboard_item_file_preserves_a_locked_destination_and_removes_staging()
         .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
         .open(&destination)
         .unwrap();
-    assert!(save_clipboard_item_file_blocking(
-        &database,
-        &paths,
-        "id",
-        &destination.to_string_lossy()
-    )
-    .is_err());
+    assert!(
+        save_clipboard_item_file_blocking(&database, &paths, "id", &destination.to_string_lossy())
+            .is_err()
+    );
     assert_eq!(
         std::fs::read(&destination).unwrap(),
         b"previous destination bytes"
@@ -457,11 +451,13 @@ fn save_clipboard_item_file_preserves_a_locked_destination_and_removes_staging()
         std::fs::read(paths.files.join("captured.bin")).unwrap(),
         b"synthetic captured bytes"
     );
-    assert!(!std::fs::read_dir(&root).unwrap().any(|entry| entry
-        .unwrap()
-        .file_name()
-        .to_string_lossy()
-        .contains(".tmp-")));
+    assert!(!std::fs::read_dir(&root).unwrap().any(|entry| {
+        entry
+            .unwrap()
+            .file_name()
+            .to_string_lossy()
+            .contains(".tmp-")
+    }));
     drop(held);
     drop(database);
     std::fs::remove_dir_all(root).unwrap();
@@ -476,13 +472,15 @@ fn save_clipboard_item_file_rejects_relative_directory_and_missing_record_destin
             .is_err()
     );
     let missing_destination = root.join("not-created.bin");
-    assert!(save_clipboard_item_file_blocking(
-        &database,
-        &paths,
-        "missing",
-        &missing_destination.to_string_lossy()
-    )
-    .is_err());
+    assert!(
+        save_clipboard_item_file_blocking(
+            &database,
+            &paths,
+            "missing",
+            &missing_destination.to_string_lossy()
+        )
+        .is_err()
+    );
     assert!(!missing_destination.exists());
     assert_eq!(
         std::fs::read(paths.files.join("captured.bin")).unwrap(),

@@ -44,7 +44,7 @@ pub fn get_foreground_app() -> crate::platform::ForegroundApp {
     use std::ffi::OsString;
     use std::os::windows::ffi::OsStringExt;
 
-    extern "system" {
+    unsafe extern "system" {
         fn GetForegroundWindow() -> isize;
         fn GetWindowThreadProcessId(hwnd: isize, process_id: *mut u32) -> u32;
         fn OpenProcess(desired_access: u32, inherit_handle: i32, process_id: u32) -> isize;
@@ -132,7 +132,7 @@ pub fn extract_app_icon(
     app_name: &str,
     exe_path: &str,
 ) -> Option<String> {
-    extern "system" {
+    unsafe extern "system" {
         fn SHGetFileInfoW(
             path: *const u16,
             attributes: u32,
@@ -219,7 +219,7 @@ pub fn extract_app_icon(
 
 #[cfg(target_os = "windows")]
 pub(super) fn save_hicon_to_png(hicon: isize, path: &std::path::Path) -> bool {
-    extern "system" {
+    unsafe extern "system" {
         fn GetIconInfo(hicon: isize, info: *mut ICONINFO) -> i32;
         fn DeleteObject(obj: isize) -> i32;
         fn GetDC(hwnd: isize) -> isize;

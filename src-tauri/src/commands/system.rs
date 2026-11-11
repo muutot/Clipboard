@@ -2,15 +2,15 @@
 //
 // Backward-compatibility re-exports — items migrated to dedicated modules.
 pub use super::api::{
-    get_local_api_status, run_cli_command, start_local_api, stop_local_api, LocalApiStatus,
+    LocalApiStatus, get_local_api_status, run_cli_command, start_local_api, stop_local_api,
 };
 pub use super::cleanup::{
-    cleanup_orphan_storage_files, cleanup_orphan_storage_files_with_grace, cleanup_storage_files,
-    enforce_history_cleanup, enforce_history_cleanup_for, StorageCleanupResult,
+    StorageCleanupResult, cleanup_orphan_storage_files, cleanup_orphan_storage_files_with_grace,
+    cleanup_storage_files, enforce_history_cleanup, enforce_history_cleanup_for,
 };
 pub use super::files::{
-    copy_clipboard_item_files, delete_icon_files, list_icon_cache, open_external_url,
-    replace_icon_file, reveal_in_explorer, save_clipboard_item_file, IconCacheEntry,
+    IconCacheEntry, copy_clipboard_item_files, delete_icon_files, list_icon_cache,
+    open_external_url, replace_icon_file, reveal_in_explorer, save_clipboard_item_file,
 };
 pub use super::signal::{stop_signal_requested, wait_for_stop};
 
@@ -20,7 +20,7 @@ use crate::content;
 use crate::content::{ContentMarkers, QuickAction, TextTransform, TransformOperation};
 use crate::performance::{PerformanceSnapshot, PerformanceTracker};
 use crate::search::SearchIndex;
-use crate::storage::{refresh_database_backup, Database, RepairResult, StoragePaths};
+use crate::storage::{Database, RepairResult, StoragePaths, refresh_database_backup};
 
 /// Appends one frontend diagnostic line to the application log.
 ///

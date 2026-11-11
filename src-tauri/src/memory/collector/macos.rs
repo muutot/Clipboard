@@ -1,6 +1,6 @@
 //! macOS process-group probe (best-effort `ps` sample).
 
-use super::{fallback_current_process, MemoryProcess};
+use super::{MemoryProcess, fallback_current_process};
 use std::process::Command;
 
 pub(super) fn collect_processes(current_pid: u32) -> Vec<MemoryProcess> {

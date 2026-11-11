@@ -1,9 +1,9 @@
 use std::{collections::BTreeSet, path::Path, time::Instant};
 
 use crate::s3::{
-    delete_from_s3, get_s3_object, get_s3_object_to_file, head_s3_object,
-    list_s3_objects_after_with_metrics, put_s3_file, put_s3_object, S3PutCondition, S3PutOutcome,
-    S3RequestMetrics,
+    S3PutCondition, S3PutOutcome, S3RequestMetrics, delete_from_s3, get_s3_object,
+    get_s3_object_to_file, head_s3_object, list_s3_objects_after_with_metrics, put_s3_file,
+    put_s3_object,
 };
 
 use super::layout::obsolete_object_candidate;
@@ -65,7 +65,7 @@ pub trait ObjectStore {
         max_bytes: u64,
     ) -> Result<Option<DownloadedFile>, String>;
     fn put(&self, key: &str, bytes: Vec<u8>, condition: PutCondition)
-        -> Result<PutOutcome, String>;
+    -> Result<PutOutcome, String>;
     fn put_file(
         &self,
         key: &str,
@@ -651,15 +651,17 @@ mod tests {
         assert!(store.full_object_key("../v1/checkpoint.bin").is_err());
         assert!(store.full_object_key("/v1/checkpoint.bin").is_err());
         assert!(store.full_list_prefix("v1//heads/").is_err());
-        assert!(S3ObjectStore::new(
-            "http://127.0.0.1:9000",
-            "us-east-1",
-            "clipboard",
-            "access",
-            "secret",
-            "team/../other",
-        )
-        .is_err());
+        assert!(
+            S3ObjectStore::new(
+                "http://127.0.0.1:9000",
+                "us-east-1",
+                "clipboard",
+                "access",
+                "secret",
+                "team/../other",
+            )
+            .is_err()
+        );
     }
 
     #[test]

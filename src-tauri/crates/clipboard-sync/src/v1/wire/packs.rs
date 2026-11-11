@@ -477,13 +477,13 @@ impl<'a, T: Decode<()>> LargePackReader<'a, T> {
         let encrypted = flags & FLAG_ENCRYPTED != 0;
         match (encrypted, key) {
             (true, None) => {
-                return Err("sync v1 object requires an encryption password".to_string())
+                return Err("sync v1 object requires an encryption password".to_string());
             }
             (false, Some(_)) => {
                 return Err(
                     "sync v1 object is unencrypted but this remote scope requires encryption"
                         .to_string(),
-                )
+                );
             }
             _ => {}
         }

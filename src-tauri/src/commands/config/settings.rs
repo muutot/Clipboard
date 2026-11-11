@@ -5,8 +5,8 @@ use tauri::{Emitter, Manager};
 
 use crate::commands::clipboard::SearchResultCache;
 use crate::config::{ConfigStore, GeneralConfig, SearchIndexSyncMode};
-use crate::geometry::{clamp_window_position_to_work_areas, WindowPosition, WindowWorkArea};
-use crate::platform::{autostart::persist_autostart, WindowManager};
+use crate::geometry::{WindowPosition, WindowWorkArea, clamp_window_position_to_work_areas};
+use crate::platform::{WindowManager, autostart::persist_autostart};
 use crate::search::{SearchIndex, SearchSyncWorker};
 use crate::state::CaptureState;
 use crate::storage::{Database, StoragePaths};
@@ -295,8 +295,8 @@ mod search_mode_tests {
     use crate::config::ConfigStore;
     use serde_json::json;
     use std::sync::{
-        atomic::{AtomicUsize, Ordering},
         Arc, Mutex,
+        atomic::{AtomicUsize, Ordering},
     };
 
     struct TestWorker(Arc<AtomicUsize>);
@@ -399,14 +399,16 @@ mod search_mode_tests {
         })
         .unwrap();
         std::fs::rename(root.join("conf"), root.join("saved-conf")).unwrap();
-        assert!(apply_general_settings_with_worker(
-            &mut worker,
-            &config,
-            None,
-            Some(json!({"searchIndexSyncMode": "lazy"})),
-            || panic!()
-        )
-        .is_err());
+        assert!(
+            apply_general_settings_with_worker(
+                &mut worker,
+                &config,
+                None,
+                Some(json!({"searchIndexSyncMode": "lazy"})),
+                || panic!()
+            )
+            .is_err()
+        );
         assert!(worker.is_some());
         assert_eq!(dropped.load(Ordering::SeqCst), 1);
         assert_eq!(
@@ -444,30 +446,31 @@ mod search_mode_tests {
     #[test]
     fn failed_transitions_preserve_the_previous_mode() {
         let mut worker = None::<u8>;
-        assert!(transition_search_worker(
-            &mut worker,
-            true,
-            || Err("spawn".into()),
-            || -> Result<(), String> { panic!("must not save") }
-        )
-        .is_err());
+        assert!(
+            transition_search_worker(
+                &mut worker,
+                true,
+                || Err("spawn".into()),
+                || -> Result<(), String> { panic!("must not save") }
+            )
+            .is_err()
+        );
         assert_eq!(worker, None);
-        assert!(transition_search_worker(
-            &mut worker,
-            true,
-            || Ok(1),
-            || Err::<(), _>("save".into())
-        )
-        .is_err());
+        assert!(
+            transition_search_worker(&mut worker, true, || Ok(1), || Err::<(), _>("save".into()))
+                .is_err()
+        );
         assert_eq!(worker, None);
         worker = Some(2);
-        assert!(transition_search_worker(
-            &mut worker,
-            false,
-            || panic!(),
-            || Err::<(), _>("save".into())
-        )
-        .is_err());
+        assert!(
+            transition_search_worker(
+                &mut worker,
+                false,
+                || panic!(),
+                || Err::<(), _>("save".into())
+            )
+            .is_err()
+        );
         assert_eq!(worker, Some(2));
     }
 }

@@ -10,8 +10,8 @@ use crate::commands::lock::lock_state;
 use crate::config::ConfigStore;
 use crate::state::CaptureState;
 use crate::storage::{
-    ClipboardRepository, Database, ResourceRootRole, StorageFileReferences, StoragePaths,
-    RESOURCE_ROOT_DATABASES, RESOURCE_ROOT_LOCK, RESOURCE_ROOT_MARKER,
+    ClipboardRepository, Database, RESOURCE_ROOT_DATABASES, RESOURCE_ROOT_LOCK,
+    RESOURCE_ROOT_MARKER, ResourceRootRole, StorageFileReferences, StoragePaths,
 };
 
 #[derive(Debug, Serialize)]

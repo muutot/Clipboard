@@ -5,19 +5,20 @@ use crate::{
     platform::{
         hotkey_common::HotkeyRegistration,
         native_hotkeys::report_registration_failure,
-        windows::hotkey::{action_for_hotkey_id, HotkeyAction},
+        windows::hotkey::{HotkeyAction, action_for_hotkey_id},
     },
 };
 use dbus::{
+    Path,
     arg::{PropMap, Variant},
     blocking::Connection,
     message::MatchRule,
-    Path,
 };
 use std::{
     sync::{
+        Arc,
         atomic::{AtomicBool, Ordering},
-        mpsc, Arc,
+        mpsc,
     },
     thread,
     time::Duration,

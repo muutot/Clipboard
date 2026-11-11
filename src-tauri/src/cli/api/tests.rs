@@ -3,7 +3,7 @@
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{mpsc, Arc};
+use std::sync::{Arc, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -12,12 +12,12 @@ use crate::item_operations::CopyContext;
 use crate::state::CaptureState;
 use crate::storage::{ClipboardRepository, Database};
 
+use super::LocalApiServer;
 use super::http::{
-    authorize, constant_time_eq, handle_connection, read_request_with_deadline, serve, HttpRequest,
-    ServeContext,
+    HttpRequest, ServeContext, authorize, constant_time_eq, handle_connection,
+    read_request_with_deadline, serve,
 };
 use super::routes::{dispatch, dispatch_with_context, parse_query};
-use super::LocalApiServer;
 
 fn request(method: &str, target: &str, body: &[u8]) -> HttpRequest {
     HttpRequest {
@@ -142,10 +142,12 @@ fn paste_list_search_and_delete_endpoints_use_database() {
 
     let delete = request("DELETE", &format!("/items/{}", item.id), b"");
     assert_eq!(dispatch(&delete, &database, 500, 500).status, 200);
-    assert!(database
-        .list_recent(10, 0, &crate::storage::HistoryFilter::default())
-        .unwrap()
-        .is_empty());
+    assert!(
+        database
+            .list_recent(10, 0, &crate::storage::HistoryFilter::default())
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[test]
@@ -532,9 +534,11 @@ fn media_copy_has_the_same_missing_resource_error_as_the_cli() {
         500,
     );
     assert_eq!(response.status, 500);
-    assert!(String::from_utf8(response.body)
-        .unwrap()
-        .contains("resource missing"));
+    assert!(
+        String::from_utf8(response.body)
+            .unwrap()
+            .contains("resource missing")
+    );
     let args = crate::cli::CliArgs {
         command: crate::cli::CliCommand::Copy,
         query: Some(item.id.clone()),
@@ -542,9 +546,11 @@ fn media_copy_has_the_same_missing_resource_error_as_the_cli() {
         format: None,
         output_path: None,
     };
-    assert!(crate::cli::run_cli_command(&args, &db, 500, 500)
-        .unwrap_err()
-        .contains("resource missing"));
+    assert!(
+        crate::cli::run_cli_command(&args, &db, 500, 500)
+            .unwrap_err()
+            .contains("resource missing")
+    );
     assert_eq!(
         db.get_item(&item.id).unwrap().unwrap().last_used_at_ms,
         Some(1)

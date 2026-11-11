@@ -6,7 +6,7 @@ pub fn read_clipboard_file_paths() -> Vec<String> {
     use std::ffi::OsString;
     use std::os::windows::ffi::OsStringExt;
 
-    extern "system" {
+    unsafe extern "system" {
         fn OpenClipboard(hwnd: isize) -> i32;
         fn CloseClipboard() -> i32;
         fn GetClipboardData(format: u32) -> isize;

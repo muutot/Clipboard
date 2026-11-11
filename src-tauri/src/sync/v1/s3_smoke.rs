@@ -175,7 +175,7 @@ impl Drop for SmokeScope {
 #[test]
 #[ignore = "requires an explicitly configured disposable S3-compatible server"]
 fn namespace_binding_is_durable_and_cannot_be_overwritten() {
-    use clipboard_sync::v1::namespace::{resolve_namespace, NAMESPACE_KEY};
+    use clipboard_sync::v1::namespace::{NAMESPACE_KEY, resolve_namespace};
     let config = require_config!();
     let scope = SmokeScope::new(&config, "namespace-binding");
     scope.ensure_bucket();
@@ -491,11 +491,13 @@ fn real_s3_cancelled_publications_retry_without_losing_pending_records() {
             previous_head,
             "unpublished work must not advance the head"
         );
-        assert!(store
-            .list("", None)
-            .unwrap()
-            .iter()
-            .any(|object| object.key.contains(fragment)));
+        assert!(
+            store
+                .list("", None)
+                .unwrap()
+                .iter()
+                .any(|object| object.key.contains(fragment))
+        );
         if index == 0 {
             assert!(
                 !source
@@ -505,18 +507,22 @@ fn real_s3_cancelled_publications_retry_without_losing_pending_records() {
                     .initialized
             );
         } else {
-            assert!(source
+            assert!(
+                source
+                    .database()
+                    .get_sync_outbox_batch_for_scope(&scope.remote_scope, 100)
+                    .unwrap()
+                    .is_some()
+            );
+        }
+        run_sync(&store, &source, &scope);
+        assert!(
+            source
                 .database()
                 .get_sync_outbox_batch_for_scope(&scope.remote_scope, 100)
                 .unwrap()
-                .is_some());
-        }
-        run_sync(&store, &source, &scope);
-        assert!(source
-            .database()
-            .get_sync_outbox_batch_for_scope(&scope.remote_scope, 100)
-            .unwrap()
-            .is_none());
+                .is_none()
+        );
         run_sync(&scope.store(None), &target, &scope);
         assert_eq!(target.database().item_count().unwrap(), (index + 1) as u64);
         assert_eq!(
@@ -920,13 +926,15 @@ fn real_s3_encrypted_resource_materializes_across_devices() {
         pulled.downloaded_resources, 0,
         "an ordinary pull must defer resource bodies"
     );
-    assert!(target
-        .database()
-        .get_item("encrypted-image")
-        .unwrap()
-        .unwrap()
-        .resource_path
-        .is_none());
+    assert!(
+        target
+            .database()
+            .get_item("encrypted-image")
+            .unwrap()
+            .unwrap()
+            .resource_path
+            .is_none()
+    );
 
     let materialized = materialize_resource(
         &store,
@@ -947,7 +955,7 @@ fn real_s3_encrypted_resource_materializes_across_devices() {
 #[test]
 #[ignore = "requires a disposable S3-compatible server; run scripts/sync-s3-test.ps1"]
 fn real_s3_rotation_pointer_blocks_a_stale_peer() {
-    use crate::commands::sync::{refuse_if_prefix_rotated, ROTATED_TO_KEY};
+    use crate::commands::sync::{ROTATED_TO_KEY, refuse_if_prefix_rotated};
     let config = require_config!();
     let scope = SmokeScope::new(&config, "rotation-pointer");
     scope.ensure_bucket();
@@ -987,7 +995,7 @@ fn real_s3_rotation_pointer_blocks_a_stale_peer() {
 #[test]
 #[ignore = "requires a disposable S3-compatible server; run scripts/sync-s3-test.ps1"]
 fn real_s3_namespace_rotation_moves_state_and_tombstones() {
-    use crate::commands::sync::{perform_namespace_rotation, SyncSettings};
+    use crate::commands::sync::{SyncSettings, perform_namespace_rotation};
     use crate::config::{SyncConfig, SyncProvider};
     use clipboard_sync::cancellation::CancellationToken;
 
@@ -1049,13 +1057,15 @@ fn real_s3_namespace_rotation_moves_state_and_tombstones() {
         old_settings.engine_options(),
     )
     .unwrap();
-    assert!(target
-        .database()
-        .get_item("rotate-image")
-        .unwrap()
-        .unwrap()
-        .resource_path
-        .is_none());
+    assert!(
+        target
+            .database()
+            .get_item("rotate-image")
+            .unwrap()
+            .unwrap()
+            .resource_path
+            .is_none()
+    );
 
     let new_password = "brand-new-rotation-password";
     let new_prefix = format!("{}-rotated-1700000000000", scope.remote_prefix);
@@ -1124,9 +1134,11 @@ fn real_s3_namespace_rotation_moves_state_and_tombstones() {
         .collect();
     assert!(new_keys.iter().any(|key| key == "v1/namespace.json"));
     assert!(new_keys.iter().any(|key| key.starts_with("v1/heads/")));
-    assert!(new_keys
-        .iter()
-        .any(|key| key.starts_with("v1/resources/image/")));
+    assert!(
+        new_keys
+            .iter()
+            .any(|key| key.starts_with("v1/resources/image/"))
+    );
 
     // The rotating device now holds the body locally, byte-identical.
     let rotated = target.database().get_item("rotate-image").unwrap().unwrap();

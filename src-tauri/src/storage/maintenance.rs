@@ -86,9 +86,11 @@ mod tests {
         let original = item();
         database.save_item(&original).unwrap();
         std::fs::write(root.join("history.sqlite3.resource-generation"), b"bad").unwrap();
-        assert!(database
-            .set_preview_path(&original.id, "new-preview.jpg")
-            .is_err());
+        assert!(
+            database
+                .set_preview_path(&original.id, "new-preview.jpg")
+                .is_err()
+        );
         assert_eq!(
             database
                 .get_item(&original.id)
@@ -124,9 +126,11 @@ mod tests {
             })
             .unwrap();
 
-        assert!(database
-            .set_preview_path("item", "previews/item.jpg")
-            .unwrap());
+        assert!(
+            database
+                .set_preview_path("item", "previews/item.jpg")
+                .unwrap()
+        );
         assert_eq!(
             database
                 .get_item("item")

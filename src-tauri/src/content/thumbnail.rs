@@ -2,15 +2,15 @@ use std::{
     fs,
     path::{Path, PathBuf},
     sync::{
+        Arc,
         atomic::{AtomicBool, Ordering},
         mpsc::{self, Sender},
-        Arc,
     },
     thread::{self, JoinHandle},
 };
 
-use image::codecs::jpeg::JpegEncoder;
 use image::GenericImageView;
+use image::codecs::jpeg::JpegEncoder;
 use serde::Serialize;
 
 use crate::storage::{Database, StorageError};
@@ -214,10 +214,11 @@ impl ThumbnailWorker {
 
     pub fn stop(&mut self) {
         self.request_stop();
-        if let Some(handle) = self.handle.take() {
-            if handle.thread().id() != thread::current().id() && handle.join().is_err() {
-                crate::log_error!("[thumbnail] worker thread terminated with a panic");
-            }
+        if let Some(handle) = self.handle.take()
+            && handle.thread().id() != thread::current().id()
+            && handle.join().is_err()
+        {
+            crate::log_error!("[thumbnail] worker thread terminated with a panic");
         }
     }
 }

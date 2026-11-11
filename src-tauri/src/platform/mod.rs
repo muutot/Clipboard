@@ -45,18 +45,18 @@ use std::path::Path;
 //  Re-exports so items remain at crate::platform::*
 // ---------------------------------------------------------------------------
 
-pub use autostart::{decide_autostart_action, sync_autostart, AutostartAction};
-pub use dispatch::{platform, ClipboardImageData, PlatformClipboard};
+pub use autostart::{AutostartAction, decide_autostart_action, sync_autostart};
+pub use dispatch::{ClipboardImageData, PlatformClipboard, platform};
 pub use os_locale::os_locale_name;
 pub use platform_info::{
-    current_capabilities, get_platform_info, runtime_info, ClipboardPlatform, ForegroundApp,
-    Platform, PlatformCapabilities, PlatformInfo, RuntimeInfo,
+    ClipboardPlatform, ForegroundApp, Platform, PlatformCapabilities, PlatformInfo, RuntimeInfo,
+    current_capabilities, get_platform_info, runtime_info,
 };
 pub use single_instance::{SingleInstanceError, SingleInstanceGuard};
 pub use ui::{
-    apply_window_effect, apply_window_transparency, disk_space, enable_child_clipping,
-    hide_main_window, refresh_tray_recent_menu, restore_main_window, show_main_window,
-    window_transparency_alpha, DiskSpace, SystemTray, WindowManager,
+    DiskSpace, SystemTray, WindowManager, apply_window_effect, apply_window_transparency,
+    disk_space, enable_child_clipping, hide_main_window, refresh_tray_recent_menu,
+    restore_main_window, show_main_window, window_transparency_alpha,
 };
 pub use windows::ClipboardMonitor;
 

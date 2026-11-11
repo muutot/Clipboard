@@ -1,7 +1,7 @@
 use super::helpers::{kind_from_storage, sync_item_tags_from_metadata};
 use crate::storage::{Database, StorageError};
-use crate::tags::{match_auto_tags, CompiledAutoTagRule};
-use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
+use crate::tags::{CompiledAutoTagRule, match_auto_tags};
+use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 use serde::Serialize;
 
 #[derive(Debug, Default, Serialize)]

@@ -414,7 +414,7 @@ fn native_payload_caps_reject_oversized_lengths_without_allocating() {
 fn set_cf_hdrop(path: &str) {
     use std::os::windows::ffi::OsStrExt;
 
-    extern "system" {
+    unsafe extern "system" {
         fn OpenClipboard(hwnd: isize) -> i32;
         fn EmptyClipboard() -> i32;
         fn CloseClipboard() -> i32;
@@ -481,9 +481,9 @@ fn read_clipboard_file_paths_reads_a_cf_hdrop() {
     // cover the decoding rules without touching the clipboard.
     if std::env::var_os("CLIPBOARD_ALLOW_REAL_CLIPBOARD_TEST").is_none() {
         eprintln!(
-                "skipping read_clipboard_file_paths_reads_a_cf_hdrop: set \
+            "skipping read_clipboard_file_paths_reads_a_cf_hdrop: set \
                  CLIPBOARD_ALLOW_REAL_CLIPBOARD_TEST=1 to allow overwriting the real system clipboard"
-            );
+        );
         return;
     }
     let path = r"C:\Windows\notepad.exe";
@@ -500,7 +500,7 @@ fn read_clipboard_file_paths_reads_a_cf_hdrop() {
 
 #[cfg(target_os = "windows")]
 fn set_clipboard_format_bytes(format: u32, bytes: &[u8]) {
-    extern "system" {
+    unsafe extern "system" {
         fn OpenClipboard(hwnd: isize) -> i32;
         fn EmptyClipboard() -> i32;
         fn CloseClipboard() -> i32;
@@ -544,7 +544,7 @@ fn set_clipboard_format_bytes(format: u32, bytes: &[u8]) {
 /// read paths, used to verify the self-trigger marker the write path stores.
 #[cfg(target_os = "windows")]
 fn get_clipboard_format_bytes(format: u32) -> Option<Vec<u8>> {
-    extern "system" {
+    unsafe extern "system" {
         fn OpenClipboard(hwnd: isize) -> i32;
         fn CloseClipboard() -> i32;
         fn GetClipboardData(format: u32) -> isize;
@@ -583,7 +583,7 @@ fn register_clipboard_format(name: &str) -> u32 {
     use std::ffi::OsStr;
     use std::os::windows::ffi::OsStrExt;
 
-    extern "system" {
+    unsafe extern "system" {
         fn RegisterClipboardFormatW(name: *const u16) -> u32;
     }
     let wide: Vec<u16> = OsStr::new(name)

@@ -786,13 +786,14 @@ fn validate_compaction_vector(
         }
     }
     for cursor in candidate {
-        if let Some(existing) = current.get(cursor.device_id.as_str()) {
-            if existing.epoch == cursor.epoch && existing.sequence > cursor.sequence {
-                return Err(format!(
-                    "checkpoint candidate regresses device {} from {} to {}",
-                    cursor.device_id, existing.sequence, cursor.sequence
-                ));
-            }
+        if let Some(existing) = current.get(cursor.device_id.as_str())
+            && existing.epoch == cursor.epoch
+            && existing.sequence > cursor.sequence
+        {
+            return Err(format!(
+                "checkpoint candidate regresses device {} from {} to {}",
+                cursor.device_id, existing.sequence, cursor.sequence
+            ));
         }
     }
     Ok(())

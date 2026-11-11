@@ -143,7 +143,7 @@ pub const MOD5_MASK: u32 = 1 << 7;
 pub const ANY_MODIFIER: u32 = 1 << 15;
 
 #[link(name = "X11")]
-extern "C" {
+unsafe extern "C" {
     // Connection management
     pub fn XOpenDisplay(name: *const i8) -> *mut Display;
     pub fn XCloseDisplay(display: *mut Display) -> i32;
@@ -236,7 +236,7 @@ extern "C" {
 }
 
 #[link(name = "Xfixes")]
-extern "C" {
+unsafe extern "C" {
     // XFixes (query version, select selection input)
     pub fn XFixesQueryExtension(
         display: *mut Display,

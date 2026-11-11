@@ -5,7 +5,7 @@ use super::*;
 
 #[cfg(target_os = "windows")]
 pub(super) fn clipboard_format_available(format: u32) -> bool {
-    extern "system" {
+    unsafe extern "system" {
         fn IsClipboardFormatAvailable(format: u32) -> i32;
     }
     unsafe { IsClipboardFormatAvailable(format) != 0 }
@@ -29,7 +29,7 @@ pub(super) fn self_trigger_format_id() -> Option<u32> {
     use std::os::windows::ffi::OsStrExt;
     use std::sync::OnceLock;
 
-    extern "system" {
+    unsafe extern "system" {
         fn RegisterClipboardFormatW(name: *const u16) -> u32;
     }
 
@@ -51,7 +51,7 @@ pub(super) fn self_trigger_format_id() -> Option<u32> {
 
 #[cfg(target_os = "windows")]
 pub(super) fn read_self_trigger_marker() -> Option<Vec<u8>> {
-    extern "system" {
+    unsafe extern "system" {
         fn OpenClipboard(hwnd: isize) -> i32;
         fn CloseClipboard() -> i32;
         fn GetClipboardData(format: u32) -> isize;
@@ -109,7 +109,7 @@ pub(super) fn read_self_trigger_marker() -> Option<Vec<u8>> {
 // next `EmptyClipboard` releases them.
 #[cfg(target_os = "windows")]
 #[link(name = "User32")]
-extern "system" {
+unsafe extern "system" {
     pub(super) fn OpenClipboard(window: isize) -> i32;
     pub(super) fn CloseClipboard() -> i32;
     pub(super) fn EmptyClipboard() -> i32;
@@ -118,7 +118,7 @@ extern "system" {
 
 #[cfg(target_os = "windows")]
 #[link(name = "Kernel32")]
-extern "system" {
+unsafe extern "system" {
     pub(super) fn GlobalAlloc(flags: u32, bytes: usize) -> isize;
     pub(super) fn GlobalFree(memory: isize) -> isize;
     pub(super) fn GlobalLock(memory: isize) -> *const u8;

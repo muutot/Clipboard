@@ -674,9 +674,11 @@ mod tests {
             // Subsequent writes/recovery retries remain valid after lock release.
             restored.save_item(&item("after-owner-finished")).unwrap();
             drop(restored);
-            assert!(recover_database_if_needed(&database_path)
-                .unwrap()
-                .is_none());
+            assert!(
+                recover_database_if_needed(&database_path)
+                    .unwrap()
+                    .is_none()
+            );
             let restored = Database::open(&database_path).unwrap();
             assert!(restored.get_item("after-owner-finished").unwrap().is_some());
             drop(restored);
@@ -799,9 +801,11 @@ mod tests {
             name.contains(".restore-tmp") || name.contains(".corrupt")
         }));
         fs::remove_dir(&lock_path).unwrap();
-        assert!(recover_database_if_needed(&database_path)
-            .unwrap()
-            .is_some());
+        assert!(
+            recover_database_if_needed(&database_path)
+                .unwrap()
+                .is_some()
+        );
         let restored = Database::open(&database_path).unwrap();
         assert!(restored.get_item("safe").unwrap().is_some());
         drop(restored);
@@ -1154,9 +1158,11 @@ mod tests {
         let _ = fs::remove_file(super::sibling_with_suffix(&database_path, "-wal"));
         let _ = fs::remove_file(super::sibling_with_suffix(&database_path, "-shm"));
 
-        assert!(recover_database_if_needed(&database_path)
-            .unwrap()
-            .is_none());
+        assert!(
+            recover_database_if_needed(&database_path)
+                .unwrap()
+                .is_none()
+        );
         fs::remove_dir_all(root).unwrap();
     }
 
@@ -1176,9 +1182,11 @@ mod tests {
         let report = recover_database_if_needed(&database_path)
             .unwrap()
             .expect("previous backup should be used");
-        assert!(report
-            .restored_from
-            .ends_with("clipboard.sqlite3.backup.prev"));
+        assert!(
+            report
+                .restored_from
+                .ends_with("clipboard.sqlite3.backup.prev")
+        );
         let restored = Database::open(&database_path).unwrap();
         assert!(restored.get_item("first").unwrap().is_some());
         assert!(restored.get_item("second").unwrap().is_none());
@@ -1236,10 +1244,12 @@ mod tests {
 
         assert!(target.join("keep.txt").is_file());
         assert!(index.is_dir());
-        assert!(!fs::symlink_metadata(&index)
-            .unwrap()
-            .file_type()
-            .is_symlink());
+        assert!(
+            !fs::symlink_metadata(&index)
+                .unwrap()
+                .file_type()
+                .is_symlink()
+        );
         fs::remove_dir_all(root).unwrap();
     }
 }

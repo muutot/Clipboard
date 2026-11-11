@@ -3,15 +3,15 @@ use std::{
     io::{Read, Write},
     path::Path,
     sync::{
-        atomic::{AtomicU64, Ordering},
         Arc,
+        atomic::{AtomicU64, Ordering},
     },
     time::Duration,
 };
 
 use crate::{cancellation, transport};
-use base64::{engine::general_purpose::STANDARD, Engine};
-use reqwest::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_LENGTH, ETAG};
+use base64::{Engine, engine::general_purpose::STANDARD};
+use reqwest::header::{CONTENT_LENGTH, ETAG, HeaderMap, HeaderName, HeaderValue};
 use reqwest::{Client, RequestBuilder};
 use serde::Serialize;
 use sha2::{Digest, Sha256};

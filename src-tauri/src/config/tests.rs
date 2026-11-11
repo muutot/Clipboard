@@ -1,6 +1,6 @@
 use std::{fs, path::PathBuf, str::FromStr, time::SystemTime};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::config::ConfigStore;
 
@@ -269,14 +269,16 @@ fn corrupt_config_must_be_preserved_before_loading_defaults() {
     drop(held);
     let store = ConfigStore::load(&project).unwrap();
     assert!(store.path().exists());
-    assert!(fs::read_dir(project.join("conf"))
-        .unwrap()
-        .filter_map(Result::ok)
-        .any(|entry| entry
-            .file_name()
-            .to_string_lossy()
-            .starts_with("conf.json.corrupt-")
-            && fs::read(entry.path()).unwrap() == bytes));
+    assert!(
+        fs::read_dir(project.join("conf"))
+            .unwrap()
+            .filter_map(Result::ok)
+            .any(|entry| entry
+                .file_name()
+                .to_string_lossy()
+                .starts_with("conf.json.corrupt-")
+                && fs::read(entry.path()).unwrap() == bytes)
+    );
     fs::remove_dir_all(project).unwrap();
 }
 
@@ -726,12 +728,16 @@ fn rejects_relative_or_shared_resource_storage_paths() {
     let mut store = ConfigStore::load(&project).unwrap();
     let shared = project.join("resources");
 
-    assert!(store
-        .set_resource_storage_paths(Some(PathBuf::from("relative")), None)
-        .is_err());
-    assert!(store
-        .set_resource_storage_paths(Some(shared.clone()), Some(shared))
-        .is_err());
+    assert!(
+        store
+            .set_resource_storage_paths(Some(PathBuf::from("relative")), None)
+            .is_err()
+    );
+    assert!(
+        store
+            .set_resource_storage_paths(Some(shared.clone()), Some(shared))
+            .is_err()
+    );
 
     fs::remove_dir_all(project).unwrap();
 }
@@ -1124,8 +1130,8 @@ fn history_limits_clamp_out_of_range_values() {
 #[test]
 fn history_config_readers_never_observe_a_partially_saved_request() {
     use std::sync::{
-        atomic::{AtomicBool, Ordering},
         Arc, Barrier,
+        atomic::{AtomicBool, Ordering},
     };
 
     let project = temporary_test_directory("history-atomic-reader");
@@ -1275,9 +1281,11 @@ fn history_config_failed_save_preserves_all_fields_and_allows_retry() {
     );
     let bytes = fs::read(store.path()).unwrap();
     fs::rename(project.join("conf"), project.join("saved-conf")).unwrap();
-    assert!(store
-        .set_history_config(Some(42000), Some(240), Some(120))
-        .is_err());
+    assert!(
+        store
+            .set_history_config(Some(42000), Some(240), Some(120))
+            .is_err()
+    );
     assert_eq!(
         (
             store.max_items(),

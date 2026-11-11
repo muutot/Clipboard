@@ -1,7 +1,7 @@
 //! Executable format prototype. No application command uses this format yet.
 use aes_gcm::{
-    aead::{Aead, Payload},
     Aes256Gcm, KeyInit, Nonce,
+    aead::{Aead, Payload},
 };
 use hmac::Hmac;
 use rand::TryRng;

@@ -6,9 +6,9 @@ use tauri::{Emitter, Manager};
 use crate::commands::clipboard::ClipboardHistoryInvalidated;
 use crate::config::ConfigStore;
 use crate::export::{
-    export_database, export_database_to_file, import_from_csv, import_from_json,
-    import_from_plain_text, import_from_ppaste_backup, ExportFormat, ExportOptions, ImportSummary,
-    BACKUP_EXTENSION,
+    BACKUP_EXTENSION, ExportFormat, ExportOptions, ImportSummary, export_database,
+    export_database_to_file, import_from_csv, import_from_json, import_from_plain_text,
+    import_from_ppaste_backup,
 };
 use crate::storage::{ClipboardRepository, Database, StoragePaths};
 
@@ -368,15 +368,15 @@ pub async fn import_from_file(
         let paths = app.state::<StoragePaths>();
         let summary =
             import_from_path_with_summary(database.inner(), config.inner(), paths.inner(), &path)?;
-        if summary.imported_count > 0 {
-            if let Err(error) = app.emit(
+        if summary.imported_count > 0
+            && let Err(error) = app.emit(
                 "clipboard-history-invalidated",
                 ClipboardHistoryInvalidated {
                     deleted_ids: Vec::new(),
                 },
-            ) {
-                crate::log_event!("[import] failed to emit history-invalidated: {error}");
-            }
+            )
+        {
+            crate::log_event!("[import] failed to emit history-invalidated: {error}");
         }
         Ok(summary)
     })
@@ -623,12 +623,16 @@ mod tests {
             .unwrap(),
             text
         );
-        assert!(read_import_file_contents(&[0xff][..], "bad.txt", 1, 1)
-            .unwrap_err()
-            .contains("failed to read"));
-        assert!(read_import_file_contents(&b"large"[..], "large.txt", 5, 4)
-            .unwrap_err()
-            .contains("over the 4 byte import limit"));
+        assert!(
+            read_import_file_contents(&[0xff][..], "bad.txt", 1, 1)
+                .unwrap_err()
+                .contains("failed to read")
+        );
+        assert!(
+            read_import_file_contents(&b"large"[..], "large.txt", 5, 4)
+                .unwrap_err()
+                .contains("over the 4 byte import limit")
+        );
     }
 
     #[test]
@@ -636,9 +640,11 @@ mod tests {
         // The sentinel lands inside the final multi-byte code point. A size
         // violation must remain a size error, rather than a UTF-8 parse error.
         let result = read_import_file_contents("abc中文".as_bytes(), "grown.txt", 3, 4);
-        assert!(result
-            .unwrap_err()
-            .contains("exceeds the 4 byte import limit"));
+        assert!(
+            result
+                .unwrap_err()
+                .contains("exceeds the 4 byte import limit")
+        );
         assert_eq!(
             read_import_file_contents(&b""[..], "empty.txt", 0, 0).unwrap(),
             ""

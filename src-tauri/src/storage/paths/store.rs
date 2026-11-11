@@ -4,8 +4,8 @@ use std::{
 };
 
 use super::types::{
-    ResourceRootRole, StoragePaths, RESOURCE_ROOT_DATABASES, RESOURCE_ROOT_LOCK,
-    RESOURCE_ROOT_MARKER, RESOURCE_ROOT_MARKER_HEADER,
+    RESOURCE_ROOT_DATABASES, RESOURCE_ROOT_LOCK, RESOURCE_ROOT_MARKER, RESOURCE_ROOT_MARKER_HEADER,
+    ResourceRootRole, StoragePaths,
 };
 use crate::storage::StorageError;
 

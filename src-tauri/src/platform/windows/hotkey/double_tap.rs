@@ -3,10 +3,10 @@
 use std::collections::BTreeSet;
 use std::sync::Mutex;
 
-use crate::keyboard::{Modifier, DEFAULT_DOUBLE_TAP_INTERVAL_MS};
+use crate::keyboard::{DEFAULT_DOUBLE_TAP_INTERVAL_MS, Modifier};
 
-use super::message_loop::HOTKEY_SENDER;
 use super::HotkeyAction;
+use super::message_loop::HOTKEY_SENDER;
 
 const WM_KEYDOWN: u32 = 0x0100;
 const WM_KEYUP: u32 = 0x0101;
@@ -119,45 +119,47 @@ pub(super) unsafe extern "system" fn keyboard_hook_proc(
     wparam: usize,
     lparam: isize,
 ) -> isize {
-    extern "system" {
-        fn CallNextHookEx(hook: isize, code: i32, wparam: usize, lparam: isize) -> isize;
-    }
+    unsafe {
+        unsafe extern "system" {
+            fn CallNextHookEx(hook: isize, code: i32, wparam: usize, lparam: isize) -> isize;
+        }
 
-    #[repr(C)]
-    struct KeyboardHookEvent {
-        virtual_key: u32,
-        scan_code: u32,
-        flags: u32,
-        time: u32,
-        extra_info: usize,
-    }
+        #[repr(C)]
+        struct KeyboardHookEvent {
+            virtual_key: u32,
+            scan_code: u32,
+            flags: u32,
+            time: u32,
+            extra_info: usize,
+        }
 
-    if code >= 0 && lparam != 0 {
-        let message = wparam as u32;
-        let is_key_down = message == WM_KEYDOWN || message == WM_SYSKEYDOWN;
-        let is_key_up = message == WM_KEYUP || message == WM_SYSKEYUP;
-        if is_key_down || is_key_up {
-            let event = &*(lparam as *const KeyboardHookEvent);
-            let fired = DOUBLE_MODIFIER_TRACKER
-                .lock()
-                .ok()
-                .and_then(|mut tracker| {
-                    tracker.as_mut().map(|tracker| {
-                        tracker.on_key_event(event.virtual_key, is_key_down, event.time)
+        if code >= 0 && lparam != 0 {
+            let message = wparam as u32;
+            let is_key_down = message == WM_KEYDOWN || message == WM_SYSKEYDOWN;
+            let is_key_up = message == WM_KEYUP || message == WM_SYSKEYUP;
+            if is_key_down || is_key_up {
+                let event = &*(lparam as *const KeyboardHookEvent);
+                let fired = DOUBLE_MODIFIER_TRACKER
+                    .lock()
+                    .ok()
+                    .and_then(|mut tracker| {
+                        tracker.as_mut().map(|tracker| {
+                            tracker.on_key_event(event.virtual_key, is_key_down, event.time)
+                        })
                     })
-                })
-                .unwrap_or(false);
-            if fired {
-                // Double-tap modifiers always drive the main toggle; float
-                // chords are registered as plain hotkeys only.
-                if let Some(tx) = HOTKEY_SENDER.lock().ok().and_then(|g| g.clone()) {
-                    let _ = tx.send(HotkeyAction::ToggleMain);
+                    .unwrap_or(false);
+                if fired {
+                    // Double-tap modifiers always drive the main toggle; float
+                    // chords are registered as plain hotkeys only.
+                    if let Some(tx) = HOTKEY_SENDER.lock().ok().and_then(|g| g.clone()) {
+                        let _ = tx.send(HotkeyAction::ToggleMain);
+                    }
                 }
             }
         }
-    }
 
-    CallNextHookEx(0, code, wparam, lparam)
+        CallNextHookEx(0, code, wparam, lparam)
+    }
 }
 
 static DOUBLE_MODIFIER_TRACKER: Mutex<Option<DoubleModifierTracker>> = Mutex::new(None);
@@ -178,9 +180,9 @@ pub(super) fn clear_double_modifier_tracker() {
 /// a mouse-only window switch between two bare modifier taps cannot satisfy the
 /// double-tap interval (the keyboard hook never sees a key event for it).
 pub(super) fn cancel_pending_double_tap() {
-    if let Ok(mut guard) = DOUBLE_MODIFIER_TRACKER.lock() {
-        if let Some(tracker) = guard.as_mut() {
-            tracker.cancel_pending();
-        }
+    if let Ok(mut guard) = DOUBLE_MODIFIER_TRACKER.lock()
+        && let Some(tracker) = guard.as_mut()
+    {
+        tracker.cancel_pending();
     }
 }

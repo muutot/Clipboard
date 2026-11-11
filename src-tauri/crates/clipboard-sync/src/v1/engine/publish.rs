@@ -71,38 +71,36 @@ pub(super) fn reconcile_local_device_head(
         && remote_head.epoch == state.epoch
         && Some(&remote_head.snapshot) == state.snapshot.as_ref()
         && remote_head.published_sequence > state.published_sequence
+        && let Some(segment_key) = remote_head.last_segment_key.clone()
+        && published_segment_matches_outbox(
+            store,
+            database,
+            device_id,
+            &state,
+            &remote_head,
+            session_key,
+            result,
+        )
     {
-        if let Some(segment_key) = remote_head.last_segment_key.clone() {
-            if published_segment_matches_outbox(
-                store,
+        // A commit failure here means the local outbox no longer covers
+        // the remote head (e.g. it was pruned outside the engine); the
+        // pull-and-reset recovery below remains the fallback for that.
+        if let Ok(adopted) = database.commit_sync_segment_published(
+            remote_scope,
+            &state.epoch,
+            &segment_key,
+            remote_head.published_sequence,
+        ) {
+            record_head_cache(
                 database,
+                remote_scope,
                 device_id,
-                &state,
+                listed,
+                downloaded.etag.as_deref(),
+                downloaded.bytes.len() as u64,
                 &remote_head,
-                session_key,
-                result,
-            ) {
-                // A commit failure here means the local outbox no longer covers
-                // the remote head (e.g. it was pruned outside the engine); the
-                // pull-and-reset recovery below remains the fallback for that.
-                if let Ok(adopted) = database.commit_sync_segment_published(
-                    remote_scope,
-                    &state.epoch,
-                    &segment_key,
-                    remote_head.published_sequence,
-                ) {
-                    record_head_cache(
-                        database,
-                        remote_scope,
-                        device_id,
-                        listed,
-                        downloaded.etag.as_deref(),
-                        downloaded.bytes.len() as u64,
-                        &remote_head,
-                    );
-                    return Ok(adopted);
-                }
-            }
+            );
+            return Ok(adopted);
         }
     }
 

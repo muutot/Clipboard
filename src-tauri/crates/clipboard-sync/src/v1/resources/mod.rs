@@ -16,11 +16,11 @@ use std::{
 use sha2::{Digest, Sha256};
 
 use super::{
-    layout::{parse_resource_key, resource_object_key, ResourceCategory},
+    layout::{ResourceCategory, parse_resource_key, resource_object_key},
     remote::{ObjectMetadata, ObjectStore, PutCondition, PutOutcome},
     wire::{
-        resource_header, validate_resource_header, MutationBatch, SessionKey, SyncItemKind,
-        RESOURCE_AUTH_TAG_LEN, RESOURCE_HEADER_LEN,
+        MutationBatch, RESOURCE_AUTH_TAG_LEN, RESOURCE_HEADER_LEN, SessionKey, SyncItemKind,
+        resource_header, validate_resource_header,
     },
 };
 

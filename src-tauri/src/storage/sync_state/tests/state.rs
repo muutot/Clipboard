@@ -8,8 +8,8 @@ fn run_sync_write_during_capture(
 ) {
     use rusqlite::hooks::{AuthAction, AuthContext, Authorization};
     use std::sync::{
-        atomic::{AtomicBool, Ordering},
         Arc,
+        atomic::{AtomicBool, Ordering},
     };
     let root = std::env::temp_dir().join(format!("clipboard-sync-write-race-{}", Uuid::new_v4()));
     std::fs::create_dir(&root).unwrap();
@@ -363,13 +363,17 @@ fn sync_head_cache_round_trips_and_ignores_corrupt_values() {
             Ok(())
         })
         .unwrap();
-    assert!(database
-        .get_sync_head_cache(REMOTE_SCOPE, REMOTE_DEVICE)
-        .unwrap()
-        .is_none());
-    assert!(database
-        .record_sync_head_cache(REMOTE_SCOPE, REMOTE_DEVICE, "bad\netag", 88, None, &head)
-        .is_err());
+    assert!(
+        database
+            .get_sync_head_cache(REMOTE_SCOPE, REMOTE_DEVICE)
+            .unwrap()
+            .is_none()
+    );
+    assert!(
+        database
+            .record_sync_head_cache(REMOTE_SCOPE, REMOTE_DEVICE, "bad\netag", 88, None, &head)
+            .is_err()
+    );
 }
 
 #[test]

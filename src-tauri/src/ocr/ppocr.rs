@@ -263,7 +263,7 @@ impl OcrEngine for PpOcrEngine {
 
 #[cfg(test)]
 mod tests {
-    use super::{ocr_input_geometry, PpOcrEngine, MAX_OCR_SIDE};
+    use super::{MAX_OCR_SIDE, PpOcrEngine, ocr_input_geometry};
 
     fn assert_send<T: Send>() {}
     fn assert_sync<T: Sync>() {}

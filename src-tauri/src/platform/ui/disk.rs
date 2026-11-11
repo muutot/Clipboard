@@ -18,7 +18,7 @@ pub struct DiskSpace {
 pub fn disk_space(path: &Path) -> Option<DiskSpace> {
     use std::os::windows::ffi::OsStrExt;
 
-    extern "system" {
+    unsafe extern "system" {
         fn GetDiskFreeSpaceExW(
             directory_name: *const u16,
             free_bytes_available: *mut u64,

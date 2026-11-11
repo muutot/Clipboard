@@ -265,20 +265,22 @@ fn invalid_checkpoint_rolls_back_rows_cursors_and_generation() {
         tombstones: Vec::new(),
     };
 
-    assert!(database
-        .apply_sync_checkpoint(
-            REMOTE_SCOPE,
-            2,
-            &"d".repeat(64),
-            &[DeviceCursor {
-                device_id: "33333333-3333-4333-8333-333333333333".to_string(),
-                epoch: "44444444-4444-4444-8444-444444444444".to_string(),
-                sequence: 0,
-                last_segment_key: None,
-            }],
-            &invalid,
-        )
-        .is_err());
+    assert!(
+        database
+            .apply_sync_checkpoint(
+                REMOTE_SCOPE,
+                2,
+                &"d".repeat(64),
+                &[DeviceCursor {
+                    device_id: "33333333-3333-4333-8333-333333333333".to_string(),
+                    epoch: "44444444-4444-4444-8444-444444444444".to_string(),
+                    sequence: 0,
+                    last_segment_key: None,
+                }],
+                &invalid,
+            )
+            .is_err()
+    );
     assert!(database.get_item("broken-checkpoint").unwrap().is_none());
     assert_eq!(
         database.list_sync_cursors(REMOTE_SCOPE).unwrap(),
@@ -347,12 +349,14 @@ fn tombstone_blocks_an_older_later_segment_from_resurrecting_a_row() {
             .unwrap(),
         0
     );
-    assert!(database
-        .export_sync_snapshot()
-        .unwrap()
-        .mutations
-        .upserts
-        .is_empty());
+    assert!(
+        database
+            .export_sync_snapshot()
+            .unwrap()
+            .mutations
+            .upserts
+            .is_empty()
+    );
     assert_eq!(
         database
             .export_sync_snapshot()
@@ -396,14 +400,18 @@ fn failed_remote_batch_rolls_back_rows_suppression_and_cursor() {
         upserts: vec![first, collision],
         tombstones: Vec::new(),
     };
-    assert!(database
-        .apply_sync_snapshot(REMOTE_SCOPE, &cursor(0, None), &"f".repeat(64), &failed)
-        .is_err());
+    assert!(
+        database
+            .apply_sync_snapshot(REMOTE_SCOPE, &cursor(0, None), &"f".repeat(64), &failed)
+            .is_err()
+    );
     assert!(database.get_item("would-be-inserted").unwrap().is_none());
-    assert!(database
-        .get_sync_cursor(REMOTE_SCOPE, REMOTE_DEVICE)
-        .unwrap()
-        .is_none());
+    assert!(
+        database
+            .get_sync_cursor(REMOTE_SCOPE, REMOTE_DEVICE)
+            .unwrap()
+            .is_none()
+    );
 
     database
         .save_item(&item("after-failure", "hash-after", "after"))
@@ -426,13 +434,17 @@ fn invalid_resource_metadata_rolls_back_sync_rows_and_cursor() {
         upserts: vec![valid, invalid],
         tombstones: vec![],
     };
-    assert!(database
-        .apply_sync_snapshot(REMOTE_SCOPE, &cursor(0, None), &"c".repeat(64), &mutations)
-        .is_err());
+    assert!(
+        database
+            .apply_sync_snapshot(REMOTE_SCOPE, &cursor(0, None), &"c".repeat(64), &mutations)
+            .is_err()
+    );
     assert_eq!(database.item_count().unwrap(), 0);
     assert_eq!(database.count_sync_outbox().unwrap(), 0);
-    assert!(database
-        .get_sync_cursor(REMOTE_SCOPE, REMOTE_DEVICE)
-        .unwrap()
-        .is_none());
+    assert!(
+        database
+            .get_sync_cursor(REMOTE_SCOPE, REMOTE_DEVICE)
+            .unwrap()
+            .is_none()
+    );
 }

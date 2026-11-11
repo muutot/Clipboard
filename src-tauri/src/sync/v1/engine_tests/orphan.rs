@@ -255,17 +255,19 @@ fn assert_restored_edit_survives_interrupted_publication(
     let backup = paths.project.join("backup.sqlite3");
     source.vacuum_into(&backup).unwrap();
     let edit = |database: &Database, text: &str, hash: &str| {
-        assert!(database
-            .update_text_item(&TextItemUpdate {
-                id: "editable",
-                kind: ClipboardKind::Text,
-                title: text,
-                text_content: text,
-                content_hash: hash,
-                size_bytes: text.len() as u64,
-                custom_title: None,
-            })
-            .unwrap());
+        assert!(
+            database
+                .update_text_item(&TextItemUpdate {
+                    id: "editable",
+                    kind: ClipboardKind::Text,
+                    title: text,
+                    text_content: text,
+                    content_hash: hash,
+                    size_bytes: text.len() as u64,
+                    custom_title: None,
+                })
+                .unwrap()
+        );
     };
     edit(&source, "interrupted remote edit", "remote-edit-hash");
     let device = source.get_sync_device_id().unwrap();
@@ -620,10 +622,12 @@ fn published_head_without_local_commit_is_adopted_in_place() {
         recovered.last_segment_key.as_deref(),
         Some(segment_key.as_str())
     );
-    assert!(source
-        .get_sync_outbox_batch_for_scope(REMOTE_SCOPE, 100)
-        .unwrap()
-        .is_none());
+    assert!(
+        source
+            .get_sync_outbox_batch_for_scope(REMOTE_SCOPE, 100)
+            .unwrap()
+            .is_none()
+    );
     assert!(source.get_item("uncommitted").unwrap().is_some());
 
     // A fresh peer converges through the adopted chain.

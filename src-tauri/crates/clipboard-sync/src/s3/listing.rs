@@ -174,7 +174,7 @@ fn invalid_list_xml() -> String {
 /// Serde consumes one value; validate the entire document first so a closed
 /// first root or missing trailing closing tag cannot return partial discovery.
 fn validate_list_document(xml: &str) -> Result<(), String> {
-    use quick_xml::{events::Event, Reader};
+    use quick_xml::{Reader, events::Event};
 
     let mut reader = Reader::from_str(xml);
     reader.config_mut().expand_empty_elements = true;

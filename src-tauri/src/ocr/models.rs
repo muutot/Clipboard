@@ -143,7 +143,8 @@ pub fn models_dir(storage_path: &Path) -> PathBuf {
 }
 
 pub fn set_oar_home(dir: &Path) {
-    std::env::set_var("OAR_HOME", dir);
+    // FIXME: Audit that the environment access only happens in single-threaded code.
+    unsafe { std::env::set_var("OAR_HOME", dir) };
 }
 
 pub fn model_spec(value: &str) -> Option<&'static PpOcrModelSpec> {
@@ -246,12 +247,11 @@ pub fn model_digest_matches(dir: &Path, file: &PpOcrModelFile) -> bool {
         len: metadata.len(),
         modified: metadata.modified().ok(),
     };
-    if let Ok(cache) = digest_cache().lock() {
-        if let Some((cached_key, matches)) = cache.get(&model_path) {
-            if *cached_key == key {
-                return *matches;
-            }
-        }
+    if let Ok(cache) = digest_cache().lock()
+        && let Some((cached_key, matches)) = cache.get(&model_path)
+        && *cached_key == key
+    {
+        return *matches;
     }
 
     let digest_path = model_digest_path(dir, file);
@@ -308,8 +308,8 @@ mod tests {
     use std::time::SystemTime;
 
     use super::{
-        file_matches_sha256, model_digest_matches, model_is_installed, model_spec,
-        record_model_digest, PpOcrModelFile, SUPPORTED_MODEL_SPECS,
+        PpOcrModelFile, SUPPORTED_MODEL_SPECS, file_matches_sha256, model_digest_matches,
+        model_is_installed, model_spec, record_model_digest,
     };
 
     #[test]
@@ -333,16 +333,20 @@ mod tests {
         let path = dir.join("model.bin");
         fs::write(&path, b"hello").unwrap();
         // SHA-256("hello").
-        assert!(file_matches_sha256(
-            &path,
-            "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
-        )
-        .unwrap());
-        assert!(!file_matches_sha256(
-            &path,
-            "0000000000000000000000000000000000000000000000000000000000000000"
-        )
-        .unwrap());
+        assert!(
+            file_matches_sha256(
+                &path,
+                "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+            )
+            .unwrap()
+        );
+        assert!(
+            !file_matches_sha256(
+                &path,
+                "0000000000000000000000000000000000000000000000000000000000000000"
+            )
+            .unwrap()
+        );
         fs::remove_dir_all(dir).unwrap();
     }
 

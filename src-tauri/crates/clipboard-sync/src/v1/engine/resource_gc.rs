@@ -127,13 +127,12 @@ pub(super) fn garbage_collect_resources(
             continue;
         };
         checkpoints.insert((parsed.generation, parsed.sha256.clone()));
-        if mode == ResourceGcMode::Manifest {
-            if let Some(manifest) =
+        if mode == ResourceGcMode::Manifest
+            && let Some(manifest) =
                 read_resource_manifest(store, parsed.generation, &parsed.sha256)?
-            {
-                keep.extend(manifest);
-                continue;
-            }
+        {
+            keep.extend(manifest);
+            continue;
         }
         collect_checkpoint_references(
             store,

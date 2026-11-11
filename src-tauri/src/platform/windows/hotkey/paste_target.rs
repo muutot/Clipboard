@@ -72,7 +72,7 @@ impl QuickPasteTarget {
 
 #[cfg(target_os = "windows")]
 fn window_process_id(window_handle: isize) -> u32 {
-    extern "system" {
+    unsafe extern "system" {
         fn GetWindowThreadProcessId(window: isize, process_id: *mut u32) -> u32;
     }
     let mut process_id = 0u32;
@@ -108,10 +108,10 @@ pub(super) unsafe extern "system" fn foreground_hook_proc(
     // pending double-modifier tap here; otherwise the two taps could still
     // satisfy the double-tap interval across the switch and misfire.
     super::double_tap::cancel_pending_double_tap();
-    if let Ok(guard) = FOREGROUND_TARGET.lock() {
-        if let Some(target) = guard.as_ref() {
-            target.remember(hwnd);
-        }
+    if let Ok(guard) = FOREGROUND_TARGET.lock()
+        && let Some(target) = guard.as_ref()
+    {
+        target.remember(hwnd);
     }
 }
 
@@ -129,7 +129,7 @@ pub(super) fn clear_foreground_paste_target() {
 
 #[cfg(target_os = "windows")]
 pub(super) fn foreground_window_handle() -> Option<isize> {
-    extern "system" {
+    unsafe extern "system" {
         fn GetForegroundWindow() -> isize;
     }
 
@@ -150,7 +150,7 @@ pub(super) fn foreground_window_handle() -> Option<isize> {
 pub fn focus_quick_paste_target(target: QuickPasteHandle) -> Result<(), String> {
     const SW_RESTORE: i32 = 9;
 
-    extern "system" {
+    unsafe extern "system" {
         fn IsWindow(window: isize) -> i32;
         fn IsIconic(window: isize) -> i32;
         fn ShowWindow(window: isize, command: i32) -> i32;
@@ -185,7 +185,7 @@ pub fn focus_quick_paste_target(_target: QuickPasteHandle) -> Result<(), String>
 
 #[cfg(target_os = "windows")]
 pub fn restore_window_and_paste(target: QuickPasteHandle) -> Result<(), String> {
-    extern "system" {
+    unsafe extern "system" {
         fn GetForegroundWindow() -> isize;
     }
 
@@ -283,7 +283,7 @@ fn send_ctrl_v(target: QuickPasteHandle) -> Result<(), String> {
         }
     }
 
-    extern "system" {
+    unsafe extern "system" {
         fn SendInput(input_count: u32, inputs: *const Input, input_size: i32) -> u32;
         fn GetAsyncKeyState(virtual_key: i32) -> i16;
         fn GetLastError() -> u32;

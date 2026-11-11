@@ -540,23 +540,23 @@ pub(crate) fn persist_sync_config(
         .then(|| SyncSettings::validated_from_sync_config(&sync).ok())
         .flatten()
         .map(|settings| settings.remote_scope_id());
-    if let Some(next_scope) = next_scope {
-        if previous_scope.as_ref() != Some(&next_scope) {
-            // Off has no active target, and a known namespace may use its
-            // historical scope rather than the stable settings identity.
-            let binding = database
-                .sync_namespace_binding(&next_scope)
-                .map_err(|error| error.to_string())?
-                .map(|bytes| clipboard_sync::v1::namespace::Namespace::from_bytes(&bytes))
-                .transpose()?;
-            let publication_scope = binding
-                .as_ref()
-                .map(|namespace| namespace.scope.as_str())
-                .unwrap_or(&next_scope);
-            database
-                .reset_sync_remote_state(publication_scope)
-                .map_err(|error| error.to_string())?;
-        }
+    if let Some(next_scope) = next_scope
+        && previous_scope.as_ref() != Some(&next_scope)
+    {
+        // Off has no active target, and a known namespace may use its
+        // historical scope rather than the stable settings identity.
+        let binding = database
+            .sync_namespace_binding(&next_scope)
+            .map_err(|error| error.to_string())?
+            .map(|bytes| clipboard_sync::v1::namespace::Namespace::from_bytes(&bytes))
+            .transpose()?;
+        let publication_scope = binding
+            .as_ref()
+            .map(|namespace| namespace.scope.as_str())
+            .unwrap_or(&next_scope);
+        database
+            .reset_sync_remote_state(publication_scope)
+            .map_err(|error| error.to_string())?;
     }
     config
         .set_sync_config(sync)
@@ -733,12 +733,12 @@ fn materialize_clipboard_item_blocking(
         )
     })?;
 
-    if changed && updated.kind == ClipboardKind::Image {
-        if let Some(resource_path) = updated.resource_path.as_deref() {
-            if let Ok(worker) = thumbnail_worker.lock() {
-                worker.enqueue(id.to_string(), PathBuf::from(resource_path));
-            }
-        }
+    if changed
+        && updated.kind == ClipboardKind::Image
+        && let Some(resource_path) = updated.resource_path.as_deref()
+        && let Ok(worker) = thumbnail_worker.lock()
+    {
+        worker.enqueue(id.to_string(), PathBuf::from(resource_path));
     }
     Ok(updated)
 }
@@ -1435,19 +1435,17 @@ pub(super) fn run_sync_cancellable(
             Ok(engine_result.into())
         }
         Err(error) => {
-            if let Ok(mut guard) = config.lock() {
-                if let Err(status_error) = guard.update_sync_status(
+            if let Ok(mut guard) = config.lock()
+                && let Err(status_error) = guard.update_sync_status(
                     if operation.token().is_cancelled() {
                         "cancelled"
                     } else {
                         "failed"
                     },
                     now_ms,
-                ) {
-                    crate::log_error!(
-                        "[sync] failed to persist failed sync status: {status_error}"
-                    );
-                }
+                )
+            {
+                crate::log_error!("[sync] failed to persist failed sync status: {status_error}");
             }
             Err(error)
         }
@@ -2196,10 +2194,10 @@ mod tests {
             let etag = fake_etag(&bytes);
             objects.insert(key.to_string(), (bytes, etag.clone()));
             self.puts.fetch_add(1, Ordering::Relaxed);
-            if key == ROTATED_TO_KEY {
-                if let Some(token) = self.cancel_after_tombstone.lock().unwrap().as_ref() {
-                    token.cancel();
-                }
+            if key == ROTATED_TO_KEY
+                && let Some(token) = self.cancel_after_tombstone.lock().unwrap().as_ref()
+            {
+                token.cancel();
             }
             Ok(PutOutcome::Stored { etag: Some(etag) })
         }
@@ -2328,12 +2326,14 @@ mod tests {
             old_settings.engine_options(),
         )
         .unwrap();
-        assert!(target
-            .get_item("rotate-image")
-            .unwrap()
-            .unwrap()
-            .resource_path
-            .is_none());
+        assert!(
+            target
+                .get_item("rotate-image")
+                .unwrap()
+                .unwrap()
+                .resource_path
+                .is_none()
+        );
 
         let new_password = "brand-new-rotation-password";
         let new_prefix = "clipboard-rotated-42";
@@ -2392,9 +2392,11 @@ mod tests {
             .map(|object| object.key)
             .collect();
         assert!(new_keys.iter().any(|key| key == "v1/namespace.json"));
-        assert!(new_keys
-            .iter()
-            .any(|key| key.starts_with("v1/resources/image/")));
+        assert!(
+            new_keys
+                .iter()
+                .any(|key| key.starts_with("v1/resources/image/"))
+        );
         assert!(new_keys.iter().any(|key| key.starts_with("v1/heads/")));
 
         // The materialized body is local, byte-identical, and the record kept
@@ -2558,9 +2560,11 @@ mod tests {
             .map(|object| object.key)
             .collect();
         assert!(new_keys.iter().any(|key| key == "v1/namespace.json"));
-        assert!(new_keys
-            .iter()
-            .any(|key| key.starts_with("v1/resources/image/")));
+        assert!(
+            new_keys
+                .iter()
+                .any(|key| key.starts_with("v1/resources/image/"))
+        );
 
         drop(database);
         fs::remove_dir_all(paths.project).unwrap();
@@ -2605,11 +2609,13 @@ mod tests {
                 &mut |_| {},
             )
         });
-        assert!(old_store
-            .objects
-            .lock()
-            .unwrap()
-            .contains_key(ROTATED_TO_KEY));
+        assert!(
+            old_store
+                .objects
+                .lock()
+                .unwrap()
+                .contains_key(ROTATED_TO_KEY)
+        );
         let saved = ConfigStore::load(&paths.project).unwrap().sync_config();
         let deletes = old_store.deletes.load(Ordering::Relaxed);
         drop(database);

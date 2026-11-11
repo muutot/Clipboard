@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{Arc, Mutex, mpsc};
 use std::time::Duration;
 
 use tauri::{AppHandle, Emitter};
@@ -17,7 +17,7 @@ use super::helpers::{
 use super::web_source;
 use crate::content;
 use crate::content::self_trigger::SelfTriggerGuard;
-use crate::content::{FileStore, ThumbnailQueue, RESOURCE_METADATA_SCHEMA_VERSION};
+use crate::content::{FileStore, RESOURCE_METADATA_SCHEMA_VERSION, ThumbnailQueue};
 use crate::domain::{ClipboardItem, ClipboardKind};
 use crate::platform;
 use crate::platform::windows::ClipboardChange;

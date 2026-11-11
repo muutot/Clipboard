@@ -58,65 +58,65 @@ fn rename_item_record_with_copy(
         return Err("name contains no usable characters".to_string());
     }
     let mut updated = item.clone();
-    if item.kind == ClipboardKind::Image || item.kind == ClipboardKind::File {
-        if let Some(ref old_path) = item.resource_path {
-            let old = std::path::Path::new(old_path);
-            // Storage files are content-hash-named and can be shared by several
-            // records (dedup, duplicates, previews). Known shared files receive
-            // a display-title change only. A currently unshared file is copied
-            // to the new name; a concurrent writer may already have read the
-            // old path without committing its reference yet.
-            let shared = database
-                .resource_reference_count(old_path, &id)
-                .map_err(|e| e.to_string())?
-                > 0;
-            if is_owned_rename_source(paths, old) && !shared {
-                let ext = old.extension().unwrap_or_default().to_string_lossy();
-                let parent = old.parent().unwrap_or(std::path::Path::new("."));
-                // The new name arrives from the webview and must never be able
-                // to escape the managed directory via separators or traversal.
-                // An empty extension must not produce a trailing dot: Windows
-                // strips it from the real file name, so the DB record would
-                // point at a path that does not exist on disk.
-                let candidate = if ext.is_empty() {
-                    sanitized_name.clone()
-                } else {
-                    format!("{sanitized_name}.{ext}")
-                };
-                if std::path::Path::new(&candidate)
-                    .file_name()
-                    .map(|f| f.to_string_lossy().to_string())
-                    .as_deref()
-                    != Some(candidate.as_str())
-                {
-                    return Err("invalid file name".to_string());
+    if (item.kind == ClipboardKind::Image || item.kind == ClipboardKind::File)
+        && let Some(ref old_path) = item.resource_path
+    {
+        let old = std::path::Path::new(old_path);
+        // Storage files are content-hash-named and can be shared by several
+        // records (dedup, duplicates, previews). Known shared files receive
+        // a display-title change only. A currently unshared file is copied
+        // to the new name; a concurrent writer may already have read the
+        // old path without committing its reference yet.
+        let shared = database
+            .resource_reference_count(old_path, &id)
+            .map_err(|e| e.to_string())?
+            > 0;
+        if is_owned_rename_source(paths, old) && !shared {
+            let ext = old.extension().unwrap_or_default().to_string_lossy();
+            let parent = old.parent().unwrap_or(std::path::Path::new("."));
+            // The new name arrives from the webview and must never be able
+            // to escape the managed directory via separators or traversal.
+            // An empty extension must not produce a trailing dot: Windows
+            // strips it from the real file name, so the DB record would
+            // point at a path that does not exist on disk.
+            let candidate = if ext.is_empty() {
+                sanitized_name.clone()
+            } else {
+                format!("{sanitized_name}.{ext}")
+            };
+            if std::path::Path::new(&candidate)
+                .file_name()
+                .map(|f| f.to_string_lossy().to_string())
+                .as_deref()
+                != Some(candidate.as_str())
+            {
+                return Err("invalid file name".to_string());
+            }
+            let new_path = parent.join(candidate);
+            if new_path != old {
+                if new_path.exists() {
+                    return Err(format!("file already exists: {}", new_path.display()));
                 }
-                let new_path = parent.join(candidate);
-                if new_path != old {
-                    if new_path.exists() {
-                        return Err(format!("file already exists: {}", new_path.display()));
-                    }
-                    // Finish the copy before publishing any new DB paths.
-                    // Keep the old file for in-flight duplicates/captures;
-                    // orphan cleanup reclaims it once no writer or row uses it.
-                    // A failed save leaves only an unreferenced complete copy.
-                    copy_file(old, &new_path).map_err(|e| format!("rename failed: {e}"))?;
-                    let old_path_string = old.to_string_lossy().to_string();
-                    let new_path_string = new_path.to_string_lossy().to_string();
-                    updated.resource_path = Some(new_path_string.clone());
-                    // preview_path either points at the dedicated thumbnail
-                    // under previews/ or falls back to the original image
-                    // path until the worker fills it in. Only refresh the
-                    // fallback; overwriting a generated thumbnail link would
-                    // lose it and orphan the preview file.
-                    if updated.preview_path.as_deref() == Some(old_path_string.as_str()) {
-                        updated.preview_path = Some(new_path_string.clone());
-                    }
-                    // The detail panel and multi-file paste read the managed
-                    // path out of `metadata_json`/`text_content` before
-                    // `resource_path`, so those copies must move with the file.
-                    rewrite_stored_resource_paths(&mut updated, &old_path_string, &new_path_string);
+                // Finish the copy before publishing any new DB paths.
+                // Keep the old file for in-flight duplicates/captures;
+                // orphan cleanup reclaims it once no writer or row uses it.
+                // A failed save leaves only an unreferenced complete copy.
+                copy_file(old, &new_path).map_err(|e| format!("rename failed: {e}"))?;
+                let old_path_string = old.to_string_lossy().to_string();
+                let new_path_string = new_path.to_string_lossy().to_string();
+                updated.resource_path = Some(new_path_string.clone());
+                // preview_path either points at the dedicated thumbnail
+                // under previews/ or falls back to the original image
+                // path until the worker fills it in. Only refresh the
+                // fallback; overwriting a generated thumbnail link would
+                // lose it and orphan the preview file.
+                if updated.preview_path.as_deref() == Some(old_path_string.as_str()) {
+                    updated.preview_path = Some(new_path_string.clone());
                 }
+                // The detail panel and multi-file paste read the managed
+                // path out of `metadata_json`/`text_content` before
+                // `resource_path`, so those copies must move with the file.
+                rewrite_stored_resource_paths(&mut updated, &old_path_string, &new_path_string);
             }
         }
     }
@@ -190,7 +190,7 @@ fn copy_rename_resource(from: &std::path::Path, to: &std::path::Path) -> std::io
 /// symlink metadata rejects a linked leaf and directories themselves.
 pub(super) fn is_owned_rename_source(paths: &StoragePaths, source: &std::path::Path) -> bool {
     use crate::storage::{
-        ResourceRootRole, RESOURCE_ROOT_DATABASES, RESOURCE_ROOT_LOCK, RESOURCE_ROOT_MARKER,
+        RESOURCE_ROOT_DATABASES, RESOURCE_ROOT_LOCK, RESOURCE_ROOT_MARKER, ResourceRootRole,
     };
     if source.file_name().is_some_and(|name| {
         name == RESOURCE_ROOT_MARKER
@@ -271,28 +271,26 @@ pub(super) fn rewrite_stored_resource_paths(
     old_path: &str,
     new_path: &str,
 ) {
-    if let Some(metadata) = item.metadata_json.as_deref() {
-        if let Ok(mut value) = serde_json::from_str::<serde_json::Value>(metadata) {
-            replace_path_strings(&mut value, old_path, new_path);
-            if let Ok(serialized) = serde_json::to_string(&value) {
-                item.metadata_json = Some(serialized);
-            }
+    if let Some(metadata) = item.metadata_json.as_deref()
+        && let Ok(mut value) = serde_json::from_str::<serde_json::Value>(metadata)
+    {
+        replace_path_strings(&mut value, old_path, new_path);
+        if let Ok(serialized) = serde_json::to_string(&value) {
+            item.metadata_json = Some(serialized);
         }
     }
-    if let Some(text) = item.text_content.as_deref() {
-        if let Ok(mut paths) = serde_json::from_str::<Vec<String>>(text) {
-            let mut changed = false;
-            for path in &mut paths {
-                if path == old_path {
-                    *path = new_path.to_owned();
-                    changed = true;
-                }
+    if let Some(text) = item.text_content.as_deref()
+        && let Ok(mut paths) = serde_json::from_str::<Vec<String>>(text)
+    {
+        let mut changed = false;
+        for path in &mut paths {
+            if path == old_path {
+                *path = new_path.to_owned();
+                changed = true;
             }
-            if changed {
-                if let Ok(serialized) = serde_json::to_string(&paths) {
-                    item.text_content = Some(serialized);
-                }
-            }
+        }
+        if changed && let Ok(serialized) = serde_json::to_string(&paths) {
+            item.text_content = Some(serialized);
         }
     }
 }
@@ -367,17 +365,19 @@ mod tests {
         assert!(other.set_tags("source", &["after".into()]).unwrap());
         assert!(other.set_code_language("source", Some("Rust")).unwrap());
         assert!(other.set_favorite("source", false).unwrap());
-        assert!(other
-            .update_text_item(&TextItemUpdate {
-                id: "source",
-                kind,
-                title: "later title",
-                text_content: "later body",
-                content_hash: "later-hash",
-                size_bytes: 10,
-                custom_title: None,
-            })
-            .unwrap());
+        assert!(
+            other
+                .update_text_item(&TextItemUpdate {
+                    id: "source",
+                    kind,
+                    title: "later title",
+                    text_content: "later body",
+                    content_hash: "later-hash",
+                    size_bytes: 10,
+                    custom_title: None,
+                })
+                .unwrap()
+        );
         let mut expected = other.get_item("source").unwrap().unwrap();
         expected.title = prepared.title.clone();
         expected.metadata_json =
@@ -459,9 +459,11 @@ mod tests {
                     RenameInterleave::Metadata => {
                         assert!(other.set_tags("source", &["after".into()]).unwrap());
                         assert!(other.set_favorite("source", false).unwrap());
-                        assert!(other
-                            .set_preview_path("source", preview.to_str().unwrap())
-                            .unwrap());
+                        assert!(
+                            other
+                                .set_preview_path("source", preview.to_str().unwrap())
+                                .unwrap()
+                        );
                         assert!(other.set_last_used("source").unwrap());
                     }
                     RenameInterleave::Delete => {

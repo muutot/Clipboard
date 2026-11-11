@@ -146,17 +146,19 @@ fn resource_refs_commit_with_the_cursor_and_survive_local_only_updates() {
     invalid_refs.get_mut("remote-image").unwrap()[0].object_key = "invalid".to_string();
     let mut newer = exported.mutations.upserts[0].clone();
     newer.version.modified_at_ms += 1;
-    assert!(database
-        .apply_sync_segment_with_resources(
-            REMOTE_SCOPE,
-            &cursor(1, Some("segment-1")),
-            &MutationBatch {
-                upserts: vec![newer],
-                tombstones: Vec::new(),
-            },
-            &invalid_refs,
-        )
-        .is_err());
+    assert!(
+        database
+            .apply_sync_segment_with_resources(
+                REMOTE_SCOPE,
+                &cursor(1, Some("segment-1")),
+                &MutationBatch {
+                    upserts: vec![newer],
+                    tombstones: Vec::new(),
+                },
+                &invalid_refs,
+            )
+            .is_err()
+    );
     assert!(
         database
             .get_sync_cursor(REMOTE_SCOPE, REMOTE_DEVICE)

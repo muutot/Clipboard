@@ -111,7 +111,7 @@ fn compile_sensitive_patterns(patterns: &[String]) -> Vec<regex_lite::Regex> {
 
 #[cfg(test)]
 mod tests {
-    use super::{compile_sensitive_patterns, PrivacyManager};
+    use super::{PrivacyManager, compile_sensitive_patterns};
 
     #[test]
     fn skips_invalid_patterns_without_dropping_valid_ones() {
@@ -145,7 +145,9 @@ mod tests {
     #[test]
     fn detects_private_key_patterns() {
         let manager = PrivacyManager::new();
-        assert!(manager.is_sensitive_content("-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQE..."));
+        assert!(
+            manager.is_sensitive_content("-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQE...")
+        );
     }
 
     #[test]

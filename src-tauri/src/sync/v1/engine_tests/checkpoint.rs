@@ -55,24 +55,30 @@ fn malformed_checkpoint_tail_rolls_back_rows_and_cursors_then_allows_retry() {
     );
     assert!(database.get_item("incomplete-peer-item").unwrap().is_none());
     assert!(database.get_item("local-existing").unwrap().is_some());
-    assert!(database
-        .get_sync_cursor(REMOTE_SCOPE, peer)
-        .unwrap()
-        .is_none());
-    assert!(database
-        .get_sync_checkpoint_state(REMOTE_SCOPE)
-        .unwrap()
-        .is_none());
+    assert!(
+        database
+            .get_sync_cursor(REMOTE_SCOPE, peer)
+            .unwrap()
+            .is_none()
+    );
+    assert!(
+        database
+            .get_sync_checkpoint_state(REMOTE_SCOPE)
+            .unwrap()
+            .is_none()
+    );
 
     insert_checkpoint_head(&store, &checkpoint, valid_reference, None);
     let retried = sync_database(&store, &database, &paths, REMOTE_SCOPE, None, options()).unwrap();
     assert!(retried.applied_entries >= 1);
     assert!(database.get_item("incomplete-peer-item").unwrap().is_some());
     assert!(database.get_item("local-existing").unwrap().is_some());
-    assert!(database
-        .get_sync_cursor(REMOTE_SCOPE, peer)
-        .unwrap()
-        .is_some());
+    assert!(
+        database
+            .get_sync_cursor(REMOTE_SCOPE, peer)
+            .unwrap()
+            .is_some()
+    );
     drop(database);
     fs::remove_dir_all(paths.project).unwrap();
 }
@@ -154,10 +160,12 @@ fn empty_device_bootstraps_from_checkpoint_without_peer_history() {
     assert_eq!(result.downloaded_entries, 1);
     assert_eq!(result.applied_entries, 1);
     assert!(database.get_item("checkpoint-only").unwrap().is_some());
-    assert!(database
-        .get_sync_checkpoint_state(REMOTE_SCOPE)
-        .unwrap()
-        .is_some_and(|(generation, _)| generation >= 1));
+    assert!(
+        database
+            .get_sync_checkpoint_state(REMOTE_SCOPE)
+            .unwrap()
+            .is_some_and(|(generation, _)| generation >= 1)
+    );
 
     drop(database);
     fs::remove_dir_all(paths.project).unwrap();
@@ -214,10 +222,12 @@ fn corrupt_current_checkpoint_falls_back_to_previous_generation() {
 
     assert!(database.get_item("previous-only").unwrap().is_some());
     assert!(database.get_item("current-only").unwrap().is_none());
-    assert!(database
-        .get_sync_checkpoint_state(REMOTE_SCOPE)
-        .unwrap()
-        .is_some_and(|(generation, _)| generation >= 1));
+    assert!(
+        database
+            .get_sync_checkpoint_state(REMOTE_SCOPE)
+            .unwrap()
+            .is_some_and(|(generation, _)| generation >= 1)
+    );
 
     drop(database);
     fs::remove_dir_all(paths.project).unwrap();
@@ -240,18 +250,22 @@ fn idle_sync_does_not_read_or_publish_a_checkpoint() {
     assert_eq!(idle.uploaded_entries, 0);
     assert_eq!(idle.bytes_uploaded, 0);
     assert_eq!(idle.deleted_remote_objects, 0);
-    assert!(!store
-        .gets
-        .lock()
-        .unwrap()
-        .iter()
-        .any(|key| key == CHECKPOINT_HEAD_KEY));
-    assert!(!store
-        .puts
-        .lock()
-        .unwrap()
-        .iter()
-        .any(|key| key == CHECKPOINT_HEAD_KEY || key.starts_with("v1/checkpoints/")));
+    assert!(
+        !store
+            .gets
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|key| key == CHECKPOINT_HEAD_KEY)
+    );
+    assert!(
+        !store
+            .puts
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|key| key == CHECKPOINT_HEAD_KEY || key.starts_with("v1/checkpoints/"))
+    );
 
     drop(database);
     fs::remove_dir_all(paths.project).unwrap();
@@ -296,12 +310,14 @@ fn idle_sync_uses_one_head_listing_and_zero_head_gets_after_cache_warmup() {
             .count(),
         1
     );
-    assert!(!store
-        .gets
-        .lock()
-        .unwrap()
-        .iter()
-        .any(|key| key.starts_with(HEADS_PREFIX)));
+    assert!(
+        !store
+            .gets
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|key| key.starts_with(HEADS_PREFIX))
+    );
 
     drop(first);
     drop(second);

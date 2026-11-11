@@ -388,13 +388,13 @@ async fn download_ppocr_file(
     // The pinned asset size is also the disk budget, not merely an EOF
     // integrity check. A changed server body must not fill the model volume.
     let total = model_file.size_bytes;
-    if let Some(declared) = response.content_length() {
-        if declared > total {
-            return Err(format!(
-                "downloaded {} has unexpected size: expected {}, declared {}",
-                model_file.filename, total, declared
-            ));
-        }
+    if let Some(declared) = response.content_length()
+        && declared > total
+    {
+        return Err(format!(
+            "downloaded {} has unexpected size: expected {}, declared {}",
+            model_file.filename, total, declared
+        ));
     }
     let mut file = tokio::fs::File::create(&temporary)
         .await
@@ -745,11 +745,11 @@ mod tests {
         database.enqueue_ocr("settings-image").unwrap();
         let deadline = Instant::now() + Duration::from_secs(5);
         loop {
-            if let Some(result) = database.get_ocr_result("settings-image").unwrap() {
-                if result.status == crate::domain::OcrStatus::Completed {
-                    assert_eq!(result.model_version, "score-0.9");
-                    break;
-                }
+            if let Some(result) = database.get_ocr_result("settings-image").unwrap()
+                && result.status == crate::domain::OcrStatus::Completed
+            {
+                assert_eq!(result.model_version, "score-0.9");
+                break;
             }
             assert!(
                 Instant::now() < deadline,
@@ -767,18 +767,20 @@ mod tests {
         let before = fixture.config.lock().unwrap().det_score_threshold();
         fs::rename(fixture.root.join("conf"), fixture.root.join("saved-conf")).unwrap();
         let restarted = std::sync::atomic::AtomicBool::new(false);
-        assert!(apply_ocr_runtime_settings_with(
-            &fixture.config,
-            &fixture.paths,
-            &fixture.worker,
-            score_update(0.4),
-            settings_engine,
-            |_, _| {
-                restarted.store(true, std::sync::atomic::Ordering::SeqCst);
-                Ok(())
-            },
-        )
-        .is_err());
+        assert!(
+            apply_ocr_runtime_settings_with(
+                &fixture.config,
+                &fixture.paths,
+                &fixture.worker,
+                score_update(0.4),
+                settings_engine,
+                |_, _| {
+                    restarted.store(true, std::sync::atomic::Ordering::SeqCst);
+                    Ok(())
+                },
+            )
+            .is_err()
+        );
         assert!(!restarted.load(std::sync::atomic::Ordering::SeqCst));
         assert_eq!(fixture.config.lock().unwrap().det_score_threshold(), before);
         fs::rename(fixture.root.join("saved-conf"), fixture.root.join("conf")).unwrap();

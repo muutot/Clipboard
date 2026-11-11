@@ -13,7 +13,7 @@ pub type Id = *mut Object;
 pub const YES: i8 = 1;
 pub const NO: i8 = 0;
 
-extern "C" {
+unsafe extern "C" {
     pub fn objc_getClass(name: *const i8) -> Id;
     pub fn sel_registerName(name: *const i8) -> Sel;
     #[link_name = "objc_msgSend"]

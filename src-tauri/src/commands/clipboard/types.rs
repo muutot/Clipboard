@@ -3,12 +3,12 @@ use std::sync::Mutex;
 use serde::{Deserialize, Serialize};
 
 use super::super::cleanup::cleanup_orphan_storage_files;
+use crate::STORAGE_KIND_DELETE_SCOPE;
 use crate::domain::{ClipboardItem, ClipboardKind};
 use crate::search::{SearchIndex, SearchSyncSummary, SearchSynchronizer};
 use crate::storage::{
     ClipboardRepository, Database, HistoryCursor, KindDeleteResult, KindStorageStats, StoragePaths,
 };
-use crate::STORAGE_KIND_DELETE_SCOPE;
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]

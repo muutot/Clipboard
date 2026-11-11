@@ -151,7 +151,8 @@ fn position_float_panel<R: tauri::Runtime>(
             let _ = window.center();
             return;
         };
-        let place = match config.lock() {
+
+        match config.lock() {
             Ok(guard) => guard.general_settings().float_panel_position.clone(),
             Err(error) => {
                 crate::log_error!(
@@ -160,8 +161,7 @@ fn position_float_panel<R: tauri::Runtime>(
                 let _ = window.center();
                 return;
             }
-        };
-        place
+        }
     };
     let (x, y) = corner_position(
         place.as_str(),
@@ -217,10 +217,13 @@ fn restore_geometry<R: tauri::Runtime>(
             geometry.height as i32,
         )
     };
-    if let Err(error) = window.set_position(PhysicalPosition::new(x, y)) {
-        crate::log_warn!("[float] failed to restore panel position ({x},{y}): {error}");
-    } else {
-        crate::log_debug!("[float] restored idle-captured placement at ({x},{y})");
+    match window.set_position(PhysicalPosition::new(x, y)) {
+        Err(error) => {
+            crate::log_warn!("[float] failed to restore panel position ({x},{y}): {error}");
+        }
+        _ => {
+            crate::log_debug!("[float] restored idle-captured placement at ({x},{y})");
+        }
     }
 }
 
@@ -322,10 +325,10 @@ pub fn start_float_idle_reaper<R: tauri::Runtime>(app: tauri::AppHandle<R>) {
                         None
                     }
                 };
-                if let Some(geometry) = geometry {
-                    if let Ok(mut slot) = float_geometry_slot().lock() {
-                        *slot = Some(geometry);
-                    }
+                if let Some(geometry) = geometry
+                    && let Ok(mut slot) = float_geometry_slot().lock()
+                {
+                    *slot = Some(geometry);
                 }
                 crate::log_debug!("[float] idle threshold reached; destroying panel");
                 if window.close().is_err() {

@@ -218,17 +218,17 @@ pub async fn permanently_delete_storage_kind(
             Some(expected),
         )?;
         drop(ingestion_guard);
-        if result.deleted_count > 0 {
-            if let Err(error) = app.emit(
+        if result.deleted_count > 0
+            && let Err(error) = app.emit(
                 "clipboard-history-invalidated",
                 ClipboardHistoryInvalidated {
                     deleted_ids: result.deleted_ids.clone(),
                 },
-            ) {
-                result
-                    .warnings
-                    .push(format!("main window refresh is pending: {error}"));
-            }
+            )
+        {
+            result
+                .warnings
+                .push(format!("main window refresh is pending: {error}"));
         }
         Ok(result)
     })

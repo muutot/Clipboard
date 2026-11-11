@@ -11,9 +11,9 @@
 
 use crate::platform::hotkey_common::action_index_for_hotkey_id;
 pub use crate::platform::hotkey_common::{
-    assign_hotkey_ids, combined_hotkey_registrations, shortcut_bindings_to_double_modifiers,
-    shortcut_bindings_to_windows_hotkeys, HotkeyRegistration, FIRST_HOTKEY_ID,
-    FLOAT_HOTKEY_ID_BASE,
+    FIRST_HOTKEY_ID, FLOAT_HOTKEY_ID_BASE, HotkeyRegistration, assign_hotkey_ids,
+    combined_hotkey_registrations, shortcut_bindings_to_double_modifiers,
+    shortcut_bindings_to_windows_hotkeys,
 };
 
 mod double_tap;
@@ -28,7 +28,7 @@ pub use manager::HotkeyManager;
 pub use message_loop::{
     clear_hotkey_state, set_hotkey_hwnd, set_hotkey_sender, stop_hotkey_thread,
 };
-pub use paste_target::{focus_quick_paste_target, restore_window_and_paste, QuickPasteHandle};
+pub use paste_target::{QuickPasteHandle, focus_quick_paste_target, restore_window_and_paste};
 
 /// OS hotkey action selected by the fired registration id.
 ///

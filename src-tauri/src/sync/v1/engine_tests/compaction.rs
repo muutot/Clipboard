@@ -244,11 +244,13 @@ fn checkpoint_cas_loser_never_garbage_collects_history() {
     assert_eq!(result.deleted_remote_objects, 0);
     assert!(result.bytes_uploaded > 0);
     assert!(store.deleted.lock().unwrap().is_empty());
-    assert!(store
-        .objects
-        .lock()
-        .unwrap()
-        .contains_key(&protected_snapshot));
+    assert!(
+        store
+            .objects
+            .lock()
+            .unwrap()
+            .contains_key(&protected_snapshot)
+    );
 
     drop(database);
     fs::remove_dir_all(paths.project).unwrap();
@@ -405,12 +407,14 @@ fn compaction_without_any_etag_preserves_the_pointer_and_normal_sync() {
         previous_state
     );
     assert!(store.deleted.lock().unwrap().is_empty());
-    assert!(!store
-        .puts
-        .lock()
-        .unwrap()
-        .iter()
-        .any(|key| key == CHECKPOINT_HEAD_KEY || key.starts_with("v1/checkpoints/")));
+    assert!(
+        !store
+            .puts
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|key| key == CHECKPOINT_HEAD_KEY || key.starts_with("v1/checkpoints/"))
+    );
     drop(database);
     fs::remove_dir_all(paths.project).unwrap();
 }
@@ -834,12 +838,14 @@ fn fourth_device_bootstraps_after_three_device_compaction_and_gc() {
     ] {
         assert!(fourth.get_item(id).unwrap().is_some(), "missing item {id}");
     }
-    assert!(store
-        .gets
-        .lock()
-        .unwrap()
-        .iter()
-        .any(|key| key == CHECKPOINT_HEAD_KEY));
+    assert!(
+        store
+            .gets
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|key| key == CHECKPOINT_HEAD_KEY)
+    );
 
     drop(first);
     drop(second);
@@ -997,7 +1003,7 @@ fn missing_segment_chain_recovers_from_newer_checkpoint() {
                     SET sequence = 1, last_segment_key = ?3
                   WHERE remote_scope = ?1 AND device_id = ?2",
                 rusqlite::params![REMOTE_SCOPE, &source_id, {
-                    let first_segment = store
+                    store
                         .objects
                         .lock()
                         .unwrap()
@@ -1007,8 +1013,7 @@ fn missing_segment_chain_recovers_from_newer_checkpoint() {
                         })
                         .find(|key| parse_segment_key(key).unwrap().first_sequence == 1)
                         .cloned()
-                        .unwrap();
-                    first_segment
+                        .unwrap()
                 }],
             )?;
             Ok(())
@@ -1141,10 +1146,12 @@ fn pulls_and_garbage_collects_more_than_one_thousand_segments() {
 
     assert_eq!(result.downloaded_entries, SEGMENT_COUNT);
     assert_eq!(result.applied_entries, SEGMENT_COUNT);
-    assert!(database
-        .get_item(&format!("segment-{SEGMENT_COUNT}"))
-        .unwrap()
-        .is_some());
+    assert!(
+        database
+            .get_item(&format!("segment-{SEGMENT_COUNT}"))
+            .unwrap()
+            .is_some()
+    );
     assert_eq!(
         database
             .get_sync_cursor(REMOTE_SCOPE, device_id)
@@ -1165,11 +1172,13 @@ fn pulls_and_garbage_collects_more_than_one_thousand_segments() {
     )
     .unwrap();
     assert_eq!(deleted, 1_001);
-    assert!(store
-        .objects
-        .lock()
-        .unwrap()
-        .contains_key(last_segment_key.as_ref().unwrap()));
+    assert!(
+        store
+            .objects
+            .lock()
+            .unwrap()
+            .contains_key(last_segment_key.as_ref().unwrap())
+    );
 
     drop(database);
     fs::remove_dir_all(paths.project).unwrap();

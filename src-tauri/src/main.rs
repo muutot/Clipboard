@@ -3,8 +3,8 @@
 use std::ffi::OsString;
 use std::path::PathBuf;
 
-use clipboard_desktop_lib::cli::args::{parse_process_args, ProcessAction, CLI_USAGE};
 use clipboard_desktop_lib::cli::CliArgs;
+use clipboard_desktop_lib::cli::args::{CLI_USAGE, ProcessAction, parse_process_args};
 use clipboard_desktop_lib::storage::{Database, StoragePaths};
 
 fn main() {

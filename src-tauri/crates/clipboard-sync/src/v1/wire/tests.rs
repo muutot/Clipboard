@@ -102,14 +102,18 @@ fn wrong_password_and_corruption_fail_explicitly() {
     let right = SessionKey::derive("right", "remote-a").unwrap();
     let wrong = SessionKey::derive("wrong", "remote-a").unwrap();
     let mut encoded = encode_segment(&sample_segment(), Some(&right)).unwrap();
-    assert!(decode_segment(&encoded.bytes, Some(&wrong))
-        .unwrap_err()
-        .contains("wrong password or corrupted data"));
+    assert!(
+        decode_segment(&encoded.bytes, Some(&wrong))
+            .unwrap_err()
+            .contains("wrong password or corrupted data")
+    );
     let last = encoded.bytes.len() - 1;
     encoded.bytes[last] ^= 0x01;
-    assert!(decode_segment(&encoded.bytes, Some(&right))
-        .unwrap_err()
-        .contains("wrong password or corrupted data"));
+    assert!(
+        decode_segment(&encoded.bytes, Some(&right))
+            .unwrap_err()
+            .contains("wrong password or corrupted data")
+    );
 }
 
 #[test]
@@ -123,9 +127,11 @@ fn decoder_rejects_kind_mismatch_and_oversized_claims() {
 
     let mut oversized = encoded.bytes;
     oversized[12..20].copy_from_slice(&(MAX_UNCOMPRESSED_BYTES + 1).to_le_bytes());
-    assert!(decode_segment(&oversized, None)
-        .unwrap_err()
-        .contains("uncompressed size limit"));
+    assert!(
+        decode_segment(&oversized, None)
+            .unwrap_err()
+            .contains("uncompressed size limit")
+    );
 }
 
 #[test]
@@ -154,18 +160,22 @@ fn encrypted_resource_headers_accept_the_configured_two_gib_limit() {
 fn encrypted_objects_require_a_key_without_plaintext_fallback() {
     let key = SessionKey::derive("password", "remote-a").unwrap();
     let encoded = encode_segment(&sample_segment(), Some(&key)).unwrap();
-    assert!(decode_segment(&encoded.bytes, None)
-        .unwrap_err()
-        .contains("requires an encryption password"));
+    assert!(
+        decode_segment(&encoded.bytes, None)
+            .unwrap_err()
+            .contains("requires an encryption password")
+    );
 }
 
 #[test]
 fn encrypted_scope_rejects_plaintext_objects() {
     let key = SessionKey::derive("password", "remote-a").unwrap();
     let encoded = encode_segment(&sample_segment(), None).unwrap();
-    assert!(decode_segment(&encoded.bytes, Some(&key))
-        .unwrap_err()
-        .contains("requires encryption"));
+    assert!(
+        decode_segment(&encoded.bytes, Some(&key))
+            .unwrap_err()
+            .contains("requires encryption")
+    );
 }
 
 #[test]
@@ -626,19 +636,23 @@ fn chunked_pack_rejects_wrong_password_and_tampering() {
         Some(&right),
     )
     .unwrap();
-    assert!(open_checkpoint_pack(encoded.path(), Some(&wrong))
-        .unwrap_err()
-        .contains("wrong password or corrupted data"));
+    assert!(
+        open_checkpoint_pack(encoded.path(), Some(&wrong))
+            .unwrap_err()
+            .contains("wrong password or corrupted data")
+    );
 
     let mut bytes = fs::read(encoded.path()).unwrap();
     *bytes.last_mut().unwrap() ^= 0x01;
     fs::write(encoded.path(), bytes).unwrap();
     let mut reader = open_checkpoint_pack(encoded.path(), Some(&right)).unwrap();
-    assert!(reader
-        .next()
-        .unwrap()
-        .unwrap_err()
-        .contains("wrong password or corrupted data"));
+    assert!(
+        reader
+            .next()
+            .unwrap()
+            .unwrap_err()
+            .contains("wrong password or corrupted data")
+    );
     drop(reader);
     drop(encoded);
     let _ = fs::remove_dir(&directory);

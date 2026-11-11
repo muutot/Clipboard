@@ -1,4 +1,4 @@
-use super::{StoredClipboardItem, ITEM_COLUMNS};
+use super::{ITEM_COLUMNS, StoredClipboardItem};
 use crate::{
     domain::ClipboardItem,
     storage::{Database, StorageError},

@@ -1,6 +1,6 @@
 use super::{
-    clipboard_kind_name, escape_csv, ExportFormat, ExportOptions, CSV_TEXT_ENCODING,
-    PLAIN_TEXT_HEADER,
+    CSV_TEXT_ENCODING, ExportFormat, ExportOptions, PLAIN_TEXT_HEADER, clipboard_kind_name,
+    escape_csv,
 };
 use crate::{
     domain::ClipboardItem,
@@ -200,11 +200,13 @@ mod tests {
         std::fs::create_dir_all(&root).unwrap();
         let path = root.join("backup.json");
         std::fs::write(&path, "previous").unwrap();
-        assert!(atomic_output(&path, |file| {
-            file.write_all(b"partial").unwrap();
-            Err("disk full".into())
-        })
-        .is_err());
+        assert!(
+            atomic_output(&path, |file| {
+                file.write_all(b"partial").unwrap();
+                Err("disk full".into())
+            })
+            .is_err()
+        );
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "previous");
         assert_eq!(std::fs::read_dir(&root).unwrap().count(), 1);
         std::fs::remove_dir_all(root).unwrap();

@@ -5,7 +5,7 @@ use crate::storage::Database;
 
 pub(crate) mod backup;
 mod ppaste;
-pub(crate) use ppaste::{import_from_ppaste_backup, BACKUP_EXTENSION};
+pub(crate) use ppaste::{BACKUP_EXTENSION, import_from_ppaste_backup};
 
 mod csv;
 mod import;
@@ -14,7 +14,7 @@ mod stream;
 #[cfg(test)]
 mod tests;
 
-pub(crate) use csv::{clipboard_kind_name, escape_csv, CsvReader, CSV_TEXT_ENCODING};
+pub(crate) use csv::{CSV_TEXT_ENCODING, CsvReader, clipboard_kind_name, escape_csv};
 pub(super) const PLAIN_TEXT_HEADER: &str = "\\clipboard-plain-text-v1";
 pub use import::*;
 #[cfg(test)]

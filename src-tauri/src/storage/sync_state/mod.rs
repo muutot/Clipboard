@@ -7,14 +7,15 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use rusqlite::{params, params_from_iter, OptionalExtension, Row, Transaction};
+use rusqlite::{OptionalExtension, Row, Transaction, params, params_from_iter};
 use uuid::Uuid;
 
 use super::{Database, StorageError};
 use crate::sync::v1::{
-    checkpoint_object_key, parse_segment_key, snapshot_object_key, DeviceCursor, DeviceHead,
-    MutationBatch, ObjectRef, RecordVersion, ReplicatedItem, SyncHeadCache, SyncItem, SyncItemKind,
-    SyncOutboxBatch, SyncRemoteState, SyncResourceRef, SyncSnapshot, SyncSnapshotExport, Tombstone,
+    DeviceCursor, DeviceHead, MutationBatch, ObjectRef, RecordVersion, ReplicatedItem,
+    SyncHeadCache, SyncItem, SyncItemKind, SyncOutboxBatch, SyncRemoteState, SyncResourceRef,
+    SyncSnapshot, SyncSnapshotExport, Tombstone, checkpoint_object_key, parse_segment_key,
+    snapshot_object_key,
 };
 
 const LOOKUP_CHUNK_SIZE: usize = 500;

@@ -66,12 +66,11 @@ impl CopyContext {
                 .map(|mut guard| guard.mark_clipboard_write(text))
         });
         let result = write();
-        if result.is_err() {
-            if let (Some(guard), Some(registration)) = (&self.self_trigger, registration) {
-                if let Ok(mut guard) = guard.lock() {
-                    guard.cancel_registration(&registration);
-                }
-            }
+        if result.is_err()
+            && let (Some(guard), Some(registration)) = (&self.self_trigger, registration)
+            && let Ok(mut guard) = guard.lock()
+        {
+            guard.cancel_registration(&registration);
         }
         result.map_err(CopyError::Failed)
     }
@@ -96,10 +95,8 @@ pub fn copy_item_with(
             false
         }
     };
-    if updated {
-        if let Ok(Some(current)) = database.get_item(id) {
-            item.last_used_at_ms = current.last_used_at_ms;
-        }
+    if updated && let Ok(Some(current)) = database.get_item(id) {
+        item.last_used_at_ms = current.last_used_at_ms;
     }
     Ok((item, updated))
 }
@@ -176,27 +173,27 @@ pub(crate) fn resolve_clipboard_file_paths(
                         }
                     }
                     if let Some(storage) = storage {
-                        if let Some(database) = database {
-                            if let Some(inherited) = latest_copied_original_path(
+                        if let Some(database) = database
+                            && let Some(inherited) = latest_copied_original_path(
                                 database,
                                 &storage,
                                 &item.id,
                                 paths,
                                 captured_storage_digest(&item.metadata_json, &storage, paths)
                                     .as_deref(),
-                            ) {
-                                candidates.push(inherited.to_string_lossy().to_string());
-                                continue;
-                            }
+                            )
+                        {
+                            candidates.push(inherited.to_string_lossy().to_string());
+                            continue;
                         }
                         candidates.push(storage);
                     }
                 }
             }
-            if candidates.is_empty() {
-                if let Some(resource) = item.resource_path.as_deref() {
-                    candidates.push(resource.to_owned());
-                }
+            if candidates.is_empty()
+                && let Some(resource) = item.resource_path.as_deref()
+            {
+                candidates.push(resource.to_owned());
             }
         }
         _ => {
@@ -658,19 +655,25 @@ mod tests {
             paths: None,
             self_trigger: Some(guard.clone()),
         };
-        assert!(context
-            .write_marked("sample", || {
-                assert!(guard
-                    .lock()
-                    .unwrap()
-                    .is_text_write_self_triggered("text", "sample"));
-                Err("busy".into())
-            })
-            .is_err());
-        assert!(!guard
-            .lock()
-            .unwrap()
-            .is_text_write_self_triggered("text", "sample"));
+        assert!(
+            context
+                .write_marked("sample", || {
+                    assert!(
+                        guard
+                            .lock()
+                            .unwrap()
+                            .is_text_write_self_triggered("text", "sample")
+                    );
+                    Err("busy".into())
+                })
+                .is_err()
+        );
+        assert!(
+            !guard
+                .lock()
+                .unwrap()
+                .is_text_write_self_triggered("text", "sample")
+        );
     }
 
     #[test]
@@ -719,9 +722,11 @@ mod tests {
             self_trigger: Some(guard.clone()),
         };
         context.write_marked("first\nsecond", || Ok(())).unwrap();
-        assert!(context
-            .write_marked("first\nsecond", || Err("retry failure".into()))
-            .is_err());
+        assert!(
+            context
+                .write_marked("first\nsecond", || Err("retry failure".into()))
+                .is_err()
+        );
         assert!(crate::commands::capture::should_skip_self_triggered_text(
             &mut guard.lock().unwrap(),
             ClipboardKind::Text,

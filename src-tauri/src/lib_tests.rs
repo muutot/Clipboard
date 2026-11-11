@@ -1,7 +1,7 @@
 use super::*;
 use crate::content::resource_metadata::RESOURCE_METADATA_SCHEMA_VERSION;
 use crate::domain::{ClipboardItem, ClipboardKind};
-use crate::geometry::{clamp_window_position_to_work_areas, WindowPosition, WindowWorkArea};
+use crate::geometry::{WindowPosition, WindowWorkArea, clamp_window_position_to_work_areas};
 use crate::storage::{ClipboardRepository, OcrRepository};
 
 #[cfg(test)]
@@ -278,9 +278,11 @@ mod capture_tests {
 
         assert_eq!(stored.len(), 2);
         assert!(stored.iter().all(|file| file.copied));
-        assert!(stored
-            .iter()
-            .all(|file| Path::new(&file.storage_path).starts_with(&storage_dir)));
+        assert!(
+            stored
+                .iter()
+                .all(|file| Path::new(&file.storage_path).starts_with(&storage_dir))
+        );
         assert_eq!(
             std::fs::read(&stored[0].storage_path).unwrap(),
             b"first file"
@@ -865,11 +867,13 @@ mod storage_cleanup_tests {
         worker.stop();
 
         assert!(worker.stop_flag.load(Ordering::SeqCst));
-        assert!(worker
-            .handle
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .is_none());
+        assert!(
+            worker
+                .handle
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .is_none()
+        );
         fs::remove_dir_all(&paths.project).unwrap();
     }
 

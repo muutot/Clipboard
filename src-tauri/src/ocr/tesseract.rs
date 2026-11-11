@@ -33,11 +33,7 @@ pub fn sanitize_languages(languages: &str) -> &str {
     let valid = trimmed
         .chars()
         .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '+' | '.'));
-    if valid {
-        trimmed
-    } else {
-        DEFAULT_LANGUAGES
-    }
+    if valid { trimmed } else { DEFAULT_LANGUAGES }
 }
 
 pub struct TesseractOcrEngine {
@@ -289,10 +285,10 @@ fn cached_availability() -> bool {
     let mut cache = CACHE
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
-    if let Some((probed_at, available)) = *cache {
-        if probed_at.elapsed() < AVAILABILITY_CACHE_TTL {
-            return available;
-        }
+    if let Some((probed_at, available)) = *cache
+        && probed_at.elapsed() < AVAILABILITY_CACHE_TTL
+    {
+        return available;
     }
     let available = run_probe_with_timeout("tesseract", &["--version"], PROBE_TIMEOUT)
         .is_some_and(|output| output.status.success());

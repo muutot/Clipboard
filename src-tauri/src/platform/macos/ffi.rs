@@ -12,7 +12,7 @@
 // HIServices symbols declared below; nothing else links it for us.
 #[cfg(target_os = "macos")]
 #[link(name = "ApplicationServices", kind = "framework")]
-extern "C" {
+unsafe extern "C" {
     // ---- CGEvent (CoreGraphics) ----------------------------------------
     fn CGEventSourceCreate(state_id: i32) -> *mut std::ffi::c_void;
     fn CGEventTapCreate(
@@ -86,7 +86,7 @@ extern "C" {
 // surfaces only as `ld: symbol(s) not found` on the macOS job.
 #[cfg(target_os = "macos")]
 #[link(name = "CoreFoundation", kind = "framework")]
-extern "C" {
+unsafe extern "C" {
     pub fn CFRelease(cf: *const std::ffi::c_void);
     pub fn CFLocaleCopyCurrent() -> *const std::ffi::c_void;
     pub fn CFLocaleGetIdentifier(locale: *const std::ffi::c_void) -> *const std::ffi::c_void;

@@ -2,7 +2,7 @@ use std::{fs, path::Path, sync::Mutex, time::Duration};
 
 use rusqlite::{Connection, OpenFlags};
 
-use super::{schema, StorageError};
+use super::{StorageError, schema};
 
 pub struct Database {
     pub(super) connection: Mutex<Connection>,
@@ -114,10 +114,10 @@ impl Database {
         let mut writer = match self.migration_writer.try_lock() {
             Ok(writer) => writer,
             Err(std::sync::TryLockError::WouldBlock) => {
-                return Err(StorageError::StorageMigrationInProgress)
+                return Err(StorageError::StorageMigrationInProgress);
             }
             Err(std::sync::TryLockError::Poisoned(_)) => {
-                return Err(StorageError::ConnectionPoisoned)
+                return Err(StorageError::ConnectionPoisoned);
             }
         };
         if writer.is_some() {
@@ -273,7 +273,7 @@ mod tests {
 
     #[test]
     fn migration_reservation_drains_an_existing_transaction_before_snapshot() {
-        use std::sync::{mpsc, Arc};
+        use std::sync::{Arc, mpsc};
         use std::time::Duration;
         let root =
             std::env::temp_dir().join(format!("clipboard-migration-drain-{}", Uuid::new_v4()));

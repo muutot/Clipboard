@@ -81,7 +81,7 @@ pub fn test_s3_connection(
                 success: false,
                 message: e,
                 status_code: None,
-            }
+            };
         }
     };
     let (scheme, host) = parse_endpoint(endpoint);

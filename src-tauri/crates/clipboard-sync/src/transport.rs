@@ -1,6 +1,6 @@
 //! Synchronous facade over cancellable async HTTP. Dropping the selected
 //! request/body future aborts I/O; no detached per-request blocking thread.
-use crate::cancellation::{self, CancellationToken, CANCELLED};
+use crate::cancellation::{self, CANCELLED, CancellationToken};
 use bytes::{Buf, Bytes};
 use std::{
     io::{self, Read},

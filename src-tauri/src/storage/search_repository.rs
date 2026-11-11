@@ -362,10 +362,12 @@ mod tests {
             .unwrap();
         database.soft_delete("soft-deleted").unwrap();
 
-        assert!(database
-            .get_search_document("soft-deleted")
-            .unwrap()
-            .is_none());
+        assert!(
+            database
+                .get_search_document("soft-deleted")
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[test]

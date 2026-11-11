@@ -1,5 +1,5 @@
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use serde::Serialize;
@@ -367,7 +367,7 @@ mod tests {
     #[test]
     fn concurrent_drains_cannot_commit_an_older_snapshot_after_a_newer_one() {
         use crate::storage::{SearchDocument, SearchOutboxEvent, StorageError};
-        use std::sync::{mpsc, Mutex};
+        use std::sync::{Mutex, mpsc};
         use std::time::Duration;
 
         struct PausedRepository<'a> {
@@ -527,8 +527,8 @@ mod tests {
 
     #[test]
     fn background_worker_drains_the_outbox_and_stops() {
-        use std::sync::atomic::{AtomicUsize, Ordering};
         use std::sync::Arc;
+        use std::sync::atomic::{AtomicUsize, Ordering};
         use std::time::{Duration, SystemTime};
 
         let unique = SystemTime::now()
@@ -591,7 +591,7 @@ mod tests {
 
     #[test]
     fn background_worker_performs_a_required_full_rebuild() {
-        use std::sync::{mpsc, Arc};
+        use std::sync::{Arc, mpsc};
         use std::time::Duration;
 
         let database = Database::open_in_memory().unwrap();

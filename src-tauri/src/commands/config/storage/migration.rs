@@ -125,8 +125,16 @@ fn copy_migration_file(from: &Path, to: &Path) -> Result<(), String> {
     drop(target);
     if let Err(error) = copied {
         return match std::fs::remove_file(to) {
-            Ok(()) => Err(format!("copy {} to {}: {error}", from.display(), to.display())),
-            Err(cleanup) => Err(format!("copy {} failed: {error}; incomplete destination {} could not be removed: {cleanup}", from.display(), to.display())),
+            Ok(()) => Err(format!(
+                "copy {} to {}: {error}",
+                from.display(),
+                to.display()
+            )),
+            Err(cleanup) => Err(format!(
+                "copy {} failed: {error}; incomplete destination {} could not be removed: {cleanup}",
+                from.display(),
+                to.display()
+            )),
         };
     }
     Ok(())
@@ -291,7 +299,7 @@ pub(super) fn quarantine_database_for_migration(
                 return Err(format!(
                     "failed to inspect {}: {error}",
                     candidate.display()
-                ))
+                ));
             }
         }
     }
@@ -307,7 +315,7 @@ pub(super) fn quarantine_database_for_migration(
                 return Err(format!(
                     "failed to reserve {}: {error}",
                     directory.display()
-                ))
+                ));
             }
         }
     };

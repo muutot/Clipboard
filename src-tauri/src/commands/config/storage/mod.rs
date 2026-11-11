@@ -8,7 +8,7 @@ use crate::config::ConfigStore;
 use crate::domain::ClipboardKind;
 use crate::keyboard::KeyboardManager;
 use crate::platform;
-use crate::search::{SearchIndex, SEARCH_INDEX_VERSION};
+use crate::search::{SEARCH_INDEX_VERSION, SearchIndex};
 use crate::storage::{ClipboardRepository, Database, ResourceRootRole, StoragePaths};
 use crate::{CaptureState, STORAGE_KIND_DELETE_SCOPE};
 

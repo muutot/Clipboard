@@ -8,8 +8,8 @@ use std::{
     process::{Child, ChildStdout, Command, Output, Stdio},
     rc::Rc,
     sync::{
-        atomic::{AtomicBool, Ordering},
         Arc,
+        atomic::{AtomicBool, Ordering},
     },
     time::{Duration, Instant},
 };
@@ -146,14 +146,12 @@ impl BoundedCommandExt for Command {
                     Err(error) => return Err(error),
                 }
             }
-            if eof {
-                if let Some(status) = child.0.try_wait()? {
-                    return Ok(Output {
-                        status,
-                        stdout: bytes,
-                        stderr: Vec::new(),
-                    });
-                }
+            if eof && let Some(status) = child.0.try_wait()? {
+                return Ok(Output {
+                    status,
+                    stdout: bytes,
+                    stderr: Vec::new(),
+                });
             }
             std::thread::sleep(Duration::from_millis(5));
         }
@@ -300,9 +298,11 @@ mod tests {
     fn output_success_overflow_timeout_and_stop_are_bounded() {
         let result = fixture("normal").bounded_output(4096).unwrap();
         assert!(result.status.success());
-        assert!(String::from_utf8(result.stdout)
-            .unwrap()
-            .contains("fixture payload"));
+        assert!(
+            String::from_utf8(result.stdout)
+                .unwrap()
+                .contains("fixture payload")
+        );
         assert!(fixture("large").bounded_output(4096).is_err());
         let started = Instant::now();
         assert!(fixture("stall").bounded_output(4096).is_err());
@@ -323,10 +323,12 @@ mod tests {
     #[cfg(unix)]
     fn inherited_pipe_does_not_leave_a_reader_waiting_forever() {
         let started = Instant::now();
-        assert!(Command::new("sh")
-            .args(["-c", "sleep 10 & exit 0"])
-            .bounded_output(4096)
-            .is_err());
+        assert!(
+            Command::new("sh")
+                .args(["-c", "sleep 10 & exit 0"])
+                .bounded_output(4096)
+                .is_err()
+        );
         assert!(started.elapsed() < Duration::from_secs(2));
     }
 }

@@ -39,7 +39,7 @@ pub(super) fn format_id_to_name(format_id: u32) -> String {
         return name.to_string();
     }
 
-    extern "system" {
+    unsafe extern "system" {
         fn GetClipboardFormatNameW(format: u32, name: *mut u16, max_count: i32) -> i32;
     }
 
@@ -62,7 +62,7 @@ pub(super) fn format_id_to_name(_format_id: u32) -> String {
 
 #[cfg(target_os = "windows")]
 pub fn read_clipboard_text() -> Option<String> {
-    extern "system" {
+    unsafe extern "system" {
         fn OpenClipboard(hwnd: isize) -> i32;
         fn CloseClipboard() -> i32;
         fn GetClipboardData(format: u32) -> isize;

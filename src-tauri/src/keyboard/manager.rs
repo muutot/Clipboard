@@ -94,10 +94,12 @@ mod tests {
         assert_eq!(manager.config().shortcuts, before.shortcuts);
         assert_eq!(manager.match_chord([Modifier::Alt], "C"), &["toggleWindow"]);
         manager.delete_action("toggleWindow".into()).unwrap();
-        assert!(KeyboardManager::load(&project)
-            .unwrap()
-            .match_chord([Modifier::Alt], "C")
-            .is_empty());
+        assert!(
+            KeyboardManager::load(&project)
+                .unwrap()
+                .match_chord([Modifier::Alt], "C")
+                .is_empty()
+        );
         fs::remove_dir_all(project).unwrap();
         assert!(result.is_err());
         assert!(

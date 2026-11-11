@@ -1,6 +1,6 @@
 use rusqlite::Connection;
 
-use super::{migrations, StorageError};
+use super::{StorageError, migrations};
 
 pub(super) const SCHEMA_VERSION: i64 = 2;
 
@@ -92,12 +92,12 @@ fn drop_all_user_objects(connection: &Connection) -> Result<(), StorageError> {
                  ELSE 2
              END",
         )?;
-        let rows = statement
+
+        statement
             .query_map([], |row| {
                 Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
             })?
-            .collect::<Result<Vec<_>, _>>()?;
-        rows
+            .collect::<Result<Vec<_>, _>>()?
     };
 
     for (object_type, name) in objects {

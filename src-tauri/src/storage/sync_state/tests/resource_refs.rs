@@ -172,17 +172,19 @@ fn materialized_resources_update_paths_without_replicating_the_cache_write() {
     let second_path = format!("{sep}cache{sep}second.txt");
     let icon_materialized_path = format!("{sep}cache{sep}icons{sep}source.png");
 
-    assert!(database
-        .mark_sync_resources_materialized(
-            REMOTE_SCOPE,
-            "materialized-files",
-            &[
-                (refs[0].clone(), first_path.clone()),
-                (refs[1].clone(), second_path.clone()),
-                (refs[2].clone(), icon_materialized_path),
-            ],
-        )
-        .unwrap());
+    assert!(
+        database
+            .mark_sync_resources_materialized(
+                REMOTE_SCOPE,
+                "materialized-files",
+                &[
+                    (refs[0].clone(), first_path.clone()),
+                    (refs[1].clone(), second_path.clone()),
+                    (refs[2].clone(), icon_materialized_path),
+                ],
+            )
+            .unwrap()
+    );
 
     let stored = database.get_item("materialized-files").unwrap().unwrap();
     assert_eq!(stored.resource_path.as_deref(), Some(first_path.as_str()));
@@ -265,22 +267,26 @@ fn materialized_resource_write_is_atomic_when_any_reference_is_stale() {
         ordinal: 0,
     };
 
-    assert!(!database
-        .mark_sync_resources_materialized(
-            REMOTE_SCOPE,
-            "atomic-image",
-            &[
-                (reference, "C:\\cache\\image.png".to_string()),
-                (stale, "C:\\cache\\icon.png".to_string()),
-            ],
-        )
-        .unwrap());
-    assert!(database
-        .get_item("atomic-image")
-        .unwrap()
-        .unwrap()
-        .resource_path
-        .is_none());
+    assert!(
+        !database
+            .mark_sync_resources_materialized(
+                REMOTE_SCOPE,
+                "atomic-image",
+                &[
+                    (reference, "C:\\cache\\image.png".to_string()),
+                    (stale, "C:\\cache\\icon.png".to_string()),
+                ],
+            )
+            .unwrap()
+    );
+    assert!(
+        database
+            .get_item("atomic-image")
+            .unwrap()
+            .unwrap()
+            .resource_path
+            .is_none()
+    );
     assert_eq!(database.count_sync_outbox().unwrap(), 0);
 }
 
@@ -327,9 +333,11 @@ fn single_file_materialization_keeps_null_text_content_and_reuses_resource_path(
         .unwrap();
 
     let local_path = "C:\\cache\\single.txt";
-    assert!(database
-        .mark_sync_resource_materialized(REMOTE_SCOPE, "single-file", &reference, local_path,)
-        .unwrap());
+    assert!(
+        database
+            .mark_sync_resource_materialized(REMOTE_SCOPE, "single-file", &reference, local_path,)
+            .unwrap()
+    );
     let stored = database.get_item("single-file").unwrap().unwrap();
     assert_eq!(stored.resource_path.as_deref(), Some(local_path));
     assert!(stored.text_content.is_none());
@@ -340,9 +348,11 @@ fn single_file_materialization_keeps_null_text_content_and_reuses_resource_path(
             .as_deref(),
         Some(local_path)
     );
-    assert!(!database
-        .mark_sync_resource_materialized(REMOTE_SCOPE, "single-file", &reference, local_path,)
-        .unwrap());
+    assert!(
+        !database
+            .mark_sync_resource_materialized(REMOTE_SCOPE, "single-file", &reference, local_path,)
+            .unwrap()
+    );
     assert_eq!(database.count_sync_outbox().unwrap(), 0);
 }
 

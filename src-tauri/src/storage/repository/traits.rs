@@ -111,7 +111,7 @@ pub trait ClipboardRepository {
     /// upsert key so duplicate imports can count pre-existing rows as skipped
     /// instead of re-importing them.
     fn content_exists(&self, kind: ClipboardKind, content_hash: &str)
-        -> Result<bool, StorageError>;
+    -> Result<bool, StorageError>;
     /// Atomically replaces the textual payload of an active text/link item.
     ///
     /// Keeping this operation in the repository ensures the content hash and

@@ -14,8 +14,8 @@ use std::{
 };
 
 use aes_gcm::{
-    aead::{Aead, KeyInit, Payload},
     Aes256Gcm, Nonce,
+    aead::{Aead, KeyInit, Payload},
 };
 use bincode::{Decode, Encode};
 use hmac::{Hmac, Mac};
@@ -75,7 +75,7 @@ fn decode_bounded_bincode<T: Decode<()>>(
     // budget, bounded by the existing protocol ceiling; never base it on an
     // untrusted container length or compressed frame size.
     macro_rules! decode {
-        ($limit:expr) => {
+        ($limit:expr_2021) => {
             if fixed_int_encoding {
                 bincode::decode_from_slice(
                     bytes,
@@ -118,15 +118,15 @@ use crypto::*;
 use packs::*;
 
 pub use crypto::{
-    decode_checkpoint_head, decode_device_head, decode_segment, encode_checkpoint_head,
-    encode_device_head, encode_segment, envelope_is_encrypted, EncodedObject, SessionKey,
+    EncodedObject, SessionKey, decode_checkpoint_head, decode_device_head, decode_segment,
+    encode_checkpoint_head, encode_device_head, encode_segment, envelope_is_encrypted,
 };
 pub(crate) use crypto::{resource_header, validate_resource_header};
 pub use packs::{
-    encode_checkpoint_pack, encode_snapshot_pack, large_pack_chunk_limit_bytes,
+    CheckpointPackReader, LargePackKind, LargePackWriter, PACK_CHUNK_FRAMING_HEADROOM_BYTES,
+    SnapshotPackReader, encode_checkpoint_pack, encode_snapshot_pack, large_pack_chunk_limit_bytes,
     large_pack_chunk_raw_budget_bytes, mutation_batch_encoded_size, open_checkpoint_pack,
-    open_snapshot_pack, CheckpointPackReader, LargePackKind, LargePackWriter, SnapshotPackReader,
-    PACK_CHUNK_FRAMING_HEADROOM_BYTES,
+    open_snapshot_pack,
 };
 pub use types::{
     CheckpointHead, CheckpointPackHeader, DeviceCursor, DeviceHead, EncodedFile, MutationBatch,

@@ -355,9 +355,11 @@ fn migration_blocks_independent_writers_through_save_and_until_restart() {
         Ok(())
     });
     result.unwrap();
-    assert!(writer
-        .execute("INSERT INTO audit_migration VALUES (3)", [])
-        .is_err());
+    assert!(
+        writer
+            .execute("INSERT INTO audit_migration VALUES (3)", [])
+            .is_err()
+    );
     let snapshot = rusqlite::Connection::open(&new.database).unwrap();
     let count: i64 = snapshot
         .query_row("SELECT COUNT(*) FROM audit_migration", [], |row| row.get(0))

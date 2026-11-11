@@ -84,14 +84,12 @@ impl WindowsClipboardMonitor {
                     }
                     sequence = current_sequence;
 
-                    if has_self_trigger_format() {
-                        if let (Some(marker), Some(text)) =
+                    if has_self_trigger_format()
+                        && let (Some(marker), Some(text)) =
                             (read_self_trigger_marker(), read_clipboard_text())
-                        {
-                            if clipboard_change_is_self_write(&marker, &text) {
-                                continue;
-                            }
-                        }
+                        && clipboard_change_is_self_write(&marker, &text)
+                    {
+                        continue;
                     }
 
                     if sender_for_thread
@@ -117,15 +115,15 @@ impl WindowsClipboardMonitor {
             let _ = sender.send(());
         }
         self.sender = None;
-        if let Some(handle) = self.handle.take() {
-            if handle.thread().id() != thread::current().id() {
-                // A panicked monitor explains why captures silently stopped;
-                // swallowing the payload hid that from every log.
-                if let Err(panic) = handle.join() {
-                    crate::log_error!(
-                        "[clipboard-monitor] monitor thread terminated with a panic: {panic:?}"
-                    );
-                }
+        if let Some(handle) = self.handle.take()
+            && handle.thread().id() != thread::current().id()
+        {
+            // A panicked monitor explains why captures silently stopped;
+            // swallowing the payload hid that from every log.
+            if let Err(panic) = handle.join() {
+                crate::log_error!(
+                    "[clipboard-monitor] monitor thread terminated with a panic: {panic:?}"
+                );
             }
         }
     }
@@ -148,17 +146,13 @@ impl Drop for WindowsClipboardMonitor {
 
 #[cfg(target_os = "windows")]
 pub(super) fn read_clipboard_sequence() -> Option<u32> {
-    extern "system" {
+    unsafe extern "system" {
         fn GetClipboardSequenceNumber() -> u32;
     }
 
     unsafe {
         let seq = GetClipboardSequenceNumber();
-        if seq == 0 {
-            None
-        } else {
-            Some(seq)
-        }
+        if seq == 0 { None } else { Some(seq) }
     }
 }
 

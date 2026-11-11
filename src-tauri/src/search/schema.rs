@@ -1,8 +1,8 @@
+use tantivy::Index;
 use tantivy::schema::{
-    Field, IndexRecordOption, Schema, TextFieldIndexing, TextOptions, FAST, INDEXED, STORED, STRING,
+    FAST, Field, INDEXED, IndexRecordOption, STORED, STRING, Schema, TextFieldIndexing, TextOptions,
 };
 use tantivy::tokenizer::{LowerCaser, NgramTokenizer, TextAnalyzer};
-use tantivy::Index;
 
 pub const NGRAM_TOKENIZER_NAME: &str = "cjk_ngram_1_3";
 
@@ -50,8 +50,8 @@ pub fn register_tokenizers(index: &Index) -> tantivy::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use tantivy::tokenizer::{NgramTokenizer, TokenStream, Tokenizer};
     use tantivy::Index;
+    use tantivy::tokenizer::{NgramTokenizer, TokenStream, Tokenizer};
 
     use super::{build_schema, register_tokenizers};
 

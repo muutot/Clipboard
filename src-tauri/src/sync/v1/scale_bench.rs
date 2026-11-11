@@ -2,8 +2,8 @@ use std::{
     fs,
     path::{Path, PathBuf},
     sync::{
-        atomic::{AtomicBool, AtomicU64, Ordering},
         Arc,
+        atomic::{AtomicBool, AtomicU64, Ordering},
     },
     thread,
     time::{Duration, Instant},
@@ -766,7 +766,7 @@ fn assert_converged(devices: &[&BenchDevice], expected_count: u64) -> String {
     for (label, (count, _)) in &digests {
         assert_eq!(*count, expected_count, "unexpected record count on {label}");
     }
-    let expected_digest = digests[0].1 .1.clone();
+    let expected_digest = digests[0].1.1.clone();
     for (label, (_, digest)) in &digests[1..] {
         assert_eq!(digest, &expected_digest, "content diverged on {label}");
     }
@@ -894,9 +894,7 @@ fn print_checkpoint_state(scope: &BenchScope, devices: &[&BenchDevice], label: &
             "[sync-bench] checkpoint_state label={label} remote_generation={} remote_digest={} remote_vector={:?}",
             head.generation, head.checkpoint.sha256, head.vector
         ),
-        None => eprintln!(
-            "[sync-bench] checkpoint_state label={label} remote_generation=none"
-        ),
+        None => eprintln!("[sync-bench] checkpoint_state label={label} remote_generation=none"),
     }
     for device in devices {
         let local = device

@@ -72,12 +72,12 @@ fn persist_autostart_with(
         register(desired)?;
     }
     if let Err(error) = persist() {
-        if actual != desired {
-            if let Err(rollback) = register(actual) {
-                return Err(format!(
-                    "{error}; failed to restore autostart registration: {rollback}"
-                ));
-            }
+        if actual != desired
+            && let Err(rollback) = register(actual)
+        {
+            return Err(format!(
+                "{error}; failed to restore autostart registration: {rollback}"
+            ));
         }
         return Err(error);
     }

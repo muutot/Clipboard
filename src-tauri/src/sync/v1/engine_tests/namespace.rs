@@ -7,7 +7,7 @@ static MEDIA_SWITCH_TEST_LOCK: Mutex<()> = Mutex::new(());
 fn deferred_media_switch_scenario(via_off: bool, legacy: bool, encrypted: bool, mode: &str) {
     use crate::background_operations::BackgroundOperations;
     use crate::commands::sync::{
-        persist_sync_config, update_sync_config, SyncCancellation, SyncSettings,
+        SyncCancellation, SyncSettings, persist_sync_config, update_sync_config,
     };
     use crate::config::{ConfigStore, SyncConfig, SyncProvider};
     use clipboard_sync::v1::namespace::resolve_namespace;
@@ -90,12 +90,14 @@ fn deferred_media_switch_scenario(via_off: bool, legacy: bool, encrypted: bool, 
         options(),
     )
     .unwrap();
-    assert!(mover
-        .get_item("deferred-image")
-        .unwrap()
-        .unwrap()
-        .resource_path
-        .is_none());
+    assert!(
+        mover
+            .get_item("deferred-image")
+            .unwrap()
+            .unwrap()
+            .resource_path
+            .is_none()
+    );
     assert_eq!(
         mover
             .get_sync_resource_refs(&binding.scope, "deferred-image")
@@ -384,7 +386,7 @@ fn deferred_media_same_target_save_skips_download() {
 }
 
 fn target_switch_scenario(via_off: bool, legacy: bool) {
-    use crate::commands::sync::{persist_sync_config, SyncSettings};
+    use crate::commands::sync::{SyncSettings, persist_sync_config};
     use crate::config::{ConfigStore, SyncConfig, SyncProvider};
     use clipboard_sync::v1::namespace::resolve_namespace;
 
@@ -601,7 +603,7 @@ fn portable_backup_restored_shared_media_remains_publishable() {
 
 #[test]
 fn namespace_upgrade_preserves_legacy_encryption_and_accepts_rotated_credentials() {
-    use clipboard_sync::v1::namespace::{resolve_namespace, Namespace, NAMESPACE_KEY};
+    use clipboard_sync::v1::namespace::{NAMESPACE_KEY, Namespace, resolve_namespace};
     let store = MemoryStore::default();
     let source_paths = temp_paths("namespace-source");
     let target_paths = temp_paths("namespace-target");
@@ -667,7 +669,7 @@ fn namespace_upgrade_preserves_legacy_encryption_and_accepts_rotated_credentials
 
 #[test]
 fn fresh_namespace_is_credential_independent_and_encryption_mode_is_bound() {
-    use clipboard_sync::v1::namespace::{resolve_namespace, Namespace, NAMESPACE_KEY};
+    use clipboard_sync::v1::namespace::{NAMESPACE_KEY, Namespace, resolve_namespace};
     for password in [None, Some("namespace fixture password")] {
         let store = MemoryStore::default();
         let stable = "c".repeat(64);

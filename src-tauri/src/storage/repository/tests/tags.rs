@@ -120,9 +120,11 @@ fn set_tags_replaces_and_removes_tags_in_metadata_json() {
         .save_item(&text_item("item-1", "hash-1", 100))
         .unwrap();
 
-    assert!(database
-        .set_tags("item-1", &["work".to_owned(), " urgent ".to_owned()])
-        .unwrap());
+    assert!(
+        database
+            .set_tags("item-1", &["work".to_owned(), " urgent ".to_owned()])
+            .unwrap()
+    );
     let stored = database.get_item("item-1").unwrap().unwrap();
     let metadata: serde_json::Value =
         serde_json::from_str(stored.metadata_json.as_deref().unwrap()).unwrap();
@@ -286,13 +288,14 @@ fn auto_tag_history_preview_is_read_only_and_apply_is_additive_and_idempotent() 
     let preview = db.auto_tag_history(&rules, false).unwrap();
     assert_eq!(preview.changed_count, 1);
     assert_eq!(preview.samples[0].id, "a");
-    assert!(!db
-        .get_item("a")
-        .unwrap()
-        .unwrap()
-        .metadata_json
-        .unwrap()
-        .contains("work"));
+    assert!(
+        !db.get_item("a")
+            .unwrap()
+            .unwrap()
+            .metadata_json
+            .unwrap()
+            .contains("work")
+    );
     assert_eq!(db.auto_tag_history(&rules, true).unwrap().changed_count, 1);
     let metadata: serde_json::Value =
         serde_json::from_str(&db.get_item("a").unwrap().unwrap().metadata_json.unwrap()).unwrap();

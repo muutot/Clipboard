@@ -24,10 +24,9 @@ pub fn stop_runtime_services(app: &tauri::AppHandle) {
         cancellation.0.cancel();
     }
     if let Some(operations) = app.try_state::<crate::background_operations::BackgroundOperations>()
+        && !operations.shutdown(std::time::Duration::from_secs(30))
     {
-        if !operations.shutdown(std::time::Duration::from_secs(30)) {
-            crate::log_warn!("[shutdown] background operations exceeded the cancellation deadline");
-        }
+        crate::log_warn!("[shutdown] background operations exceeded the cancellation deadline");
     }
     if let Some(worker) = app.try_state::<Mutex<crate::item_operations::ExternalChangeWorker>>() {
         lock_or_recover(&worker, "external item changes").stop();
@@ -40,10 +39,10 @@ pub fn stop_runtime_services(app: &tauri::AppHandle) {
         lock_or_recover(&cleanup, "history cleanup").stop();
     }
 
-    if let Some(monitor) = app.try_state::<Mutex<crate::platform::ClipboardMonitor>>() {
-        if let Err(error) = lock_or_recover(&monitor, "clipboard monitor").stop() {
-            crate::log_error!("[shutdown] failed to stop clipboard monitor: {error}");
-        }
+    if let Some(monitor) = app.try_state::<Mutex<crate::platform::ClipboardMonitor>>()
+        && let Err(error) = lock_or_recover(&monitor, "clipboard monitor").stop()
+    {
+        crate::log_error!("[shutdown] failed to stop clipboard monitor: {error}");
     }
 
     if let Some(capture) = app.try_state::<CaptureState>() {
@@ -63,15 +62,15 @@ pub fn stop_runtime_services(app: &tauri::AppHandle) {
         lock_or_recover(&hotkey, "hotkey manager").stop();
     }
 
-    if let Some(api) = app.try_state::<Mutex<crate::cli::LocalApiServer>>() {
-        if let Err(error) = lock_or_recover(&api, "local API").stop() {
-            crate::log_error!("[shutdown] failed to stop local API: {error}");
-        }
+    if let Some(api) = app.try_state::<Mutex<crate::cli::LocalApiServer>>()
+        && let Err(error) = lock_or_recover(&api, "local API").stop()
+    {
+        crate::log_error!("[shutdown] failed to stop local API: {error}");
     }
 
-    if let Some(worker) = app.try_state::<Mutex<Option<crate::search::SearchSyncWorker>>>() {
-        if let Some(worker) = lock_or_recover(&worker, "search-sync worker").as_mut() {
-            worker.stop();
-        }
+    if let Some(worker) = app.try_state::<Mutex<Option<crate::search::SearchSyncWorker>>>()
+        && let Some(worker) = lock_or_recover(&worker, "search-sync worker").as_mut()
+    {
+        worker.stop();
     }
 }

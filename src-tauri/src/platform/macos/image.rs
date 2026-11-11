@@ -76,12 +76,11 @@ fn read_with(parent: &Path, run: &mut Runner<'_>) -> Option<(Vec<u8>, u32, u32)>
         if super::bounded_command::capture_aborted() {
             return None;
         }
-        if let Ok(output) = run(Command::new(tool).args(args), MAX_IMAGE_BYTES) {
-            if output.status.success() {
-                if let Some(image) = decode(&output.stdout) {
-                    return Some(image);
-                }
-            }
+        if let Ok(output) = run(Command::new(tool).args(args), MAX_IMAGE_BYTES)
+            && output.status.success()
+            && let Some(image) = decode(&output.stdout)
+        {
+            return Some(image);
         }
     }
     if super::bounded_command::capture_aborted() {
@@ -225,12 +224,14 @@ mod tests {
             std::sync::atomic::AtomicBool::new(false),
         ));
         let mut calls = 0;
-        assert!(read_with(&parent.0, &mut |_, _| {
-            calls += 1;
-            super::super::bounded_command::fail_capture();
-            Err(io::ErrorKind::TimedOut.into())
-        })
-        .is_none());
+        assert!(
+            read_with(&parent.0, &mut |_, _| {
+                calls += 1;
+                super::super::bounded_command::fail_capture();
+                Err(io::ErrorKind::TimedOut.into())
+            })
+            .is_none()
+        );
         assert_eq!(calls, 1);
         assert_eq!(fs::read_dir(&parent.0).unwrap().count(), 0);
     }

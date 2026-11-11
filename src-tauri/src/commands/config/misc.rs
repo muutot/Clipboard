@@ -4,13 +4,13 @@ use std::time::Duration;
 
 use tauri::{Emitter, Manager};
 
+use crate::CaptureState;
 use crate::config::ConfigStore;
-use crate::keyboard::{is_global_action, KeyboardConfig, KeyboardManager};
+use crate::keyboard::{KeyboardConfig, KeyboardManager, is_global_action};
 use crate::platform::windows::hotkey::HotkeyManager;
 use crate::platform::{self, ClipboardMonitor, RuntimeInfo};
 use crate::privacy::PrivacyManager;
 use crate::storage::{ClipboardRepository, Database};
-use crate::CaptureState;
 
 use super::{ApplicationFilterSettings, DiscoveredApplication, PrivacySettings, PrivacyStatus};
 use crate::commands::lock::lock_state;
@@ -502,16 +502,16 @@ pub async fn paste_to_previous_application(
     }
 
     let main_window = app.get_webview_window("main");
-    if let Some(window) = &main_window {
-        if let Err(error) = platform::hide_main_window(window) {
-            crate::dbg_log(&format!(
-                "paste_to_previous_application: hide window error={error}"
-            ));
-            if let Some(token) = &batch_token {
-                super::paste_batch::finish(token, false);
-            }
-            return Err(error.to_string());
+    if let Some(window) = &main_window
+        && let Err(error) = platform::hide_main_window(window)
+    {
+        crate::dbg_log(&format!(
+            "paste_to_previous_application: hide window error={error}"
+        ));
+        if let Some(token) = &batch_token {
+            super::paste_batch::finish(token, false);
         }
+        return Err(error.to_string());
     }
 
     // The paste sequence sleeps and injects input; run it on the blocking
@@ -703,7 +703,7 @@ mod tests {
 
     #[test]
     fn concurrent_automatic_tag_saves_follow_runtime_application_order() {
-        use std::sync::{mpsc, Arc};
+        use std::sync::{Arc, mpsc};
         use std::time::{Duration, Instant};
         let root =
             std::env::temp_dir().join(format!("clipboard-tag-policy-{}", uuid::Uuid::new_v4()));
@@ -828,28 +828,32 @@ mod tests {
         )
         .unwrap();
         fs::rename(root.join("conf"), root.join("saved-conf")).unwrap();
-        assert!(apply_privacy_settings(
-            &config,
-            &cancellation,
-            &privacy,
-            &capture,
-            None,
-            Some(vec!["new-secret".into()])
-        )
-        .is_err());
+        assert!(
+            apply_privacy_settings(
+                &config,
+                &cancellation,
+                &privacy,
+                &capture,
+                None,
+                Some(vec!["new-secret".into()])
+            )
+            .is_err()
+        );
         assert!(privacy.lock().unwrap().is_sensitive_content("old-secret"));
         assert!(capture.should_skip(None, Some("old-secret")));
         assert!(!capture.should_skip(None, Some("new-secret")));
         fs::rename(root.join("saved-conf"), root.join("conf")).unwrap();
-        assert!(apply_privacy_settings(
-            &config,
-            &cancellation,
-            &privacy,
-            &capture,
-            None,
-            Some(vec!["[".into()])
-        )
-        .is_err());
+        assert!(
+            apply_privacy_settings(
+                &config,
+                &cancellation,
+                &privacy,
+                &capture,
+                None,
+                Some(vec!["[".into()])
+            )
+            .is_err()
+        );
         let saved = apply_privacy_settings(
             &config,
             &cancellation,
@@ -873,7 +877,7 @@ mod tests {
 
     #[test]
     fn concurrent_privacy_saves_wait_for_the_previous_runtime_application() {
-        use std::sync::{mpsc, Arc};
+        use std::sync::{Arc, mpsc};
         use std::time::{Duration, Instant};
         let root =
             std::env::temp_dir().join(format!("clipboard-privacy-policy-{}", uuid::Uuid::new_v4()));
@@ -937,10 +941,12 @@ mod tests {
         );
         assert!(capture.should_skip(None, Some("second-secret")));
         assert!(!capture.should_skip(None, Some("first-secret")));
-        assert!(privacy
-            .lock()
-            .unwrap()
-            .is_sensitive_content("second-secret"));
+        assert!(
+            privacy
+                .lock()
+                .unwrap()
+                .is_sensitive_content("second-secret")
+        );
         assert_eq!(
             ConfigStore::load(&root).unwrap().sensitive_patterns(),
             &["second-secret"]

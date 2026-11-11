@@ -16,17 +16,19 @@ fn text_writes_reject_archive_limit_violations_without_mutation() {
         ("edited", oversized.as_str()),
         (oversized_title.as_str(), "edited body"),
     ] {
-        assert!(database
-            .update_text_item(&TextItemUpdate {
-                id: "original",
-                kind: ClipboardKind::Text,
-                title,
-                text_content: text,
-                content_hash: "edited-hash",
-                size_bytes: 1, // A forged size cannot bypass the byte validation.
-                custom_title: Some(true),
-            })
-            .is_err());
+        assert!(
+            database
+                .update_text_item(&TextItemUpdate {
+                    id: "original",
+                    kind: ClipboardKind::Text,
+                    title,
+                    text_content: text,
+                    content_hash: "edited-hash",
+                    size_bytes: 1, // A forged size cannot bypass the byte validation.
+                    custom_title: Some(true),
+                })
+                .is_err()
+        );
         assert_eq!(database.get_item("original").unwrap().unwrap(), original);
     }
     for field in ["title", "text_content", "html_content", "rtf_content"] {
@@ -56,17 +58,19 @@ fn an_edit_at_the_utf8_byte_boundaries_still_creates_a_valid_backup() {
     let title = format!("{}x", "汉".repeat(1_365));
     assert_eq!(text.len(), 10_000_000);
     assert_eq!(title.len(), 4_096);
-    assert!(database
-        .update_text_item(&TextItemUpdate {
-            id: "editable",
-            kind: ClipboardKind::Text,
-            title: &title,
-            text_content: &text,
-            content_hash: "boundary-hash",
-            size_bytes: text.len() as u64,
-            custom_title: None,
-        })
-        .unwrap());
+    assert!(
+        database
+            .update_text_item(&TextItemUpdate {
+                id: "editable",
+                kind: ClipboardKind::Text,
+                title: &title,
+                text_content: &text,
+                content_hash: "boundary-hash",
+                size_bytes: text.len() as u64,
+                custom_title: None,
+            })
+            .unwrap()
+    );
     let root = std::env::temp_dir().join(format!("clipboard-edit-backup-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir(&root).unwrap();
     let target = root.join("boundary.clipbackup");
@@ -261,10 +265,11 @@ fn list_summaries_bound_unicode_bodies_and_full_reads_preserve_payloads() {
     assert_eq!(full.html_content, item.html_content);
     assert_eq!(full.rtf_content, item.rtf_content);
     db.soft_delete("large").unwrap();
-    assert!(db
-        .list_summaries(10, 0, &HistoryFilter::default(), false)
-        .unwrap()
-        .is_empty());
+    assert!(
+        db.list_summaries(10, 0, &HistoryFilter::default(), false)
+            .unwrap()
+            .is_empty()
+    );
     assert_eq!(
         db.list_summaries(10, 0, &HistoryFilter::default(), true)
             .unwrap(),

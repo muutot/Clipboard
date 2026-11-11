@@ -11,9 +11,9 @@ pub(crate) fn create_private_directory(path: &Path) -> io::Result<()> {
 pub(crate) fn create_private_directory(path: &Path) -> io::Result<()> {
     use std::os::windows::ffi::OsStrExt;
     use windows_sys::Win32::Security::{
-        InitializeSecurityDescriptor, SetSecurityDescriptorControl, SetSecurityDescriptorDacl,
-        SECURITY_ATTRIBUTES, SECURITY_DESCRIPTOR, SE_DACL_PROTECTED,
-        SUB_CONTAINERS_AND_OBJECTS_INHERIT,
+        InitializeSecurityDescriptor, SE_DACL_PROTECTED, SECURITY_ATTRIBUTES, SECURITY_DESCRIPTOR,
+        SUB_CONTAINERS_AND_OBJECTS_INHERIT, SetSecurityDescriptorControl,
+        SetSecurityDescriptorDacl,
     };
     use windows_sys::Win32::Storage::FileSystem::CreateDirectoryW;
 

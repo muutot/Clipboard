@@ -117,7 +117,8 @@ pub(super) fn load_checkpoint_cursors(
           WHERE remote_scope = ?1
           ORDER BY device_id",
     )?;
-    let cursors = statement
+
+    statement
         .query_map([remote_scope], |row| {
             Ok((
                 row.get::<_, String>(0)?,
@@ -135,8 +136,7 @@ pub(super) fn load_checkpoint_cursors(
                 last_segment_key,
             })
         })
-        .collect();
-    cursors
+        .collect()
 }
 
 pub(super) fn validate_checkpoint_cursors(cursors: &[DeviceCursor]) -> Result<(), StorageError> {

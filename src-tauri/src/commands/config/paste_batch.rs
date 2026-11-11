@@ -39,7 +39,7 @@ static BATCH: Mutex<Option<Batch>> = Mutex::new(None);
 
 #[cfg(target_os = "windows")]
 fn focused(target: Target, first: bool) -> bool {
-    extern "system" {
+    unsafe extern "system" {
         fn GetForegroundWindow() -> isize;
         fn GetWindowThreadProcessId(window: isize, pid: *mut u32) -> u32;
     }
@@ -62,7 +62,7 @@ fn focused(target: Target, first: bool) -> bool {
 /// only: a lease failure reads very differently when the foreground is the
 /// panel itself versus some unrelated application that stole focus.
 fn current_foreground_handle() -> isize {
-    extern "system" {
+    unsafe extern "system" {
         fn GetForegroundWindow() -> isize;
     }
     unsafe { GetForegroundWindow() }
@@ -196,15 +196,15 @@ pub(super) fn active(token: &str) -> bool {
     })
 }
 pub(super) fn finish(token: &str, succeeded: bool) {
-    if let Ok(mut slot) = BATCH.lock() {
-        if let Some(batch) = slot.as_mut().filter(|batch| batch.token == token) {
-            if succeeded {
-                batch.started = true;
-                batch.busy = false;
-                batch.touched = Instant::now();
-            } else {
-                *slot = None;
-            }
+    if let Ok(mut slot) = BATCH.lock()
+        && let Some(batch) = slot.as_mut().filter(|batch| batch.token == token)
+    {
+        if succeeded {
+            batch.started = true;
+            batch.busy = false;
+            batch.touched = Instant::now();
+        } else {
+            *slot = None;
         }
     }
 }
@@ -254,12 +254,16 @@ mod tests {
         batch.started = true;
         assert!(batch.validate("batch", now, false).is_err());
         assert!(batch.validate("batch", now, true).is_ok());
-        assert!(batch
-            .validate("batch", now + Duration::from_secs(31), true)
-            .is_err());
+        assert!(
+            batch
+                .validate("batch", now + Duration::from_secs(31), true)
+                .is_err()
+        );
         batch.touched = now + Duration::from_secs(301);
-        assert!(batch
-            .validate("batch", now + Duration::from_secs(301), true)
-            .is_err());
+        assert!(
+            batch
+                .validate("batch", now + Duration::from_secs(301), true)
+                .is_err()
+        );
     }
 }

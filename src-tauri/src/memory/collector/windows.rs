@@ -1,6 +1,6 @@
 //! Windows process-group and system-memory probes (Toolhelp/psapi/kernel32).
 
-use super::{fallback_current_process, MemoryProcess, SystemMemory};
+use super::{MemoryProcess, SystemMemory, fallback_current_process};
 use std::{
     collections::HashSet,
     ffi::c_void,

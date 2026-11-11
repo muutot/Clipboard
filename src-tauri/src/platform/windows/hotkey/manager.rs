@@ -1,17 +1,17 @@
 //! `HotkeyManager`: the per-action chord plan, loop rebuild, and dispatch thread.
 
-use std::sync::{mpsc, Arc};
+use std::sync::{Arc, mpsc};
 use std::thread;
 
 use tauri::{Emitter as _, Manager as _};
 
-use crate::keyboard::{global_action_ids, Modifier};
+use crate::keyboard::{Modifier, global_action_ids};
 use crate::platform::hotkey_common::plan_registrations;
 
 use super::message_loop::{
     spawn_hotkey_thread_with_registrations, stop_hotkey_thread, wait_for_hotkey_hwnd_or_exit,
 };
-use super::paste_target::{foreground_window_handle, QuickPasteHandle, QuickPasteTarget};
+use super::paste_target::{QuickPasteHandle, QuickPasteTarget, foreground_window_handle};
 use super::{HotkeyAction, HotkeyRegistration};
 
 pub struct HotkeyManager {
@@ -190,10 +190,8 @@ impl HotkeyManager {
                                 })
                                 .and_then(|panel| panel.is_focused().ok())
                                 .unwrap_or(false);
-                        if !own_focused {
-                            if let Some(window_handle) = foreground_window_handle() {
-                                quick_paste_target.remember(window_handle);
-                            }
+                        if !own_focused && let Some(window_handle) = foreground_window_handle() {
+                            quick_paste_target.remember(window_handle);
                         }
                         if is_visible && is_focused {
                             let _ = crate::platform::hide_main_window(&window);
@@ -214,10 +212,9 @@ impl HotkeyManager {
                                     .get_webview_window(crate::commands::float::FLOAT_WINDOW_LABEL)
                                     .and_then(|panel| panel.is_focused().ok())
                                     .unwrap_or(false);
-                            if !own_focused {
-                                if let Some(window_handle) = foreground_window_handle() {
-                                    quick_paste_target.remember(window_handle);
-                                }
+                            if !own_focused && let Some(window_handle) = foreground_window_handle()
+                            {
+                                quick_paste_target.remember(window_handle);
                             }
                             let app = app.clone();
                             tauri::async_runtime::spawn_blocking(move || {

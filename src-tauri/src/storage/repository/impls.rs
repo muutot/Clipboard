@@ -8,14 +8,14 @@
 
 use std::collections::HashMap;
 
-use rusqlite::{params, params_from_iter, OptionalExtension, TransactionBehavior};
+use rusqlite::{OptionalExtension, TransactionBehavior, params, params_from_iter};
 
 use super::{
-    content_exists_on_connection, current_time_ms, delete_kind_records, history_predicates,
-    is_valid_tag_color, kind_to_storage, query_kind_storage_stats, rewrite_item_tags, unique_ids,
-    ClipboardRepository, HistoryFilter, KindDeleteResult, KindDeleteScope, KindStorageStats,
-    StorageFileReferences, StoredClipboardItem, TagInfo, TextItemUpdate, ITEM_COLUMNS,
-    ITEM_LOOKUP_CHUNK_SIZE,
+    ClipboardRepository, HistoryFilter, ITEM_COLUMNS, ITEM_LOOKUP_CHUNK_SIZE, KindDeleteResult,
+    KindDeleteScope, KindStorageStats, StorageFileReferences, StoredClipboardItem, TagInfo,
+    TextItemUpdate, content_exists_on_connection, current_time_ms, delete_kind_records,
+    history_predicates, is_valid_tag_color, kind_to_storage, query_kind_storage_stats,
+    rewrite_item_tags, unique_ids,
 };
 use crate::domain::{ClipboardItem, ClipboardKind};
 use crate::storage::{Database, StorageError};

@@ -11,5 +11,5 @@ pub use error::SearchError;
 pub use index::{SearchHit, SearchIndex, SearchIndexChange};
 pub use manifest::SEARCH_INDEX_VERSION;
 pub use query::SearchQuery;
-pub use schema::{build_schema, register_tokenizers, SearchFields, NGRAM_TOKENIZER_NAME};
+pub use schema::{NGRAM_TOKENIZER_NAME, SearchFields, build_schema, register_tokenizers};
 pub use sync::{SearchIndexSink, SearchSyncSummary, SearchSyncWorker, SearchSynchronizer};

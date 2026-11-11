@@ -8,6 +8,7 @@ use super::{
     sanitize_file_stem, save_clipboard_item_as_new_record, search_clipboard_items_blocking,
     set_custom_title_metadata,
 };
+use crate::STORAGE_KIND_DELETE_SCOPE;
 use crate::commands::clipboard::types::{
     HistoryFilterArgs, SearchResultCache, SearchSortDirection, SearchSortField, SearchSortRule,
 };
@@ -17,7 +18,6 @@ use crate::performance::PerformanceTracker;
 use crate::search::{SearchIndex, SearchSyncWorker};
 use crate::storage::ClipboardRepository;
 use crate::storage::{Database, HistoryCursor, KindStorageStats, StoragePaths};
-use crate::STORAGE_KIND_DELETE_SCOPE;
 use std::sync::Mutex;
 
 fn item(id: &str, title: &str) -> ClipboardItem {
@@ -73,10 +73,12 @@ fn clearing_history_announces_only_rows_soft_deleted_by_its_commit() {
             Ok(())
         })
         .unwrap();
-    assert!(super::clear_non_favorite_records(&database, |_| {
-        panic!("a failed clear must not notify");
-    })
-    .is_err());
+    assert!(
+        super::clear_non_favorite_records(&database, |_| {
+            panic!("a failed clear must not notify");
+        })
+        .is_err()
+    );
 }
 
 #[test]
@@ -238,11 +240,13 @@ fn save_as_new_rolls_back_partial_tags_and_outboxes_before_retry() {
             .unwrap();
     assert_eq!(database.get_item(&retry.id).unwrap(), Some(retry));
     assert_eq!(counts().0, before.0 + 1);
-    assert!(database
-        .list_all_tags()
-        .unwrap()
-        .iter()
-        .all(|tag| tag.count == 2));
+    assert!(
+        database
+            .list_all_tags()
+            .unwrap()
+            .iter()
+            .all(|tag| tag.count == 2)
+    );
 }
 
 #[test]
@@ -1168,15 +1172,17 @@ fn permanently_delete_storage_kind_enforces_expected_stats_and_clears_cache() {
         item_count: stats.item_count + 1,
         ..stats
     };
-    assert!(permanently_delete_storage_kind_for(
-        &database,
-        &paths,
-        &index,
-        &cache,
-        ClipboardKind::Text,
-        Some(stale)
-    )
-    .is_err());
+    assert!(
+        permanently_delete_storage_kind_for(
+            &database,
+            &paths,
+            &index,
+            &cache,
+            ClipboardKind::Text,
+            Some(stale)
+        )
+        .is_err()
+    );
 
     let result = permanently_delete_storage_kind_for(
         &database,

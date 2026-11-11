@@ -37,12 +37,13 @@ impl Database {
         self.with_connection(|connection| {
             let transaction =
                 connection.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-            if let Some(existing) = load_cursor(&transaction, remote_scope, &cursor.device_id)? {
-                if existing.epoch == cursor.epoch && existing.sequence > cursor.sequence {
-                    return Err(StorageError::InvalidSyncState(
-                        "snapshot cursor sequence regressed".to_string(),
-                    ));
-                }
+            if let Some(existing) = load_cursor(&transaction, remote_scope, &cursor.device_id)?
+                && existing.epoch == cursor.epoch
+                && existing.sequence > cursor.sequence
+            {
+                return Err(StorageError::InvalidSyncState(
+                    "snapshot cursor sequence regressed".to_string(),
+                ));
             }
             set_changelog_suppressed(&transaction, true)?;
             let applied = apply_mutations(&transaction, remote_scope, mutations, resource_refs)?;
@@ -79,12 +80,13 @@ impl Database {
         self.with_connection(|connection| {
             let transaction =
                 connection.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-            if let Some(existing) = load_cursor(&transaction, remote_scope, &cursor.device_id)? {
-                if existing.epoch == cursor.epoch && existing.sequence > cursor.sequence {
-                    return Err(StorageError::InvalidSyncState(
-                        "snapshot cursor sequence regressed".to_string(),
-                    ));
-                }
+            if let Some(existing) = load_cursor(&transaction, remote_scope, &cursor.device_id)?
+                && existing.epoch == cursor.epoch
+                && existing.sequence > cursor.sequence
+            {
+                return Err(StorageError::InvalidSyncState(
+                    "snapshot cursor sequence regressed".to_string(),
+                ));
             }
             set_changelog_suppressed(&transaction, true)?;
             let applied = Self::fold_decoded_batches(batches, |(mutations, resource_refs)| {

@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{Arc, Mutex, mpsc};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
@@ -268,38 +268,42 @@ impl OcrWorker {
 
                         // Check if an OCR result for this image hash already
                         // exists.  Reusing it avoids duplicate local inference.
-                        if let Ok(Some(existing)) =
-                            database.find_completed_ocr_by_hash(&input.image_hash)
-                        {
-                            let result = OcrResult::completed(
-                                &input.item_id,
-                                &existing.engine,
-                                &existing.model_version,
-                                existing.language.as_deref(),
-                                &existing.full_text,
-                                &existing.blocks,
-                                &input.image_hash,
-                            );
-                            let active = lock_unpoisoned(&publication);
-                            if !*active {
-                                break;
+                        match database.find_completed_ocr_by_hash(&input.image_hash) {
+                            Ok(Some(existing)) => {
+                                let result = OcrResult::completed(
+                                    &input.item_id,
+                                    &existing.engine,
+                                    &existing.model_version,
+                                    existing.language.as_deref(),
+                                    &existing.full_text,
+                                    &existing.blocks,
+                                    &input.image_hash,
+                                );
+                                let active = lock_unpoisoned(&publication);
+                                if !*active {
+                                    break;
+                                }
+                                if let Err(error) = database.save_ocr_result(&result) {
+                                    let message =
+                                        format!("failed to save reused OCR result: {error}");
+                                    crate::log_event!("[ocr] {message} for {}", input.item_id);
+                                    persist_failure(&database, &input.item_id, &message);
+                                }
                             }
-                            if let Err(error) = database.save_ocr_result(&result) {
-                                let message = format!("failed to save reused OCR result: {error}");
-                                crate::log_event!("[ocr] {message} for {}", input.item_id);
-                                persist_failure(&database, &input.item_id, &message);
+                            _ => {
+                                if let Err(message) =
+                                    attempt_recognition(&engine, &database, &input, &publication)
+                                {
+                                    handle_recognition_failure(
+                                        &database,
+                                        input,
+                                        1,
+                                        &message,
+                                        &mut retries,
+                                        &publication,
+                                    );
+                                }
                             }
-                        } else if let Err(message) =
-                            attempt_recognition(&engine, &database, &input, &publication)
-                        {
-                            handle_recognition_failure(
-                                &database,
-                                input,
-                                1,
-                                &message,
-                                &mut retries,
-                                &publication,
-                            );
                         }
                     }
                     Ok(None) => {}
@@ -462,15 +466,15 @@ impl Drop for OcrWorker {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
     use std::time::{Duration, Instant};
 
     use crate::domain::{ClipboardItem, ClipboardKind, OcrResult, OcrStatus};
     use crate::ocr::{OcrEngine, OcrEngineError, OcrInput, OcrOutput};
     use crate::storage::{ClipboardRepository, Database, OcrRepository};
 
-    use super::{retry_backoff, OcrWorker, OcrWorkerManager, MAX_RECOGNITION_ATTEMPTS};
+    use super::{MAX_RECOGNITION_ATTEMPTS, OcrWorker, OcrWorkerManager, retry_backoff};
 
     fn image_item(id: &str) -> ClipboardItem {
         ClipboardItem {

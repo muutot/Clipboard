@@ -82,16 +82,18 @@ pub fn action_bindings(config: &KeyboardConfig, action: &str) -> Vec<ShortcutBin
 mod tests {
     use std::collections::BTreeMap;
 
-    use super::{action_bindings, global_action_ids, is_global_action, ActionScope};
-    use crate::keyboard::{KeyboardConfig, GLOBAL_HOTKEY_ACTIONS};
+    use super::{ActionScope, action_bindings, global_action_ids, is_global_action};
+    use crate::keyboard::{GLOBAL_HOTKEY_ACTIONS, KeyboardConfig};
 
     #[test]
     fn registry_lists_the_two_global_actions_in_stable_order() {
         let ids: Vec<_> = global_action_ids().collect();
         assert_eq!(ids, vec!["toggleWindow", "toggleFloatPanel"]);
-        assert!(GLOBAL_HOTKEY_ACTIONS
-            .iter()
-            .all(|def| def.scope == ActionScope::Global));
+        assert!(
+            GLOBAL_HOTKEY_ACTIONS
+                .iter()
+                .all(|def| def.scope == ActionScope::Global)
+        );
     }
 
     #[test]

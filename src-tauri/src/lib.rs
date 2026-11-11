@@ -55,15 +55,15 @@ pub mod tags;
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
 use std::time::Duration;
 
 use cli::LocalApiServer;
 use commands::clipboard::SearchResultCache;
 use config::{ConfigStore, SearchIndexSyncMode};
-use content::{self_trigger, ThumbnailWorker};
-use keyboard::{KeyboardConfig, KeyboardManager, GLOBAL_HOTKEY_ACTIONS};
+use content::{ThumbnailWorker, self_trigger};
+use keyboard::{GLOBAL_HOTKEY_ACTIONS, KeyboardConfig, KeyboardManager};
 use ocr::{NoopOcrEngine, OcrEngine, OcrWorkerManager, PpOcrEngine, TesseractOcrEngine};
 use performance::{PerformanceTracker, StartupMetrics, StartupTimer};
 use platform::hotkey_common::{
@@ -71,17 +71,17 @@ use platform::hotkey_common::{
 };
 use platform::windows::hotkey::HotkeyManager;
 use platform::{
-    hide_main_window, show_main_window, sync_autostart, ClipboardMonitor, SingleInstanceError,
-    SingleInstanceGuard, SystemTray,
+    ClipboardMonitor, SingleInstanceError, SingleInstanceGuard, SystemTray, hide_main_window,
+    show_main_window, sync_autostart,
 };
 use privacy::PrivacyManager;
 use search::{SearchIndex, SearchSyncWorker, SearchSynchronizer};
 use shutdown::stop_runtime_services;
 use state::{CaptureState, CaptureWorker, SelfTriggerState};
 use storage::{
-    cleanup_stale_sync_snapshots, discard_database_backups, discard_database_quarantine,
-    quarantine_search_index, recover_database_if_needed, refresh_database_backup, Database,
-    KindDeleteScope, OcrRepository, StoragePaths,
+    Database, KindDeleteScope, OcrRepository, StoragePaths, cleanup_stale_sync_snapshots,
+    discard_database_backups, discard_database_quarantine, quarantine_search_index,
+    recover_database_if_needed, refresh_database_backup,
 };
 use tauri::{Emitter, Manager};
 mod background_operations;
@@ -106,10 +106,10 @@ pub fn resolve_project_directory() -> PathBuf {
     let executable_directory = std::env::current_exe()
         .ok()
         .and_then(|path| path.parent().map(|parent| parent.to_path_buf()));
-    if let Some(directory) = &executable_directory {
-        if directory_is_writable(directory) {
-            return directory.clone();
-        }
+    if let Some(directory) = &executable_directory
+        && directory_is_writable(directory)
+    {
+        return directory.clone();
     }
     platform_data_directory()
         .or(executable_directory)
@@ -199,45 +199,47 @@ impl CleanupWorker {
         let worker_flag = Arc::clone(&stop_flag);
         let handle = thread::Builder::new()
             .name("history-cleanup".to_owned())
-            .spawn(move || loop {
-                if worker_flag.load(Ordering::SeqCst) {
-                    break;
-                }
+            .spawn(move || {
+                loop {
+                    if worker_flag.load(Ordering::SeqCst) {
+                        break;
+                    }
 
-                match ConfigStore::load_existing(&project_directory) {
-                    Ok(config) => {
-                        // Hold the storage maintenance lock for the whole run:
-                        // the orphan scan inside must not race a concurrent
-                        // rename's DB-first-then-move sequence, or it can
-                        // delete the not-yet-moved old file and leave the
-                        // rolled-back record pointing at a missing file.
-                        let _maintenance = storage_maintenance_lock
-                            .lock()
-                            .unwrap_or_else(|poisoned| poisoned.into_inner());
-                        match commands::cleanup::enforce_history_cleanup_for(
-                            &database,
-                            &config,
-                            &paths,
-                            commands::cleanup::ORPHAN_FILE_GRACE,
-                        ) {
-                            Ok(total_deleted) if total_deleted > 0 => {
-                                crate::log_event!(
-                                    "[cleanup] removed {total_deleted} expired history entries"
-                                );
-                            }
-                            Ok(_) => {}
-                            Err(error) => {
-                                crate::log_error!("[cleanup] scheduled cleanup failed: {error}")
+                    match ConfigStore::load_existing(&project_directory) {
+                        Ok(config) => {
+                            // Hold the storage maintenance lock for the whole run:
+                            // the orphan scan inside must not race a concurrent
+                            // rename's DB-first-then-move sequence, or it can
+                            // delete the not-yet-moved old file and leave the
+                            // rolled-back record pointing at a missing file.
+                            let _maintenance = storage_maintenance_lock
+                                .lock()
+                                .unwrap_or_else(|poisoned| poisoned.into_inner());
+                            match commands::cleanup::enforce_history_cleanup_for(
+                                &database,
+                                &config,
+                                &paths,
+                                commands::cleanup::ORPHAN_FILE_GRACE,
+                            ) {
+                                Ok(total_deleted) if total_deleted > 0 => {
+                                    crate::log_event!(
+                                        "[cleanup] removed {total_deleted} expired history entries"
+                                    );
+                                }
+                                Ok(_) => {}
+                                Err(error) => {
+                                    crate::log_error!("[cleanup] scheduled cleanup failed: {error}")
+                                }
                             }
                         }
+                        Err(error) => {
+                            crate::log_error!("[cleanup] failed to load configuration: {error}")
+                        }
                     }
-                    Err(error) => {
-                        crate::log_error!("[cleanup] failed to load configuration: {error}")
-                    }
-                }
 
-                if commands::signal::wait_for_stop(&stop_receiver, &worker_flag, interval) {
-                    break;
+                    if commands::signal::wait_for_stop(&stop_receiver, &worker_flag, interval) {
+                        break;
+                    }
                 }
             })
             .map_err(|error| format!("failed to start history cleanup worker: {error}"))?;
@@ -304,7 +306,7 @@ impl Drop for CleanupWorker {
 fn resolve_global_hotkey_plan(
     config: &KeyboardConfig,
 ) -> (Vec<Vec<(u32, u32)>>, Vec<keyboard::Modifier>) {
-    use keyboard::{action_bindings, ActionScope};
+    use keyboard::{ActionScope, action_bindings};
 
     let mut chords = Vec::with_capacity(GLOBAL_HOTKEY_ACTIONS.len());
     let mut double_modifiers = Vec::new();
@@ -369,8 +371,8 @@ pub fn run() {
                 let mut guard = match SingleInstanceGuard::acquire(&project_directory) {
                     Ok(guard) => guard,
                     Err(error) => {
-                        if let SingleInstanceError::AlreadyRunning(owner_pid) = &error {
-                            if !SingleInstanceGuard::notify_existing_instance(
+                        if let SingleInstanceError::AlreadyRunning(owner_pid) = &error
+                            && !SingleInstanceGuard::notify_existing_instance(
                                 &project_directory,
                                 *owner_pid,
                             ) {
@@ -378,7 +380,6 @@ pub fn run() {
                                     "[single-instance] failed to notify the existing process (PID: {owner_pid})"
                                 );
                             }
-                        }
                         return Err(error.into());
                     }
                 };
@@ -448,14 +449,13 @@ pub fn run() {
                     discard_database_quarantine(quarantined_database)?;
                 }
                 storage::reset_search_index(&paths.search_index)?;
-            } else if recovery_report.is_some() {
-                if let Some(quarantined_index) = quarantine_search_index(&paths.search_index)? {
+            } else if recovery_report.is_some()
+                && let Some(quarantined_index) = quarantine_search_index(&paths.search_index)? {
                     crate::log_warn!(
                         "[recovery] quarantined stale search index at {}",
                         quarantined_index.display()
                     );
                 }
-            }
 
             let repair_result = database.repair()?;
             if !repair_result.integrity_ok {
@@ -582,7 +582,7 @@ pub fn run() {
             clipboard_monitor.set_ignored_apps(initial_ignored);
 
             if clipboard_monitor.start().is_ok() {
-                if let Some(receiver) = clipboard_monitor.take_receiver() {
+                match clipboard_monitor.take_receiver() { Some(receiver) => {
                     let self_trigger_clone = self_trigger_guard.clone();
                     let capture_for_thread = capture_state.clone();
                     let stop_flag = Arc::new(AtomicBool::new(false));
@@ -625,9 +625,9 @@ pub fn run() {
                         stop_sender: Some(stop_sender),
                         handle: Some(handle),
                     });
-            } else {
+            } _ => {
                 crate::log_warn!("[startup] clipboard monitor has no receiver");
-            }
+            }}
         } else {
             crate::log_error!("[startup] failed to start clipboard monitor");
         }

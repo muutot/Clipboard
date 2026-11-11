@@ -182,10 +182,10 @@ pub(super) fn load_mutations(
     }
 
     for (item_id, tombstone) in &tombstones {
-        if let Some(item) = upserts.get(item_id) {
-            if tombstone.version >= item.version {
-                upserts.remove(item_id);
-            }
+        if let Some(item) = upserts.get(item_id)
+            && tombstone.version >= item.version
+        {
+            upserts.remove(item_id);
         }
     }
     tombstones.retain(|item_id, tombstone| {

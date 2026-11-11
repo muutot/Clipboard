@@ -11,7 +11,7 @@ pub(super) fn rtf_format_id() -> Option<u32> {
     use std::os::windows::ffi::OsStrExt;
     use std::sync::OnceLock;
 
-    extern "system" {
+    unsafe extern "system" {
         fn RegisterClipboardFormatW(name: *const u16) -> u32;
     }
 
@@ -31,7 +31,7 @@ pub(super) fn rtf_format_id() -> Option<u32> {
 /// without the fragment-header parsing CF_HTML requires.
 #[cfg(target_os = "windows")]
 pub fn read_clipboard_rtf() -> Option<String> {
-    extern "system" {
+    unsafe extern "system" {
         fn OpenClipboard(hwnd: isize) -> i32;
         fn CloseClipboard() -> i32;
         fn GetClipboardData(format: u32) -> isize;

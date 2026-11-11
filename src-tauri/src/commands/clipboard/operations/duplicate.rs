@@ -238,9 +238,10 @@ mod tests {
             deleted
         );
         assert!(created.html_content.is_none() && created.rtf_content.is_none());
-        assert!(tags
-            .iter()
-            .any(|tag| tag.name == "editor-tag" && tag.count == 2));
+        assert!(
+            tags.iter()
+                .any(|tag| tag.name == "editor-tag" && tag.count == 2)
+        );
         assert_eq!(
             tags.iter()
                 .find(|tag| tag.name == "capture-tag")

@@ -1,5 +1,5 @@
 //! Portable active-history bundles. No configuration, credentials, recycle bin or derived previews.
-use super::{stream::atomic_output, ImportSummary};
+use super::{ImportSummary, stream::atomic_output};
 use crate::background_operations::OperationPhase;
 use crate::{
     domain::{ClipboardItem, ClipboardKind},
@@ -13,7 +13,7 @@ use std::{
     io::{BufRead, BufReader, Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
 };
-use zip::{write::SimpleFileOptions, ZipArchive, ZipWriter};
+use zip::{ZipArchive, ZipWriter, write::SimpleFileOptions};
 
 type Progress<'a> = &'a mut dyn FnMut(OperationPhase, u64, Option<u64>) -> Result<(), String>;
 
@@ -128,19 +128,19 @@ fn sanitize_archivable_media(item: &mut ClipboardItem) {
     }
     item.preview_path = None;
     item.icon_path = None;
-    if item.kind == ClipboardKind::File {
-        if let Some(text) = &item.text_content {
-            match serde_json::from_str::<Vec<String>>(text) {
-                Ok(paths) => {
-                    let kept = paths
-                        .into_iter()
-                        .filter(|path| is_regular_file(path))
-                        .collect::<Vec<_>>();
-                    item.text_content = (!kept.is_empty())
-                        .then(|| serde_json::to_string(&kept).unwrap_or_default());
-                }
-                Err(_) => item.text_content = None,
+    if item.kind == ClipboardKind::File
+        && let Some(text) = &item.text_content
+    {
+        match serde_json::from_str::<Vec<String>>(text) {
+            Ok(paths) => {
+                let kept = paths
+                    .into_iter()
+                    .filter(|path| is_regular_file(path))
+                    .collect::<Vec<_>>();
+                item.text_content =
+                    (!kept.is_empty()).then(|| serde_json::to_string(&kept).unwrap_or_default());
             }
+            Err(_) => item.text_content = None,
         }
     }
     let Some(raw) = item.metadata_json.as_deref() else {
@@ -223,19 +223,19 @@ fn remap_item(
         }
         item.metadata_json = Some(value.to_string());
     }
-    if item.kind == ClipboardKind::File {
-        if let Some(text) = &item.text_content {
-            let paths: Vec<String> = serde_json::from_str(text).map_err(err)?;
-            item.text_content = Some(
-                serde_json::to_string(
-                    &paths
-                        .iter()
-                        .map(|path| map(path))
-                        .collect::<Result<Vec<_>, _>>()?,
-                )
-                .map_err(err)?,
-            );
-        }
+    if item.kind == ClipboardKind::File
+        && let Some(text) = &item.text_content
+    {
+        let paths: Vec<String> = serde_json::from_str(text).map_err(err)?;
+        item.text_content = Some(
+            serde_json::to_string(
+                &paths
+                    .iter()
+                    .map(|path| map(path))
+                    .collect::<Result<Vec<_>, _>>()?,
+            )
+            .map_err(err)?,
+        );
     }
     Ok(())
 }
@@ -719,11 +719,13 @@ mod tests {
 
     fn assert_no_published_resources(paths: &StoragePaths) {
         for root in [&paths.images, &paths.files] {
-            assert!(!fs::read_dir(root).unwrap().any(|entry| entry
-                .unwrap()
-                .file_name()
-                .to_string_lossy()
-                .starts_with("backup-")));
+            assert!(!fs::read_dir(root).unwrap().any(|entry| {
+                entry
+                    .unwrap()
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with("backup-")
+            }));
         }
     }
     pub(super) fn item(id: &str, kind: ClipboardKind, path: Option<String>) -> ClipboardItem {
@@ -1063,11 +1065,13 @@ mod tests {
         let metadata: serde_json::Value =
             serde_json::from_str(restored.metadata_json.as_ref().unwrap()).unwrap();
         assert_eq!(metadata["tags"], serde_json::json!(["keep"]));
-        assert!(metadata["files"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .all(|file| file.get("path").is_none()));
+        assert!(
+            metadata["files"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|file| file.get("path").is_none())
+        );
     }
 
     #[test]
@@ -1114,17 +1118,21 @@ mod tests {
         create(&database, &archive).unwrap();
         let checked = preview(&archive, &database).unwrap();
         let paths = StoragePaths::initialize(root.0.join("target")).unwrap();
-        assert!(restore(&archive, "old fingerprint", &database, &paths)
-            .unwrap_err()
-            .contains("changed"));
+        assert!(
+            restore(&archive, "old fingerprint", &database, &paths)
+                .unwrap_err()
+                .contains("changed")
+        );
         rewrite(&archive, |name, bytes| {
             if name == "records.jsonl" {
                 bytes[3] ^= 1;
             }
         });
-        assert!(restore(&archive, &checked.fingerprint, &database, &paths)
-            .unwrap_err()
-            .contains("checksum"));
+        assert!(
+            restore(&archive, &checked.fingerprint, &database, &paths)
+                .unwrap_err()
+                .contains("checksum")
+        );
         let mut zip = ZipWriter::new(File::create(&archive).unwrap());
         zip.start_file("../escape", SimpleFileOptions::default())
             .unwrap();
@@ -1171,12 +1179,16 @@ mod tests {
         zip.write_all(&serde_json::to_vec(&manifest).unwrap())
             .unwrap();
         zip.finish().unwrap();
-        assert!(preview(&archive, &database)
-            .unwrap_err()
-            .contains("negative"));
-        assert!(restore(&archive, "unused", &database, &paths)
-            .unwrap_err()
-            .contains("negative"));
+        assert!(
+            preview(&archive, &database)
+                .unwrap_err()
+                .contains("negative")
+        );
+        assert!(
+            restore(&archive, "unused", &database, &paths)
+                .unwrap_err()
+                .contains("negative")
+        );
         assert_eq!(database.item_count().unwrap(), 2);
     }
 

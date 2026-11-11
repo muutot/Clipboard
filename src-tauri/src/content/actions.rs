@@ -105,9 +105,11 @@ mod tests {
         let markers = detect_markers("call 138-1234-5678");
         let actions = detect_actions(&markers);
         assert!(!actions.is_empty());
-        assert!(actions
-            .iter()
-            .any(|a| a.action_type == "open" && a.payload.starts_with("tel:")));
+        assert!(
+            actions
+                .iter()
+                .any(|a| a.action_type == "open" && a.payload.starts_with("tel:"))
+        );
     }
 
     #[test]

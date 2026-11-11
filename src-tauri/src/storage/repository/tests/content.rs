@@ -247,9 +247,11 @@ fn re_copied_soft_deleted_content_resurrects_the_record() {
 
     assert!(database.soft_delete("original").unwrap());
     assert_eq!(database.item_count().unwrap(), 0);
-    assert!(database
-        .content_exists(ClipboardKind::Text, "same-hash")
-        .unwrap());
+    assert!(
+        database
+            .content_exists(ClipboardKind::Text, "same-hash")
+            .unwrap()
+    );
 
     let repeated = text_item("replacement", "same-hash", 500);
     let stored_id = database.save_item(&repeated).unwrap();
@@ -294,12 +296,16 @@ fn storage_references_include_every_path_from_multi_file_records() {
 
     let references = database.list_storage_file_references().unwrap();
 
-    assert!(references
-        .resource_paths
-        .contains(&"C:\\managed\\first.txt".to_owned()));
-    assert!(references
-        .resource_paths
-        .contains(&"C:\\managed\\second.txt".to_owned()));
+    assert!(
+        references
+            .resource_paths
+            .contains(&"C:\\managed\\first.txt".to_owned())
+    );
+    assert!(
+        references
+            .resource_paths
+            .contains(&"C:\\managed\\second.txt".to_owned())
+    );
 }
 
 #[test]
@@ -320,9 +326,11 @@ fn metadata_only_file_references_are_visible_to_cleanup_and_rename() {
     database.save_item(&item).unwrap();
 
     let references = database.list_storage_file_references().unwrap();
-    assert!(references
-        .resource_paths
-        .contains(&"C:\\managed\\metadata-only.bin".to_owned()));
+    assert!(
+        references
+            .resource_paths
+            .contains(&"C:\\managed\\metadata-only.bin".to_owned())
+    );
     assert_eq!(
         database
             .resource_reference_count("C:\\managed\\metadata-only.bin", "other")
@@ -419,10 +427,12 @@ fn latest_file_record_referencing_storage_returns_most_recent_file_owner() {
     assert_eq!(rediscovered.id, "file-old");
 
     // Unknown storage paths yield no record.
-    assert!(database
-        .latest_file_record_referencing_storage("C:\\managed\\missing.txt", "file-old")
-        .unwrap()
-        .is_none());
+    assert!(
+        database
+            .latest_file_record_referencing_storage("C:\\managed\\missing.txt", "file-old")
+            .unwrap()
+            .is_none()
+    );
     // Non-file records must never satisfy the lookup, even when their metadata
     // references the same managed path.
     let storage = "C:\\managed\\text-only.txt";
@@ -437,10 +447,12 @@ fn latest_file_record_referencing_storage_returns_most_recent_file_owner() {
         .to_string(),
     );
     database.save_item(&text_row).unwrap();
-    assert!(database
-        .latest_file_record_referencing_storage(storage, "text-scan")
-        .unwrap()
-        .is_none());
+    assert!(
+        database
+            .latest_file_record_referencing_storage(storage, "text-scan")
+            .unwrap()
+            .is_none()
+    );
 }
 
 #[test]
@@ -462,11 +474,13 @@ fn legacy_malformed_metadata_preserves_possible_references_without_sql_errors() 
         database.save_item(&item).unwrap();
     }
     database.soft_delete("legacy-0").unwrap();
-    assert!(database
-        .list_storage_file_references()
-        .unwrap()
-        .resource_paths
-        .contains(&path.to_owned()));
+    assert!(
+        database
+            .list_storage_file_references()
+            .unwrap()
+            .resource_paths
+            .contains(&path.to_owned())
+    );
     assert_eq!(
         database
             .resource_reference_count(path, "unrelated")
@@ -477,10 +491,12 @@ fn legacy_malformed_metadata_preserves_possible_references_without_sql_errors() 
         database.resource_reference_count(path, "legacy-3").unwrap(),
         2
     );
-    assert!(database
-        .latest_file_record_referencing_storage(path, "unrelated")
-        .unwrap()
-        .is_none());
+    assert!(
+        database
+            .latest_file_record_referencing_storage(path, "unrelated")
+            .unwrap()
+            .is_none()
+    );
 }
 
 #[test]
@@ -490,9 +506,11 @@ fn invalid_json_metadata_defers_reference_based_operations() {
     item.metadata_json = Some("{broken".into());
     database.save_item(&item).unwrap();
     assert!(database.list_storage_file_references().is_err());
-    assert!(database
-        .resource_reference_count("anything", "other")
-        .is_err());
+    assert!(
+        database
+            .resource_reference_count("anything", "other")
+            .is_err()
+    );
 }
 
 #[test]

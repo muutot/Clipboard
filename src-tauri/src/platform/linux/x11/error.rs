@@ -42,7 +42,10 @@ impl std::fmt::Display for X11Error {
             Self::MissingAtom(name) => write!(f, "missing X atom: {name}"),
             Self::PropertyReadFailed(msg) => write!(f, "property read failed: {msg}"),
             Self::HotkeyGrabFailed(keycode, modifiers) => {
-                write!(f, "failed to grab keycode {keycode} with modifiers {modifiers:#x}")
+                write!(
+                    f,
+                    "failed to grab keycode {keycode} with modifiers {modifiers:#x}"
+                )
             }
             Self::TrayCreationFailed(msg) => write!(f, "tray creation failed: {msg}"),
             Self::XFixesNotAvailable => write!(f, "XFixes extension not available"),

@@ -10,6 +10,7 @@ use std::time::Instant;
 
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 
+use crate::CaptureState;
 use crate::commands::lock::lock_state;
 use crate::config::ConfigStore;
 use crate::content;
@@ -20,13 +21,12 @@ use crate::storage::{
     ClipboardRepository, Database, HistoryCursor, HistoryFilter, KindStorageStats, OcrRepository,
     SearchRepository, StoragePaths, TagInfo, TextItemUpdate,
 };
-use crate::CaptureState;
 
 use super::types::{
-    permanently_delete_storage_kind_for, ClipboardHistoryInvalidated, ClipboardItemsChanged,
-    ClipboardListItem, ClipboardUsageUpdate, HistoryFilterArgs, SearchPage, SearchResultCache,
-    SearchSortDirection, SearchSortField, SearchSortRule, StorageKindDeleteExpectation,
-    StorageKindDeleteResult,
+    ClipboardHistoryInvalidated, ClipboardItemsChanged, ClipboardListItem, ClipboardUsageUpdate,
+    HistoryFilterArgs, SearchPage, SearchResultCache, SearchSortDirection, SearchSortField,
+    SearchSortRule, StorageKindDeleteExpectation, StorageKindDeleteResult,
+    permanently_delete_storage_kind_for,
 };
 
 mod delete;

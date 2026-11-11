@@ -38,7 +38,7 @@ fn windows_locale_name() -> Option<String> {
     // LOCALE_NAME_MAX_LENGTH is 85 including the terminating null.
     const LOCALE_NAME_MAX_LENGTH: usize = 85;
 
-    extern "system" {
+    unsafe extern "system" {
         fn GetUserDefaultLocaleName(lpLocaleName: *mut u16, cchLocaleName: i32) -> i32;
     }
 
@@ -125,23 +125,25 @@ mod tests {
             .map(|key| std::env::var(key).ok())
             .collect();
 
-        std::env::set_var("LC_ALL", "zh_CN.UTF-8");
-        std::env::set_var("LC_MESSAGES", "en_US.UTF-8");
-        std::env::set_var("LANG", "en_US.UTF-8");
+        // Tests run under cargo's single-threaded-per-process default harness;
+        // these mutate process-global state, which is unsafe as of Rust 2024.
+        unsafe { std::env::set_var("LC_ALL", "zh_CN.UTF-8") };
+        unsafe { std::env::set_var("LC_MESSAGES", "en_US.UTF-8") };
+        unsafe { std::env::set_var("LANG", "en_US.UTF-8") };
         assert_eq!(linux_locale_name(), Some("zh_CN".to_owned()));
 
-        std::env::set_var("LC_ALL", "");
+        unsafe { std::env::set_var("LC_ALL", "") };
         assert_eq!(linux_locale_name(), Some("en_US".to_owned()));
 
-        std::env::remove_var("LC_ALL");
-        std::env::remove_var("LC_MESSAGES");
-        std::env::set_var("LANG", "zh_TW.UTF-8");
+        unsafe { std::env::remove_var("LC_ALL") };
+        unsafe { std::env::remove_var("LC_MESSAGES") };
+        unsafe { std::env::set_var("LANG", "zh_TW.UTF-8") };
         assert_eq!(linux_locale_name(), Some("zh_TW".to_owned()));
 
         for (index, key) in ["LC_ALL", "LC_MESSAGES", "LANG"].iter().enumerate() {
             match &previous[index] {
-                Some(value) => std::env::set_var(key, value),
-                None => std::env::remove_var(key),
+                Some(value) => unsafe { std::env::set_var(key, value) },
+                None => unsafe { std::env::remove_var(key) },
             }
         }
     }

@@ -71,14 +71,12 @@ impl FromStr for ShortcutBinding {
             return Err(ShortcutParseError::new(value, "shortcut cannot be empty"));
         }
 
-        if parts.len() == 2 {
-            if let (Some(first), Some(second)) =
+        if parts.len() == 2
+            && let (Some(first), Some(second)) =
                 (Modifier::parse(parts[0]), Modifier::parse(parts[1]))
-            {
-                if first == second {
-                    return Ok(Self::DoubleModifier { modifier: first });
-                }
-            }
+            && first == second
+        {
+            return Ok(Self::DoubleModifier { modifier: first });
         }
 
         let mut modifiers = BTreeSet::new();

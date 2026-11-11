@@ -55,7 +55,7 @@ mod mac {
     }
     pub fn paste(target: Target) -> Result<(), String> {
         #[link(name = "ApplicationServices", kind = "framework")]
-        extern "C" {
+        unsafe extern "C" {
             fn CGEventCreateKeyboardEvent(
                 source: *mut std::ffi::c_void,
                 key: u16,
@@ -269,12 +269,14 @@ mod tests {
     use super::*;
     #[test]
     fn rejects_self_and_matches_both_window_and_owner() {
-        assert!(Target {
-            handle: 1,
-            pid: std::process::id()
-        }
-        .external()
-        .is_none());
+        assert!(
+            Target {
+                handle: 1,
+                pid: std::process::id()
+            }
+            .external()
+            .is_none()
+        );
         let wanted = Target {
             handle: 5,
             pid: 123,

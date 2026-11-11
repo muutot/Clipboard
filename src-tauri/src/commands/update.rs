@@ -200,8 +200,9 @@ mod tests {
         io::{Read, Write},
         net::TcpListener,
         sync::{
+            Arc,
             atomic::{AtomicBool, Ordering},
-            mpsc, Arc,
+            mpsc,
         },
         time::Duration,
     };
@@ -258,7 +259,10 @@ mod tests {
                     assert!(request.len() < 8192);
                 }
                 let chunked = framing.contains("chunked");
-                let _ = write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n{framing}Connection: close\r\n\r\n");
+                let _ = write!(
+                    stream,
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n{framing}Connection: close\r\n\r\n"
+                );
                 if chunked {
                     let _ = write!(stream, "{:x}\r\n", body.len());
                 }

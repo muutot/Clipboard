@@ -43,7 +43,7 @@ impl Database {
             Ok(local) => local,
             Err(std::sync::TryLockError::WouldBlock) => return Err(busy()),
             Err(std::sync::TryLockError::Poisoned(_)) => {
-                return Err(StorageError::ConnectionPoisoned)
+                return Err(StorageError::ConnectionPoisoned);
             }
         };
         let file = self.with_connection(|connection| {

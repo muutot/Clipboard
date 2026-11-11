@@ -155,15 +155,19 @@ mod tests {
     #[test]
     fn file_capture_hash_matches_clipboard_write_hashes() {
         let single = vec![r"C:\Users\admin\Documents\report.txt".to_owned()];
-        assert!(compute_clipboard_write_hashes(&single[0])
-            .contains(&compute_file_capture_hash(&single)));
+        assert!(
+            compute_clipboard_write_hashes(&single[0])
+                .contains(&compute_file_capture_hash(&single))
+        );
 
         let paths = vec![
             r"C:\Users\admin\Documents\alpha.txt".to_owned(),
             r"C:\Users\admin\Documents\zeta.txt".to_owned(),
         ];
-        assert!(compute_clipboard_write_hashes(&paths.join("\n"))
-            .contains(&compute_file_capture_hash(&paths)));
+        assert!(
+            compute_clipboard_write_hashes(&paths.join("\n"))
+                .contains(&compute_file_capture_hash(&paths))
+        );
     }
 
     #[test]

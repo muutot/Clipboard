@@ -36,7 +36,7 @@ pub fn replace_file(temporary: &Path, target: &Path) -> Result<(), StorageError>
         const MOVEFILE_REPLACE_EXISTING: u32 = 0x1;
         const MOVEFILE_WRITE_THROUGH: u32 = 0x8;
 
-        extern "system" {
+        unsafe extern "system" {
             fn MoveFileExW(existing: *const u16, new: *const u16, flags: u32) -> i32;
         }
 

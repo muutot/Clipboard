@@ -3,7 +3,7 @@ use std::time::{Duration, SystemTime};
 
 use tauri::Manager;
 
-use crate::commands::sync::{run_sync_cancellable, SyncCancellation};
+use crate::commands::sync::{SyncCancellation, run_sync_cancellable};
 use crate::config::ConfigStore;
 use clipboard_sync::cancellation::CancellationToken;
 

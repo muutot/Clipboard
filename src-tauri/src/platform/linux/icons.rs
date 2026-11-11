@@ -113,10 +113,9 @@ pub fn find_app_icon_source(
             };
             if !exe_base.is_empty()
                 && binary_name(&entry.exec_binary).eq_ignore_ascii_case(exe_base)
+                && let Some(icon) = resolve_icon_value(data_dirs, &entry.icon)
             {
-                if let Some(icon) = resolve_icon_value(data_dirs, &entry.icon) {
-                    return Some(icon);
-                }
+                return Some(icon);
             }
             if name_fallback.is_none()
                 && !app_name.is_empty()
@@ -356,8 +355,10 @@ mod tests {
         );
         fixture.icon("hicolor/48x48/apps/app.png");
         // Point XDG at the fixture so no real system directories are touched.
-        std::env::set_var("XDG_DATA_HOME", fixture.root.as_os_str());
-        std::env::set_var("XDG_DATA_DIRS", "");
+        // FIXME: Audit that the environment access only happens in single-threaded code.
+        unsafe { std::env::set_var("XDG_DATA_HOME", fixture.root.as_os_str()) };
+        // FIXME: Audit that the environment access only happens in single-threaded code.
+        unsafe { std::env::set_var("XDG_DATA_DIRS", "") };
         let icons_dir = fixture.root.join("cache-icons");
 
         let first = ensure_cached_app_icon(&icons_dir, "App", "/usr/bin/app-bin");
@@ -371,7 +372,9 @@ mod tests {
         let second = ensure_cached_app_icon(&icons_dir, "App", "/usr/bin/app-bin");
         assert_eq!(second.map(|name| icons_dir.join(name)), Some(staged));
 
-        std::env::remove_var("XDG_DATA_HOME");
-        std::env::remove_var("XDG_DATA_DIRS");
+        // FIXME: Audit that the environment access only happens in single-threaded code.
+        unsafe { std::env::remove_var("XDG_DATA_HOME") };
+        // FIXME: Audit that the environment access only happens in single-threaded code.
+        unsafe { std::env::remove_var("XDG_DATA_DIRS") };
     }
 }

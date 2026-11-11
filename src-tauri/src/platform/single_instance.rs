@@ -75,7 +75,7 @@ impl WindowsWakeEvent {
     }
 
     fn create(project_dir: &Path, pid: u32) -> io::Result<Self> {
-        extern "system" {
+        unsafe extern "system" {
             fn CreateEventW(
                 attributes: *const std::ffi::c_void,
                 manual_reset: i32,
@@ -101,7 +101,7 @@ impl WindowsWakeEvent {
     where
         F: Fn() + Send + 'static,
     {
-        extern "system" {
+        unsafe extern "system" {
             fn WaitForSingleObject(handle: isize, milliseconds: u32) -> u32;
         }
 
@@ -117,22 +117,24 @@ impl WindowsWakeEvent {
         let stop = Arc::clone(&self.stop);
         let thread = thread::Builder::new()
             .name("single-instance-wake".to_owned())
-            .spawn(move || loop {
-                let result = unsafe { WaitForSingleObject(handle, Self::INFINITE) };
-                if stop.load(Ordering::SeqCst) {
-                    break;
+            .spawn(move || {
+                loop {
+                    let result = unsafe { WaitForSingleObject(handle, Self::INFINITE) };
+                    if stop.load(Ordering::SeqCst) {
+                        break;
+                    }
+                    if result != Self::WAIT_OBJECT_0 {
+                        break;
+                    }
+                    callback();
                 }
-                if result != Self::WAIT_OBJECT_0 {
-                    break;
-                }
-                callback();
             })?;
         *listener = Some(thread);
         Ok(())
     }
 
     fn notify(project_dir: &Path, pid: u32) -> bool {
-        extern "system" {
+        unsafe extern "system" {
             fn AllowSetForegroundWindow(process_id: u32) -> i32;
             fn OpenEventW(desired_access: u32, inherit_handle: i32, name: *const u16) -> isize;
             fn SetEvent(handle: isize) -> i32;
@@ -159,7 +161,7 @@ impl WindowsWakeEvent {
 #[cfg(target_os = "windows")]
 impl Drop for WindowsWakeEvent {
     fn drop(&mut self) {
-        extern "system" {
+        unsafe extern "system" {
             fn CloseHandle(handle: isize) -> i32;
             fn SetEvent(handle: isize) -> i32;
         }
@@ -370,7 +372,7 @@ enum OwnerLiveness {
 
 #[cfg(target_os = "windows")]
 fn is_process_running(pid: u32) -> bool {
-    extern "system" {
+    unsafe extern "system" {
         fn OpenProcess(desired_access: u32, inherit_handle: i32, process_id: u32) -> isize;
         fn CloseHandle(handle: isize) -> i32;
         fn GetExitCodeProcess(process: isize, exit_code: *mut u32) -> i32;

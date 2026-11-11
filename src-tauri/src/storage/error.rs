@@ -89,8 +89,12 @@ impl fmt::Display for StorageError {
             Self::Json(error) => write!(formatter, "JSON storage error: {error}"),
             Self::Sqlite(error) => write!(formatter, "SQLite error: {error}"),
             Self::ConnectionPoisoned => formatter.write_str("database connection lock is poisoned"),
-            Self::StorageMigrationInProgress => formatter.write_str("storage migration is already in progress or awaiting restart"),
-            Self::StorageMigrationRequiresFile => formatter.write_str("storage migration requires a file-backed database"),
+            Self::StorageMigrationInProgress => {
+                formatter.write_str("storage migration is already in progress or awaiting restart")
+            }
+            Self::StorageMigrationRequiresFile => {
+                formatter.write_str("storage migration requires a file-backed database")
+            }
             Self::DatabaseBackupFailed { database, reason } => write!(
                 formatter,
                 "database backup failed for {}: {reason}",

@@ -206,10 +206,10 @@ impl ObjectStore for MemoryStore {
         }
         let etag = format!("\"{}\"", hex::encode(Sha256::digest(&bytes)));
         objects.insert(key.to_string(), bytes);
-        if let Some((fragment, token)) = self.cancel_after_key_fragment.lock().unwrap().as_ref() {
-            if key.contains(fragment) {
-                token.cancel();
-            }
+        if let Some((fragment, token)) = self.cancel_after_key_fragment.lock().unwrap().as_ref()
+            && key.contains(fragment)
+        {
+            token.cancel();
         }
         drop(objects);
         let hook = {

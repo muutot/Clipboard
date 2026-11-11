@@ -131,9 +131,11 @@ impl WaylandCapabilities {
             global_shortcuts: false,
             system_tray: false,
             requires_config: true,
-            notes: vec!["Compositor not recognized. Clipboard and global shortcuts \
+            notes: vec![
+                "Compositor not recognized. Clipboard and global shortcuts \
                  may not function."
-                .into()],
+                    .into(),
+            ],
         }
     }
 

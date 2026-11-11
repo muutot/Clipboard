@@ -67,7 +67,7 @@ pub(super) fn dispatch_once<State>(
         Err(wayland_client::backend::WaylandError::Io(error))
             if error.kind() == io::ErrorKind::WouldBlock =>
         {
-            return Ok(())
+            return Ok(());
         }
         Err(error) => return Err(io::Error::other(error)),
     }
@@ -81,7 +81,7 @@ use std::os::fd::AsFd;
 mod tests {
     use super::*;
     use std::{io::Write, os::unix::net::UnixStream, time::Duration};
-    use wayland_client::{protocol::wl_callback, Connection, Dispatch, Proxy, QueueHandle};
+    use wayland_client::{Connection, Dispatch, Proxy, QueueHandle, protocol::wl_callback};
 
     #[derive(Default)]
     struct State(bool);
@@ -140,12 +140,14 @@ mod tests {
         );
         unsafe { libc::close(reader) };
         drop(compositor);
-        assert!(dispatch_once(
-            &mut queue,
-            &mut state,
-            -1,
-            Some(Instant::now() + Duration::from_secs(1))
-        )
-        .is_err());
+        assert!(
+            dispatch_once(
+                &mut queue,
+                &mut state,
+                -1,
+                Some(Instant::now() + Duration::from_secs(1))
+            )
+            .is_err()
+        );
     }
 }

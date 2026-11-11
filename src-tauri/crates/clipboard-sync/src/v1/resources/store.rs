@@ -439,10 +439,10 @@ fn symlink_metadata_if_exists(path: &Path) -> Result<Option<fs::Metadata>, Strin
 
 fn publish_verified_file(temp_path: &Path, final_path: &Path) -> Result<(), String> {
     crate::cancellation::check()?;
-    if let Some(metadata) = symlink_metadata_if_exists(final_path)? {
-        if metadata.file_type().is_symlink() || !metadata.is_file() {
-            return Err("cached resource path changed to a non-regular file".to_string());
-        }
+    if let Some(metadata) = symlink_metadata_if_exists(final_path)?
+        && (metadata.file_type().is_symlink() || !metadata.is_file())
+    {
+        return Err("cached resource path changed to a non-regular file".to_string());
     }
     // Another process may have published a valid body while we downloaded.
     // Atomic replacement keeps its directory entry intact if rename fails;

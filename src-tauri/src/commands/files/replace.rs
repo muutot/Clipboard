@@ -36,10 +36,10 @@ pub(super) fn replace_icon_file_at(
     validate_replace_source(source)?;
     // A planted symlink at the target must not be followed by fs::copy —
     // otherwise the link's own target would be overwritten with the new icon.
-    if let Ok(metadata) = std::fs::symlink_metadata(&target) {
-        if metadata.file_type().is_symlink() {
-            return Err("icon target is a symlink; refusing to overwrite".to_string());
-        }
+    if let Ok(metadata) = std::fs::symlink_metadata(&target)
+        && metadata.file_type().is_symlink()
+    {
+        return Err("icon target is a symlink; refusing to overwrite".to_string());
     }
     // A cached icon can be selected as its own replacement (including via a
     // hard link). Stage before replacement so we never copy onto the source

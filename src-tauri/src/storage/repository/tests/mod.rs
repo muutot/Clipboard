@@ -9,8 +9,8 @@ use crate::domain::{ClipboardItem, ClipboardKind, OcrResult, OcrStatus};
 use crate::storage::{Database, OcrRepository, SearchOperation, SearchRepository, StorageError};
 
 use super::{
-    current_time_ms, ClipboardRepository, HistoryCursor, HistoryFilter, KindDeleteResult,
-    KindDeleteScope, KindStorageStats, TextItemUpdate,
+    ClipboardRepository, HistoryCursor, HistoryFilter, KindDeleteResult, KindDeleteScope,
+    KindStorageStats, TextItemUpdate, current_time_ms,
 };
 
 mod content;

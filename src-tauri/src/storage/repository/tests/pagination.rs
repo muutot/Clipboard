@@ -206,10 +206,12 @@ fn deleted_records_are_listed_in_recency_order() {
             .collect::<Vec<_>>(),
         vec!["newer", "older"]
     );
-    assert!(database
-        .list_recent(20, 0, &HistoryFilter::default())
-        .unwrap()
-        .is_empty());
+    assert!(
+        database
+            .list_recent(20, 0, &HistoryFilter::default())
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[test]
@@ -222,19 +224,25 @@ fn batch_restore_and_permanent_delete_are_atomic() {
         database.soft_delete(id).unwrap();
     }
 
-    assert!(!database
-        .restore_deleted_batch(&["one".to_owned(), "missing".to_owned()])
-        .unwrap());
+    assert!(
+        !database
+            .restore_deleted_batch(&["one".to_owned(), "missing".to_owned()])
+            .unwrap()
+    );
     assert_eq!(database.list_deleted(20, 0).unwrap().len(), 3);
 
-    assert!(database
-        .restore_deleted_batch(&["one".to_owned(), "two".to_owned()])
-        .unwrap());
+    assert!(
+        database
+            .restore_deleted_batch(&["one".to_owned(), "two".to_owned()])
+            .unwrap()
+    );
     assert_eq!(database.list_deleted(20, 0).unwrap().len(), 1);
 
-    assert!(!database
-        .permanently_delete_batch(&["three".to_owned(), "missing".to_owned()])
-        .unwrap());
+    assert!(
+        !database
+            .permanently_delete_batch(&["three".to_owned(), "missing".to_owned()])
+            .unwrap()
+    );
     assert!(database.get_item("three").unwrap().is_some());
     assert!(database.permanently_delete("three").unwrap());
     assert!(database.get_item("three").unwrap().is_none());

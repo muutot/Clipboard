@@ -32,27 +32,33 @@ fn recovery_range_matches_payload_versions_and_tombstones() {
         .unwrap()
         .unwrap();
     assert_eq!(deleted.mutations.tombstones.len(), 1);
-    assert!(database
-        .sync_outbox_range_matches_mutations(
-            REMOTE_SCOPE,
-            0,
-            deleted.last_sequence,
-            &deleted.mutations,
-        )
-        .unwrap());
+    assert!(
+        database
+            .sync_outbox_range_matches_mutations(
+                REMOTE_SCOPE,
+                0,
+                deleted.last_sequence,
+                &deleted.mutations,
+            )
+            .unwrap()
+    );
     let mut changed = deleted.mutations.clone();
     changed.tombstones[0].deleted_at_ms += 1;
-    assert!(!database
-        .sync_outbox_range_matches_mutations(REMOTE_SCOPE, 0, deleted.last_sequence, &changed,)
-        .unwrap());
-    assert!(!database
-        .sync_outbox_range_matches_mutations(
-            REMOTE_SCOPE,
-            deleted.last_sequence,
-            deleted.last_sequence,
-            &deleted.mutations,
-        )
-        .unwrap());
+    assert!(
+        !database
+            .sync_outbox_range_matches_mutations(REMOTE_SCOPE, 0, deleted.last_sequence, &changed,)
+            .unwrap()
+    );
+    assert!(
+        !database
+            .sync_outbox_range_matches_mutations(
+                REMOTE_SCOPE,
+                deleted.last_sequence,
+                deleted.last_sequence,
+                &deleted.mutations,
+            )
+            .unwrap()
+    );
 }
 
 #[test]
@@ -181,7 +187,9 @@ fn snapshot_visitor_is_deterministic_bounded_and_point_in_time() {
         .collect::<Vec<_>>();
     assert_eq!(
         upsert_ids,
-        vec!["item-00", "item-01", "item-02", "item-03", "item-04", "item-05"]
+        vec![
+            "item-00", "item-01", "item-02", "item-03", "item-04", "item-05"
+        ]
     );
     assert_eq!(
         batches
@@ -228,19 +236,23 @@ fn batched_snapshot_apply_rolls_back_every_prior_chunk_on_late_failure() {
         last_segment_key: None,
     };
 
-    assert!(database
-        .apply_sync_snapshot_batches(
-            REMOTE_SCOPE,
-            &cursor,
-            &"a".repeat(64),
-            [Ok((good, BTreeMap::new())), Ok((bad, BTreeMap::new())),],
-        )
-        .is_err());
+    assert!(
+        database
+            .apply_sync_snapshot_batches(
+                REMOTE_SCOPE,
+                &cursor,
+                &"a".repeat(64),
+                [Ok((good, BTreeMap::new())), Ok((bad, BTreeMap::new())),],
+            )
+            .is_err()
+    );
     assert!(database.get_item("remote-good").unwrap().is_none());
-    assert!(database
-        .get_sync_cursor(REMOTE_SCOPE, &cursor.device_id)
-        .unwrap()
-        .is_none());
+    assert!(
+        database
+            .get_sync_cursor(REMOTE_SCOPE, &cursor.device_id)
+            .unwrap()
+            .is_none()
+    );
 }
 
 /// Peak residency during a pack apply must be one batch, not the whole pack.
@@ -363,8 +375,10 @@ fn a_failing_late_batch_rolls_back_the_earlier_ones() {
         database.get_item("remote-first").unwrap().is_none(),
         "a batch applied before the failure must be rolled back"
     );
-    assert!(database
-        .get_sync_cursor(REMOTE_SCOPE, &cursor.device_id)
-        .unwrap()
-        .is_none());
+    assert!(
+        database
+            .get_sync_cursor(REMOTE_SCOPE, &cursor.device_id)
+            .unwrap()
+            .is_none()
+    );
 }

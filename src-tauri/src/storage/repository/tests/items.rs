@@ -260,9 +260,11 @@ fn bulk_import_does_not_overwrite_a_row_on_id_collision() {
     let stored = database.get_item("shared-id").unwrap().unwrap();
     assert_eq!(stored.content_hash, "hash-victim");
     assert_eq!(stored.text_content.as_deref(), Some("original"));
-    assert!(!database
-        .content_exists(ClipboardKind::Text, "hash-forged")
-        .unwrap());
+    assert!(
+        !database
+            .content_exists(ClipboardKind::Text, "hash-forged")
+            .unwrap()
+    );
 }
 
 #[test]

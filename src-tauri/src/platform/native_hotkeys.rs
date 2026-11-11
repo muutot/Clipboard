@@ -1,5 +1,5 @@
 //! macOS/X11 global chords and sampled modifier taps.
-use crate::keyboard::{Modifier, DEFAULT_DOUBLE_TAP_INTERVAL_MS};
+use crate::keyboard::{DEFAULT_DOUBLE_TAP_INTERVAL_MS, Modifier};
 use global_hotkey::hotkey::HotKey;
 
 pub fn report_registration_failure(app: &tauri::AppHandle, action: &str, error: &str) {
@@ -69,17 +69,15 @@ impl TapTracker {
             let active = self.active.take();
             let clean = !self.interrupted;
             self.interrupted = false;
-            if clean {
-                if let Some(modifier) = active {
-                    let fire = self.registered.contains(&modifier)
-                        && self.last.is_some_and(|(previous, at)| {
-                            previous == modifier
-                                && time >= at
-                                && time - at <= DEFAULT_DOUBLE_TAP_INTERVAL_MS
-                        });
-                    self.last = if fire { None } else { Some((modifier, time)) };
-                    return fire;
-                }
+            if clean && let Some(modifier) = active {
+                let fire = self.registered.contains(&modifier)
+                    && self.last.is_some_and(|(previous, at)| {
+                        previous == modifier
+                            && time >= at
+                            && time - at <= DEFAULT_DOUBLE_TAP_INTERVAL_MS
+                    });
+                self.last = if fire { None } else { Some((modifier, time)) };
+                return fire;
             }
         } else if pressed.len() == 1 && pressed[0].is_some() && !self.interrupted {
             if self.active.is_some() && self.active != pressed[0] {
@@ -101,18 +99,19 @@ mod runtime {
     use super::*;
     use crate::platform::hotkey_common::HotkeyRegistration;
     #[cfg(not(target_os = "windows"))]
-    use crate::platform::windows::hotkey::{action_for_hotkey_id, HotkeyAction};
+    use crate::platform::windows::hotkey::{HotkeyAction, action_for_hotkey_id};
     #[cfg(all(test, target_os = "windows"))]
     use crate::platform::windows::portable_hotkey_compile_test::{
-        action_for_hotkey_id, HotkeyAction,
+        HotkeyAction, action_for_hotkey_id,
     };
     use global_hotkey::{GlobalHotKeyEvent, GlobalHotKeyManager, HotKeyState};
     use std::{
         cell::RefCell,
         collections::HashMap,
         sync::{
+            Arc, Mutex,
             atomic::{AtomicBool, Ordering},
-            mpsc, Arc, Mutex,
+            mpsc,
         },
         thread,
         time::{Duration, Instant},
@@ -195,15 +194,14 @@ mod runtime {
             let started = Instant::now();
             while !stop.load(Ordering::SeqCst) {
                 while let Ok(event) = GlobalHotKeyEvent::receiver().try_recv() {
-                    if event.state == HotKeyState::Pressed {
-                        if let Some(id) = mapping
+                    if event.state == HotKeyState::Pressed
+                        && let Some(id) = mapping
                             .lock()
                             .unwrap_or_else(|e| e.into_inner())
                             .get(&event.id)
                             .copied()
-                        {
-                            let _ = tx.send(action_for_hotkey_id(id));
-                        }
+                    {
+                        let _ = tx.send(action_for_hotkey_id(id));
                     }
                 }
                 if let Some(device) = input.as_mut() {
@@ -229,10 +227,9 @@ mod runtime {
                         .borrow()
                         .as_ref()
                         .is_some_and(|current| Arc::ptr_eq(&current.generation, &stop))
+                        && let Some(current) = state.borrow_mut().take()
                     {
-                        if let Some(current) = state.borrow_mut().take() {
-                            drop(current.manager);
-                        }
+                        drop(current.manager);
                     }
                 })
             }) {

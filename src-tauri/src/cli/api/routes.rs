@@ -6,12 +6,12 @@ use serde::Serialize;
 use crate::cli::{build_text_clipboard_item, search_items_by_scanning};
 use crate::content;
 use crate::domain::{ClipboardItem, ClipboardKind};
-use crate::export::{export_database, ExportFormat, ExportOptions};
-use crate::item_operations::{change_membership, copy_item_with, CopyContext, MembershipAction};
+use crate::export::{ExportFormat, ExportOptions, export_database};
+use crate::item_operations::{CopyContext, MembershipAction, change_membership, copy_item_with};
 use crate::state::CaptureState;
 use crate::storage::{ClipboardRepository, Database};
 
-use super::http::{error_response, json_response, response, HttpRequest, HttpResponse};
+use super::http::{HttpRequest, HttpResponse, error_response, json_response, response};
 
 #[cfg(test)]
 pub(super) fn dispatch(
@@ -235,12 +235,11 @@ fn search_items(
 
 fn parse_paste_body(body: &str) -> String {
     let trimmed = body.trim();
-    if trimmed.starts_with('{') {
-        if let Ok(value) = serde_json::from_str::<serde_json::Value>(trimmed) {
-            if let Some(text) = value.get("text").and_then(serde_json::Value::as_str) {
-                return text.to_owned();
-            }
-        }
+    if trimmed.starts_with('{')
+        && let Ok(value) = serde_json::from_str::<serde_json::Value>(trimmed)
+        && let Some(text) = value.get("text").and_then(serde_json::Value::as_str)
+    {
+        return text.to_owned();
     }
     body.to_owned()
 }

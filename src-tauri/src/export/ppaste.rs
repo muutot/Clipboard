@@ -3,9 +3,9 @@ use std::path::{Path, PathBuf};
 
 use rusqlite::Connection;
 
+use crate::content::FileStore;
 use crate::content::hash::compute_media_hash;
 use crate::content::resource_metadata::RESOURCE_METADATA_SCHEMA_VERSION;
-use crate::content::FileStore;
 use crate::domain::{ClipboardItem, ClipboardKind};
 use crate::export::ImportSummary;
 use crate::storage::{Database, StoragePaths};
@@ -797,11 +797,13 @@ mod tests {
             .iter()
             .find(|i| i.kind == ClipboardKind::Image)
             .unwrap();
-        assert!(image_item
-            .resource_path
-            .as_deref()
-            .unwrap()
-            .ends_with(".png"));
+        assert!(
+            image_item
+                .resource_path
+                .as_deref()
+                .unwrap()
+                .ends_with(".png")
+        );
         assert!(std::path::Path::new(image_item.resource_path.as_deref().unwrap()).exists());
         let metadata: serde_json::Value =
             serde_json::from_str(image_item.metadata_json.as_deref().unwrap()).unwrap();
@@ -1013,16 +1015,18 @@ mod tests {
         let stored = database
             .list_recent(10, 0, &crate::storage::HistoryFilter::default())
             .unwrap();
-        assert!(stored.iter().any(|i| i
-            .text_content
-            .as_deref()
-            .unwrap_or_default()
-            .contains("hello world")));
-        assert!(stored.iter().any(|i| i
-            .text_content
-            .as_deref()
-            .unwrap_or_default()
-            .contains("a completely different sentence")));
+        assert!(stored.iter().any(|i| {
+            i.text_content
+                .as_deref()
+                .unwrap_or_default()
+                .contains("hello world")
+        }));
+        assert!(stored.iter().any(|i| {
+            i.text_content
+                .as_deref()
+                .unwrap_or_default()
+                .contains("a completely different sentence")
+        }));
         // Ids are content-derived, so distinct content yields distinct ids.
         assert!(stored.iter().all(|i| i.id.starts_with("ppaste_")));
 
@@ -1070,11 +1074,13 @@ mod tests {
         assert_eq!(summary.imported_count, 4);
         assert_eq!(summary.skipped_count, 1);
         assert_eq!(summary.errors.len(), 1);
-        assert!(database
-            .list_recent(10, 0, &crate::storage::HistoryFilter::default())
-            .unwrap()
-            .iter()
-            .any(|i| i.kind == ClipboardKind::Image));
+        assert!(
+            database
+                .list_recent(10, 0, &crate::storage::HistoryFilter::default())
+                .unwrap()
+                .iter()
+                .any(|i| i.kind == ClipboardKind::Image)
+        );
 
         std::fs::remove_dir_all(&temp).unwrap();
     }
@@ -1127,10 +1133,12 @@ mod tests {
             import_from_ppaste_backup(backup.to_str().unwrap(), &database, &paths).unwrap();
         assert_eq!(summary.imported_count, 4);
         assert_eq!(summary.skipped_count, 2);
-        assert!(summary
-            .errors
-            .iter()
-            .any(|error| error.contains("unknown type")));
+        assert!(
+            summary
+                .errors
+                .iter()
+                .any(|error| error.contains("unknown type"))
+        );
 
         std::fs::remove_dir_all(&temp).unwrap();
     }

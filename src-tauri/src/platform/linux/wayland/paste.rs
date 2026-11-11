@@ -35,22 +35,22 @@ pub fn available() -> bool {
 }
 
 fn sway_target(node: &serde_json::Value) -> Option<Target> {
-    if node.get("focused").and_then(|v| v.as_bool()) == Some(true) {
-        if let (Some(handle), Some(pid)) = (
+    if node.get("focused").and_then(|v| v.as_bool()) == Some(true)
+        && let (Some(handle), Some(pid)) = (
             node.get("id").and_then(|v| v.as_i64()),
             node.get("pid").and_then(|v| v.as_u64()),
-        ) {
-            return Some(Target {
-                handle: isize::try_from(handle).ok()?,
-                pid: u32::try_from(pid).ok()?,
-            });
-        }
+        )
+    {
+        return Some(Target {
+            handle: isize::try_from(handle).ok()?,
+            pid: u32::try_from(pid).ok()?,
+        });
     }
     for key in ["nodes", "floating_nodes"] {
-        if let Some(nodes) = node.get(key).and_then(|v| v.as_array()) {
-            if let Some(target) = nodes.iter().find_map(sway_target) {
-                return Some(target);
-            }
+        if let Some(nodes) = node.get(key).and_then(|v| v.as_array())
+            && let Some(target) = nodes.iter().find_map(sway_target)
+        {
+            return Some(target);
         }
     }
     None

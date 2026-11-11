@@ -6,8 +6,8 @@ use std::{
 
 use super::store::resource_root_marker_content;
 use super::{
-    ResourceRootRole, StoragePaths, RESOURCE_ROOT_DATABASES, RESOURCE_ROOT_LOCK,
-    RESOURCE_ROOT_MARKER,
+    RESOURCE_ROOT_DATABASES, RESOURCE_ROOT_LOCK, RESOURCE_ROOT_MARKER, ResourceRootRole,
+    StoragePaths,
 };
 use crate::storage::StorageError;
 
@@ -144,9 +144,11 @@ fn ownership_transfer_waits_for_root_guard_and_stale_revoke_keeps_foreign_marker
         .recv_timeout(std::time::Duration::from_secs(2))
         .unwrap();
     let second = transfer.join().unwrap();
-    assert!(first
-        .resource_root_cleanup_lock(ResourceRootRole::File)
-        .is_none());
+    assert!(
+        first
+            .resource_root_cleanup_lock(ResourceRootRole::File)
+            .is_none()
+    );
     first
         .remove_resource_root_marker(ResourceRootRole::File)
         .unwrap();

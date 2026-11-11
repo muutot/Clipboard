@@ -3,8 +3,8 @@
 use std::path::Path;
 
 use crate::content::{
-    created_at_ms, extension_for_path, mime_type_for_path, modified_at_ms, FileStore,
-    RESOURCE_METADATA_SCHEMA_VERSION,
+    FileStore, RESOURCE_METADATA_SCHEMA_VERSION, created_at_ms, extension_for_path,
+    mime_type_for_path, modified_at_ms,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]

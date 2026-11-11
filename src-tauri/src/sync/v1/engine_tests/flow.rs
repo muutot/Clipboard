@@ -299,12 +299,14 @@ fn empty_peer_joins_without_rewriting_checkpoint_and_source_keeps_publishing() {
             .cloned(),
         Some(checkpoint_before)
     );
-    assert!(!store
-        .puts
-        .lock()
-        .unwrap()
-        .iter()
-        .any(|key| key == CHECKPOINT_HEAD_KEY || key.starts_with("v1/checkpoints/")));
+    assert!(
+        !store
+            .puts
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|key| key == CHECKPOINT_HEAD_KEY || key.starts_with("v1/checkpoints/"))
+    );
     assert!(store.deleted.lock().unwrap().is_empty());
 
     source
@@ -399,12 +401,14 @@ fn ordinary_pull_defers_resource_download_and_can_republish_the_reference() {
         Some(resource_key.as_str())
     );
     assert!(remote.item.preview_path.is_none());
-    assert!(remote
-        .item
-        .metadata_json
-        .as_deref()
-        .unwrap()
-        .contains(resource_key.as_str()));
+    assert!(
+        remote
+            .item
+            .metadata_json
+            .as_deref()
+            .unwrap()
+            .contains(resource_key.as_str())
+    );
 
     drop(source);
     drop(target);

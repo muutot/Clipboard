@@ -161,10 +161,10 @@ pub(super) fn read_body_bounded(
     limit: u64,
     op: &str,
 ) -> Result<Vec<u8>, String> {
-    if let Some(len) = resp.content_length() {
-        if len > limit {
-            return Err(format!("{op} response body exceeds the {limit}-byte limit"));
-        }
+    if let Some(len) = resp.content_length()
+        && len > limit
+    {
+        return Err(format!("{op} response body exceeds the {limit}-byte limit"));
     }
     let mut bytes = Vec::new();
     resp.take(limit.saturating_add(1))

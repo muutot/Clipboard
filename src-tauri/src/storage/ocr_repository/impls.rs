@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use rusqlite::{params, OptionalExtension, TransactionBehavior};
+use rusqlite::{OptionalExtension, TransactionBehavior, params};
 
 use crate::domain::OcrResult;
 use crate::ocr::OcrInput;

@@ -1,10 +1,11 @@
 use super::{
-    captured_file_metadata, foreground_app_name, normalize_platform_image_to_png,
-    read_managed_image, register_image_self_trigger, should_skip_self_triggered_hash,
-    should_skip_self_triggered_text, store_captured_file_references, CapturedFileReference,
+    CapturedFileReference, captured_file_metadata, foreground_app_name,
+    normalize_platform_image_to_png, read_managed_image, register_image_self_trigger,
+    should_skip_self_triggered_hash, should_skip_self_triggered_text,
+    store_captured_file_references,
 };
-use crate::content::self_trigger::SelfTriggerGuard;
 use crate::content::RESOURCE_METADATA_SCHEMA_VERSION;
+use crate::content::self_trigger::SelfTriggerGuard;
 use crate::domain::ClipboardKind;
 use crate::platform::ForegroundApp;
 use std::fs;
@@ -125,19 +126,19 @@ fn normalize_platform_image_keeps_encoded_and_rejects_malformed_raw_payloads() {
     assert_eq!(passthrough, encoded);
 
     // Empty raw payloads and length/dimension mismatches are rejected.
-    assert!(normalize_platform_image_to_png(
-        crate::platform::ClipboardImageData::Rgba(Vec::new()),
-        2,
-        2
-    )
-    .is_empty());
+    assert!(
+        normalize_platform_image_to_png(
+            crate::platform::ClipboardImageData::Rgba(Vec::new()),
+            2,
+            2
+        )
+        .is_empty()
+    );
     let short = vec![0u8; 4];
-    assert!(normalize_platform_image_to_png(
-        crate::platform::ClipboardImageData::Rgba(short),
-        2,
-        2
-    )
-    .is_empty());
+    assert!(
+        normalize_platform_image_to_png(crate::platform::ClipboardImageData::Rgba(short), 2, 2)
+            .is_empty()
+    );
 }
 
 #[test]
@@ -231,22 +232,26 @@ fn register_image_self_trigger_reads_resource_or_falls_back() {
     let external = outside.join("secret.png");
     fs::write(&external, b"external-bytes").unwrap();
     let mut outside_guard = SelfTriggerGuard::new();
-    assert!(register_image_self_trigger(
-        &mut outside_guard,
-        &directory,
-        Some(external.to_str().expect("temp path is utf-8")),
-        None,
-    )
-    .is_err());
+    assert!(
+        register_image_self_trigger(
+            &mut outside_guard,
+            &directory,
+            Some(external.to_str().expect("temp path is utf-8")),
+            None,
+        )
+        .is_err()
+    );
     assert!(!outside_guard.is_media_write_self_triggered("image", b"external-bytes"));
     // With a fallback hash the registration still succeeds without reading.
-    assert!(register_image_self_trigger(
-        &mut outside_guard,
-        &directory,
-        Some(external.to_str().expect("temp path is utf-8")),
-        Some("outside-fallback-hash"),
-    )
-    .is_ok());
+    assert!(
+        register_image_self_trigger(
+            &mut outside_guard,
+            &directory,
+            Some(external.to_str().expect("temp path is utf-8")),
+            Some("outside-fallback-hash"),
+        )
+        .is_ok()
+    );
 
     // Nothing readable and no hash is an error.
     let mut empty_guard = SelfTriggerGuard::new();
@@ -350,13 +355,15 @@ fn read_managed_image_enforces_the_managed_root_boundary() {
         .expect_err("a path outside the managed root must be rejected");
     assert_eq!(error.kind(), std::io::ErrorKind::PermissionDenied);
 
-    assert!(read_managed_image(
-        &root,
-        root.join("missing.png")
-            .to_str()
-            .expect("temp path is utf-8")
-    )
-    .is_err());
+    assert!(
+        read_managed_image(
+            &root,
+            root.join("missing.png")
+                .to_str()
+                .expect("temp path is utf-8")
+        )
+        .is_err()
+    );
 
     fs::remove_dir_all(&root).unwrap();
     fs::remove_dir_all(&outside_root).unwrap();

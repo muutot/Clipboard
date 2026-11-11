@@ -11,14 +11,14 @@
 
 use std::net::TcpListener;
 use std::sync::atomic::AtomicUsize;
-use std::sync::{mpsc, Arc};
+use std::sync::{Arc, mpsc};
 use std::thread::{self, JoinHandle};
 
 use crate::item_operations::CopyContext;
 use crate::state::CaptureState;
 use crate::storage::Database;
 
-use http::{serve, ServeContext};
+use http::{ServeContext, serve};
 
 mod http;
 mod routes;
@@ -162,12 +162,12 @@ impl LocalApiServer {
         if let Some(sender) = self.stop_sender.take() {
             let _ = sender.send(());
         }
-        if let Some(handle) = self.handle.take() {
-            if handle.thread().id() != thread::current().id() {
-                handle
-                    .join()
-                    .map_err(|_| "local API thread terminated with a panic".to_owned())?;
-            }
+        if let Some(handle) = self.handle.take()
+            && handle.thread().id() != thread::current().id()
+        {
+            handle
+                .join()
+                .map_err(|_| "local API thread terminated with a panic".to_owned())?;
         }
         Ok(())
     }

@@ -8,8 +8,8 @@ use std::{
 
 use super::*;
 use crate::v1::{
-    remote::{DownloadedFile, DownloadedObject, ObjectInfo},
     MutationBatch, RecordVersion, ReplicatedItem, SyncItem, SyncItemKind,
+    remote::{DownloadedFile, DownloadedObject, ObjectInfo},
 };
 
 #[derive(Default)]
@@ -238,9 +238,11 @@ fn encrypted_resources_are_deterministic_private_and_password_scoped() {
         .unwrap();
     assert_eq!(stored.len() as u64, uploaded.size_bytes);
     assert_ne!(stored, plaintext);
-    assert!(!stored
-        .windows(b"clipboard secret body".len())
-        .any(|window| window == b"clipboard secret body"));
+    assert!(
+        !stored
+            .windows(b"clipboard secret body".len())
+            .any(|window| window == b"clipboard secret body")
+    );
 
     let retry_store = MemoryStore::default();
     ensure_resource_uploaded(&retry_store, &same, Some(&same_key)).unwrap();
@@ -285,29 +287,35 @@ fn encrypted_resource_round_trip_rejects_wrong_password_and_corruption() {
     )
     .unwrap();
     assert_eq!(fs::read(&materialized.path).unwrap(), plaintext);
-    assert!(verify_local_resource(
-        &materialized.path,
-        &descriptor.object_key,
-        plaintext.len() as u64,
-        Some(&key),
-    )
-    .unwrap());
-    assert!(!verify_local_resource(
-        &materialized.path,
-        &descriptor.object_key,
-        plaintext.len() as u64,
-        Some(&wrong),
-    )
-    .unwrap());
+    assert!(
+        verify_local_resource(
+            &materialized.path,
+            &descriptor.object_key,
+            plaintext.len() as u64,
+            Some(&key),
+        )
+        .unwrap()
+    );
+    assert!(
+        !verify_local_resource(
+            &materialized.path,
+            &descriptor.object_key,
+            plaintext.len() as u64,
+            Some(&wrong),
+        )
+        .unwrap()
+    );
 
-    assert!(materialize_resource(
-        &store,
-        &descriptor.object_key,
-        &wrong_cache,
-        plaintext.len() as u64,
-        Some(&wrong),
-    )
-    .is_err());
+    assert!(
+        materialize_resource(
+            &store,
+            &descriptor.object_key,
+            &wrong_cache,
+            plaintext.len() as u64,
+            Some(&wrong),
+        )
+        .is_err()
+    );
     assert!(fs::read_dir(&wrong_cache).unwrap().next().is_none());
 
     let corrupt_store = MemoryStore::default();
@@ -323,14 +331,16 @@ fn encrypted_resource_round_trip_rejects_wrong_password_and_corruption() {
         .objects
         .borrow_mut()
         .insert(descriptor.object_key.clone(), corrupted);
-    assert!(materialize_resource(
-        &corrupt_store,
-        &descriptor.object_key,
-        &corrupt_cache,
-        plaintext.len() as u64,
-        Some(&key),
-    )
-    .is_err());
+    assert!(
+        materialize_resource(
+            &corrupt_store,
+            &descriptor.object_key,
+            &corrupt_cache,
+            plaintext.len() as u64,
+            Some(&key),
+        )
+        .is_err()
+    );
     assert!(fs::read_dir(&corrupt_cache).unwrap().next().is_none());
 
     fs::remove_dir_all(root).unwrap();
@@ -677,17 +687,21 @@ fn mutation_resources_round_trip_without_machine_local_paths() {
             .is_none_or(|path| path.starts_with("v1/resources/"))
     }));
     assert!(batch.upserts[0].item.preview_path.is_none());
-    assert!(!store
-        .objects
-        .borrow()
-        .keys()
-        .any(|key| key.starts_with("v1/resources/preview/")));
-    assert!(batch.upserts[0]
-        .item
-        .icon_path
-        .as_deref()
-        .unwrap()
-        .starts_with("v1/resources/icon/"));
+    assert!(
+        !store
+            .objects
+            .borrow()
+            .keys()
+            .any(|key| key.starts_with("v1/resources/preview/"))
+    );
+    assert!(
+        batch.upserts[0]
+            .item
+            .icon_path
+            .as_deref()
+            .unwrap()
+            .starts_with("v1/resources/icon/")
+    );
 
     let mut metadata: serde_json::Value =
         serde_json::from_str(batch.upserts[1].item.metadata_json.as_deref().unwrap()).unwrap();

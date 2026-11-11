@@ -1,19 +1,19 @@
 #![allow(dead_code)]
 
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
 
 use tauri::Emitter as _;
 
-use crate::keyboard::{global_action_ids, Modifier};
-use crate::platform::hotkey_common::{action_index_for_hotkey_id, plan_registrations};
+use crate::keyboard::{Modifier, global_action_ids};
 #[cfg_attr(all(test, target_os = "windows"), allow(unused_imports))]
 pub use crate::platform::hotkey_common::{
-    assign_hotkey_ids, combined_hotkey_registrations, shortcut_bindings_to_double_modifiers,
-    shortcut_bindings_to_windows_hotkeys, HotkeyRegistration, FIRST_HOTKEY_ID,
-    FLOAT_HOTKEY_ID_BASE,
+    FIRST_HOTKEY_ID, FLOAT_HOTKEY_ID_BASE, HotkeyRegistration, assign_hotkey_ids,
+    combined_hotkey_registrations, shortcut_bindings_to_double_modifiers,
+    shortcut_bindings_to_windows_hotkeys,
 };
+use crate::platform::hotkey_common::{action_index_for_hotkey_id, plan_registrations};
 
 /// OS hotkey action selected by the fired registration id. Mirrors
 /// `windows/hotkey`; the native loop supplies OS events, but the routing stays
@@ -321,8 +321,8 @@ impl HotkeyManager {
                             if let Some(app) = app.as_ref() {
                                 if let Err(error) = app.emit("global-hotkey", action_id) {
                                     crate::log_error!(
-                                    "[hotkey] failed to emit global-hotkey {action_id}: {error}"
-                                );
+                                        "[hotkey] failed to emit global-hotkey {action_id}: {error}"
+                                    );
                                 }
                             } else {
                                 crate::log_warn!(

@@ -5,7 +5,7 @@ const MOD_NOREPEAT: u32 = 0x4000;
 
 #[cfg(target_os = "windows")]
 pub fn register_global_hotkey(hwnd: isize, id: i32, modifiers: u32, vk: u32) -> Result<(), String> {
-    extern "system" {
+    unsafe extern "system" {
         fn RegisterHotKey(hwnd: isize, id: i32, modifiers: u32, vk: u32) -> i32;
     }
 
@@ -29,7 +29,7 @@ pub fn register_global_hotkey(
 
 #[cfg(target_os = "windows")]
 pub fn unregister_global_hotkey(hwnd: isize, id: i32) -> Result<(), String> {
-    extern "system" {
+    unsafe extern "system" {
         fn UnregisterHotKey(hwnd: isize, id: i32) -> i32;
     }
 

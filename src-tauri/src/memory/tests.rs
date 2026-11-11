@@ -148,9 +148,11 @@ fn process_probe_always_includes_the_current_process() {
         let current = _current;
         assert!(current.working_set_bytes.is_some_and(|bytes| bytes > 0));
         assert!(current.private_bytes.is_some_and(|bytes| bytes > 0));
-        assert!(current
-            .private_working_set_bytes
-            .is_some_and(|bytes| bytes > 0));
+        assert!(
+            current
+                .private_working_set_bytes
+                .is_some_and(|bytes| bytes > 0)
+        );
         assert!(current.virtual_bytes.is_some_and(|bytes| bytes > 0));
         assert!(current.private_working_set_bytes <= current.working_set_bytes);
         let system = collect_system_memory();

@@ -12,17 +12,19 @@ fn update_text_item_replaces_payload_and_preserves_record_metadata() {
     original.metadata_json = Some(r#"{"custom":"value"}"#.to_owned());
     database.save_item(&original).unwrap();
 
-    assert!(database
-        .update_text_item(&TextItemUpdate {
-            id: "editable",
-            kind: ClipboardKind::Link,
-            title: "updated title",
-            text_content: "https://example.com",
-            content_hash: "new-hash",
-            size_bytes: 19,
-            custom_title: None,
-        })
-        .unwrap());
+    assert!(
+        database
+            .update_text_item(&TextItemUpdate {
+                id: "editable",
+                kind: ClipboardKind::Link,
+                title: "updated title",
+                text_content: "https://example.com",
+                content_hash: "new-hash",
+                size_bytes: 19,
+                custom_title: None,
+            })
+            .unwrap()
+    );
 
     let saved = database.get_item("editable").unwrap().unwrap();
     assert_eq!(saved.kind, ClipboardKind::Link);
@@ -47,17 +49,19 @@ fn update_text_item_clears_stale_rich_content() {
     original.rtf_content = Some("{\\rtf old}".to_owned());
     database.save_item(&original).unwrap();
 
-    assert!(database
-        .update_text_item(&TextItemUpdate {
-            id: "rich-edit",
-            kind: ClipboardKind::Text,
-            title: "edited",
-            text_content: "edited body",
-            content_hash: "new-rich-hash",
-            size_bytes: 11,
-            custom_title: None,
-        })
-        .unwrap());
+    assert!(
+        database
+            .update_text_item(&TextItemUpdate {
+                id: "rich-edit",
+                kind: ClipboardKind::Text,
+                title: "edited",
+                text_content: "edited body",
+                content_hash: "new-rich-hash",
+                size_bytes: 11,
+                custom_title: None,
+            })
+            .unwrap()
+    );
 
     let saved = database.get_item("rich-edit").unwrap().unwrap();
     assert_eq!(saved.text_content.as_deref(), Some("edited body"));
@@ -72,17 +76,19 @@ fn update_text_item_merges_custom_title_without_dropping_other_metadata() {
     original.metadata_json = Some(r#"{"width":120,"custom":"value"}"#.to_owned());
     database.save_item(&original).unwrap();
 
-    assert!(database
-        .update_text_item(&TextItemUpdate {
-            id: "metadata-edit",
-            kind: ClipboardKind::Text,
-            title: "Custom heading",
-            text_content: "body text",
-            content_hash: "new-metadata-hash",
-            size_bytes: 9,
-            custom_title: Some(true),
-        })
-        .unwrap());
+    assert!(
+        database
+            .update_text_item(&TextItemUpdate {
+                id: "metadata-edit",
+                kind: ClipboardKind::Text,
+                title: "Custom heading",
+                text_content: "body text",
+                content_hash: "new-metadata-hash",
+                size_bytes: 9,
+                custom_title: Some(true),
+            })
+            .unwrap()
+    );
 
     let saved = database.get_item("metadata-edit").unwrap().unwrap();
     let metadata: serde_json::Value =
@@ -123,26 +129,30 @@ fn text_edit_after_metadata_change(change_tags: bool, clear: bool) {
         };
         assert!(other.set_tags("editable", &tags).unwrap());
     } else {
-        assert!(other
-            .set_code_language("editable", (!clear).then_some("Rust"))
-            .unwrap());
+        assert!(
+            other
+                .set_code_language("editable", (!clear).then_some("Rust"))
+                .unwrap()
+        );
     }
     let latest = other.get_item("editable").unwrap().unwrap();
     let tags_before = other.list_all_tags().unwrap();
     let mut expected: serde_json::Value =
         serde_json::from_str(latest.metadata_json.as_deref().unwrap()).unwrap();
     expected["customTitle"] = custom_title.into();
-    assert!(database
-        .update_text_item(&TextItemUpdate {
-            id: "editable",
-            kind: source.kind,
-            title: "Custom heading",
-            text_content: "edited body",
-            content_hash: "edited-hash",
-            size_bytes: 11,
-            custom_title: Some(custom_title),
-        })
-        .unwrap());
+    assert!(
+        database
+            .update_text_item(&TextItemUpdate {
+                id: "editable",
+                kind: source.kind,
+                title: "Custom heading",
+                text_content: "edited body",
+                content_hash: "edited-hash",
+                size_bytes: 11,
+                custom_title: Some(custom_title),
+            })
+            .unwrap()
+    );
     let stored = database.get_item("editable").unwrap().unwrap();
     let actual: serde_json::Value =
         serde_json::from_str(stored.metadata_json.as_deref().unwrap()).unwrap();
@@ -194,17 +204,19 @@ fn update_text_item_custom_title_is_boolean_and_preserves_metadata_shapes() {
             original.metadata_json = raw.map(str::to_owned);
             database.save_item(&original).unwrap();
             let tags_before = database.list_all_tags().unwrap();
-            assert!(database
-                .update_text_item(&TextItemUpdate {
-                    id: "editable",
-                    kind: ClipboardKind::Text,
-                    title: "edited",
-                    text_content: "edited body",
-                    content_hash: "edited-hash",
-                    size_bytes: 11,
-                    custom_title: flag,
-                })
-                .unwrap());
+            assert!(
+                database
+                    .update_text_item(&TextItemUpdate {
+                        id: "editable",
+                        kind: ClipboardKind::Text,
+                        title: "edited",
+                        text_content: "edited body",
+                        content_hash: "edited-hash",
+                        size_bytes: 11,
+                        custom_title: flag,
+                    })
+                    .unwrap()
+            );
             let stored = database.get_item("editable").unwrap().unwrap();
             if let Some(flag) = flag {
                 let mut expected = raw
@@ -287,9 +299,11 @@ fn favorite_ignores_soft_deleted_rows() {
     // A deleted row must not become favorited: favorites are exempt from
     // recycle-bin expiry, so this would pin invisible data forever.
     assert!(!database.set_favorite("deleted", true).unwrap());
-    assert!(!database
-        .set_favorite_batch(&["active".to_owned(), "deleted".to_owned()], true)
-        .unwrap());
+    assert!(
+        !database
+            .set_favorite_batch(&["active".to_owned(), "deleted".to_owned()], true)
+            .unwrap()
+    );
     assert!(!database.get_item("deleted").unwrap().unwrap().is_favorite);
     assert!(!database.get_item("active").unwrap().unwrap().is_favorite);
 }
@@ -304,19 +318,23 @@ fn batch_favorite_is_atomic_and_deduplicates_ids() {
         .save_item(&text_item("second", "hash-second", 200))
         .unwrap();
 
-    assert!(database
-        .set_favorite_batch(
-            &["first".to_owned(), "first".to_owned(), "second".to_owned()],
-            true,
-        )
-        .unwrap());
+    assert!(
+        database
+            .set_favorite_batch(
+                &["first".to_owned(), "first".to_owned(), "second".to_owned()],
+                true,
+            )
+            .unwrap()
+    );
     assert!(database.get_item("first").unwrap().unwrap().is_favorite);
     assert!(database.get_item("second").unwrap().unwrap().is_favorite);
 
     // A stale id must not leave a partially updated batch behind.
-    assert!(!database
-        .set_favorite_batch(&["first".to_owned(), "missing".to_owned()], false)
-        .unwrap());
+    assert!(
+        !database
+            .set_favorite_batch(&["first".to_owned(), "missing".to_owned()], false)
+            .unwrap()
+    );
     assert!(database.get_item("first").unwrap().unwrap().is_favorite);
 }
 
@@ -339,15 +357,19 @@ fn batch_soft_delete_protects_favorites_without_partial_changes() {
     assert!(database.get_item("regular").unwrap().is_some());
     assert!(database.get_item("favorite").unwrap().is_some());
 
-    assert!(database
-        .soft_delete_batch(&["regular".to_owned(), "regular".to_owned()])
-        .unwrap());
+    assert!(
+        database
+            .soft_delete_batch(&["regular".to_owned(), "regular".to_owned()])
+            .unwrap()
+    );
     assert!(database.get_item("regular").unwrap().is_some());
-    assert!(!database
-        .list_recent(10, 0, &HistoryFilter::default())
-        .unwrap()
-        .iter()
-        .any(|item| item.id == "regular"));
+    assert!(
+        !database
+            .list_recent(10, 0, &HistoryFilter::default())
+            .unwrap()
+            .iter()
+            .any(|item| item.id == "regular")
+    );
 }
 
 #[test]

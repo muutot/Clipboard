@@ -297,13 +297,17 @@ mod tests {
         let reopened = ResourcePublication::for_database(Some(path.to_str().unwrap())).unwrap();
         assert!(Arc::ptr_eq(&destination, &reopened));
         assert!(reopened.snapshot().is_none());
-        assert!(before
-            .remove_if_current(|| panic!("pre-migration snapshot must be invalidated"))
-            .is_none());
+        assert!(
+            before
+                .remove_if_current(|| panic!("pre-migration snapshot must be invalidated"))
+                .is_none()
+        );
         drop(guard);
-        assert!(before
-            .remove_if_current(|| panic!("old snapshot remains stale after commit"))
-            .is_none());
+        assert!(
+            before
+                .remove_if_current(|| panic!("old snapshot remains stale after commit"))
+                .is_none()
+        );
         assert!(reopened.snapshot().is_some());
         drop(destination);
         drop(reopened);
@@ -317,15 +321,19 @@ mod tests {
         let first = publication.begin_write().unwrap();
         let second = publication.begin_write().unwrap();
         assert!(publication.snapshot().is_none());
-        assert!(snapshot
-            .remove_if_current(|| panic!("must not unlink"))
-            .is_none());
+        assert!(
+            snapshot
+                .remove_if_current(|| panic!("must not unlink"))
+                .is_none()
+        );
         drop(first);
         assert!(publication.snapshot().is_none());
         drop(second);
-        assert!(snapshot
-            .remove_if_current(|| panic!("stale snapshot"))
-            .is_none());
+        assert!(
+            snapshot
+                .remove_if_current(|| panic!("stale snapshot"))
+                .is_none()
+        );
         assert_eq!(
             publication.snapshot().unwrap().remove_if_current(|| 42),
             Some(42)
@@ -353,9 +361,11 @@ mod tests {
         drop(first);
         assert!(reader.snapshot().is_none());
         drop(second);
-        assert!(snapshot
-            .remove_if_current(|| panic!("stale snapshot"))
-            .is_none());
+        assert!(
+            snapshot
+                .remove_if_current(|| panic!("stale snapshot"))
+                .is_none()
+        );
         assert_eq!(
             reader.snapshot().unwrap().remove_if_current(|| 42),
             Some(42)
@@ -378,18 +388,22 @@ mod tests {
             io::ErrorKind::InvalidData
         );
         assert!(publication.snapshot().is_none());
-        assert!(snapshot
-            .remove_if_current(|| panic!("invalid counter"))
-            .is_none());
+        assert!(
+            snapshot
+                .remove_if_current(|| panic!("invalid counter"))
+                .is_none()
+        );
         assert_eq!(std::fs::read(&paths.generation).unwrap(), b"bad");
         std::fs::write(&paths.generation, u64::MAX.to_le_bytes()).unwrap();
         assert!(publication.begin_write().is_err());
         std::fs::remove_file(&paths.active).unwrap();
         assert!(publication.begin_write().is_err());
         assert!(publication.snapshot().is_none());
-        assert!(snapshot
-            .remove_if_current(|| panic!("missing coordination"))
-            .is_none());
+        assert!(
+            snapshot
+                .remove_if_current(|| panic!("missing coordination"))
+                .is_none()
+        );
         std::fs::remove_dir_all(temporary).unwrap();
     }
 }

@@ -2,10 +2,10 @@
 
 use std::time::Duration;
 
+use super::PerformanceTracker;
 use super::memory_monitor::MemoryMonitor;
 use super::search_latency::SearchLatencyTracker;
 use super::startup::StartupTimer;
-use super::PerformanceTracker;
 
 #[cfg(target_os = "macos")]
 use super::memory_monitor::{macos_current_process_rss_bytes, ps_current_process_rss_bytes};

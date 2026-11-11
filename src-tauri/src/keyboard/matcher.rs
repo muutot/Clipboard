@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, str::FromStr};
 
 use crate::storage::StorageError;
 
-use super::{binding::normalize_key, KeyboardConfig, Modifier, ShortcutBinding};
+use super::{KeyboardConfig, Modifier, ShortcutBinding, binding::normalize_key};
 
 pub const DEFAULT_DOUBLE_TAP_INTERVAL_MS: u64 = 300;
 
@@ -132,9 +132,11 @@ mod tests {
         let mut matcher = ShortcutMatcher::from_config(&config()).unwrap();
 
         assert_eq!(matcher.match_chord([Modifier::Alt], "v"), &["toggleWindow"]);
-        assert!(matcher
-            .record_modifier_tap(Modifier::Shift, 1_000)
-            .is_empty());
+        assert!(
+            matcher
+                .record_modifier_tap(Modifier::Shift, 1_000)
+                .is_empty()
+        );
         assert_eq!(
             matcher.record_modifier_tap(Modifier::Shift, 1_250),
             &["toggleWindow"]
@@ -145,12 +147,16 @@ mod tests {
     fn double_taps_expire_after_the_configured_interval() {
         let mut matcher = ShortcutMatcher::with_double_tap_interval(&config(), 200).unwrap();
 
-        assert!(matcher
-            .record_modifier_tap(Modifier::Shift, 1_000)
-            .is_empty());
-        assert!(matcher
-            .record_modifier_tap(Modifier::Shift, 1_250)
-            .is_empty());
+        assert!(
+            matcher
+                .record_modifier_tap(Modifier::Shift, 1_000)
+                .is_empty()
+        );
+        assert!(
+            matcher
+                .record_modifier_tap(Modifier::Shift, 1_250)
+                .is_empty()
+        );
         assert_eq!(
             matcher.record_modifier_tap(Modifier::Shift, 1_400),
             &["toggleWindow"]
@@ -164,8 +170,10 @@ mod tests {
         matcher.record_modifier_tap(Modifier::Shift, 1_000);
         matcher.cancel_modifier_sequence();
 
-        assert!(matcher
-            .record_modifier_tap(Modifier::Shift, 1_100)
-            .is_empty());
+        assert!(
+            matcher
+                .record_modifier_tap(Modifier::Shift, 1_100)
+                .is_empty()
+        );
     }
 }

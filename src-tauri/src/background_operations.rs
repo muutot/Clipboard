@@ -131,12 +131,13 @@ impl BackgroundOperations {
     /// An old window must never cancel a newer run of the same operation.
     pub fn cancel(&self, kind: OperationKind, id: &str) -> bool {
         let mut state = lock(&self.0);
-        if let Some(slot) = state.slots.get_mut(&kind) {
-            if slot.snapshot.id == id && slot.snapshot.status.active() {
-                slot.snapshot.status = OperationStatus::Cancelling;
-                slot.cancellation.cancel();
-                return true;
-            }
+        if let Some(slot) = state.slots.get_mut(&kind)
+            && slot.snapshot.id == id
+            && slot.snapshot.status.active()
+        {
+            slot.snapshot.status = OperationStatus::Cancelling;
+            slot.cancellation.cancel();
+            return true;
         }
         false
     }
@@ -216,10 +217,10 @@ impl Operation {
         result
     }
     fn set_status(&self, status: OperationStatus) {
-        if let Some(slot) = lock(&self.registry.0).slots.get_mut(&self.kind) {
-            if slot.snapshot.id == self.id {
-                slot.snapshot.status = status;
-            }
+        if let Some(slot) = lock(&self.registry.0).slots.get_mut(&self.kind)
+            && slot.snapshot.id == self.id
+        {
+            slot.snapshot.status = status;
         }
         self.registry.0.idle.notify_all();
     }

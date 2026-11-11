@@ -140,11 +140,13 @@ mod tests {
         assert!(
             super::match_auto_tags(&rules, "screenshot", "Editor", ClipboardKind::Text).is_empty()
         );
-        assert!(validate_auto_tag_rules(&[AutoTagRule {
-            tag: "everything".into(),
-            ..AutoTagRule::default()
-        }])
-        .is_err());
+        assert!(
+            validate_auto_tag_rules(&[AutoTagRule {
+                tag: "everything".into(),
+                ..AutoTagRule::default()
+            }])
+            .is_err()
+        );
         assert!(validate_auto_tag_rules(&[rule("[", "broken")]).is_err());
     }
 }

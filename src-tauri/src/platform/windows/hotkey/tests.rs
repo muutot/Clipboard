@@ -7,10 +7,10 @@ use crate::platform::hotkey_common::action_id_base;
 
 use super::double_tap::DoubleModifierTracker;
 use super::paste_target::{
-    clear_foreground_paste_target, foreground_hook_proc, set_foreground_paste_target,
-    QuickPasteTarget, EVENT_SYSTEM_FOREGROUND, OBJID_WINDOW,
+    EVENT_SYSTEM_FOREGROUND, OBJID_WINDOW, QuickPasteTarget, clear_foreground_paste_target,
+    foreground_hook_proc, set_foreground_paste_target,
 };
-use super::{action_for_hotkey_id, HotkeyAction, FIRST_HOTKEY_ID, FLOAT_HOTKEY_ID_BASE};
+use super::{FIRST_HOTKEY_ID, FLOAT_HOTKEY_ID_BASE, HotkeyAction, action_for_hotkey_id};
 
 const VK_SHIFT: u32 = 0x10;
 const VK_CONTROL: u32 = 0x11;

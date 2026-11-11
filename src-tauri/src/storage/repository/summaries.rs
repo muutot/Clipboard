@@ -1,5 +1,5 @@
 //! List reads never allocate rich-text bodies. Full records remain the storage/export contract.
-use super::{history_predicates, StoredClipboardItem, ITEM_LOOKUP_CHUNK_SIZE};
+use super::{ITEM_LOOKUP_CHUNK_SIZE, StoredClipboardItem, history_predicates};
 use crate::domain::ClipboardItem;
 use crate::storage::{Database, HistoryFilter, StorageError};
 use rusqlite::{params_from_iter, types::ToSql};

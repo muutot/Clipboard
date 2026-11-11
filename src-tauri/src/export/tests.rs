@@ -315,12 +315,16 @@ fn imports_crlf_plain_text_separators_without_changing_record_line_endings() {
     let items = database
         .list_recent(10, 0, &crate::storage::HistoryFilter::default())
         .unwrap();
-    assert!(items
-        .iter()
-        .any(|item| item.text_content.as_deref() == Some("first\r\ncontinued")));
-    assert!(items
-        .iter()
-        .any(|item| item.text_content.as_deref() == Some("second")));
+    assert!(
+        items
+            .iter()
+            .any(|item| item.text_content.as_deref() == Some("first\r\ncontinued"))
+    );
+    assert!(
+        items
+            .iter()
+            .any(|item| item.text_content.as_deref() == Some("second"))
+    );
 }
 
 #[test]
@@ -366,8 +370,8 @@ fn database_export_reads_more_than_one_page() {
 #[test]
 fn database_export_keeps_one_snapshot_during_concurrent_usage_updates() {
     use std::sync::{
-        atomic::{AtomicBool, Ordering},
         Arc,
+        atomic::{AtomicBool, Ordering},
     };
 
     let directory = std::env::temp_dir().join(format!("clipboard-export-{}", uuid::Uuid::new_v4()));

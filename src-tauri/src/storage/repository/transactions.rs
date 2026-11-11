@@ -7,11 +7,11 @@
 //! `Database::save_items_transactional`, and the import bounds
 //! (`MAX_IMPORT_*`, `validate_imported_item`) every importer is validated against.
 
-use rusqlite::{params, OptionalExtension, TransactionBehavior};
+use rusqlite::{OptionalExtension, TransactionBehavior, params};
 
 use super::{
-    content_exists_on_connection, current_time_ms, insert_item_row, sync_item_tags_from_metadata,
-    StoredClipboardItem, ITEM_COLUMNS,
+    ITEM_COLUMNS, StoredClipboardItem, content_exists_on_connection, current_time_ms,
+    insert_item_row, sync_item_tags_from_metadata,
 };
 use crate::domain::ClipboardItem;
 use crate::storage::{Database, StorageError};

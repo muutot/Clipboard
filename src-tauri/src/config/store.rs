@@ -79,10 +79,8 @@ impl ConfigStore {
         let mut raw: Value = serde_json::from_slice(bytes)?;
         let general_settings_present = raw.get("general").map(Value::is_object).unwrap_or(false);
 
-        if !general_settings_present {
-            if let Value::Object(object) = &mut raw {
-                object.remove("general");
-            }
+        if !general_settings_present && let Value::Object(object) = &mut raw {
+            object.remove("general");
         }
 
         let mut config: AppConfig = serde_json::from_value(raw)?;
@@ -625,46 +623,52 @@ impl ConfigStore {
         // logged so the fallback is visible instead of silent; legacy
         // plaintext values are upgraded on their next save.
         use crate::platform::secret_store::{
-            discard_secret, is_protected, protect_secret, unprotect_secret, SecretAccount,
+            SecretAccount, discard_secret, is_protected, protect_secret, unprotect_secret,
         };
         let previous = self.config.sync.clone();
         let mut prepared = Vec::new();
-        if let Some(secret) = &sync.s3_secret_key {
-            if !secret.is_empty() && !is_protected(secret) {
-                let retained = previous
-                    .s3_secret_key
-                    .as_ref()
-                    .filter(|stored| unprotect_secret(stored).as_deref() == Some(secret))
-                    .cloned();
-                match retained.or_else(|| {
-                    let protected = protect_secret(SecretAccount::S3SecretKey, secret);
-                    if let Some(stored) = &protected { prepared.push(stored.clone()); }
-                    protected
-                }) {
-                    Some(protected) => sync.s3_secret_key = Some(protected),
-                    None => crate::log_warn!(
-                        "[config] credential store unavailable; keeping sync.s3SecretKey in plaintext"
-                    ),
+        if let Some(secret) = &sync.s3_secret_key
+            && !secret.is_empty()
+            && !is_protected(secret)
+        {
+            let retained = previous
+                .s3_secret_key
+                .as_ref()
+                .filter(|stored| unprotect_secret(stored).as_deref() == Some(secret))
+                .cloned();
+            match retained.or_else(|| {
+                let protected = protect_secret(SecretAccount::S3SecretKey, secret);
+                if let Some(stored) = &protected {
+                    prepared.push(stored.clone());
                 }
+                protected
+            }) {
+                Some(protected) => sync.s3_secret_key = Some(protected),
+                None => crate::log_warn!(
+                    "[config] credential store unavailable; keeping sync.s3SecretKey in plaintext"
+                ),
             }
         }
-        if let Some(password) = &sync.sync_password {
-            if !password.is_empty() && !is_protected(password) {
-                let retained = previous
-                    .sync_password
-                    .as_ref()
-                    .filter(|stored| unprotect_secret(stored).as_deref() == Some(password))
-                    .cloned();
-                match retained.or_else(|| {
-                    let protected = protect_secret(SecretAccount::SyncPassword, password);
-                    if let Some(stored) = &protected { prepared.push(stored.clone()); }
-                    protected
-                }) {
-                    Some(protected) => sync.sync_password = Some(protected),
-                    None => crate::log_warn!(
-                        "[config] credential store unavailable; keeping sync.syncPassword in plaintext"
-                    ),
+        if let Some(password) = &sync.sync_password
+            && !password.is_empty()
+            && !is_protected(password)
+        {
+            let retained = previous
+                .sync_password
+                .as_ref()
+                .filter(|stored| unprotect_secret(stored).as_deref() == Some(password))
+                .cloned();
+            match retained.or_else(|| {
+                let protected = protect_secret(SecretAccount::SyncPassword, password);
+                if let Some(stored) = &protected {
+                    prepared.push(stored.clone());
                 }
+                protected
+            }) {
+                Some(protected) => sync.sync_password = Some(protected),
+                None => crate::log_warn!(
+                    "[config] credential store unavailable; keeping sync.syncPassword in plaintext"
+                ),
             }
         }
         self.config.sync = sync;
@@ -773,10 +777,10 @@ impl ConfigStore {
             )));
         }
         let mut value = serde_json::to_value(&self.config)?;
-        if !self.general_settings_present {
-            if let Value::Object(object) = &mut value {
-                object.remove("general");
-            }
+        if !self.general_settings_present
+            && let Value::Object(object) = &mut value
+        {
+            object.remove("general");
         }
         let contents = serde_json::to_vec_pretty(&value)?;
         let revision = Sha256::digest(&contents).into();

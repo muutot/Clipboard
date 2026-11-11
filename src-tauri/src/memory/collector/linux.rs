@@ -1,6 +1,6 @@
 //! Linux process-group and system-memory probes (`/proc` based).
 
-use super::{fallback_current_process, MemoryProcess, SystemMemory};
+use super::{MemoryProcess, SystemMemory, fallback_current_process};
 use std::{collections::HashSet, fs};
 
 #[derive(Debug, Clone)]

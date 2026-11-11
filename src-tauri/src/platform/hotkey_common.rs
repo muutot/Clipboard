@@ -225,10 +225,10 @@ mod tests {
     use crate::keyboard::ShortcutBinding;
 
     use super::{
-        action_id_base, action_index_for_hotkey_id, assign_hotkey_ids,
-        combined_hotkey_registrations, hotkey_registration_identity, plan_registrations,
-        shortcut_bindings_to_double_modifiers, shortcut_bindings_to_windows_hotkeys,
-        FIRST_HOTKEY_ID, FLOAT_HOTKEY_ID_BASE,
+        FIRST_HOTKEY_ID, FLOAT_HOTKEY_ID_BASE, action_id_base, action_index_for_hotkey_id,
+        assign_hotkey_ids, combined_hotkey_registrations, hotkey_registration_identity,
+        plan_registrations, shortcut_bindings_to_double_modifiers,
+        shortcut_bindings_to_windows_hotkeys,
     };
 
     #[test]

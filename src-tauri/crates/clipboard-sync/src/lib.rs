@@ -5,4 +5,4 @@ pub mod s3;
 mod transport;
 pub mod v1;
 
-pub use s3::{test_s3_connection, S3TestResult};
+pub use s3::{S3TestResult, test_s3_connection};

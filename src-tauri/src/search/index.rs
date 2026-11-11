@@ -2,24 +2,24 @@ use std::{
     ops::Bound,
     path::Path,
     sync::{
-        atomic::{AtomicBool, AtomicU64, Ordering},
         Mutex,
+        atomic::{AtomicBool, AtomicU64, Ordering},
     },
 };
 
 use tantivy::{
+    Index, IndexReader, IndexWriter, ReloadPolicy, Term,
     collector::{Count, TopDocs},
     directory::MmapDirectory,
     query::{BooleanQuery, ConstScoreQuery, Query, RangeQuery, TermQuery, TermSetQuery},
     schema::{IndexRecordOption, TantivyDocument, Value},
-    Index, IndexReader, IndexWriter, ReloadPolicy, Term,
 };
 
 use crate::storage::SearchDocument;
 
 use super::{
-    build_schema, manifest::SearchIndexLayout, register_tokenizers, SearchError, SearchFields,
-    SearchQuery,
+    SearchError, SearchFields, SearchQuery, build_schema, manifest::SearchIndexLayout,
+    register_tokenizers,
 };
 
 const INDEX_WRITER_MEMORY_BYTES: usize = 60_000_000;
@@ -86,7 +86,8 @@ impl SearchIndex {
                 let retried = MmapDirectory::open(&layout.index_directory)
                     .map_err(tantivy::TantivyError::from)
                     .and_then(|directory| Index::open_or_create(directory, build_schema().0));
-                let index = match retried {
+
+                match retried {
                     Ok(index) => index,
                     Err(retry_error) => {
                         // A schema/version mismatch surfaces as "schema does
@@ -110,8 +111,7 @@ impl SearchIndex {
                         let (schema2, _) = build_schema();
                         Index::open_or_create(directory, schema2)?
                     }
-                };
-                index
+                }
             }
         };
 
@@ -297,13 +297,12 @@ impl SearchIndex {
                 .cached_ids
                 .lock()
                 .map_err(|_| SearchError::WriterPoisoned)?;
-            if let Some((ref cached_query, cached_max, cached_range, ref ids, total)) = *cache {
-                if cached_query.as_str() == normalized.as_str()
-                    && cached_max >= max_results
-                    && cached_range == date_range
-                {
-                    return Ok((ids[..max_results.min(ids.len())].to_vec(), total));
-                }
+            if let Some((ref cached_query, cached_max, cached_range, ref ids, total)) = *cache
+                && cached_query.as_str() == normalized.as_str()
+                && cached_max >= max_results
+                && cached_range == date_range
+            {
+                return Ok((ids[..max_results.min(ids.len())].to_vec(), total));
             }
         }
 

@@ -217,10 +217,10 @@ fn concurrent_install_scenario(shared_directory: bool) {
         let first = tokio::spawn(async move {
             let mut ready = Some(ready);
             download_ppocr_models(&first_client, &first_dir, [file], |progress| {
-                if progress.current > 0 {
-                    if let Some(ready) = ready.take() {
-                        let _ = ready.send(());
-                    }
+                if progress.current > 0
+                    && let Some(ready) = ready.take()
+                {
+                    let _ = ready.send(());
                 }
             })
             .await
@@ -252,11 +252,11 @@ fn concurrent_install_scenario(shared_directory: bool) {
     }
     if shared_directory {
         assert!(
-        second_result
-            .as_ref()
-            .is_err_and(|e| e.contains("already in progress")),
-        "second install entered the shared partial file: {second_result:?}; first={first_result:?}; requests={requests}"
-    );
+            second_result
+                .as_ref()
+                .is_err_and(|e| e.contains("already in progress")),
+            "second install entered the shared partial file: {second_result:?}; first={first_result:?}; requests={requests}"
+        );
         assert_eq!(
             requests, 1,
             "a competing install must not start another request"
@@ -404,10 +404,10 @@ fn oversized_download_scenario(mode: ResponseMode) {
             let mut ready = Some(ready);
             download_ppocr_models(&client, &download_dir, [file], |event| {
                 progress.fetch_max(event.current as usize, Ordering::SeqCst);
-                if event.current > 0 {
-                    if let Some(ready) = ready.take() {
-                        let _ = ready.send(());
-                    }
+                if event.current > 0
+                    && let Some(ready) = ready.take()
+                {
+                    let _ = ready.send(());
                 }
             })
             .await
@@ -450,9 +450,9 @@ fn oversized_download_scenario(mode: ResponseMode) {
     fs::remove_dir_all(directory).unwrap();
     let written = progress_bytes.load(Ordering::SeqCst);
     assert!(
-        result.as_ref().is_some_and(|result| result
+        result
             .as_ref()
-            .is_err_and(|error| error.contains("size"))),
+            .is_some_and(|result| result.as_ref().is_err_and(|error| error.contains("size"))),
         "oversized response waited for EOF: result={result:?}, partial={partial_size:?}, progress={written}"
     );
     assert_eq!(partial_size, None, "rejected download left partial bytes");
@@ -521,9 +521,11 @@ fn valid_download_without_length_scenario(mode: ResponseMode) {
         progress.last(),
         Some(&(BODY.len() as u64, BODY.len() as u64))
     );
-    assert!(progress
-        .iter()
-        .all(|(_, total)| *total == BODY.len() as u64));
+    assert!(
+        progress
+            .iter()
+            .all(|(_, total)| *total == BODY.len() as u64)
+    );
 }
 
 #[test]

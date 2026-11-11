@@ -11,8 +11,8 @@ use sha2::{Digest, Sha256};
 
 use crate::storage::StorageError;
 
-use super::actions::is_global_action;
 use super::ShortcutBinding;
+use super::actions::is_global_action;
 
 const CONFIG_DIRECTORY_NAME: &str = "conf";
 const KEYBOARD_CONFIG_FILE_NAME: &str = "keyboard.json";
@@ -413,7 +413,7 @@ fn validate_action_name(action: &str) -> Result<(), StorageError> {
 mod tests {
     use std::{fs, time::SystemTime};
 
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
 
     use super::KeyboardConfigStore;
     use crate::storage::StorageError;

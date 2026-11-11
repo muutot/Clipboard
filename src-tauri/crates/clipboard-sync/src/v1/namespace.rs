@@ -2,8 +2,8 @@
 //! Existing v1 data keeps its original derivation scope; only this small binding
 //! is added, after authenticating the existing pointers, using create-if-absent.
 use super::{
-    decode_checkpoint_head, decode_device_head, parse_head_key, ObjectStore, PutCondition,
-    SessionKey, CHECKPOINT_HEAD_KEY, HEADS_PREFIX,
+    CHECKPOINT_HEAD_KEY, HEADS_PREFIX, ObjectStore, PutCondition, SessionKey,
+    decode_checkpoint_head, decode_device_head, parse_head_key,
 };
 use serde::{Deserialize, Serialize};
 

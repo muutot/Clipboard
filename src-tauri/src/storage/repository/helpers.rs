@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use rusqlite::{params, OptionalExtension, Row, TransactionBehavior};
+use rusqlite::{OptionalExtension, Row, TransactionBehavior, params};
 
 use crate::domain::{ClipboardItem, ClipboardKind};
 use crate::storage::StorageError;

@@ -1,22 +1,22 @@
 //! The `RegisterHotKey` message window, its loop thread, and the stop handshake.
 
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
 
 use tauri::Emitter as _;
 
-use crate::keyboard::{global_action_ids, Modifier};
+use crate::keyboard::{Modifier, global_action_ids};
 use crate::platform::hotkey_common::action_index_for_hotkey_id;
 use crate::platform::windows::{register_global_hotkey, unregister_global_hotkey};
 
 use super::double_tap::{
-    clear_double_modifier_tracker, keyboard_hook_proc, set_double_modifier_tracker, WH_KEYBOARD_LL,
+    WH_KEYBOARD_LL, clear_double_modifier_tracker, keyboard_hook_proc, set_double_modifier_tracker,
 };
 use super::paste_target::{
+    EVENT_SYSTEM_FOREGROUND, QuickPasteTarget, WINEVENT_OUTOFCONTEXT, WINEVENT_SKIPOWNPROCESS,
     clear_foreground_paste_target, foreground_hook_proc, set_foreground_paste_target,
-    QuickPasteTarget, EVENT_SYSTEM_FOREGROUND, WINEVENT_OUTOFCONTEXT, WINEVENT_SKIPOWNPROCESS,
 };
-use super::{action_for_hotkey_id, HotkeyAction, HotkeyRegistration, HotkeyRegistrationFailure};
+use super::{HotkeyAction, HotkeyRegistration, HotkeyRegistrationFailure, action_for_hotkey_id};
 
 const WM_HOTKEY: u32 = 0x0312;
 
@@ -69,7 +69,7 @@ fn hotkey_message_loop(
     }
     set_foreground_paste_target(&paste_target);
 
-    extern "system" {
+    unsafe extern "system" {
         fn GetModuleHandleW(module: *const u16) -> isize;
         fn GetLastError() -> u32;
         fn RegisterClassExW(class: *const WndClassExW) -> u16;
@@ -195,16 +195,16 @@ fn hotkey_message_loop(
                 // Tell the settings UI the chord is not actually live —
                 // without this the panel keeps showing it as an active
                 // binding while the OS silently drops every press.
-                if let Some(app) = app.as_ref() {
-                    if let Err(error) = app.emit(
+                if let Some(app) = app.as_ref()
+                    && let Err(error) = app.emit(
                         "hotkey-registration-failed",
                         HotkeyRegistrationFailure {
                             action,
                             error: error.clone(),
                         },
-                    ) {
-                        crate::log_error!("[hotkey] failed to emit registration-failed: {error}");
-                    }
+                    )
+                {
+                    crate::log_error!("[hotkey] failed to emit registration-failed: {error}");
                 }
                 continue;
             }
@@ -290,17 +290,19 @@ unsafe extern "system" fn hotkey_window_proc(
     wparam: usize,
     lparam: isize,
 ) -> isize {
-    if msg == WM_HOTKEY && wparam != 0 {
-        if let Some(tx) = HOTKEY_SENDER.lock().ok().and_then(|g| g.clone()) {
-            let _ = tx.send(action_for_hotkey_id(wparam as i32));
+    unsafe {
+        if msg == WM_HOTKEY && wparam != 0 {
+            if let Some(tx) = HOTKEY_SENDER.lock().ok().and_then(|g| g.clone()) {
+                let _ = tx.send(action_for_hotkey_id(wparam as i32));
+            }
+            return 0;
         }
-        return 0;
-    }
 
-    extern "system" {
-        fn DefWindowProcW(hwnd: isize, msg: u32, wparam: usize, lparam: isize) -> isize;
+        unsafe extern "system" {
+            fn DefWindowProcW(hwnd: isize, msg: u32, wparam: usize, lparam: isize) -> isize;
+        }
+        DefWindowProcW(hwnd, msg, wparam, lparam)
     }
-    DefWindowProcW(hwnd, msg, wparam, lparam)
 }
 
 pub(super) static HOTKEY_SENDER: Mutex<Option<mpsc::Sender<HotkeyAction>>> = Mutex::new(None);
@@ -355,14 +357,10 @@ pub(super) fn wait_for_hotkey_hwnd_or_exit(handle: &thread::JoinHandle<()>) -> b
 pub fn stop_hotkey_thread() {
     let hwnd = HOTKEY_HWND.lock().ok().and_then(|g| {
         let h = *g;
-        if h != 0 {
-            Some(h)
-        } else {
-            None
-        }
+        if h != 0 { Some(h) } else { None }
     });
     if let Some(hwnd) = hwnd {
-        extern "system" {
+        unsafe extern "system" {
             fn PostMessageW(hwnd: isize, msg: u32, wparam: usize, lparam: isize) -> i32;
         }
         const WM_QUIT: u32 = 0x0012;

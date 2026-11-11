@@ -17,8 +17,8 @@
 use std::fs::{self, File, OpenOptions};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use std::sync::atomic::{AtomicU64, AtomicU8, Ordering};
 use std::sync::OnceLock;
+use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
 
 const LOG_DIRECTORY_NAME: &str = "logs";
 const LOG_FILE_NAME: &str = "clipboard.log";

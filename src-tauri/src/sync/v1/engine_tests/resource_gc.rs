@@ -128,9 +128,11 @@ fn manifest_mode_uses_the_checkpoint_manifest_without_reading_the_pack() {
     let objects = store.objects.lock().unwrap();
     assert!(objects.contains_key(&orphan));
     assert!(objects.contains_key(&resource_key));
-    assert!(objects
-        .keys()
-        .any(|key| key.starts_with("v1/resource-refs/")));
+    assert!(
+        objects
+            .keys()
+            .any(|key| key.starts_with("v1/resource-refs/"))
+    );
     drop(objects);
     let gets = store.gets.lock().unwrap();
     assert!(gets.iter().any(|key| key.starts_with("v1/resource-refs/")));

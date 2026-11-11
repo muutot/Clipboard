@@ -202,6 +202,7 @@
   - [x] 追踪静态桌面中的 server/enhance/prerender/cookie/deepmerge 调用与不可信输入，记录可达或不可达证据。
   - [x] 对当前 Cargo.lock 执行适当 advisory 检查，区分运行/构建/测试依赖。
   - [ ] 对确有必要的依赖更新逐项验证兼容性；未证明可利用的扫描结果不包装成已确认产品漏洞。
+  - [x] Rust edition 从 2021 升级到 2024（src-tauri 两个 crate）：迁移 unsafe 块、`unsafe extern` 块、`expr_2021` 宏片段与 let-chains，格式随 Style 2024 重排，完整 `npm run verify` 通过；macOS/Linux cfg 代码仅过 rustfmt 语法检查，最终验收归属匹配的 CI jobs。
 
 复核证据：[依赖可达性](docs/DEPENDENCY_REACHABILITY.md) 记录 npm 入口/构建边界、764 个 Rust 锁文件依赖扫描及剩余范围；zstd 兼容补丁消除 3 条漏洞记录和 10 条 unsound 警告，19 项 wire 测试通过。ZIP、glib、lru 的维护/平台边界仍保留，V02 父项不勾选。
 

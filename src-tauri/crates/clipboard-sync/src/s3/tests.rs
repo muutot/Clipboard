@@ -799,51 +799,57 @@ fn streaming_put_rejects_bad_sources_before_any_request() {
 
     // Missing source file fails before any client is built.
     let missing = root.join("absent.bin");
-    assert!(put_s3_file(
-        "http://127.0.0.1:1",
-        "us-east-1",
-        "bucket",
-        "k",
-        &missing,
-        valid_sha256,
-        0,
-        AKID,
-        SECRET,
-        S3PutCondition::Unconditional,
-    )
-    .is_err());
+    assert!(
+        put_s3_file(
+            "http://127.0.0.1:1",
+            "us-east-1",
+            "bucket",
+            "k",
+            &missing,
+            valid_sha256,
+            0,
+            AKID,
+            SECRET,
+            S3PutCondition::Unconditional,
+        )
+        .is_err()
+    );
 
     // The caller's fingerprinted size no longer matches the on-disk file.
     let sized = root.join("sized.bin");
     std::fs::write(&sized, b"0123456789").unwrap();
-    assert!(put_s3_file(
-        "http://127.0.0.1:1",
-        "us-east-1",
-        "bucket",
-        "k",
-        &sized,
-        valid_sha256,
-        11,
-        AKID,
-        SECRET,
-        S3PutCondition::Unconditional,
-    )
-    .is_err());
+    assert!(
+        put_s3_file(
+            "http://127.0.0.1:1",
+            "us-east-1",
+            "bucket",
+            "k",
+            &sized,
+            valid_sha256,
+            11,
+            AKID,
+            SECRET,
+            S3PutCondition::Unconditional,
+        )
+        .is_err()
+    );
 
     // A directory is not a regular-file source.
-    assert!(put_s3_file(
-        "http://127.0.0.1:1",
-        "us-east-1",
-        "bucket",
-        "k",
-        &root,
-        valid_sha256,
-        0,
-        AKID,
-        SECRET,
-        S3PutCondition::Unconditional,
-    )
-    .is_err());
+    assert!(
+        put_s3_file(
+            "http://127.0.0.1:1",
+            "us-east-1",
+            "bucket",
+            "k",
+            &root,
+            valid_sha256,
+            0,
+            AKID,
+            SECRET,
+            S3PutCondition::Unconditional,
+        )
+        .is_err()
+    );
 
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -1090,33 +1096,37 @@ fn disposable_s3_edge_branches() {
     // 404 semantics agree across metadata and streaming download, and the
     // refused download never leaves a partial destination behind.
     let missing_key = format!("{prefix}missing.bin");
-    assert!(head_s3_object(
-        &endpoint,
-        &region,
-        &bucket,
-        &missing_key,
-        &access_key,
-        &secret_key
-    )
-    .unwrap()
-    .is_none());
+    assert!(
+        head_s3_object(
+            &endpoint,
+            &region,
+            &bucket,
+            &missing_key,
+            &access_key,
+            &secret_key
+        )
+        .unwrap()
+        .is_none()
+    );
     let missing_destination = std::env::temp_dir().join(format!(
         "clipboard-s3-missing-destination-{}-{}.bin",
         std::process::id(),
         uuid::Uuid::new_v4()
     ));
-    assert!(get_s3_object_to_file(
-        &endpoint,
-        &region,
-        &bucket,
-        &missing_key,
-        &missing_destination,
-        1024,
-        &access_key,
-        &secret_key,
-    )
-    .unwrap()
-    .is_none());
+    assert!(
+        get_s3_object_to_file(
+            &endpoint,
+            &region,
+            &bucket,
+            &missing_key,
+            &missing_destination,
+            1024,
+            &access_key,
+            &secret_key,
+        )
+        .unwrap()
+        .is_none()
+    );
     assert!(!missing_destination.exists());
 
     // The unconditional helper round-trips through a plain GET.
@@ -1133,17 +1143,19 @@ fn disposable_s3_edge_branches() {
         uuid::Uuid::new_v4()
     ));
     std::fs::write(&occupied_destination, b"occupied").unwrap();
-    assert!(get_s3_object_to_file(
-        &endpoint,
-        &region,
-        &bucket,
-        &key,
-        &occupied_destination,
-        1024,
-        &access_key,
-        &secret_key,
-    )
-    .is_err());
+    assert!(
+        get_s3_object_to_file(
+            &endpoint,
+            &region,
+            &bucket,
+            &key,
+            &occupied_destination,
+            1024,
+            &access_key,
+            &secret_key,
+        )
+        .is_err()
+    );
     assert_eq!(std::fs::read(&occupied_destination).unwrap(), b"occupied");
 
     // A streamed PUT with a stale IfMatch etag must lose its precondition.
@@ -1312,9 +1324,11 @@ fn disposable_s3_connection_and_streaming_paths() {
         &access_key,
         &secret_key,
     );
-    assert!(missing
-        .unwrap_err()
-        .contains(&format!("S3 object not found: {missing_key}")));
+    assert!(
+        missing
+            .unwrap_err()
+            .contains(&format!("S3 object not found: {missing_key}"))
+    );
 
     delete_from_s3(&endpoint, &region, &bucket, &key, &access_key, &secret_key).unwrap();
     let _ = std::fs::remove_file(source);
@@ -1433,9 +1447,11 @@ fn list_transport_discards_a_valid_first_page_when_a_later_page_is_invalid() {
 #[test]
 fn list_transport_accepts_a_complete_empty_page() {
     let body = b"<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><IsTruncated>false</IsTruncated><KeyCount>0</KeyCount></ListBucketResult>";
-    assert!(list_with_fixture_pages(vec![body.to_vec()])
-        .unwrap()
-        .is_empty());
+    assert!(
+        list_with_fixture_pages(vec![body.to_vec()])
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[test]
@@ -1461,7 +1477,10 @@ fn list_parser_rejects_broken_structure_and_ambiguous_fields() {
         "<ListBucketResult><IsTruncated>false</IsTruncated><Contents><Key>key</Key><Size>invalid</Size></Contents></ListBucketResult>",
         "<!DOCTYPE ListBucketResult [<!ENTITY key 'private'>]><ListBucketResult><IsTruncated>false</IsTruncated></ListBucketResult>",
     ] {
-        assert!(parse_s3_list_page(xml).is_err(), "fixture must fail validation");
+        assert!(
+            parse_s3_list_page(xml).is_err(),
+            "fixture must fail validation"
+        );
     }
 }
 

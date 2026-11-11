@@ -38,7 +38,7 @@ pub fn restore_main_window<R: Runtime>(window: &WebviewWindow<R>) -> tauri::Resu
 pub fn enable_child_clipping<R: Runtime>(window: &WebviewWindow<R>) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
-        extern "system" {
+        unsafe extern "system" {
             fn GetWindowLongW(hwnd: isize, index: i32) -> i32;
             fn SetWindowLongW(hwnd: isize, index: i32, new_long: i32) -> i32;
         }
@@ -78,10 +78,10 @@ pub fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
         // Remember which window was active before the clipboard is brought up,
         // so "paste to previous application" works when opened from the tray
         // (the toggle hotkey records the target inside its own loop).
-        if let Some(hm) = app.try_state::<Mutex<HotkeyManager>>() {
-            if let Ok(hm) = hm.lock() {
-                hm.remember_foreground();
-            }
+        if let Some(hm) = app.try_state::<Mutex<HotkeyManager>>()
+            && let Ok(hm) = hm.lock()
+        {
+            hm.remember_foreground();
         }
     }
 
@@ -177,7 +177,7 @@ pub fn apply_webview_transparency<R: Runtime>(
 /// compositing over the desktop (the application window is `transparent`).
 #[cfg(target_os = "windows")]
 pub fn apply_window_transparency(window_handle: isize, percent: u8) -> Result<(), String> {
-    extern "system" {
+    unsafe extern "system" {
         fn GetWindowLongW(hwnd: isize, index: i32) -> i32;
         fn SetWindowLongW(hwnd: isize, index: i32, new_long: i32) -> i32;
         fn SetLayeredWindowAttributes(hwnd: isize, color_key: u32, alpha: u8, flags: u32) -> i32;
@@ -247,7 +247,7 @@ pub fn apply_window_effect<R: Runtime>(
         _ => {
             return window_vibrancy::clear_vibrancy(window)
                 .map(|_| ())
-                .map_err(|e| e.to_string())
+                .map_err(|e| e.to_string());
         }
     };
     window_vibrancy::apply_vibrancy(window, material, Some(NSVisualEffectState::Active), None)

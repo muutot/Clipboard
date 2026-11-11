@@ -3,13 +3,13 @@
 use std::sync::Mutex;
 
 use tauri::{
+    AppHandle, Emitter, Listener, Manager, Runtime,
     menu::{CheckMenuItem, Menu, MenuItem, Submenu},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Emitter, Listener, Manager, Runtime,
 };
 use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 
-use crate::commands::clipboard::{broadcast_item_usage, record_item_usage, SearchResultCache};
+use crate::commands::clipboard::{SearchResultCache, broadcast_item_usage, record_item_usage};
 use crate::config::ConfigStore;
 use crate::domain::ClipboardKind;
 use crate::platform::windows::hotkey::HotkeyManager;
@@ -183,12 +183,11 @@ impl SystemTray {
                             main.is_visible().unwrap_or(false) && main.is_focused().unwrap_or(false)
                         })
                         .unwrap_or(false);
-                if !own_focused {
-                    if let Some(hm) = app.try_state::<Mutex<HotkeyManager>>() {
-                        if let Ok(hm) = hm.lock() {
-                            hm.remember_foreground();
-                        }
-                    }
+                if !own_focused
+                    && let Some(hm) = app.try_state::<Mutex<HotkeyManager>>()
+                    && let Ok(hm) = hm.lock()
+                {
+                    hm.remember_foreground();
                 }
             }
             let app = app.clone();
@@ -311,10 +310,18 @@ fn toggle_tray_pause(
 // visible WebView; keep both languages and restart semantics aligned.
 fn pause_persistence_warning(paused: bool, chinese: bool) -> &'static str {
     match (paused, chinese) {
-        (true, true) => "本次运行已暂停剪贴板记录，但无法保存此状态。重启后可能恢复记录。请修复配置目录的写入权限，并在重启前确认暂停状态已保存。",
-        (false, true) => "本次运行已恢复剪贴板记录，但无法保存此状态。重启后可能仍处于暂停状态。请检查配置目录的写入权限。",
-        (true, false) => "Clipboard recording is paused for this session, but the pause could not be saved. Recording may resume after a restart. Check write access to the configuration directory and make sure the pause is saved before restarting.",
-        (false, false) => "Clipboard recording has resumed for this session, but the change could not be saved. Recording may be paused again after a restart. Check write access to the configuration directory.",
+        (true, true) => {
+            "本次运行已暂停剪贴板记录，但无法保存此状态。重启后可能恢复记录。请修复配置目录的写入权限，并在重启前确认暂停状态已保存。"
+        }
+        (false, true) => {
+            "本次运行已恢复剪贴板记录，但无法保存此状态。重启后可能仍处于暂停状态。请检查配置目录的写入权限。"
+        }
+        (true, false) => {
+            "Clipboard recording is paused for this session, but the pause could not be saved. Recording may resume after a restart. Check write access to the configuration directory and make sure the pause is saved before restarting."
+        }
+        (false, false) => {
+            "Clipboard recording has resumed for this session, but the change could not be saved. Recording may be paused again after a restart. Check write access to the configuration directory."
+        }
     }
 }
 
@@ -437,10 +444,10 @@ fn tray_refresh_now<R: Runtime>(app: &AppHandle<R>) {
         app.run_on_main_thread(
             move || match SystemTray::build_menu(&app_for_task, &entries) {
                 Ok(menu) => {
-                    if let Some(tray) = app_for_task.tray_by_id("main-tray") {
-                        if let Err(error) = tray.set_menu(Some(menu)) {
-                            crate::log_error!("[tray] failed to refresh recent menu: {error}");
-                        }
+                    if let Some(tray) = app_for_task.tray_by_id("main-tray")
+                        && let Err(error) = tray.set_menu(Some(menu))
+                    {
+                        crate::log_error!("[tray] failed to refresh recent menu: {error}");
                     }
                 }
                 Err(error) => crate::log_error!("[tray] failed to rebuild menu: {error}"),
@@ -524,10 +531,9 @@ fn tray_copy_item<R: Runtime>(app: &AppHandle<R>, item_id: &str) {
         {
             if let (Some(guard), Some(registration)) =
                 (app.try_state::<SelfTriggerState>(), registration)
+                && let Ok(mut guard) = guard.0.lock()
             {
-                if let Ok(mut guard) = guard.0.lock() {
-                    guard.cancel_registration(&registration);
-                }
+                guard.cancel_registration(&registration);
             }
             return Err(format!("failed to write clipboard: {error}"));
         }

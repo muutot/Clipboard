@@ -139,9 +139,11 @@ fn persists_failure_and_allows_a_manual_retry() {
     database.enqueue_ocr("image").unwrap();
     database.claim_next_ocr().unwrap().unwrap();
 
-    assert!(database
-        .mark_ocr_failed("image", "decoder unavailable")
-        .unwrap());
+    assert!(
+        database
+            .mark_ocr_failed("image", "decoder unavailable")
+            .unwrap()
+    );
     let failed = database.get_ocr_result("image").unwrap().unwrap();
     assert_eq!(failed.status, OcrStatus::Failed);
     assert_eq!(failed.error_message.as_deref(), Some("decoder unavailable"));
@@ -187,24 +189,32 @@ fn regenerates_an_image_and_invalidates_same_hash_results() {
     assert!(first.created_at_ms <= second.created_at_ms);
 
     let regeneration_events = database.read_search_outbox(100).unwrap();
-    assert!(regeneration_events
-        .iter()
-        .any(|event| event.item_id == "first"));
-    assert!(regeneration_events
-        .iter()
-        .any(|event| event.item_id == "second"));
-    assert!(!database
-        .get_search_document("first")
-        .unwrap()
-        .unwrap()
-        .content
-        .contains("鑴哥毊鎸鸿剰"));
-    assert!(!database
-        .get_search_document("second")
-        .unwrap()
-        .unwrap()
-        .content
-        .contains("鑴哥毊鎸鸿剰"));
+    assert!(
+        regeneration_events
+            .iter()
+            .any(|event| event.item_id == "first")
+    );
+    assert!(
+        regeneration_events
+            .iter()
+            .any(|event| event.item_id == "second")
+    );
+    assert!(
+        !database
+            .get_search_document("first")
+            .unwrap()
+            .unwrap()
+            .content
+            .contains("鑴哥毊鎸鸿剰")
+    );
+    assert!(
+        !database
+            .get_search_document("second")
+            .unwrap()
+            .unwrap()
+            .content
+            .contains("鑴哥毊鎸鸿剰")
+    );
 }
 
 #[test]
@@ -259,9 +269,11 @@ fn failed_transition_is_a_noop_for_pending_and_completed_tasks() {
         .save_item(&image_item("pending", "pending-hash"))
         .unwrap();
     database.enqueue_ocr("pending").unwrap();
-    assert!(!database
-        .mark_ocr_failed("pending", "should not claim")
-        .unwrap());
+    assert!(
+        !database
+            .mark_ocr_failed("pending", "should not claim")
+            .unwrap()
+    );
     assert_eq!(
         database.get_ocr_result("pending").unwrap().unwrap().status,
         OcrStatus::Pending
@@ -272,9 +284,11 @@ fn failed_transition_is_a_noop_for_pending_and_completed_tasks() {
         .unwrap();
     let completed = completed_result("completed", "completed-hash");
     database.save_ocr_result(&completed).unwrap();
-    assert!(!database
-        .mark_ocr_failed("completed", "should not overwrite")
-        .unwrap());
+    assert!(
+        !database
+            .mark_ocr_failed("completed", "should not overwrite")
+            .unwrap()
+    );
     assert_eq!(
         database
             .get_ocr_result("completed")

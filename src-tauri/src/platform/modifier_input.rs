@@ -9,13 +9,13 @@ pub struct ModifierInput;
 impl ModifierInput {
     pub fn open() -> Option<Self> {
         #[link(name = "ApplicationServices", kind = "framework")]
-        extern "C" {
+        unsafe extern "C" {
             fn CGPreflightListenEventAccess() -> bool;
         }
         unsafe { CGPreflightListenEventAccess().then_some(Self) }
     }
     pub fn pressed(&mut self) -> Option<Vec<Option<Modifier>>> {
-        extern "C" {
+        unsafe extern "C" {
             fn CGEventSourceKeyState(state: i32, key: u16) -> bool;
         }
         Some(

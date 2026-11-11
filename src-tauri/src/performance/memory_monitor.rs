@@ -35,10 +35,10 @@ impl MemoryMonitor {
 
     pub fn record_snapshot(&self) {
         let current = self.current_usage_bytes();
-        if let Ok(mut peak) = self.peak_bytes.lock() {
-            if current > *peak {
-                *peak = current;
-            }
+        if let Ok(mut peak) = self.peak_bytes.lock()
+            && current > *peak
+        {
+            *peak = current;
         }
         if let Ok(mut count) = self.snapshot_count.lock() {
             *count += 1;
