@@ -42,6 +42,11 @@ impl QuickPasteTarget {
             return;
         }
         if let Ok(mut target) = self.target.lock() {
+            crate::dbg_log(&format!(
+                "quick_paste_target: remembered 0x{:X} pid={}",
+                window_handle,
+                window_process_id(window_handle)
+            ));
             *target = Some(QuickPasteHandle {
                 window_handle,
                 process_id: window_process_id(window_handle),
@@ -50,7 +55,12 @@ impl QuickPasteTarget {
     }
 
     pub(super) fn take(&self) -> Option<QuickPasteHandle> {
-        self.target.lock().ok().and_then(|mut target| target.take())
+        let taken = self.target.lock().ok().and_then(|mut target| target.take());
+        crate::dbg_log(&match taken {
+            Some(handle) => format!("quick_paste_target: taken 0x{handle:X}"),
+            None => "quick_paste_target: taken none".to_owned(),
+        });
+        taken
     }
 
     pub(super) fn clear(&self) {

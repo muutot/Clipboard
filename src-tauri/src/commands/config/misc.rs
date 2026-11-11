@@ -504,6 +504,9 @@ pub async fn paste_to_previous_application(
     let main_window = app.get_webview_window("main");
     if let Some(window) = &main_window {
         if let Err(error) = platform::hide_main_window(window) {
+            crate::dbg_log(&format!(
+                "paste_to_previous_application: hide window error={error}"
+            ));
             if let Some(token) = &batch_token {
                 super::paste_batch::finish(token, false);
             }
@@ -522,6 +525,7 @@ pub async fn paste_to_previous_application(
             .as_deref()
             .is_some_and(|token| !super::paste_batch::active(token))
         {
+            crate::dbg_log("paste_to_previous_application: batch cancelled before injection");
             return Err("paste batch was cancelled".into());
         }
         if let Err(error) = platform::windows::hotkey::restore_window_and_paste(target) {

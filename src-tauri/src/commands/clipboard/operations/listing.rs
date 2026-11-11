@@ -275,7 +275,19 @@ pub fn read_clipboard_text() -> Option<String> {
 /// delivery already hid the window.
 #[tauri::command]
 pub fn write_clipboard_text(text: String) -> Result<(), String> {
-    crate::platform::platform().write_clipboard_text_with_self_trigger(&text)
+    let result = crate::platform::platform().write_clipboard_text_with_self_trigger(&text);
+    // Bulk paste stages every item here before the delivery call, so a wrong
+    // or missing payload at the target means this write, not the injection.
+    // The leading snippet identifies which record actually landed on the
+    // clipboard without dumping whole histories into the log.
+    let snippet: String = text.chars().take(48).collect();
+    crate::dbg_log(&format!(
+        "write_clipboard_text: len={} result={:?} head={:?}",
+        text.chars().count(),
+        result.as_ref().map(|_| "ok"),
+        snippet,
+    ));
+    result
 }
 
 #[cfg(test)]

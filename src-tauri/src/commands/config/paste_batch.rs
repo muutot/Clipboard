@@ -57,6 +57,22 @@ fn focused(target: Target, first: bool) -> bool {
         || (first && crate::platform::quick_paste::current().is_none())
 }
 
+#[cfg(target_os = "windows")]
+/// The window that actually owns the foreground right now, for diagnostics
+/// only: a lease failure reads very differently when the foreground is the
+/// panel itself versus some unrelated application that stole focus.
+fn current_foreground_handle() -> isize {
+    extern "system" {
+        fn GetForegroundWindow() -> isize;
+    }
+    unsafe { GetForegroundWindow() }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn current_foreground_handle() -> isize {
+    0
+}
+
 #[tauri::command]
 pub fn begin_paste_batch(
     hotkey_manager: tauri::State<'_, Mutex<HotkeyManager>>,
@@ -66,12 +82,14 @@ pub fn begin_paste_batch(
         .map_err(|_| "paste batch lock is poisoned".to_owned())?;
     let now = Instant::now();
     if slot.as_ref().is_some_and(|batch| !batch.expired(now)) {
+        crate::dbg_log("begin_paste_batch: rejected (another batch is active)");
         return Err("another paste batch is active".into());
     }
     *slot = None;
     let Some(target) =
         lock_state(&hotkey_manager, "hotkey manager lock is poisoned")?.take_quick_paste_target()
     else {
+        crate::dbg_log("begin_paste_batch: no remembered target");
         return Ok(None);
     };
     #[cfg(target_os = "windows")]
@@ -79,6 +97,10 @@ pub fn begin_paste_batch(
         || target.process_id == 0
         || target.process_id == std::process::id()
     {
+        crate::dbg_log(&format!(
+            "begin_paste_batch: invalid target handle=0x{:X} pid={}",
+            target.window_handle, target.process_id
+        ));
         return Ok(None);
     }
     #[cfg(not(target_os = "windows"))]
@@ -86,6 +108,20 @@ pub fn begin_paste_batch(
         return Ok(None);
     }
     let token = uuid::Uuid::new_v4().to_string();
+    #[cfg(target_os = "windows")]
+    crate::dbg_log(&format!(
+        "begin_paste_batch: OK token={} target=0x{:X} pid={}",
+        &token[..8],
+        target.window_handle,
+        target.process_id
+    ));
+    #[cfg(not(target_os = "windows"))]
+    crate::dbg_log(&format!(
+        "begin_paste_batch: OK token={} target=0x{:X} pid={}",
+        &token[..8],
+        target.handle,
+        target.pid
+    ));
     *slot = Some(Batch {
         token: token.clone(),
         target,
@@ -102,12 +138,21 @@ pub fn validate_paste_batch(token: String) -> Result<(), String> {
     let slot = BATCH
         .lock()
         .map_err(|_| "paste batch lock is poisoned".to_owned())?;
-    let batch = slot.as_ref().ok_or("paste batch is no longer active")?;
-    batch.validate(
-        &token,
-        Instant::now(),
-        focused(batch.target, !batch.started),
-    )
+    let result = match slot.as_ref() {
+        None => Err("paste batch is no longer active".to_owned()),
+        Some(batch) => batch.validate(
+            &token,
+            Instant::now(),
+            focused(batch.target, !batch.started),
+        ),
+    };
+    if let Err(error) = &result {
+        crate::dbg_log(&format!(
+            "validate_paste_batch: token={} error={error}",
+            &token[..token.len().min(8)]
+        ));
+    }
+    result
 }
 
 #[tauri::command]
@@ -126,7 +171,16 @@ pub(super) fn acquire(token: &str) -> Result<Target, String> {
         .lock()
         .map_err(|_| "paste batch lock is poisoned".to_owned())?;
     let batch = slot.as_mut().ok_or("paste batch is no longer active")?;
-    batch.validate(token, Instant::now(), focused(batch.target, !batch.started))?;
+    let focus = focused(batch.target, !batch.started);
+    let result = batch.validate(token, Instant::now(), focus);
+    if let Err(error) = &result {
+        crate::dbg_log(&format!(
+            "acquire: token={} error={error} foreground=0x{:X}",
+            &token[..token.len().min(8)],
+            current_foreground_handle()
+        ));
+    }
+    result?;
     batch.busy = true;
     batch.touched = Instant::now();
     Ok(batch.target)

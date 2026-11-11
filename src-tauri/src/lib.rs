@@ -16,7 +16,11 @@ pub fn dbg_log(msg: &str) {
             .append(true)
             .open(&path)
         {
-            let _ = writeln!(f, "{}", msg);
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis())
+                .unwrap_or(0);
+            let _ = writeln!(f, "[{now}] {msg}");
         }
     }
 }

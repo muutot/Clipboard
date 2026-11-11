@@ -727,7 +727,11 @@ async function pasteToPreviousApp(
   if (hooks.batchToken) {
     try {
       await invokeTauri<void>("validate_paste_batch", { token: hooks.batchToken });
-    } catch {
+    } catch (error) {
+      // A rejected lease aborts the whole bulk run; without a trace here the
+      // user only sees a generic failure toast while the real reason (expired
+      // lease, lost focus, dead target) stays in the backend log.
+      console.error("Paste batch validation failed", error);
       return "failed";
     }
   }
@@ -921,6 +925,9 @@ export async function pasteClipboardItem(
       hooks,
     );
   }
+  // Every paste branch must leave a trace: a silent "failed" here would make
+  // bulk runs abort with no diagnosable reason at all.
+  console.error("Unsupported clipboard item kind for paste", item.kind);
   return "failed";
 }
 
