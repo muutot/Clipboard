@@ -35,6 +35,10 @@ afterEach(() => {
 });
 const stamps = () =>
   bridge.invoke.mock.calls.filter(([command]) => command === "set_clipboard_item_last_used");
+const staged = () =>
+  bridge.invoke.mock.calls
+    .filter(([command]) => command === "write_clipboard_text")
+    .map(([, args]) => (args as { text?: string } | undefined)?.text);
 
 describe("successful usage recording", () => {
   it.each(["copy", "paste"])(
@@ -58,8 +62,8 @@ describe("successful usage recording", () => {
       if (action === "copy") {
         expect(bridge.invoke).toHaveBeenCalledWith("copy_clipboard_item", { id: item.id });
         expect(bridge.invoke).not.toHaveBeenCalledWith("get_clipboard_item", expect.anything());
-        expect(bridge.write).not.toHaveBeenCalled();
-      } else expect(bridge.write).toHaveBeenCalledWith(full);
+        expect(staged()).toEqual([]);
+      } else expect(staged()).toEqual([full]);
     },
   );
   it("coalesces concurrent hydration and does not retain stale bodies after it completes", async () => {
@@ -83,7 +87,7 @@ describe("successful usage recording", () => {
   it("never copies a truncated preview if the native record lookup fails", async () => {
     bridge.invoke.mockRejectedValue(new Error("unavailable"));
     await copyClipboardItem({ ...item, contentLoaded: false });
-    expect(bridge.write).not.toHaveBeenCalled();
+    expect(staged()).toEqual([]);
     expect(stamps()).toHaveLength(0);
     expect(bridge.toast).toHaveBeenCalledWith(expect.any(String), "error");
   });
@@ -110,9 +114,9 @@ describe("successful usage recording", () => {
   });
 
   it.each(["copy", "paste"])("does not stamp or move after a failed %s write", async (action) => {
-    bridge.write.mockRejectedValue(new Error("busy clipboard"));
     bridge.invoke.mockImplementation(async (command) => {
-      if (command === "copy_clipboard_item") throw new Error("busy clipboard");
+      if (command === "copy_clipboard_item" || command === "write_clipboard_text")
+        throw new Error("busy clipboard");
       return true;
     });
     const moveToTop = vi.fn();

@@ -43,9 +43,13 @@ const item = (id: string): ClipboardItem => ({
 beforeEach(() => {
   bridge.invoke
     .mockReset()
-    .mockImplementation(async (command: string) =>
-      command === "begin_paste_batch" ? "batch" : true,
-    );
+    .mockImplementation(async (command: string, args?: { text?: string }) => {
+      if (command === "write_clipboard_text") {
+        bridge.staged = args?.text ?? "";
+        return;
+      }
+      return command === "begin_paste_batch" ? "batch" : true;
+    });
   bridge.write.mockReset().mockImplementation(async (text: string) => {
     bridge.staged = text;
   });
@@ -71,11 +75,13 @@ afterEach(async () => {
 it.each(["write-error", "target-error", "target-unavailable"])(
   "keeps an undelivered row selected with the real paste service (%s)",
   async (failure) => {
-    bridge.write.mockImplementation(async (text: string) => {
-      if (text === "a" && failure === "write-error") throw new Error("fixture busy clipboard");
-      bridge.staged = text;
-    });
-    bridge.invoke.mockImplementation(async (command: string) => {
+    bridge.invoke.mockImplementation(async (command: string, args?: { text?: string }) => {
+      if (command === "write_clipboard_text") {
+        if (args?.text === "a" && failure === "write-error")
+          throw new Error("fixture busy clipboard");
+        bridge.staged = args?.text ?? "";
+        return;
+      }
       if (command === "paste_to_previous_application" && bridge.staged === "a") {
         if (failure === "target-error") throw new Error("fixture denied target");
         if (failure === "target-unavailable") return false;
@@ -87,7 +93,11 @@ it.each(["write-error", "target-error", "target-unavailable"])(
     expect([...out.bulk!.selectedIds]).toEqual(["a", "b"]);
     expect(bridge.toast).not.toHaveBeenCalledWith("toast.bulkPasteSuccess", "success");
     expect(bridge.toast).toHaveBeenCalledWith("toast.pasteFailed", "error");
-    expect(bridge.write.mock.calls.map(([text]) => text)).toEqual(["a"]);
+    expect(
+      bridge.invoke.mock.calls
+        .filter(([command]) => command === "write_clipboard_text")
+        .map(([, args]) => (args as { text?: string } | undefined)?.text),
+    ).toEqual(["a"]);
   },
 );
 it("clears delivered rows and reports success with the real paste service", async () => {
@@ -104,7 +114,11 @@ it("takes the previous target once and delivers three rows through one lease", a
   let active: string | null = null;
   const delivered: string[] = [];
   bridge.invoke.mockImplementation(
-    async (command: string, args?: { batchToken?: string; token?: string }) => {
+    async (command: string, args?: { batchToken?: string; token?: string; text?: string }) => {
+      if (command === "write_clipboard_text") {
+        bridge.staged = args?.text ?? "";
+        return;
+      }
       if (command === "begin_paste_batch") {
         active = remembered;
         remembered = null;
@@ -137,7 +151,11 @@ it("stops before overwriting the clipboard after batch focus is lost", async () 
   out.store!.current = appendItems(out.store!.current, [item("c")], "history");
   out.bulk!.selectedIds = new Set(["a", "b", "c"]);
   let delivered = 0;
-  bridge.invoke.mockImplementation(async (command: string) => {
+  bridge.invoke.mockImplementation(async (command: string, args?: { text?: string }) => {
+    if (command === "write_clipboard_text") {
+      bridge.staged = args?.text ?? "";
+      return;
+    }
     if (command === "begin_paste_batch") return "lease";
     if (command === "validate_paste_batch" && delivered) throw Error("focus lost");
     if (command === "paste_to_previous_application") {
@@ -147,7 +165,11 @@ it("stops before overwriting the clipboard after batch focus is lost", async () 
     return true;
   });
   await out.bulk!.bulkPasteAll();
-  expect(bridge.write.mock.calls.map(([text]) => text)).toEqual(["a"]);
+  expect(
+    bridge.invoke.mock.calls
+      .filter(([command]) => command === "write_clipboard_text")
+      .map(([, args]) => (args as { text?: string } | undefined)?.text),
+  ).toEqual(["a"]);
   expect([...out.bulk!.selectedIds]).toEqual(["b", "c"]);
   expect(bridge.invoke).toHaveBeenCalledWith("end_paste_batch", { token: "lease" });
 });
@@ -158,6 +180,8 @@ it("keeps all rows and does not write when no previous target can be leased", as
     command === "begin_paste_batch" ? null : true,
   );
   await out.bulk!.bulkPasteAll();
-  expect(bridge.write).not.toHaveBeenCalled();
+  expect(
+    bridge.invoke.mock.calls.filter(([command]) => command === "write_clipboard_text"),
+  ).toHaveLength(0);
   expect([...out.bulk!.selectedIds]).toEqual(["a", "b"]);
 });
