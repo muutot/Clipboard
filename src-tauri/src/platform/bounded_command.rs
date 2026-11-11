@@ -87,74 +87,87 @@ pub trait BoundedCommandExt {
 }
 impl BoundedCommandExt for Command {
     fn bounded_output(&mut self, max_bytes: usize) -> io::Result<Output> {
-        if capture_aborted() {
-            return Err(io::Error::other("capture cancelled or expired"));
+        bounded_output_within(self, max_bytes, Duration::from_millis(600))
+    }
+}
+
+/// Shared implementation behind `bounded_output`. The deadline is a parameter
+/// only so the test suite can absorb test-fixture startup cost; every
+/// production caller goes through `bounded_output` and keeps the 600 ms
+/// product budget.
+fn bounded_output_within(
+    command: &mut Command,
+    max_bytes: usize,
+    budget: Duration,
+) -> io::Result<Output> {
+    if capture_aborted() {
+        return Err(io::Error::other("capture cancelled or expired"));
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        command.process_group(0);
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+    let deadline = Instant::now() + budget;
+    let mut child = RunningChild(
+        command
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()?,
+    );
+    let mut stdout = child
+        .0
+        .stdout
+        .take()
+        .ok_or_else(|| io::Error::other("missing stdout"))?;
+    configure_pipe(&stdout)?;
+    let mut bytes = Vec::new();
+    let mut buffer = [0u8; 32 * 1024];
+    let mut eof = false;
+    loop {
+        if capture_aborted() || Instant::now() >= deadline {
+            fail_capture();
+            return Err(io::Error::new(
+                io::ErrorKind::TimedOut,
+                "helper cancelled or timed out",
+            ));
         }
-        #[cfg(unix)]
-        {
-            use std::os::unix::process::CommandExt;
-            self.process_group(0);
-        }
-        #[cfg(windows)]
-        {
-            use std::os::windows::process::CommandExt;
-            self.creation_flags(0x08000000); // CREATE_NO_WINDOW
-        }
-        let deadline = Instant::now() + Duration::from_millis(600);
-        let mut child = RunningChild(
-            self.stdin(Stdio::null())
-                .stdout(Stdio::piped())
-                .stderr(Stdio::null())
-                .spawn()?,
-        );
-        let mut stdout = child
-            .0
-            .stdout
-            .take()
-            .ok_or_else(|| io::Error::other("missing stdout"))?;
-        configure_pipe(&stdout)?;
-        let mut bytes = Vec::new();
-        let mut buffer = [0u8; 32 * 1024];
-        let mut eof = false;
-        loop {
-            if capture_aborted() || Instant::now() >= deadline {
-                fail_capture();
-                return Err(io::Error::new(
-                    io::ErrorKind::TimedOut,
-                    "helper cancelled or timed out",
-                ));
-            }
-            if !eof {
-                let available = buffer
-                    .len()
-                    .min(max_bytes.saturating_sub(bytes.len()).saturating_add(1));
-                match read_available(&mut stdout, &mut buffer[..available]) {
-                    Ok(0) => eof = true,
-                    Ok(count) => {
-                        if count > max_bytes.saturating_sub(bytes.len()) {
-                            fail_capture();
-                            return Err(io::Error::other("helper output exceeds limit"));
-                        }
-                        bytes.extend_from_slice(&buffer[..count]);
-                        continue;
+        if !eof {
+            let available = buffer
+                .len()
+                .min(max_bytes.saturating_sub(bytes.len()).saturating_add(1));
+            match read_available(&mut stdout, &mut buffer[..available]) {
+                Ok(0) => eof = true,
+                Ok(count) => {
+                    if count > max_bytes.saturating_sub(bytes.len()) {
+                        fail_capture();
+                        return Err(io::Error::other("helper output exceeds limit"));
                     }
-                    Err(error)
-                        if matches!(
-                            error.kind(),
-                            io::ErrorKind::WouldBlock | io::ErrorKind::Interrupted
-                        ) => {}
-                    Err(error) => return Err(error),
+                    bytes.extend_from_slice(&buffer[..count]);
+                    continue;
                 }
+                Err(error)
+                    if matches!(
+                        error.kind(),
+                        io::ErrorKind::WouldBlock | io::ErrorKind::Interrupted
+                    ) => {}
+                Err(error) => return Err(error),
             }
-            if eof && let Some(status) = child.0.try_wait()? {
-                return Ok(Output {
-                    status,
-                    stdout: bytes,
-                    stderr: Vec::new(),
-                });
-            }
-            std::thread::sleep(Duration::from_millis(5));
         }
+        if eof && let Some(status) = child.0.try_wait()? {
+            return Ok(Output {
+                status,
+                stdout: bytes,
+                stderr: Vec::new(),
+            });
+        }
+        std::thread::sleep(Duration::from_millis(5));
     }
 }
 
@@ -296,7 +309,15 @@ mod tests {
 
     #[test]
     fn output_success_overflow_timeout_and_stop_are_bounded() {
-        let result = fixture("normal").bounded_output(4096).unwrap();
+        // The fixture re-launches the whole test binary, so its startup cost
+        // scales with suite load and may exceed the 600 ms production budget
+        // before any output exists (observed twice under the full suite while
+        // 40 standalone runs passed). The success path only proves pipe
+        // plumbing, so it gets a wide deadline; the budget guarantees
+        // themselves are asserted by the stall cases below, which keep the
+        // real 600 ms budget.
+        let result = bounded_output_within(&mut fixture("normal"), 4096, Duration::from_secs(5))
+            .expect("normal fixture should succeed within the test deadline");
         assert!(result.status.success());
         assert!(
             String::from_utf8(result.stdout)
