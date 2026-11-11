@@ -37,13 +37,6 @@ afterEach(() => {
 
 const writers = [
   {
-    kind: "html",
-    run: () => writeClipboardHtml("<b>same</b>", "same"),
-    native: () => bridge.write,
-    mark: "mark_self_triggered",
-    unmark: "unmark_self_triggered",
-  },
-  {
     kind: "image",
     run: () =>
       writeClipboardImage(new Blob(["same"], { type: "image/png" }), "image.png", "same-hash"),
@@ -122,4 +115,28 @@ it("keeps the browser text fallback on the navigator clipboard", async () => {
   await writeClipboardText("same");
   expect(bridge.invoke).not.toHaveBeenCalled();
   expect(bridge.writeText).toHaveBeenCalledWith("same");
+});
+
+it("routes desktop html writes through the backend self-trigger writer", async () => {
+  bridge.invoke.mockResolvedValueOnce(undefined);
+  await writeClipboardHtml("<b>same</b>", "same", "{\\rtf1\\ansi same}");
+  expect(bridge.invoke).toHaveBeenCalledWith("write_clipboard_html", {
+    html: "<b>same</b>",
+    plainText: "same",
+    rtf: "{\\rtf1\\ansi same}",
+  });
+  expect(bridge.write).not.toHaveBeenCalled();
+});
+
+it("propagates backend html write errors", async () => {
+  const failure = new Error("clipboard refusal");
+  bridge.invoke.mockRejectedValueOnce(failure);
+  await expect(writeClipboardHtml("<b>same</b>", "same")).rejects.toBe(failure);
+});
+
+it("keeps the browser html fallback on the navigator clipboard", async () => {
+  Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
+  await writeClipboardHtml("<b>same</b>", "same");
+  expect(bridge.invoke).not.toHaveBeenCalled();
+  expect(bridge.write).toHaveBeenCalledTimes(1);
 });

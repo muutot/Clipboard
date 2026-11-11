@@ -42,6 +42,18 @@ pub trait PlatformClipboard {
     fn write_clipboard_files_with_self_trigger(&self, paths: &[String]) -> Result<(), String> {
         self.write_clipboard_text_with_self_trigger(&paths.join("\n"))
     }
+    /// Writes a rich-text payload (CF_HTML + plain text + optional RTF on
+    /// Windows) with the same self-trigger marker as the text writer, so a
+    /// hidden WebView can stage format pastes. Unsupported platforms return
+    /// an error and the frontend keeps its `navigator.clipboard.write` path.
+    fn write_clipboard_html_with_self_trigger(
+        &self,
+        _html: &str,
+        _plain_text: Option<&str>,
+        _rtf: Option<&str>,
+    ) -> Result<(), String> {
+        Err("clipboard HTML writing is not supported on this platform".to_owned())
+    }
     fn extract_app_icon(&self, icon_dir: &Path, app_name: &str, exe_path: &str) -> Option<String>;
 
     /// Reads the optional HTML fragment used for paste-by-format.

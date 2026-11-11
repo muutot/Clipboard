@@ -139,16 +139,20 @@ export async function writeClipboardHtml(
   plainText?: string | null,
   rtf?: string | null,
 ): Promise<void> {
-  const shouldMark = isTauriRuntime() && Boolean(plainText);
-  let registrations: string[] = [];
-  if (shouldMark) {
-    try {
-      registrations = await invoke<string[]>("mark_self_triggered", { text: plainText });
-    } catch (error) {
-      console.warn("Unable to register HTML self-trigger", error);
-    }
+  if (isTauriRuntime()) {
+    // Same reason as writeClipboardText: WebView2 rejects
+    // navigator.clipboard.write with NotAllowedError once the window is
+    // hidden, and bulk paste stages each item after the previous delivery
+    // already hid the window. The backend writer attaches the native
+    // self-trigger marker from the plain text itself, so the hash-receipt
+    // mark/unmark round-trips are not needed on this path.
+    await invokeTauriRequired<void>(
+      "write_clipboard_html",
+      { html, plainText: plainText ?? null, rtf: rtf ?? null },
+      "Clipboard writes require the desktop backend",
+    );
+    return;
   }
-
   const payload: Record<string, Blob> = {
     "text/html": new Blob([html], { type: "text/html" }),
   };
@@ -158,18 +162,7 @@ export async function writeClipboardHtml(
   if (rtf) {
     payload["text/rtf"] = new Blob([rtf], { type: "text/rtf" });
   }
-  try {
-    await navigator.clipboard.write([new ClipboardItem(payload)]);
-  } catch (error) {
-    if (registrations.length > 0) {
-      try {
-        await invoke("unmark_self_triggered", { registrations });
-      } catch (unmarkError) {
-        console.warn("Unable to clear HTML self-trigger", unmarkError);
-      }
-    }
-    throw error;
-  }
+  await navigator.clipboard.write([new ClipboardItem(payload)]);
 }
 
 export async function loadClipboardHistory(

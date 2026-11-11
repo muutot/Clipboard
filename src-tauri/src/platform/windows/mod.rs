@@ -51,6 +51,15 @@ impl crate::platform::PlatformClipboard for WindowsPlatform {
         write_clipboard_text_with_self_trigger(text)
     }
 
+    fn write_clipboard_html_with_self_trigger(
+        &self,
+        html: &str,
+        plain_text: Option<&str>,
+        rtf: Option<&str>,
+    ) -> Result<(), String> {
+        write_clipboard_html_with_self_trigger(html, plain_text, rtf)
+    }
+
     fn write_clipboard_files_with_self_trigger(&self, paths: &[String]) -> Result<(), String> {
         write_clipboard_files_with_self_trigger(paths)
     }
@@ -162,7 +171,10 @@ pub use monitor::{ClipboardChange, ClipboardMonitor, WindowsClipboardMonitor};
 pub use read_text::read_clipboard_text;
 pub use register::{register_global_hotkey, unregister_global_hotkey};
 pub use rtf::read_clipboard_rtf;
-pub use write::{write_clipboard_files_with_self_trigger, write_clipboard_text_with_self_trigger};
+pub use write::{
+    write_clipboard_files_with_self_trigger, write_clipboard_html_with_self_trigger,
+    write_clipboard_text_with_self_trigger,
+};
 
 use access::*;
 use bitmap::*;

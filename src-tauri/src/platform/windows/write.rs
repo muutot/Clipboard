@@ -79,6 +79,150 @@ pub fn write_clipboard_text_with_self_trigger(_text: &str) -> Result<(), String>
     Err("Windows clipboard text writing is not supported on this platform".to_owned())
 }
 
+/// Writes a rich-text payload: CF_HTML (primary), the plain text form as
+/// CF_UNICODETEXT and the optional RTF form, plus the private hash marker
+/// derived from the plain text. WebView2 rejects `navigator.clipboard.write`
+/// once the window is hidden, and bulk paste stages every item after the
+/// previous delivery already hid the window, so format writes must go
+/// through the backend like the text writer above.
+#[cfg(target_os = "windows")]
+pub fn write_clipboard_html_with_self_trigger(
+    html: &str,
+    plain_text: Option<&str>,
+    rtf: Option<&str>,
+) -> Result<(), String> {
+    use super::html::{build_cf_html_payload, html_format_id};
+    use super::rtf::rtf_format_id;
+    use std::ffi::OsStr;
+    use std::os::windows::ffi::OsStrExt;
+
+    let plain_text = plain_text.filter(|text| !text.is_empty());
+    let rtf = rtf.filter(|payload| !payload.is_empty());
+    let payload = build_cf_html_payload(html)?;
+    if payload.len() > MAX_NATIVE_TEXT_BYTES {
+        return Err("clipboard HTML payload is too large".to_owned());
+    }
+    // The marker mirrors the plain-text writer: the monitor re-reads the
+    // staged clipboard through the text form, so the hash must cover exactly
+    // that text. Without a plain text form there is nothing to mark, the
+    // same as the frontend hash flow before this writer existed.
+    let marker = plain_text.map(self_trigger_marker_for_text);
+
+    // Resolve the registered formats before touching the clipboard: a
+    // registration failure must not arrive after EmptyClipboard wiped the
+    // user's previous contents.
+    let html_format = html_format_id()
+        .ok_or_else(|| "failed to register the HTML clipboard format".to_owned())?;
+    let rtf_format = rtf.and_then(|payload| rtf_format_id().map(|format| (payload, format)));
+
+    // Allocate and fill every buffer before touching the clipboard: once
+    // EmptyClipboard succeeds the user's previous contents are gone, so the
+    // CF_HTML allocation failure must not be reachable after that point.
+    // The text/RTF/marker forms stay best-effort and may fail harmlessly
+    // later, like the file writer below.
+    let html_memory = allocate_global_bytes(&payload)?;
+    let wide_text = plain_text.map(|text| {
+        OsStr::new(text)
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect::<Vec<_>>()
+    });
+    let text_memory = wide_text.as_ref().and_then(|wide| {
+        wide.len()
+            .checked_mul(std::mem::size_of::<u16>())
+            .and_then(|wide_byte_len| {
+                allocate_global_bytes(unsafe {
+                    std::slice::from_raw_parts(wide.as_ptr().cast::<u8>(), wide_byte_len)
+                })
+                .ok()
+            })
+    });
+    let rtf_memory = rtf_format
+        .as_ref()
+        .and_then(|(payload, _)| allocate_global_bytes(payload.as_bytes()).ok());
+    // Lazy on purpose, like the sites above: the cleanup paths only free the
+    // marker buffer when this is `Some`, so an eager allocation would leak it
+    // whenever no self-trigger format is registered.
+    let marker_memory = match (self_trigger_format_id(), marker.as_ref()) {
+        (Some(format), Some(marker)) => allocate_global_bytes(marker)
+            .ok()
+            .map(|memory| (format, memory)),
+        _ => None,
+    };
+
+    unsafe {
+        if !open_clipboard_with_retry() {
+            GlobalFree(html_memory);
+            if let Some(memory) = text_memory {
+                GlobalFree(memory);
+            }
+            if let Some(memory) = rtf_memory {
+                GlobalFree(memory);
+            }
+            if let Some((_, memory)) = marker_memory {
+                GlobalFree(memory);
+            }
+            return Err("failed to open the system clipboard".to_owned());
+        }
+        let _clipboard_guard = ClipboardGuard;
+
+        if EmptyClipboard() == 0 {
+            GlobalFree(html_memory);
+            if let Some(memory) = text_memory {
+                GlobalFree(memory);
+            }
+            if let Some(memory) = rtf_memory {
+                GlobalFree(memory);
+            }
+            if let Some((_, memory)) = marker_memory {
+                GlobalFree(memory);
+            }
+            return Err("failed to clear the system clipboard".to_owned());
+        }
+
+        if SetClipboardData(html_format, html_memory) == 0 {
+            GlobalFree(html_memory);
+            if let Some(memory) = text_memory {
+                GlobalFree(memory);
+            }
+            if let Some(memory) = rtf_memory {
+                GlobalFree(memory);
+            }
+            if let Some((_, memory)) = marker_memory {
+                GlobalFree(memory);
+            }
+            return Err("failed to write HTML to the system clipboard".to_owned());
+        }
+
+        if let Some(memory) = text_memory {
+            if SetClipboardData(CF_UNICODETEXT, memory) == 0 {
+                GlobalFree(memory);
+            }
+        }
+        if let (Some(memory), Some((_, format))) = (rtf_memory, rtf_format.as_ref()) {
+            if SetClipboardData(*format, memory) == 0 {
+                GlobalFree(memory);
+            }
+        }
+        if let Some((format, memory)) = marker_memory {
+            if SetClipboardData(format, memory) == 0 {
+                GlobalFree(memory);
+            }
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn write_clipboard_html_with_self_trigger(
+    _html: &str,
+    _plain_text: Option<&str>,
+    _rtf: Option<&str>,
+) -> Result<(), String> {
+    Err("Windows clipboard HTML writing is not supported on this platform".to_owned())
+}
+
 /// Builds a `CF_HDROP` payload: a DROPFILES header (`pFiles`/`pt`/`fNC`/
 /// `fWide`) followed by a double-NUL-terminated list of UTF-16LE paths.
 #[cfg(target_os = "windows")]

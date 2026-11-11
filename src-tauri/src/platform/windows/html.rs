@@ -1,9 +1,20 @@
-//! CF_HTML ("HTML Format") decoding: header offset parsing and reads.
+//! CF_HTML ("HTML Format") encoding and decoding: header offset building,
+//! header offset parsing and reads.
 
 use super::*;
 /// The registered clipboard format name used by browsers and office apps to
 /// expose the HTML fragment of a rich-text copy.
 const CF_HTML_REGISTERED_NAME: &str = "HTML Format";
+
+/// The fragment-delimiter comments every CF_HTML writer emits around the
+/// markup; readers locate the fragment through the offsets but keep the
+/// markers so consumers that scan for them still work.
+const CF_HTML_FRAGMENT_START: &str = "<!--StartFragment-->";
+const CF_HTML_FRAGMENT_END: &str = "<!--EndFragment-->";
+/// Fixed width of every offset field in the header (the shape browsers and
+/// Office write). With a fixed width the header length never depends on the
+/// values, so the offsets can be computed in a single pass.
+const CF_HTML_OFFSET_DIGITS: usize = 10;
 
 #[cfg(target_os = "windows")]
 pub(super) fn html_format_id() -> Option<u32> {
@@ -24,6 +35,56 @@ pub(super) fn html_format_id() -> Option<u32> {
         let format = unsafe { RegisterClipboardFormatW(name.as_ptr()) };
         (format != 0).then_some(format)
     })
+}
+
+/// Builds a CF_HTML payload (header + markup) whose fragment offsets bracket
+/// `fragment` inside a standard document shell. Every offset field is
+/// zero-padded to [`CF_HTML_OFFSET_DIGITS`] so the header keeps a constant
+/// length and the byte offsets need no re-padding loop. Offsets above the
+/// representable width are rejected rather than silently truncated — an
+/// offset that wraps would hand the paste target the wrong markup region.
+pub(super) fn build_cf_html_payload(fragment: &str) -> Result<Vec<u8>, String> {
+    let max_offset = 10usize
+        .checked_pow(CF_HTML_OFFSET_DIGITS as u32)
+        .ok_or_else(|| "CF_HTML header offset width overflow".to_owned())?;
+    // The markup is UTF-8; offsets count bytes, not characters.
+    let body = format!(
+        "<html><body>{CF_HTML_FRAGMENT_START}{fragment}{CF_HTML_FRAGMENT_END}</body></html>"
+    );
+    let header = format!(
+        "Version:0100\r\nStartHTML:{z}\r\nEndHTML:{z}\r\nStartFragment:{z}\r\nEndFragment:{z}\r\n",
+        z = "0".repeat(CF_HTML_OFFSET_DIGITS)
+    );
+    let header_len = header.len();
+    let fragment_start =
+        header_len + body.find(CF_HTML_FRAGMENT_START).unwrap() + CF_HTML_FRAGMENT_START.len();
+    let fragment_end = header_len + body.find(CF_HTML_FRAGMENT_END).unwrap();
+    let end_html = header_len + body.len();
+    for offset in [header_len, end_html, fragment_start, fragment_end] {
+        if offset >= max_offset {
+            return Err("clipboard HTML payload exceeds the CF_HTML offset width".to_owned());
+        }
+    }
+    let mut out = Vec::with_capacity(end_html);
+    out.extend_from_slice(header.as_bytes());
+    out.extend_from_slice(body.as_bytes());
+    let mut apply = |label: &str, value: usize| {
+        let needle = label.as_bytes();
+        // Search the header only: copied markup may itself contain a label.
+        let header = &out[..header_len];
+        let pos = header
+            .windows(needle.len())
+            .position(|window| window == needle)
+            .expect("header label");
+        let digits = format!("{value:0width$}", width = CF_HTML_OFFSET_DIGITS);
+        out[pos + needle.len()..pos + needle.len() + CF_HTML_OFFSET_DIGITS]
+            .copy_from_slice(digits.as_bytes());
+    };
+    apply("StartHTML:", header_len);
+    apply("EndHTML:", end_html);
+    apply("StartFragment:", fragment_start);
+    apply("EndFragment:", fragment_end);
+    Ok(out)
 }
 
 fn header_field_value(data: &[u8], label: &str) -> Option<usize> {

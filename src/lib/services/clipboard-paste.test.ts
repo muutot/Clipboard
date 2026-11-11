@@ -78,7 +78,12 @@ describe("format paste with cleaning", () => {
   it("keeps rich HTML when cleaning does not change the text", async () => {
     bridge.invoke.mockImplementation(invokeMap(item.textContent ?? null));
     expect(await pasteClipboardItem(item, "format")).toBe("pasted");
-    expect(bridge.write).toHaveBeenCalledTimes(1);
+    expect(bridge.invoke).toHaveBeenCalledWith("write_clipboard_html", {
+      html: "<b>hello world</b>",
+      plainText: item.textContent,
+      rtf: null,
+    });
+    expect(bridge.write).not.toHaveBeenCalled();
     expect(bridge.writeText).not.toHaveBeenCalled();
     expect(bridge.toast).toHaveBeenCalledWith(t("toast.formatPasteSuccess"), "success");
   });
@@ -87,7 +92,12 @@ describe("format paste with cleaning", () => {
     bridge.cleaning = false;
     bridge.invoke.mockImplementation(invokeMap("hello world"));
     expect(await pasteClipboardItem(item, "format")).toBe("pasted");
-    expect(bridge.write).toHaveBeenCalledTimes(1);
+    expect(bridge.invoke).toHaveBeenCalledWith("write_clipboard_html", {
+      html: "<b>hello world</b>",
+      plainText: item.textContent,
+      rtf: null,
+    });
+    expect(bridge.write).not.toHaveBeenCalled();
     expect(bridge.writeText).not.toHaveBeenCalled();
     expect(bridge.toast).toHaveBeenCalledWith(t("toast.formatPasteSuccess"), "success");
   });
@@ -109,7 +119,8 @@ describe("paste outcomes", () => {
     async (mode) => {
       bridge.cleaning = false;
       bridge.invoke.mockImplementation(async (command: string) => {
-        if (command === "write_clipboard_text") throw new Error("fixture busy clipboard");
+        if (command === "write_clipboard_text" || command === "write_clipboard_html")
+          throw new Error("fixture busy clipboard");
         return true;
       });
       bridge.write.mockRejectedValue(new Error("fixture busy clipboard"));

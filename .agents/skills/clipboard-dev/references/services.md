@@ -111,9 +111,9 @@ and detail slot. Successful rows retain their optimistic/canonical state and any
 later restore or reload; completion must not repeat deletion/removal or reset the
 recycle-bin paging suppression already established when the action began.
 
-Keep frontend mapping aligned with Rust serde names and `metadata_json`. `loadDeletedClipboardHistory` is the current deleted-list API name. Plain-text writes go through the `write_clipboard_text` command, whose platform adapter attaches the native self-trigger marker; the WebView's `navigator.clipboard.writeText` refuses to run while the window is hidden, which bulk paste hits after the first item. HTML/image writes still register a compatible self-trigger hash before touching the system clipboard. `readClipboardText()` is the read counterpart (`read_clipboard_text` command, fallback `navigator.clipboard.readText()` outside Tauri) used by the shared editor context menu; it never writes, so it registers no self-trigger.
+Keep frontend mapping aligned with Rust serde names and `metadata_json`. `loadDeletedClipboardHistory` is the current deleted-list API name. Plain-text writes go through the `write_clipboard_text` command, whose platform adapter attaches the native self-trigger marker; the WebView's `navigator.clipboard.writeText` refuses to run while the window is hidden, which bulk paste hits after the first item. Rich-format writes go through `write_clipboard_html` (`{html, plainText, rtf}`) for the same reason — the adapter writes CF_HTML plus the plain-text/RTF forms and attaches the marker from the plain text. Image writes still register a compatible self-trigger hash before touching the system clipboard. `readClipboardText()` is the read counterpart (`read_clipboard_text` command, fallback `navigator.clipboard.readText()` outside Tauri) used by the shared editor context menu; it never writes, so it registers no self-trigger.
 
-Text/HTML/image writers retain the `string[]` receipts returned by the matching
+Image writers retain the `string[]` receipts returned by the matching
 `mark_self_triggered` commands. If the OS write fails, the matching unmark command
 receives `{registrations}` for that attempt only. Failed registration leaves an
 empty receipt list and authorizes no cleanup; success retains markers until expiry.

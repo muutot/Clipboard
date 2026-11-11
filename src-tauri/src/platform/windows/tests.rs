@@ -2,7 +2,7 @@
 
 use super::*;
 
-use html::{parse_cf_html, parse_cf_html_source_url};
+use html::{build_cf_html_payload, parse_cf_html, parse_cf_html_source_url};
 #[cfg(target_os = "windows")]
 use read_text::format_id_to_name;
 #[cfg(target_os = "windows")]
@@ -159,6 +159,26 @@ fn app_icons_are_normalized_to_32_pixels() {
 fn cf_html_extracts_the_fragment_using_byte_offsets() {
     let payload = cf_html_payload("<b>bold</b>");
     assert_eq!(parse_cf_html(&payload).as_deref(), Some("<b>bold</b>"));
+}
+
+#[test]
+fn cf_html_encoder_offsets_round_trip_through_the_decoder() {
+    // Multi-byte markup exercises byte (not character) offset arithmetic.
+    let fragment = "<b>caf\u{e9} \u{4e2d}\u{6587}</b><p>x</p>";
+    let payload = build_cf_html_payload(fragment).unwrap();
+    assert_eq!(parse_cf_html(&payload).as_deref(), Some(fragment));
+    // The header uses the canonical fixed-width shape consumers expect.
+    let head = std::str::from_utf8(&payload[..payload.len()]).unwrap();
+    assert!(head.starts_with("Version:0100\r\nStartHTML:000000"));
+}
+
+#[test]
+fn cf_html_encoder_ignores_fragment_markers_inside_the_markup() {
+    // Copied markup may itself mention the header labels; the patch pass
+    // must only touch the header region.
+    let fragment = "<p>StartFragment:</p>";
+    let payload = build_cf_html_payload(fragment).unwrap();
+    assert_eq!(parse_cf_html(&payload).as_deref(), Some(fragment));
 }
 
 #[test]
@@ -601,6 +621,26 @@ fn real_clipboard_round_trips_cover_native_write_and_read_paths() {
             .expect("self-trigger marker must be set after a text write");
         assert!(clipboard_change_is_self_write(&marker, text));
         assert!(!clipboard_change_is_self_write(&marker, "unrelated text"));
+    }
+
+    // The production HTML write stores CF_HTML plus the plain text and RTF
+    // forms and the marker for the text form; each representation must read
+    // back, and the marker must suppress a capture of the staged text.
+    let html_fragment = "<b>rich caf\u{e9}</b>";
+    let staged_text = "rich caf\u{e9}";
+    write_clipboard_html_with_self_trigger(
+        html_fragment,
+        Some(staged_text),
+        Some("{\\rtf1\\ansi rich}"),
+    )
+    .unwrap();
+    assert_eq!(read_clipboard_html().as_deref(), Some(html_fragment));
+    assert_eq!(read_clipboard_text().as_deref(), Some(staged_text));
+    assert_eq!(read_clipboard_rtf().as_deref(), Some("{\\rtf1\\ansi rich}"));
+    if let Some(marker_format) = self_trigger_format_id() {
+        let marker = get_clipboard_format_bytes(marker_format)
+            .expect("self-trigger marker must be set after an HTML write");
+        assert!(clipboard_change_is_self_write(&marker, staged_text));
     }
 
     // RTF payloads decode lossily as trimmed text through the registered
