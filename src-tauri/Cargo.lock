@@ -779,7 +779,7 @@ dependencies = [
 
 [[package]]
 name = "clipboard-desktop"
-version = "1.8.3"
+version = "1.8.4"
 dependencies = [
  "aes-gcm",
  "apple-native-keyring-store",

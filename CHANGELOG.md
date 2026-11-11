@@ -1,5 +1,61 @@
 # Changelog
 
+## 1.8.4 (2026-11-11)
+
+### ✨ Features
+
+- **paste**: merge bulk paste into one write and one delivery (dd104f87)
+- **paste**: add batch paste diagnostics for delivery failures (2e4730fd)
+- **skills**: move all skills to .agents/skills for DSH discovery (764a2f28)
+
+### 🐛 Bug Fixes
+
+- **clipboard**: route desktop html writes through the backend writer (2752cf86)
+- **selection**: preserve shift-range direction in paste order (f6dd90ae)
+- **paste**: stage later bulk items with the window hidden (41d37415)
+- **save**: explain missing resources before destination selection (67adb86f)
+- **markdown**: explain blocked images without remote requests (39603748)
+- **files**: check save capability before destination selection (1dd83bd0)
+- **update**: preserve full semantic version precedence (08ab6247)
+- **keyboard**: locate imported record IDs without CSS interpolation (4efe1a38)
+- **paste**: lease one validated target across each bulk operation (5244015b)
+- **storage**: validate imported metadata and preserve legacy resource references (1c26f08d)
+- **privacy**: cover structured credentials and upgrade untouched defaults (ca8554b8)
+
+### 🚀 Performance
+
+- **copy**: reuse captured SHA-256 and move file reads off the UI thread (1e74f3b3)
+
+### 📝 Documentation
+
+- **todo**: record bounded command full-suite flake (28b2e0a9)
+- **todo**: record dialog save and batch lease evidence (4b7b4c1b)
+- **todo**: record native save-as capability evidence (f8a50e97)
+- **skills**: wire vendored skills into repository instructions (9d3b8eaa)
+- **skills**: vendor curated mattpocock engineering skills (491764cf)
+- **verification**: record final checks and remaining native gaps (e63a549c)
+- **todo**: reassess optional capabilities against current coverage (b3343e13)
+- **todo**: remove encryption tasks from the roadmap (562e1fa6)
+- **backup**: define encrypted portable backup boundaries (2d54aa30)
+- **audit**: record bounded command repeat investigation (de490157)
+- **privacy**: record unavailable isolated native marker verification (02c9c754)
+- **todo**: rebuild roadmap from audit and competitor reports (258183f5)
+
+### ✅ Testing
+
+- **paste**: exercise backend text writes in paste tests (82c4498e)
+- **i18n**: distinguish the local asset host from locale keys (67a1723a)
+- **backup**: assert authenticated stream total and frame ceilings (b719572d)
+- **files**: verify save capability across real capture fallbacks (f68b26d8)
+- **backup**: verify authenticated stream format prototype (e14343ae)
+
+### 🔧 Chores
+
+- **build**: drop unsupported staticVCRuntime config key (fb163f93)
+- **format**: exclude local IDE metadata from formatting (e8618d54)
+- **sync**: update compatible zstd safety patches (b4969dac)
+- **build**: declare static vc runtime via tauri config (30e8b8f3)
+
 ## 1.8.3 (2026-11-08)
 
 ### ✨ Features
