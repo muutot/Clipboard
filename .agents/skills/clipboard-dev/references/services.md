@@ -67,9 +67,21 @@ Owns the record boundary and list operations:
 Paste returns `PasteOutcome` (`pasted`, `copied`, `failed`) through every mode and
 fallback. A successful OS write with unavailable target/browser preview is `copied`;
 hydration, write or target errors are `failed`. Existing single-row callers retain
-their toast behavior. Bulk paste counts only `pasted` and keeps undelivered rows
-selected for retry; a caught service error must not become batch success. Mounted
-controller tests use the real paste service with synthetic clipboard/target failures.
+their toast behavior. Bulk paste is merged, not looped: `planBulkPaste`
+(`utils/store/bulk-actions.ts`) joins the hydrated selection into ONE payload —
+plain text when no row carries HTML (rows separated by a single newline, the same
+separator and media-as-path-text rules as `planBulkCopy`), or one HTML payload
+concatenating each rich row's stored CF_HTML fragment with escaped block
+fragments for the rest, plus the plain-text fallback — and `pasteBulkPayload`
+stages it through `write_clipboard_text`/`write_clipboard_html` and delivers it
+with a single `paste_to_previous_application` under the batch lease. The merged
+design replaced the per-item loop because the next staging landed 23–30 ms after
+the previous Ctrl+V injection, before the target finished reading the clipboard
+(item N pasted item N+1's content); one write cannot race itself, and no
+per-item delay is used. A refused or failed delivery keeps every selected row
+for retry; success clears only the contributed IDs, stamps each with
+`persistLastUsed`, and reports the row count. Mounted controller tests use the
+real paste service with synthetic clipboard/target failures.
 
 Async bulk paste/favorite completion clears only its own processed IDs from the
 current selection. A different row selected while IPC is pending remains selected;

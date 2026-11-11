@@ -28,7 +28,7 @@ vi.mock("$lib/services/clipboard", async (original) => ({
 let out: ProbeState;
 let target: HTMLDivElement;
 let app: ReturnType<typeof mount>;
-const item = (id: string): ClipboardItem => ({
+const item = (id: string, overrides: Partial<ClipboardItem> = {}): ClipboardItem => ({
   id,
   kind: "text",
   title: id,
@@ -39,6 +39,7 @@ const item = (id: string): ClipboardItem => ({
   sizeLabel: "1 B",
   createdAt: 1,
   favorite: false,
+  ...overrides,
 });
 beforeEach(() => {
   bridge.invoke
@@ -73,16 +74,15 @@ afterEach(async () => {
 });
 
 it.each(["write-error", "target-error", "target-unavailable"])(
-  "keeps an undelivered row selected with the real paste service (%s)",
+  "keeps every row selected with the real paste service (%s)",
   async (failure) => {
     bridge.invoke.mockImplementation(async (command: string, args?: { text?: string }) => {
       if (command === "write_clipboard_text") {
-        if (args?.text === "a" && failure === "write-error")
-          throw new Error("fixture busy clipboard");
+        if (failure === "write-error") throw new Error("fixture busy clipboard");
         bridge.staged = args?.text ?? "";
         return;
       }
-      if (command === "paste_to_previous_application" && bridge.staged === "a") {
+      if (command === "paste_to_previous_application") {
         if (failure === "target-error") throw new Error("fixture denied target");
         if (failure === "target-unavailable") return false;
       }
@@ -90,6 +90,8 @@ it.each(["write-error", "target-error", "target-unavailable"])(
     });
     out.bulk!.selectedIds = new Set(["a", "b"]);
     await out.bulk!.bulkPasteAll();
+    // Merged paste makes one write and one delivery, so any failure means
+    // nothing was delivered: both rows stay selected for a retry.
     expect([...out.bulk!.selectedIds]).toEqual(["a", "b"]);
     expect(bridge.toast).not.toHaveBeenCalledWith("toast.bulkPasteSuccess", "success");
     expect(bridge.toast).toHaveBeenCalledWith("toast.pasteFailed", "error");
@@ -97,7 +99,7 @@ it.each(["write-error", "target-error", "target-unavailable"])(
       bridge.invoke.mock.calls
         .filter(([command]) => command === "write_clipboard_text")
         .map(([, args]) => (args as { text?: string } | undefined)?.text),
-    ).toEqual(["a"]);
+    ).toEqual(["a\nb"]);
   },
 );
 it("clears delivered rows and reports success with the real paste service", async () => {
@@ -107,7 +109,7 @@ it("clears delivered rows and reports success with the real paste service", asyn
   expect(bridge.toast).toHaveBeenCalledWith("toast.bulkPasteSuccess", "success");
 });
 
-it("takes the previous target once and delivers three rows through one lease", async () => {
+it("takes the previous target once and delivers three rows in one merged paste", async () => {
   out.store!.current = appendItems(out.store!.current, [item("c")], "history");
   out.bulk!.selectedIds = new Set(["a", "b", "c"]);
   let remembered: string | null = "editor";
@@ -141,36 +143,29 @@ it("takes the previous target once and delivers three rows through one lease", a
     },
   );
   await out.bulk!.bulkPasteAll();
-  expect(delivered).toEqual(["a", "b", "c"]);
+  // The whole selection reaches the target as one payload — the race between
+  // per-item writes and the target's async read cannot happen by design.
+  expect(delivered).toEqual(["a\nb\nc"]);
   expect([...out.bulk!.selectedIds]).toEqual([]);
   expect(bridge.invoke.mock.calls.filter(([cmd]) => cmd === "begin_paste_batch")).toHaveLength(1);
   expect(active).toBeNull();
 });
 
-it("stops before overwriting the clipboard after batch focus is lost", async () => {
+it("does not touch the clipboard when the batch lease is lost", async () => {
   out.store!.current = appendItems(out.store!.current, [item("c")], "history");
   out.bulk!.selectedIds = new Set(["a", "b", "c"]);
-  let delivered = 0;
-  bridge.invoke.mockImplementation(async (command: string, args?: { text?: string }) => {
-    if (command === "write_clipboard_text") {
-      bridge.staged = args?.text ?? "";
-      return;
-    }
+  bridge.invoke.mockImplementation(async (command: string) => {
     if (command === "begin_paste_batch") return "lease";
-    if (command === "validate_paste_batch" && delivered) throw Error("focus lost");
-    if (command === "paste_to_previous_application") {
-      delivered++;
-      return true;
-    }
+    if (command === "validate_paste_batch") throw Error("focus lost");
     return true;
   });
   await out.bulk!.bulkPasteAll();
+  // Validation happens before staging, so a dead lease never overwrites the
+  // user's clipboard.
   expect(
-    bridge.invoke.mock.calls
-      .filter(([command]) => command === "write_clipboard_text")
-      .map(([, args]) => (args as { text?: string } | undefined)?.text),
-  ).toEqual(["a"]);
-  expect([...out.bulk!.selectedIds]).toEqual(["b", "c"]);
+    bridge.invoke.mock.calls.filter(([command]) => command === "write_clipboard_text"),
+  ).toHaveLength(0);
+  expect([...out.bulk!.selectedIds]).toEqual(["a", "b", "c"]);
   expect(bridge.invoke).toHaveBeenCalledWith("end_paste_batch", { token: "lease" });
 });
 

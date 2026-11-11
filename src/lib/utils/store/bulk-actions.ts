@@ -86,3 +86,69 @@ export function planBulkCopy(items: readonly ClipboardItem[]): BulkCopyPayload {
   }
   return { text: parts.join("\n"), copiedCount: parts.length };
 }
+
+/** One merged clipboard payload for a bulk paste: plain text, or an HTML
+ * fragment plus its plain-text fallback. Never both forms separately: the
+ * rich payload already carries the plain text through the writer. */
+export type BulkPastePayload = { text: string } | { html: string; plainText: string };
+
+export interface BulkPastePlan {
+  payload: BulkPastePayload;
+  /** Ids of the rows that contributed to the merged payload. */
+  ids: string[];
+}
+
+function escapeHtmlText(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function plainFragment(text: string): string {
+  return `<div>${escapeHtmlText(text).replace(/\n/g, "<br>\n")}</div>`;
+}
+
+// A row is rich when it is a text/link row that was captured with HTML.
+// Stored `htmlContent` is the CF_HTML fragment (the bytes between the
+// StartFragment/EndFragment offsets), so fragments concatenate as siblings
+// inside the document shell the backend writer rebuilds around them. Image
+// and file rows are never treated as rich: the merged payload has no channel
+// for CF_DIB or CF_HDROP, so they fall back to their path text.
+function richSource(item: ClipboardItem): string | null {
+  if (item.kind === "image" || item.kind === "file") return null;
+  const html = item.htmlContent;
+  return html && html.trim().length > 0 ? html : null;
+}
+
+/**
+ * Plans one merged payload for a bulk paste so the whole selection reaches
+ * the target through a single clipboard write and a single delivery: with no
+ * second write there is no window for the next item's staging to race the
+ * previous delivery's asynchronous clipboard read (the item-shift bug).
+ * Rich rows keep their HTML fragment; plain text/link rows are escaped into
+ * block fragments; image/file rows contribute their path text, matching
+ * `planBulkCopy`. Rows are joined with a newline, the same separator as bulk
+ * copy. If no row carries HTML the payload stays plain text.
+ */
+export function planBulkPaste(items: readonly ClipboardItem[]): BulkPastePlan | null {
+  const textParts: string[] = [];
+  const fragments: (string | null)[] = [];
+  const ids: string[] = [];
+  for (const item of items) {
+    const entry = bulkCopyEntry(item);
+    if (entry === null) continue;
+    const rich = richSource(item);
+    textParts.push(entry);
+    fragments.push(rich);
+    ids.push(item.id);
+  }
+  if (ids.length === 0) return null;
+  const plainText = textParts.join("\n");
+  if (!fragments.some((rich) => rich !== null)) {
+    return { payload: { text: plainText }, ids };
+  }
+  const html = fragments.map((rich, index) => rich ?? plainFragment(textParts[index])).join("\n");
+  return { payload: { html, plainText }, ids };
+}

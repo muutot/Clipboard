@@ -10,7 +10,8 @@ import {
 } from "$lib/utils/store/item-store";
 import {
   hydrateClipboardItem,
-  pasteClipboardItem,
+  pasteBulkPayload,
+  persistLastUsed,
   beginPasteBatch,
   endPasteBatch,
   writeClipboardText,
@@ -21,7 +22,7 @@ import {
   persistHardDelete,
 } from "$lib/services/clipboard";
 import { showToast } from "$lib/services/toast";
-import { planBulkCopy, planBulkDelete } from "$lib/utils/store/bulk-actions";
+import { planBulkCopy, planBulkDelete, planBulkPaste } from "$lib/utils/store/bulk-actions";
 export interface BulkDependencies {
   itemStore: ItemStoreView;
   metadataMutations: ReturnType<typeof createItemMutations>;
@@ -70,58 +71,65 @@ export function createBulkController(deps: BulkDependencies) {
       });
   }
 
-  // Bulk paste: deliver every selected item to the previous application in one
-  // go, selection order preserved. No per-item queue state is exposed.
+  // Bulk paste: merge the whole selection into ONE clipboard payload and
+  // deliver it with ONE native paste, in selection order. The previous
+  // per-item loop raced the target's asynchronous clipboard read — the next
+  // staging landed 23–30 ms after the previous Ctrl+V injection, so the
+  // target sometimes read item N+1's content for item N. A single write
+  // cannot race itself, which removes the bug class without adding delays.
   let pasting = false;
   async function bulkPasteAll() {
-    // A second click while a paste run is in flight would interleave two
-    // sequences at the paste target; ignore it until the current run ends.
+    // A second click while a paste run is in flight would stage two payloads
+    // over each other at the paste target; ignore it until the run ends.
     if (pasting) return;
     const items = [...deps.selectedLoadedItems];
     if (items.length === 0) return;
     pasting = true;
     let batchToken: string | null = null;
     try {
+      // Hydrate before reserving the lease: a slow content read must not
+      // expire the batch, and a hydrate failure must leave the clipboard
+      // untouched.
+      let hydrated: ClipboardItem[];
+      try {
+        hydrated = [];
+        for (const item of items) hydrated.push(await hydrateClipboardItem(item));
+      } catch (error) {
+        console.error("Unable to load selection for paste", error);
+        showToast(deps.translate("toast.pasteFailed"), "error");
+        return;
+      }
+      const plan = planBulkPaste(hydrated);
+      if (!plan) {
+        showToast(deps.translate("toast.pasteFailed"), "error");
+        return;
+      }
       batchToken = await beginPasteBatch();
       if (!batchToken) {
         showToast(deps.translate("toast.pasteFailed"), "error");
         return;
       }
-      const failedIds: string[] = [];
-      let succeeded = 0;
-      let stopped = false;
-      for (const item of items) {
-        if (stopped) {
-          failedIds.push(item.id);
-          continue;
-        }
-        try {
-          const outcome = await pasteClipboardItem(item, "auto", { batchToken });
-          if (outcome === "pasted") succeeded++;
-          else {
-            failedIds.push(item.id);
-            stopped = true;
-          }
-        } catch (error) {
-          console.error("Bulk paste failed", error);
-          failedIds.push(item.id);
-          stopped = true;
-        }
-      }
-      // Failed rows stay selected so they can be retried without re-picking;
-      // a silent all-clear would hide exactly which rows never pasted.
-      const undeliveredIds = new Set(failedIds);
-      const deliveredIds = new Set(
-        items.filter((item) => !undeliveredIds.has(item.id)).map((item) => item.id),
-      );
-      // User selection can change while IPC is pending. Remove only the rows
-      // this run delivered, retaining failures and newly selected other rows.
-      selectedIds = new Set([...selectedIds].filter((id) => !deliveredIds.has(id)));
-      if (failedIds.length > 0) {
+      const outcome = await pasteBulkPayload(plan.payload, { batchToken });
+      if (outcome === "failed") {
+        // Nothing was delivered: keep every row selected for a retry.
         showToast(deps.translate("toast.pasteFailed"), "error");
-      } else {
-        showToast(deps.translate("toast.bulkPasteSuccess", { count: succeeded }), "success");
+        return;
       }
+      // Delivery succeeded (browser preview stages the same single payload).
+      // Usage metadata is best-effort, mirroring the per-item path's
+      // recordSuccessfulUsage; a persist failure never undoes the paste.
+      const delivered = new Set(plan.ids);
+      for (const id of plan.ids) {
+        try {
+          await persistLastUsed(id);
+        } catch (error) {
+          console.error("Unable to persist last-used item", error);
+        }
+      }
+      // User selection can change while IPC is pending. Remove only the rows
+      // this run delivered, retaining newly selected other rows.
+      selectedIds = new Set([...selectedIds].filter((id) => !delivered.has(id)));
+      showToast(deps.translate("toast.bulkPasteSuccess", { count: plan.ids.length }), "success");
     } catch (error) {
       console.error("Unable to start bulk paste", error);
       showToast(deps.translate("toast.pasteFailed"), "error");

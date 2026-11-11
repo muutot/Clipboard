@@ -13,6 +13,7 @@ import type {
 import { getLocale, resolvePath } from "$lib/i18n";
 import { generatedClipboardTitle, getDisplayTitle } from "$lib/utils/content/display-text";
 import { formatTextLength, toClipboardItem } from "$lib/services/clipboard/mapping";
+import type { BulkPastePayload } from "$lib/utils/store/bulk-actions";
 import zhCN from "$lib/i18n/locales/zh-CN";
 import en from "$lib/i18n/locales/en";
 
@@ -922,6 +923,54 @@ export async function pasteClipboardItem(
   // bulk runs abort with no diagnosable reason at all.
   console.error("Unsupported clipboard item kind for paste", item.kind);
   return "failed";
+}
+
+/**
+ * Delivers a pre-planned merged payload (see `planBulkPaste`) through ONE
+ * clipboard write and ONE native delivery. This is what bulk paste uses
+ * instead of looping `pasteClipboardItem`: sequential per-item writes raced
+ * the target's asynchronous clipboard read (the previous paste lands 23–30 ms
+ * before the next write, so the target read the wrong item). One write cannot
+ * race itself, so no per-item delay is needed.
+ * Returns `pasted` when the backend confirmed delivery to the leased target,
+ * `copied` when only staging happened (browser preview), and `failed`
+ * otherwise — including a refused native delivery (`false`), which kept
+ * undelivered rows selected in the per-item bulk loop and still does here.
+ * Toasts stay with the caller, which knows the row count.
+ */
+export async function pasteBulkPayload(
+  payload: BulkPastePayload,
+  hooks: PasteItemHooks = {},
+): Promise<PasteOutcome> {
+  if (hooks.batchToken) {
+    try {
+      await invokeTauri<void>("validate_paste_batch", { token: hooks.batchToken });
+    } catch (error) {
+      console.error("Paste batch validation failed", error);
+      return "failed";
+    }
+  }
+  try {
+    if ("html" in payload) {
+      await writeClipboardHtml(payload.html, payload.plainText);
+    } else {
+      await writeClipboardText(payload.text);
+    }
+  } catch (error) {
+    console.error("Unable to stage merged bulk paste payload", describeInvokeFailure(error));
+    return "failed";
+  }
+  if (!isTauriRuntime()) return "copied";
+  try {
+    const pasted = await invokeTauri<boolean>(
+      "paste_to_previous_application",
+      hooks.batchToken ? { batchToken: hooks.batchToken } : undefined,
+    );
+    return pasted ? "pasted" : "failed";
+  } catch (error) {
+    console.error("Unable to restore the previous application and paste", error);
+    return "failed";
+  }
 }
 
 /** Reserve the remembered native target once for all items; no target means no writes. */

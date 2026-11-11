@@ -26,6 +26,8 @@ vi.mock("$lib/services/clipboard", async (original) => ({
   persistBatchPermanentDelete: vi.fn(),
   persistBatchRestore: vi.fn(),
   pasteClipboardItem: vi.fn(async () => "pasted" as const),
+  pasteBulkPayload: vi.fn(async () => "pasted" as const),
+  persistLastUsed: vi.fn(async () => true),
   beginPasteBatch: vi.fn(async () => "batch"),
   endPasteBatch: vi.fn(async () => {}),
 }));
@@ -204,7 +206,7 @@ it("does not resurrect a row deleted while a favorite request was pending", asyn
   expect(out.store!.current.historyIds).toEqual([]);
 });
 
-it("pastes the whole multi-selection at once, selection order preserved", async () => {
+it("pastes the whole multi-selection as one merged payload", async () => {
   out.store!.current = appendItems(
     out.store!.current,
     [item("a"), item("b"), item("c")],
@@ -212,31 +214,32 @@ it("pastes the whole multi-selection at once, selection order preserved", async 
   );
   out.bulk!.selectedIds = new Set(["a", "b", "c"]);
   await out.bulk!.bulkPasteAll();
-  expect(vi.mocked(service.pasteClipboardItem).mock.calls.map((c) => c[0].id)).toEqual([
-    "a",
-    "b",
-    "c",
+  // One delivery for the whole selection: order is preserved in the merged
+  // text and no per-item write can race the target's clipboard read.
+  expect(vi.mocked(service.pasteBulkPayload).mock.calls.map((c) => c[0])).toEqual([
+    { text: "a\nb\nc" },
   ]);
+  expect(vi.mocked(service.persistLastUsed).mock.calls.map((c) => c[0])).toEqual(["a", "b", "c"]);
   expect([...out.bulk!.selectedIds]).toEqual([]);
 });
 
 it("does nothing when there is nothing to paste", async () => {
   out.bulk!.selectedIds = new Set();
   await out.bulk!.bulkPasteAll();
-  expect(service.pasteClipboardItem).not.toHaveBeenCalled();
+  expect(service.pasteBulkPayload).not.toHaveBeenCalled();
 });
-it("keeps failed rows selected and reports the failure on a partial bulk paste", async () => {
+it("keeps every row selected and reports the failure when the merged paste fails", async () => {
   out.store!.current = appendItems(
     out.store!.current,
     [item("a"), item("b"), item("c")],
     "history",
   );
   out.bulk!.selectedIds = new Set(["a", "b", "c"]);
-  vi.mocked(service.pasteClipboardItem).mockImplementationOnce(async () => {
+  vi.mocked(service.pasteBulkPayload).mockImplementationOnce(async () => {
     throw new Error("paste denied");
   });
   await out.bulk!.bulkPasteAll();
-  expect(vi.mocked(service.pasteClipboardItem).mock.calls.map((c) => c[0].id)).toEqual(["a"]);
+  expect(vi.mocked(service.pasteBulkPayload).mock.calls).toHaveLength(1);
   expect([...out.bulk!.selectedIds]).toEqual(["a", "b", "c"]);
   expect(showToast).toHaveBeenCalledWith(expect.anything(), "error");
 });
@@ -244,19 +247,19 @@ it("ignores a bulk paste request while another run is still in flight", async ()
   out.store!.current = appendItems(out.store!.current, [item("a"), item("b")], "history");
   out.bulk!.selectedIds = new Set(["a", "b"]);
   const gate = deferred<service.PasteOutcome>();
-  vi.mocked(service.pasteClipboardItem).mockImplementationOnce(() => gate.promise);
+  vi.mocked(service.pasteBulkPayload).mockImplementationOnce(() => gate.promise);
   const first = out.bulk!.bulkPasteAll();
   const second = out.bulk!.bulkPasteAll();
   gate.resolve("pasted");
   await Promise.all([first, second]);
   await settle();
-  expect(vi.mocked(service.pasteClipboardItem).mock.calls.map((c) => c[0].id)).toEqual(["a", "b"]);
+  expect(vi.mocked(service.pasteBulkPayload).mock.calls).toHaveLength(1);
 });
 it.each(["pasted", "copied", "failed"] as const)(
   "retains selections added during a pending bulk paste (%s)",
   async (outcome) => {
     const gate = deferred<service.PasteOutcome>();
-    vi.mocked(service.pasteClipboardItem).mockImplementationOnce(() => gate.promise);
+    vi.mocked(service.pasteBulkPayload).mockImplementationOnce(() => gate.promise);
     out.bulk!.selectedIds = new Set(["initial"]);
     const run = out.bulk!.bulkPasteAll();
     out.store!.current = appendItems(out.store!.current, [item("arrived")], "history");
@@ -264,7 +267,7 @@ it.each(["pasted", "copied", "failed"] as const)(
     gate.resolve(outcome);
     await run;
     expect([...out.bulk!.selectedIds]).toEqual(
-      outcome === "pasted" ? ["arrived"] : ["initial", "arrived"],
+      outcome === "failed" ? ["initial", "arrived"] : ["arrived"],
     );
   },
 );
