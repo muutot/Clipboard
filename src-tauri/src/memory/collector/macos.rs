@@ -8,21 +8,20 @@ pub(super) fn collect_processes(current_pid: u32) -> Vec<MemoryProcess> {
     if let Ok(output) = Command::new("ps")
         .args(["-o", "rss=,vsz=", "-p", &current_pid.to_string()])
         .output()
+        && output.status.success()
     {
-        if output.status.success() {
-            let values = String::from_utf8_lossy(&output.stdout)
-                .split_whitespace()
-                .filter_map(|value| value.parse::<u64>().ok())
-                .collect::<Vec<_>>();
-            process.working_set_bytes = values
-                .first()
-                .copied()
-                .map(|value| value.saturating_mul(1024));
-            process.virtual_bytes = values
-                .get(1)
-                .copied()
-                .map(|value| value.saturating_mul(1024));
-        }
+        let values = String::from_utf8_lossy(&output.stdout)
+            .split_whitespace()
+            .filter_map(|value| value.parse::<u64>().ok())
+            .collect::<Vec<_>>();
+        process.working_set_bytes = values
+            .first()
+            .copied()
+            .map(|value| value.saturating_mul(1024));
+        process.virtual_bytes = values
+            .get(1)
+            .copied()
+            .map(|value| value.saturating_mul(1024));
     }
     vec![process]
 }
