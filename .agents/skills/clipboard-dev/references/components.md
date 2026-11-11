@@ -30,7 +30,12 @@ Key contracts:
   keep their independently scoped removal snapshots.
 - During bulk selection, `HistoryList` derives each selected row's 1-based position from
   `selectionOrder(selectedIds)` and passes it as `selectIndex`; `ClipboardCard` renders that
-  insertion-order position as a non-interactive paste-order badge.
+  insertion-order position as a non-interactive paste-order badge. The main route's shift-click
+  range builds that `Set` through `utils/store/selection-range.ts::shiftSelectionIds`, which walks
+  from the click anchor toward the shift-clicked row (both ends inclusive) and clamps an anchor
+  older than the live filtered list. Upward ranges therefore number from the anchor downward
+  (6..1 down the list), while downward ranges number 1..N; bulk copy/paste consume the same
+  insertion order. Mounted coverage lives in `routes/main-shift-selection.test.ts`.
 - Inline editing is authoritative on the route's single `editingId` plus its draft, both passed down through
   `HistoryList` as the `editingId` and `editDraft` props. The card derives its open state from
   `editingId === item.id && editDraft != null` and reports keystrokes through `oneditingdraftchange`, so two

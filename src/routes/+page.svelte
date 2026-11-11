@@ -93,6 +93,7 @@
   import { createItemStoreView } from "$lib/utils/store/item-store-view.svelte";
   import { createItemMutations } from "$lib/utils/store/item-mutations";
   import { applyItemsChangedEvent, sortRecentHistory } from "$lib/utils/store/item-changes";
+  import { shiftSelectionIds } from "$lib/utils/store/selection-range";
   import { isEditableKeyboardTarget, findItemElement } from "$lib/utils/keyboard/keyboard";
   import {
     SEARCH_SUGGESTION_LIMIT,
@@ -1366,15 +1367,11 @@
         lastClickedIndex = -1;
         return;
       }
-      const start = Math.min(lastClickedIndex, currentIdx);
-      // The anchor can be older than the current filtered list after a
-      // search/filter/removal. Never index past the live array.
-      const end = Math.min(Math.max(lastClickedIndex, currentIdx), filteredItems.length - 1);
-      const rangeIds = new Set<string>();
-      for (let i = start; i <= end; i++) {
-        rangeIds.add(filteredItems[i].id);
-      }
-      bulk.selectedIds = new Set(rangeIds);
+      // The Set's insertion order is the paste queue (order badges + bulk
+      // copy/paste). Walk from the anchor toward the shift-clicked row so a
+      // bottom-to-top selection is numbered 6..1 down the list instead of
+      // always 1..6; the helper also clamps a stale anchor to the live list.
+      bulk.selectedIds = new Set(shiftSelectionIds(filteredItems, lastClickedIndex, currentIdx));
       return;
     }
 
