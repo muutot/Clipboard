@@ -1,4 +1,4 @@
-<h1 align="center">
+﻿<h1 align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="static/logo-dark.png">
     <img src="static/logo-light.png" alt="Clipboard Desktop">
@@ -15,7 +15,7 @@
   <img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="license">
   <img src="https://img.shields.io/badge/Tauri-2.x-ffc131?logo=tauri" alt="tauri">
   <img src="https://img.shields.io/badge/Svelte-5.x-ff3e00?logo=svelte" alt="svelte">
-  <img src="https://img.shields.io/badge/Rust-2021%20edition-dea584?logo=rust" alt="rust">
+  <img src="https://img.shields.io/badge/Rust-2024%20edition-dea584?logo=rust" alt="rust">
 </p>
 
 > **English**: An English version of this document is available at [README_EN.md](README_EN.md).
@@ -149,7 +149,7 @@ Alt+C 唤起 → 键入关键词搜索 → ↑↓ 导航 → Enter 粘贴
 | 层级     | 技术                       | 说明                                                       |
 | :------- | :------------------------- | :--------------------------------------------------------- |
 | 桌面框架 | **Tauri 2**                | 轻量跨平台桌面壳，Rust 后端 + Web 前端                     |
-| 后端     | **Rust** (edition 2021)    | 剪贴板监听、存储、搜索、OCR、快捷键                        |
+| 后端     | **Rust** (edition 2024)    | 剪贴板监听、存储、搜索、OCR、快捷键                        |
 | 数据库   | **SQLite** (rusqlite 0.40) | 版本化 Schema，仓储模式，自动备份恢复                      |
 | 搜索引擎 | **Tantivy 0.26**           | 全文检索，自定义 N-gram 分词（中文友好）                   |
 | OCR      | **oar-ocr 0.9** (PP-OCR)   | 本地 ONNX 推理，支持 Tesseract 备选                        |

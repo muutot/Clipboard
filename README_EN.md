@@ -1,4 +1,4 @@
-<h1 align="center">
+﻿<h1 align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="static/logo-dark.png">
     <img src="static/logo-light.png" alt="Clipboard Desktop">
@@ -15,7 +15,7 @@
   <img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="license">
   <img src="https://img.shields.io/badge/Tauri-2.x-ffc131?logo=tauri" alt="tauri">
   <img src="https://img.shields.io/badge/Svelte-5.x-ff3e00?logo=svelte" alt="svelte">
-  <img src="https://img.shields.io/badge/Rust-2021%20edition-dea584?logo=rust" alt="rust">
+  <img src="https://img.shields.io/badge/Rust-2024%20edition-dea584?logo=rust" alt="rust">
 </p>
 
 ---
@@ -144,7 +144,7 @@ Two English UI galleries with colorful icons and compact spacing, rendered in br
 | Layer    | Technology                 | Notes                                                         |
 | :------- | :------------------------- | :------------------------------------------------------------ |
 | Desktop  | **Tauri 2**                | Lightweight cross-platform shell, Rust backend + web frontend |
-| Backend  | **Rust** (edition 2021)    | Clipboard watch, storage, search, OCR, shortcuts              |
+| Backend  | **Rust** (edition 2024)    | Clipboard watch, storage, search, OCR, shortcuts              |
 | Database | **SQLite** (rusqlite 0.40) | Versioned schema, repository pattern, backup/restore          |
 | Search   | **Tantivy 0.26**           | Full-text, custom N-gram tokenizer (Chinese-friendly)         |
 | OCR      | **oar-ocr 0.9** (PP-OCR)   | Local ONNX inference, Tesseract fallback                      |
