@@ -37,13 +37,6 @@ afterEach(() => {
 
 const writers = [
   {
-    kind: "text",
-    run: () => writeClipboardText("same"),
-    native: () => bridge.writeText,
-    mark: "mark_self_triggered",
-    unmark: "unmark_self_triggered",
-  },
-  {
     kind: "html",
     run: () => writeClipboardHtml("<b>same</b>", "same"),
     native: () => bridge.write,
@@ -111,14 +104,22 @@ for (const writer of writers) {
   });
 }
 
-it("preserves the original write error when receipt cleanup fails", async () => {
+it("routes desktop text writes through the backend self-trigger writer", async () => {
+  bridge.invoke.mockResolvedValueOnce(undefined);
+  await writeClipboardText("same");
+  expect(bridge.invoke).toHaveBeenCalledWith("write_clipboard_text", { text: "same" });
+  expect(bridge.writeText).not.toHaveBeenCalled();
+});
+
+it("propagates backend text write errors", async () => {
   const failure = new Error("clipboard refusal");
-  bridge.writeText.mockRejectedValueOnce(failure);
-  bridge.invoke
-    .mockResolvedValueOnce(["registration"])
-    .mockRejectedValueOnce(new Error("cleanup unavailable"));
+  bridge.invoke.mockRejectedValueOnce(failure);
   await expect(writeClipboardText("same")).rejects.toBe(failure);
-  expect(bridge.invoke).toHaveBeenLastCalledWith("unmark_self_triggered", {
-    registrations: ["registration"],
-  });
+});
+
+it("keeps the browser text fallback on the navigator clipboard", async () => {
+  Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
+  await writeClipboardText("same");
+  expect(bridge.invoke).not.toHaveBeenCalled();
+  expect(bridge.writeText).toHaveBeenCalledWith("same");
 });

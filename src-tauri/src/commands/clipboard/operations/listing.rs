@@ -269,6 +269,15 @@ pub fn read_clipboard_text() -> Option<String> {
     crate::platform::platform().read_clipboard_text()
 }
 
+/// Writes text through the platform adapter, which attaches the native
+/// self-trigger marker. WebView2 rejects `navigator.clipboard.writeText` while
+/// the window is hidden, and bulk paste writes every item after the previous
+/// delivery already hid the window.
+#[tauri::command]
+pub fn write_clipboard_text(text: String) -> Result<(), String> {
+    crate::platform::platform().write_clipboard_text_with_self_trigger(&text)
+}
+
 #[cfg(test)]
 mod rebuild_tests {
     use super::*;

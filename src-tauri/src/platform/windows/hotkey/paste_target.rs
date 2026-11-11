@@ -133,7 +133,11 @@ pub(super) fn foreground_window_handle() -> Option<isize> {
 }
 
 #[cfg(target_os = "windows")]
-pub fn restore_window_and_paste(target: QuickPasteHandle) -> Result<(), String> {
+/// Brings the captured paste target back to the foreground. Only valid while
+/// this process still owns the foreground window: Windows refuses the
+/// activation from a hidden window, which is exactly the state the main window
+/// is in after the first bulk paste hides it.
+pub fn focus_quick_paste_target(target: QuickPasteHandle) -> Result<(), String> {
     const SW_RESTORE: i32 = 9;
 
     extern "system" {
@@ -142,7 +146,6 @@ pub fn restore_window_and_paste(target: QuickPasteHandle) -> Result<(), String> 
         fn ShowWindow(window: isize, command: i32) -> i32;
         fn BringWindowToTop(window: isize) -> i32;
         fn SetForegroundWindow(window: isize) -> i32;
-        fn GetForegroundWindow() -> isize;
     }
 
     if target.window_handle == 0 || unsafe { IsWindow(target.window_handle) } == 0 {
@@ -156,13 +159,27 @@ pub fn restore_window_and_paste(target: QuickPasteHandle) -> Result<(), String> 
     }
 
     unsafe {
-        let iconic = IsIconic(target.window_handle);
-        if iconic != 0 {
+        if IsIconic(target.window_handle) != 0 {
             ShowWindow(target.window_handle, SW_RESTORE);
         }
         BringWindowToTop(target.window_handle);
         SetForegroundWindow(target.window_handle);
     }
+    Ok(())
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn focus_quick_paste_target(_target: QuickPasteHandle) -> Result<(), String> {
+    Err("quick paste is only implemented on Windows".to_owned())
+}
+
+#[cfg(target_os = "windows")]
+pub fn restore_window_and_paste(target: QuickPasteHandle) -> Result<(), String> {
+    extern "system" {
+        fn GetForegroundWindow() -> isize;
+    }
+
+    focus_quick_paste_target(target)?;
 
     // Focus changes are asynchronous: poll until the target actually owns the
     // foreground instead of a single fixed sleep, which both slowed the common

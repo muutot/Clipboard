@@ -487,6 +487,20 @@ pub async fn paste_to_previous_application(
         "paste_to_previous_application: target=0x{target:X}"
     ));
 
+    // Windows only lets the current foreground process hand activation to
+    // another window. Do it before hiding the panel, otherwise the first bulk
+    // item hides the window and every later item can no longer focus the target.
+    #[cfg(target_os = "windows")]
+    if let Err(error) = platform::windows::hotkey::focus_quick_paste_target(target) {
+        crate::dbg_log(&format!(
+            "paste_to_previous_application: focus error={error}"
+        ));
+        if let Some(token) = &batch_token {
+            super::paste_batch::finish(token, false);
+        }
+        return Err(error);
+    }
+
     let main_window = app.get_webview_window("main");
     if let Some(window) = &main_window {
         if let Err(error) = platform::hide_main_window(window) {

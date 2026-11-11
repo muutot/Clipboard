@@ -69,7 +69,8 @@ describe("format paste with cleaning", () => {
   it("reports the cleaned plain-text downgrade instead of claiming the format", async () => {
     bridge.invoke.mockImplementation(invokeMap("hello world"));
     expect(await pasteClipboardItem(item, "format")).toBe("pasted");
-    expect(bridge.writeText).toHaveBeenCalledWith("hello world");
+    expect(bridge.invoke).toHaveBeenCalledWith("write_clipboard_text", { text: "hello world" });
+    expect(bridge.writeText).not.toHaveBeenCalled();
     expect(bridge.write).not.toHaveBeenCalled();
     expect(bridge.toast).toHaveBeenCalledWith(t("toast.formatPasteCleanedSuccess"), "success");
   });
@@ -107,7 +108,10 @@ describe("paste outcomes", () => {
     "returns failure after a write rejection in %s mode",
     async (mode) => {
       bridge.cleaning = false;
-      bridge.writeText.mockRejectedValue(new Error("fixture busy clipboard"));
+      bridge.invoke.mockImplementation(async (command: string) => {
+        if (command === "write_clipboard_text") throw new Error("fixture busy clipboard");
+        return true;
+      });
       bridge.write.mockRejectedValue(new Error("fixture busy clipboard"));
       expect(await pasteClipboardItem(item, mode)).toBe("failed");
       expect(bridge.invoke).not.toHaveBeenCalledWith("paste_to_previous_application", undefined);

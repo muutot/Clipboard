@@ -37,27 +37,18 @@ export async function hydrateClipboardItem(item: ClipboardItem): Promise<Clipboa
 }
 
 export async function writeClipboardText(text: string): Promise<void> {
-  let registrations: string[] = [];
   if (isTauriRuntime()) {
-    try {
-      registrations = await invoke<string[]>("mark_self_triggered", { text });
-    } catch (error) {
-      console.warn("Unable to register text self-trigger", error);
-    }
+    // WebView2 rejects clipboard writes from a hidden document, and bulk paste
+    // stages each item after the previous delivery already hid the window. The
+    // backend writer attaches the native self-trigger marker instead.
+    await invokeTauriRequired<void>(
+      "write_clipboard_text",
+      { text },
+      "Clipboard writes require the desktop backend",
+    );
+    return;
   }
-  try {
-    await navigator.clipboard.writeText(text);
-  } catch (error) {
-    // Roll back only this attempt; another write may own the same hashes.
-    if (registrations.length > 0) {
-      try {
-        await invoke("unmark_self_triggered", { registrations });
-      } catch (unmarkError) {
-        console.warn("Unable to clear text self-trigger", unmarkError);
-      }
-    }
-    throw error;
-  }
+  await navigator.clipboard.writeText(text);
 }
 
 /**
