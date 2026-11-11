@@ -130,7 +130,7 @@ percentage rectangles with the actual image box; no coordinates are recomputed f
 Polling observes the scalar OCR status as well as item ID, so manual regeneration restarts
 polling after a terminal result. Engines without blocks keep the plain-text fallback.
 
-Owns overlay/split detail rendering, resource metadata display, OCR status/actions, detected-content actions, code/Markdown preview, editing, rename/duplicate/save-as-new, file actions, and copy/plain-paste/format-paste/clean-paste callbacks. In overlay (modal) mode it traps Tab focus via `$lib/utils/keyboard/focus` (`trapTabFocus`) and restores focus to the trigger element on close; split mode deliberately does neither.
+Owns overlay/split detail rendering, resource metadata display, OCR status/actions, detected-content actions, code/Markdown preview, editing, rename/duplicate/save-as-new, file actions, and copy/plain-paste/format-paste/clean-paste callbacks. In overlay (modal) mode it traps Tab focus via `#lib/utils/keyboard/focus` (`trapTabFocus`) and restores focus to the trigger element on close; split mode deliberately does neither.
 
 Image fullscreen is delegated to `ImageFullscreenOverlay.svelte` via the `onimagefullscreen` callback; DetailPanel no longer owns the fullscreen viewer or WebviewWindow lifecycle.
 

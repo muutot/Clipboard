@@ -15,7 +15,9 @@
 
 `npm audit --omit=dev` 报告 0 个公告，但这不能单独证明前端安全：开发依赖可以生成或进入发布 bundle。本轮另外检查应用路由/调用和构建结果。生成客户端中的 cache-control 命中是对 `/_app/version.json` 的固定 no-cache 请求头，不是接受外部 prerender Cache-Control 响应头。未发现 enhance/deepmerge/服务端 cookie 序列化被产品输入调用。
 
-验证依据：`svelte.config.js`、`vite.config.js`、`src/routes/+layout.ts`，src 下无 `+server`、`+page.server`、`+layout.server`。没有因这些公告修改 CSP、禁用现有功能或强制跨主版本更新。未来新增服务器部署、enhance、cookies 或外部构建配置后，上述不可达结论不再自动成立。
+验证依据：`vite.config.js`（SvelteKit 3 起配置经 `sveltekit()` 插件传入，`svelte.config.js` 已移除）、`src/routes/+layout.ts`，src 下无 `+server`、`+page.server`、`+layout.server`。没有因这些公告修改 CSP、禁用现有功能或强制跨主版本更新。未来新增服务器部署、enhance、cookies 或外部构建配置后，上述不可达结论不再自动成立。
+
+> 2026-11-11 更新：SvelteKit 已升级至 3.2.0、adapter-static 4.0.1（fec5d508），报告建议的跨主版本升级已实施；上述 4 条 npm 公告的不可达结论随升级自然满足（SvelteKit ≥3.0.0）。cookie/deepmerge 两条仍属传递依赖维护事项。
 
 本地原始扫描记录保存在忽略目录 .agents/skills/code-auditor/result/v1.8.4-review/npm-audit-current.json 与 npm-audit-production.json。此文保留可分发的判断依据，不依赖日志长期存在。
 
