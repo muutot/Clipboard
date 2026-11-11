@@ -1,10 +1,10 @@
 import { mount, unmount, flushSync } from "svelte";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import Probe from "./background-operation.probe.svelte";
-import { locale } from "$lib/i18n";
+import { locale } from "#lib/i18n/index.ts";
 const invoke = vi.hoisted(() => vi.fn());
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
-vi.mock("$lib/services/runtime", () => ({ isTauriRuntime: () => true }));
+vi.mock("#lib/services/runtime.ts", () => ({ isTauriRuntime: () => true }));
 let target: HTMLDivElement;
 let component: ReturnType<typeof mount> | undefined;
 const running = {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ClipboardItem } from "$lib/types/clipboard";
+import type { ClipboardItem } from "#lib/types/clipboard.ts";
 import { shiftSelectionIds } from "./selection-range";
 
 // The ids double as the paste queue, so order (not just membership) is the

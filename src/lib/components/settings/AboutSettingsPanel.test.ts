@@ -1,15 +1,15 @@
 import { flushSync, mount, unmount } from "svelte";
 import { afterAll, afterEach, beforeAll, expect, it, vi } from "vitest";
-import { t } from "$lib/i18n";
-import { invokeTauriRequired } from "$lib/services/runtime";
-import type { UpdateInfo } from "$lib/services/update";
+import { t } from "#lib/i18n/index.ts";
+import { invokeTauriRequired } from "#lib/services/runtime.ts";
+import type { UpdateInfo } from "#lib/services/update.ts";
 import AboutSettingsPanel from "./AboutSettingsPanel.svelte";
 
-vi.mock("$lib/services/runtime", () => ({
+vi.mock("#lib/services/runtime.ts", () => ({
   isTauriRuntime: () => true,
   invokeTauriRequired: vi.fn(),
 }));
-vi.mock("$lib/services/settings", async () => {
+vi.mock("#lib/services/settings.ts", async () => {
   const { writable } = await import("svelte/store");
   return {
     generalSettings: Object.assign(

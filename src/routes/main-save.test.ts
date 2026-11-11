@@ -1,8 +1,8 @@
 import { flushSync, mount, unmount } from "svelte";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import MainPage from "./+page.svelte";
-import { t } from "$lib/i18n";
-import type { ClipboardItem } from "$lib/types/clipboard";
+import { t } from "#lib/i18n/index.ts";
+import type { ClipboardItem } from "#lib/types/clipboard.ts";
 
 const bridge = vi.hoisted(() => ({
   invoke: vi.fn(),
@@ -10,8 +10,8 @@ const bridge = vi.hoisted(() => ({
   toast: vi.fn(),
   materialize: vi.fn(),
 }));
-vi.mock("$lib/services/clipboard", async (original) => ({
-  ...(await original<typeof import("$lib/services/clipboard")>()),
+vi.mock("#lib/services/clipboard.ts", async (original) => ({
+  ...(await original<typeof import("#lib/services/clipboard.ts")>()),
   materializeClipboardItem: (item: ClipboardItem) => bridge.materialize(item),
 }));
 vi.mock("@tauri-apps/api/core", async (original) => ({
@@ -20,8 +20,8 @@ vi.mock("@tauri-apps/api/core", async (original) => ({
 }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}) }));
 vi.mock("@tauri-apps/plugin-dialog", () => ({ save: bridge.save }));
-vi.mock("$lib/data/demo-items", async (original) => {
-  const source = await original<typeof import("$lib/data/demo-items")>();
+vi.mock("#lib/data/demo-items.ts", async (original) => {
+  const source = await original<typeof import("#lib/data/demo-items.ts")>();
   return {
     ...source,
     demoClipboardItems: source.demoClipboardItems.map((item) =>
@@ -31,8 +31,8 @@ vi.mock("$lib/data/demo-items", async (original) => {
     ),
   };
 });
-vi.mock("$lib/services/toast", async (original) => ({
-  ...(await original<typeof import("$lib/services/toast")>()),
+vi.mock("#lib/services/toast.ts", async (original) => ({
+  ...(await original<typeof import("#lib/services/toast.ts")>()),
   showToast: bridge.toast,
 }));
 let app: ReturnType<typeof mount>;

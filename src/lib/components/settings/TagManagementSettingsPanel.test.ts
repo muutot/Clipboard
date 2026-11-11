@@ -1,7 +1,7 @@
 import { flushSync, mount, unmount } from "svelte";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { locale } from "$lib/i18n";
-import type { TagsChangedPayload } from "$lib/types/clipboard";
+import { locale } from "#lib/i18n/index.ts";
+import type { TagsChangedPayload } from "#lib/types/clipboard.ts";
 import { invoke } from "@tauri-apps/api/core";
 import { emit, listen } from "@tauri-apps/api/event";
 import TagManagementSettingsPanel from "./TagManagementSettingsPanel.svelte";

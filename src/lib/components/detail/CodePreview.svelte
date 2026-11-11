@@ -4,9 +4,9 @@
     language?: string | null;
   }
 
-  import { FILE_PREVIEW_LIMIT } from "$lib/utils/content/file-preview";
-  import { detectCodeLang, tokenizeCode } from "$lib/utils/content/code-tokenize";
-  import { messages, resolvePath } from "$lib/i18n";
+  import { FILE_PREVIEW_LIMIT } from "#lib/utils/content/file-preview.ts";
+  import { detectCodeLang, tokenizeCode } from "#lib/utils/content/code-tokenize.ts";
+  import { messages, resolvePath } from "#lib/i18n/index.ts";
 
   let { content, language = null }: Props = $props();
 

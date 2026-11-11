@@ -11,7 +11,7 @@
 // instead of mutating the current one, and the route holds the result in
 // `$state.raw` so a plain `Map` is never wrapped in a Svelte deep proxy.
 
-import type { ClipboardItem } from "$lib/types/clipboard";
+import type { ClipboardItem } from "#lib/types/clipboard.ts";
 
 /** The three list views; the detail pane is the single-record fourth view. */
 export type ItemView = "history" | "indexed" | "cache";

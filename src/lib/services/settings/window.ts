@@ -3,8 +3,8 @@
 // startup/tray toggles are populated before any settings panel mounts.
 
 import { writable } from "svelte/store";
-import { invokeTauri } from "$lib/services/runtime";
-import type { WindowConfig, WindowPosition } from "$lib/types/clipboard";
+import { invokeTauri } from "#lib/services/runtime.ts";
+import type { WindowConfig, WindowPosition } from "#lib/types/clipboard.ts";
 
 export const DEFAULT_WINDOW_CONFIG: WindowConfig = {
   launchAtStartup: false,

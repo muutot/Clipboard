@@ -1,20 +1,23 @@
 // Persisted-record mapping: turns backend rows into domain `ClipboardItem`
 // values plus the display metadata (resource metadata, preview, size label,
 // source tone) they carry. The IPC wrappers themselves stay in
-// `$lib/services/clipboard`.
+// `#lib/services/clipboard.ts`.
 
-import { getLocale, resolvePath } from "$lib/i18n";
-import zhCN from "$lib/i18n/locales/zh-CN";
-import en from "$lib/i18n/locales/en";
-import { formatBytes } from "$lib/utils/content/format";
-import { generatedClipboardTitle, isCustomClipboardTitle } from "$lib/utils/content/display-text";
+import { getLocale, resolvePath } from "#lib/i18n/index.ts";
+import zhCN from "#lib/i18n/locales/zh-CN.ts";
+import en from "#lib/i18n/locales/en.ts";
+import { formatBytes } from "#lib/utils/content/format.ts";
+import {
+  generatedClipboardTitle,
+  isCustomClipboardTitle,
+} from "#lib/utils/content/display-text.ts";
 import type {
   ClipboardItem,
   PersistedClipboardItem,
   ResourceFileMetadata,
   ResourceMetadata,
   WebSourceMetadata,
-} from "$lib/types/clipboard";
+} from "#lib/types/clipboard.ts";
 
 const locales = { "zh-CN": zhCN, en };
 

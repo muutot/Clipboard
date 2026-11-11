@@ -1,7 +1,7 @@
 import { flushSync, mount, unmount } from "svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import StorageSettingsDialog from "./StorageSettingsDialog.svelte";
-import { t } from "$lib/i18n";
+import { t } from "#lib/i18n/index.ts";
 
 vi.mock("@tauri-apps/api/window", () => ({
   getCurrentWindow: () => ({ label: "main" }),

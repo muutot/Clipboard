@@ -1,12 +1,12 @@
 import { flushSync, mount, unmount } from "svelte";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import Panel from "./KeyboardSettingsPanel.svelte";
-import { locale } from "$lib/i18n";
+import { locale } from "#lib/i18n/index.ts";
 
 const bridge = vi.hoisted(() => ({ get: vi.fn(), configure: vi.fn(), reset: vi.fn() }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}) }));
-vi.mock("$lib/services/keyboard", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("$lib/services/keyboard")>()),
+vi.mock("#lib/services/keyboard.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("#lib/services/keyboard.ts")>()),
   getKeyboardConfig: bridge.get,
   configureKeyboardShortcuts: bridge.configure,
   resetKeyboardConfig: bridge.reset,

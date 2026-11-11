@@ -1,18 +1,18 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import AppIcon from "$lib/components/card/AppIcon.svelte";
-  import CustomEntry from "$lib/components/settings/settings-entries/CustomEntry.svelte";
-  import ToggleEntry from "$lib/components/settings/settings-entries/ToggleEntry.svelte";
+  import AppIcon from "#lib/components/card/AppIcon.svelte";
+  import CustomEntry from "#lib/components/settings/settings-entries/CustomEntry.svelte";
+  import ToggleEntry from "#lib/components/settings/settings-entries/ToggleEntry.svelte";
   import {
     getPrivacySettings,
     setPrivacySettings,
     type PrivacySettings,
-  } from "$lib/services/capture";
-  import { messages, resolvePath } from "$lib/i18n";
-  import { createFeedback } from "$lib/utils/settings/feedback.svelte";
+  } from "#lib/services/capture.ts";
+  import { messages, resolvePath } from "#lib/i18n/index.ts";
+  import { createFeedback } from "#lib/utils/settings/feedback.svelte.ts";
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
-  import { getRuntimeInfo, isTauriRuntime } from "$lib/services/runtime";
+  import { getRuntimeInfo, isTauriRuntime } from "#lib/services/runtime.ts";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);

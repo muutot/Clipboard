@@ -1,9 +1,9 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import AppIcon from "$lib/components/card/AppIcon.svelte";
-  import MarkdownPreview from "$lib/components/detail/MarkdownPreview.svelte";
-  import { messages, resolvePath } from "$lib/i18n";
-  import type { UpdateInfo } from "$lib/services/update";
+  import AppIcon from "#lib/components/card/AppIcon.svelte";
+  import MarkdownPreview from "#lib/components/detail/MarkdownPreview.svelte";
+  import { messages, resolvePath } from "#lib/i18n/index.ts";
+  import type { UpdateInfo } from "#lib/services/update.ts";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);

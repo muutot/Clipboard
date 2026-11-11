@@ -6,7 +6,7 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: bridge.invoke,
   convertFileSrc: (x: string) => x,
 }));
-vi.mock("$lib/services/settings", () => ({
+vi.mock("#lib/services/settings.ts", () => ({
   generalSettings: {
     subscribe(run: (value: unknown) => void) {
       run({});

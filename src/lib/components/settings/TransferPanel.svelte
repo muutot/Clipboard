@@ -1,13 +1,13 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
-  import BackupPanel from "$lib/components/settings/BackupPanel.svelte";
-  import Checkbox from "$lib/components/common/Checkbox.svelte";
-  import CustomSelect from "$lib/components/common/CustomSelect.svelte";
-  import DatePicker from "$lib/components/common/DatePicker.svelte";
-  import EntryHeading from "$lib/components/settings/settings-entries/EntryHeading.svelte";
-  import { messages, resolvePath } from "$lib/i18n";
-  import { isTauriRuntime } from "$lib/services/runtime";
-  import { formatBytes } from "$lib/utils/content/format";
+  import BackupPanel from "#lib/components/settings/BackupPanel.svelte";
+  import Checkbox from "#lib/components/common/Checkbox.svelte";
+  import CustomSelect from "#lib/components/common/CustomSelect.svelte";
+  import DatePicker from "#lib/components/common/DatePicker.svelte";
+  import EntryHeading from "#lib/components/settings/settings-entries/EntryHeading.svelte";
+  import { messages, resolvePath } from "#lib/i18n/index.ts";
+  import { isTauriRuntime } from "#lib/services/runtime.ts";
+  import { formatBytes } from "#lib/utils/content/format.ts";
   import {
     exportToFile,
     getExportFormats,
@@ -16,8 +16,8 @@
     type ExportFormatInfo,
     type ImportFormatInfo,
     type ImportSummary,
-  } from "$lib/services/storage";
-  import { endOfDay, startOfDay } from "$lib/utils/search/date-query";
+  } from "#lib/services/storage.ts";
+  import { endOfDay, startOfDay } from "#lib/utils/search/date-query.ts";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DARK_THEME_COLORS, LIGHT_THEME_COLORS } from "$lib/types/clipboard";
+import { DARK_THEME_COLORS, LIGHT_THEME_COLORS } from "#lib/types/clipboard.ts";
 import {
   applyThemeColors,
   resolveThemeColors,
@@ -7,9 +7,9 @@ import {
   THEME_MODE_CACHE_KEY,
   watchSystemTheme,
 } from "./theme";
-import { DEFAULT_GENERAL_SETTINGS } from "$lib/services/settings/defaults";
-import { applyGeneralSettingsToDocument } from "$lib/services/settings-bootstrap";
-import { normalizeGeneralSettings } from "$lib/services/settings/normalize";
+import { DEFAULT_GENERAL_SETTINGS } from "#lib/services/settings/defaults.ts";
+import { applyGeneralSettingsToDocument } from "#lib/services/settings-bootstrap.ts";
+import { normalizeGeneralSettings } from "#lib/services/settings/normalize.ts";
 import themeInit from "../../../../static/theme-init.js?raw";
 
 afterEach(() => {

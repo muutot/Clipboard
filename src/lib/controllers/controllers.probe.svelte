@@ -2,7 +2,10 @@
   import { createHistoryController } from "./history.svelte";
   import { createSearchController } from "./search.svelte";
   import { createBulkController } from "./bulk.svelte";
-  import { createItemStoreView, type ItemStoreView } from "$lib/utils/store/item-store-view.svelte";
+  import {
+    createItemStoreView,
+    type ItemStoreView,
+  } from "#lib/utils/store/item-store-view.svelte.ts";
   export interface ProbeState {
     store?: ItemStoreView;
     history?: ReturnType<typeof createHistoryController>;
@@ -16,17 +19,17 @@
 
 <script lang="ts">
   import { untrack, onDestroy } from "svelte";
-  import { createItemMutations } from "$lib/utils/store/item-mutations";
-  import { applyItemsChangedEvent } from "$lib/utils/store/item-changes";
+  import { createItemMutations } from "#lib/utils/store/item-mutations.ts";
+  import { applyItemsChangedEvent } from "#lib/utils/store/item-changes.ts";
   import {
     createItemStore,
     captureAffectedItems,
     restoreAffectedItems,
     createRemovalRollbackGuard,
     removeItems,
-  } from "$lib/utils/store/item-store";
-  import { DEFAULT_GENERAL_SETTINGS } from "$lib/services/settings";
-  import type { ClipboardItem } from "$lib/types/clipboard";
+  } from "#lib/utils/store/item-store.ts";
+  import { DEFAULT_GENERAL_SETTINGS } from "#lib/services/settings.ts";
+  import type { ClipboardItem } from "#lib/types/clipboard.ts";
   let { out, initial = [] }: { out: ProbeState; initial?: ClipboardItem[] } = $props();
   let mutations: ReturnType<typeof createItemMutations> | undefined;
   const store = untrack(() =>

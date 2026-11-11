@@ -1,5 +1,5 @@
 import { estimateCardHeight, type CardEstimateInputs } from "./card-height";
-import type { ClipboardItem } from "$lib/types/clipboard";
+import type { ClipboardItem } from "#lib/types/clipboard.ts";
 
 interface Measurement {
   token: number;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ClipboardItem } from "$lib/types/clipboard";
+import type { ClipboardItem } from "#lib/types/clipboard.ts";
 import {
   appendItems,
   applyItemPatches,

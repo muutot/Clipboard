@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import AppIcon from "$lib/components/card/AppIcon.svelte";
-  import { messages, resolvePath } from "$lib/i18n";
-  import { assetUrl } from "$lib/utils/content/format";
+  import AppIcon from "#lib/components/card/AppIcon.svelte";
+  import { messages, resolvePath } from "#lib/i18n/index.ts";
+  import { assetUrl } from "#lib/utils/content/format.ts";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);

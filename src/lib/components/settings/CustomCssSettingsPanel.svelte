@@ -1,11 +1,11 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
   import { get } from "svelte/store";
-  import { generalSettings } from "$lib/services/settings";
-  import { messages, resolvePath } from "$lib/i18n";
-  import { compileCustomCss, MAX_CUSTOM_CSS_LENGTH } from "$lib/utils/settings/custom-css";
-  import { createFeedback } from "$lib/utils/settings/feedback.svelte";
-  import EntryHeading from "$lib/components/settings/settings-entries/EntryHeading.svelte";
+  import { generalSettings } from "#lib/services/settings.ts";
+  import { messages, resolvePath } from "#lib/i18n/index.ts";
+  import { compileCustomCss, MAX_CUSTOM_CSS_LENGTH } from "#lib/utils/settings/custom-css.ts";
+  import { createFeedback } from "#lib/utils/settings/feedback.svelte.ts";
+  import EntryHeading from "#lib/components/settings/settings-entries/EntryHeading.svelte";
 
   let { onclose, showHeader = true }: { onclose: () => void; showHeader?: boolean } = $props();
   const t = (key: string) => resolvePath($messages, "customCss." + key);

@@ -1,18 +1,18 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
   import { convertFileSrc } from "@tauri-apps/api/core";
-  import AppIcon from "$lib/components/card/AppIcon.svelte";
-  import Checkbox from "$lib/components/common/Checkbox.svelte";
-  import { messages, resolvePath } from "$lib/i18n";
-  import EntryHeading from "$lib/components/settings/settings-entries/EntryHeading.svelte";
+  import AppIcon from "#lib/components/card/AppIcon.svelte";
+  import Checkbox from "#lib/components/common/Checkbox.svelte";
+  import { messages, resolvePath } from "#lib/i18n/index.ts";
+  import EntryHeading from "#lib/components/settings/settings-entries/EntryHeading.svelte";
   import {
     deleteIconFiles,
     listIconCache,
     replaceIconFile,
     type IconCacheEntry,
-  } from "$lib/services/storage";
-  import { isTauriRuntime } from "$lib/services/runtime";
-  import { formatBytes } from "$lib/utils/content/format";
+  } from "#lib/services/storage.ts";
+  import { isTauriRuntime } from "#lib/services/runtime.ts";
+  import { formatBytes } from "#lib/utils/content/format.ts";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);

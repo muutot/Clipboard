@@ -1,7 +1,7 @@
 import { flushSync, mount, unmount } from "svelte";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { locale } from "$lib/i18n";
-import * as storage from "$lib/services/storage";
+import { locale } from "#lib/i18n/index.ts";
+import * as storage from "#lib/services/storage.ts";
 import SyncPanel from "./SyncPanel.svelte";
 
 // One bridge keeps the storage mock hoisted above the vi.mock factories.
@@ -17,7 +17,7 @@ const bridge = vi.hoisted(() => ({
 }));
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: bridge.invoke }));
-vi.mock("$lib/services/runtime", () => ({
+vi.mock("#lib/services/runtime.ts", () => ({
   invokeTauri: bridge.invoke,
   invokeTauriRequired: bridge.invoke,
   isTauriRuntime: () => true,
@@ -25,11 +25,11 @@ vi.mock("$lib/services/runtime", () => ({
   openDevtools: vi.fn(),
   isDevtoolsHotkey: () => false,
 }));
-vi.mock("$lib/services/settings", async () => {
+vi.mock("#lib/services/settings.ts", async () => {
   const { writable } = await import("svelte/store");
   return { generalSettings: writable({ colorIcons: false }) };
 });
-vi.mock("$lib/services/storage", () => ({
+vi.mock("#lib/services/storage.ts", () => ({
   getSyncConfig: bridge.getConfig,
   setSyncConfig: bridge.setConfig,
   testSyncConnection: bridge.testConnection,

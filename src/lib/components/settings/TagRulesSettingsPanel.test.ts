@@ -1,11 +1,11 @@
 import { mount, unmount, flushSync } from "svelte";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import Panel from "./TagRulesSettingsPanel.svelte";
-import { locale } from "$lib/i18n";
-import * as service from "$lib/services/clipboard";
+import { locale } from "#lib/i18n/index.ts";
+import * as service from "#lib/services/clipboard.ts";
 
-vi.mock("$lib/services/runtime", () => ({ isTauriRuntime: () => true }));
-vi.mock("$lib/services/clipboard", () => ({
+vi.mock("#lib/services/runtime.ts", () => ({ isTauriRuntime: () => true }));
+vi.mock("#lib/services/clipboard.ts", () => ({
   getAutoTagRules: vi.fn(),
   setAutoTagRules: vi.fn(),
   previewAutoTagRules: vi.fn(),

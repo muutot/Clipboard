@@ -1,13 +1,13 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { messages, resolvePath } from "$lib/i18n";
-  import { generalSettings } from "$lib/services/settings";
+  import { messages, resolvePath } from "#lib/i18n/index.ts";
+  import { generalSettings } from "#lib/services/settings.ts";
   import {
     MAX_SAVED_SEARCHES,
     saveNamedSearch,
     type SavedSearch,
     type SavedSearchState,
-  } from "$lib/utils/settings/saved-searches";
+  } from "#lib/utils/settings/saved-searches.ts";
   let {
     current,
     onapply,

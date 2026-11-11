@@ -1,6 +1,6 @@
 import { flushSync, mount, unmount } from "svelte";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import type { StorageStatus } from "$lib/services/storage";
+import type { StorageStatus } from "#lib/services/storage.ts";
 import StoragePathsPanel from "./StoragePathsPanel.svelte";
 
 const bridge = vi.hoisted(() => ({
@@ -9,11 +9,11 @@ const bridge = vi.hoisted(() => ({
   directory: vi.fn(),
   feedback: vi.fn(),
 }));
-vi.mock("$lib/services/settings", async () => {
+vi.mock("#lib/services/settings.ts", async () => {
   const { writable } = await import("svelte/store");
   return { generalSettings: writable({ colorIcons: false }) };
 });
-vi.mock("$lib/services/storage", () => ({
+vi.mock("#lib/services/storage.ts", () => ({
   getStorageConfig: bridge.load,
   setResourceStoragePaths: bridge.save,
   configureStorageDirectory: bridge.directory,

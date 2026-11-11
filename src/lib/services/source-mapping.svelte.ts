@@ -10,10 +10,10 @@
 // re-reads the persisted rules after a save notification.
 
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { getSourceMappingRules, type SourceMappingRule } from "$lib/services/clipboard";
-import { isTauriRuntime } from "$lib/services/runtime";
+import { getSourceMappingRules, type SourceMappingRule } from "#lib/services/clipboard.ts";
+import { isTauriRuntime } from "#lib/services/runtime.ts";
 import { BUILTIN_DOMAIN_NAMES } from "./source-mapping-domains";
-import type { WebSourceMetadata } from "$lib/types/clipboard";
+import type { WebSourceMetadata } from "#lib/types/clipboard.ts";
 
 /** Cap for raw page titles shown when no rule matches. */
 const WEB_TITLE_MAX_LENGTH = 24;

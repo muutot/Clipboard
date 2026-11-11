@@ -1,6 +1,6 @@
 <script lang="ts">
-  import AppIcon from "$lib/components/card/AppIcon.svelte";
-  import { messages, resolvePath } from "$lib/i18n";
+  import AppIcon from "#lib/components/card/AppIcon.svelte";
+  import { messages, resolvePath } from "#lib/i18n/index.ts";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);

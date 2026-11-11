@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { get } from "svelte/store";
-import { applySettingsPatch, type SettingsPatch } from "$lib/utils/settings/settings-patch";
+import { applySettingsPatch, type SettingsPatch } from "#lib/utils/settings/settings-patch.ts";
 
 const bridge = vi.hoisted(() => ({
   invoke: vi.fn(),
@@ -13,7 +13,7 @@ vi.mock("@tauri-apps/api/event", () => ({
     return () => bridge.listeners.delete(callback);
   }),
 }));
-vi.mock("$lib/i18n", () => ({ setLocale: vi.fn() }));
+vi.mock("#lib/i18n/index.ts", () => ({ setLocale: vi.fn() }));
 
 type Store = typeof import("./settings").generalSettings;
 let stores: Store[];

@@ -1,7 +1,7 @@
 import { flushSync, mount, unmount } from "svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { t } from "$lib/i18n";
-import type { StorageStatus } from "$lib/services/storage";
+import { t } from "#lib/i18n/index.ts";
+import type { StorageStatus } from "#lib/services/storage.ts";
 import StorageSettingsDialog from "./StorageSettingsDialog.svelte";
 
 const bridge = vi.hoisted(() => ({
@@ -18,7 +18,7 @@ vi.mock("@tauri-apps/api/event", () => ({
     return Promise.resolve(() => bridge.listeners.delete(event));
   }),
 }));
-vi.mock("$lib/services/storage", () => ({
+vi.mock("#lib/services/storage.ts", () => ({
   getStorageStatus: bridge.getStorageStatus,
   getPerformanceMetrics: vi.fn().mockResolvedValue(null),
 }));

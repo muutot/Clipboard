@@ -1,7 +1,7 @@
 import { flushSync, mount, unmount } from "svelte";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { UnlistenFn } from "@tauri-apps/api/event";
-import type { SourceMappingRule } from "$lib/services/clipboard";
+import type { SourceMappingRule } from "#lib/services/clipboard.ts";
 import { createSourceMappingStore, type SourceMappingStore } from "./source-mapping.svelte";
 import Probe from "./source-mapping.probe.svelte";
 
@@ -10,8 +10,8 @@ const bridge = vi.hoisted(() => ({
   listen: vi.fn(),
   listeners: new Set<() => void>(),
 }));
-vi.mock("$lib/services/runtime", () => ({ isTauriRuntime: () => true }));
-vi.mock("$lib/services/clipboard", () => ({ getSourceMappingRules: bridge.getRules }));
+vi.mock("#lib/services/runtime.ts", () => ({ isTauriRuntime: () => true }));
+vi.mock("#lib/services/clipboard.ts", () => ({ getSourceMappingRules: bridge.getRules }));
 vi.mock("@tauri-apps/api/event", () => ({
   listen: bridge.listen,
 }));

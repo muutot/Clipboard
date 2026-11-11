@@ -1,13 +1,13 @@
 import { flushSync, mount, unmount } from "svelte";
 import { afterEach, expect, it, vi } from "vitest";
-import { locale, t } from "$lib/i18n";
+import { locale, t } from "#lib/i18n/index.ts";
 import Panel from "./TagRulesSettingsPanel.svelte";
-import * as service from "$lib/services/clipboard";
+import * as service from "#lib/services/clipboard.ts";
 
 const bridge = vi.hoisted(() => ({ invoke: vi.fn(async () => null) }));
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: bridge.invoke }));
-vi.mock("$lib/services/runtime", () => ({
+vi.mock("#lib/services/runtime.ts", () => ({
   invokeTauri: bridge.invoke,
   invokeTauriRequired: bridge.invoke,
   isTauriRuntime: () => true,
@@ -15,11 +15,11 @@ vi.mock("$lib/services/runtime", () => ({
   openDevtools: vi.fn(),
   isDevtoolsHotkey: () => false,
 }));
-vi.mock("$lib/services/settings", async () => {
+vi.mock("#lib/services/settings.ts", async () => {
   const { writable } = await import("svelte/store");
   return { generalSettings: writable({ colorIcons: false }) };
 });
-vi.mock("$lib/services/clipboard", () => ({
+vi.mock("#lib/services/clipboard.ts", () => ({
   getAutoTagRules: vi.fn(),
   setAutoTagRules: vi.fn(),
   previewAutoTagRules: vi.fn(),

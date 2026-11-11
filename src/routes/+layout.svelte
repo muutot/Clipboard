@@ -3,14 +3,14 @@
   import { invoke } from "@tauri-apps/api/core";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import "../app.css";
-  import "$lib/styles/settings-shared.css";
-  import { generalSettings } from "$lib/services/settings";
-  import { destroySourceMappingRules } from "$lib/services/source-mapping.svelte";
-  import { applyGeneralSettingsToDocument } from "$lib/services/settings-bootstrap";
-  import { isTauriRuntime } from "$lib/services/runtime";
-  import { isCustomCssRecoveryShortcut } from "$lib/utils/settings/custom-css";
-  import { watchSystemTheme } from "$lib/utils/settings/theme";
-  import AppContextMenu from "$lib/components/common/AppContextMenu.svelte";
+  import "#lib/styles/settings-shared.css";
+  import { generalSettings } from "#lib/services/settings.ts";
+  import { destroySourceMappingRules } from "#lib/services/source-mapping.svelte.ts";
+  import { applyGeneralSettingsToDocument } from "#lib/services/settings-bootstrap.ts";
+  import { isTauriRuntime } from "#lib/services/runtime.ts";
+  import { isCustomCssRecoveryShortcut } from "#lib/utils/settings/custom-css.ts";
+  import { watchSystemTheme } from "#lib/utils/settings/theme.ts";
+  import AppContextMenu from "#lib/components/common/AppContextMenu.svelte";
   import { onDestroy, onMount } from "svelte";
 
   let { children } = $props();

@@ -1,7 +1,7 @@
 import { flushSync, mount, unmount } from "svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import MainPage from "./+page.svelte";
-import type { ClipboardItem } from "$lib/types/clipboard";
+import type { ClipboardItem } from "#lib/types/clipboard.ts";
 
 // Mount the real route with controlled native registrations and history IPC.
 
@@ -14,8 +14,8 @@ const bridge = vi.hoisted(() => ({
   deleted: vi.fn(async () => []),
 }));
 
-vi.mock("$lib/services/runtime", async (original) => ({
-  ...(await original<typeof import("$lib/services/runtime")>()),
+vi.mock("#lib/services/runtime.ts", async (original) => ({
+  ...(await original<typeof import("#lib/services/runtime.ts")>()),
   isTauriRuntime: () => bridge.native,
 }));
 vi.mock("@tauri-apps/api/core", () => ({
@@ -23,17 +23,17 @@ vi.mock("@tauri-apps/api/core", () => ({
   convertFileSrc: (path: string) => path,
 }));
 vi.mock("@tauri-apps/api/window", () => ({ getCurrentWindow: () => null }));
-vi.mock("$lib/services/settings-bootstrap", async (original) => ({
-  ...(await original<typeof import("$lib/services/settings-bootstrap")>()),
+vi.mock("#lib/services/settings-bootstrap.ts", async (original) => ({
+  ...(await original<typeof import("#lib/services/settings-bootstrap.ts")>()),
   applyGeneralSettingsToDocument: () => {},
 }));
-vi.mock("$lib/services/clipboard", async (original) => ({
-  ...(await original<typeof import("$lib/services/clipboard")>()),
+vi.mock("#lib/services/clipboard.ts", async (original) => ({
+  ...(await original<typeof import("#lib/services/clipboard.ts")>()),
   loadClipboardHistory: bridge.active,
   loadDeletedClipboardHistory: bridge.deleted,
 }));
 
-vi.mock("$lib/services/window-control", () => ({
+vi.mock("#lib/services/window-control.ts", () => ({
   hideMainWindow: bridge.hide,
   showMainWindow: vi.fn(),
 }));

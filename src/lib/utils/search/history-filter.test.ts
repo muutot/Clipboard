@@ -5,7 +5,7 @@ import {
   resolveDateRange,
   type HistoryFilterState,
 } from "./history-filter";
-import type { ClipboardItem } from "$lib/types/clipboard";
+import type { ClipboardItem } from "#lib/types/clipboard.ts";
 
 function item(overrides: Partial<ClipboardItem> & { id: string }): ClipboardItem {
   return {

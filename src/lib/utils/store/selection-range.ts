@@ -1,4 +1,4 @@
-import type { ClipboardItem } from "$lib/types/clipboard";
+import type { ClipboardItem } from "#lib/types/clipboard.ts";
 
 // Resolves a shift-click range into the ids to select, in the order they should
 // be pasted. The multi-selection doubles as the paste queue (a `Set` preserves

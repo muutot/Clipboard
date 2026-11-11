@@ -1,6 +1,6 @@
-import type { ThemeColors, ThemeMode } from "$lib/types/clipboard";
-import { DARK_THEME_COLORS, LIGHT_THEME_COLORS } from "$lib/types/clipboard";
-import { resolveCodeTheme } from "$lib/utils/content/code-theme";
+import type { ThemeColors, ThemeMode } from "#lib/types/clipboard.ts";
+import { DARK_THEME_COLORS, LIGHT_THEME_COLORS } from "#lib/types/clipboard.ts";
+import { resolveCodeTheme } from "#lib/utils/content/code-theme.ts";
 
 /**
  * Pre-paint theme snapshot. `static/theme-init.js` reads this key from `<head>`

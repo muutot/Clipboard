@@ -1,18 +1,18 @@
 <script lang="ts">
   import { untrack } from "svelte";
   import { listen } from "@tauri-apps/api/event";
-  import AppIcon from "$lib/components/card/AppIcon.svelte";
-  import { messages, resolvePath } from "$lib/i18n";
+  import AppIcon from "#lib/components/card/AppIcon.svelte";
+  import { messages, resolvePath } from "#lib/i18n/index.ts";
   import {
     getPerformanceMetrics,
     type PerformanceMetrics,
     type StorageStatus,
-  } from "$lib/services/storage";
-  import { getMemoryDiagnostics } from "$lib/services/memory";
-  import type { MemoryDiagnostics, OcrMemoryDiagnostics } from "$lib/types/memory";
-  import type { StatisticsTab } from "$lib/settings-navigation";
+  } from "#lib/services/storage.ts";
+  import { getMemoryDiagnostics } from "#lib/services/memory.ts";
+  import type { MemoryDiagnostics, OcrMemoryDiagnostics } from "#lib/types/memory.ts";
+  import type { StatisticsTab } from "#lib/settings-navigation.ts";
   import EntryHeading from "./settings-entries/EntryHeading.svelte";
-  import { formatBytes } from "$lib/utils/content/format";
+  import { formatBytes } from "#lib/utils/content/format.ts";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);

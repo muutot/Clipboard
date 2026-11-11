@@ -2,9 +2,9 @@ import { flushSync, mount, unmount } from "svelte";
 import { get } from "svelte/store";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import MainPage from "./+page.svelte";
-import { generalSettings } from "$lib/services/settings";
-import { t } from "$lib/i18n";
-import type { GeneralSettings, PersistedClipboardItem } from "$lib/types/clipboard";
+import { generalSettings } from "#lib/services/settings.ts";
+import { t } from "#lib/i18n/index.ts";
+import type { GeneralSettings, PersistedClipboardItem } from "#lib/types/clipboard.ts";
 
 const bridge = vi.hoisted(() => ({
   listeners: new Map<string, (event: { payload: unknown }) => void>(),

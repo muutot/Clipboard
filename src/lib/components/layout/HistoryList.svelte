@@ -1,9 +1,9 @@
 <script lang="ts">
-  import AppIcon from "$lib/components/card/AppIcon.svelte";
-  import ClipboardCard from "$lib/components/card/ClipboardCard.svelte";
-  import type { ClipboardItem } from "$lib/types/clipboard";
-  import type { VirtualListResult } from "$lib/utils/layout/virtual-scroll";
-  import { selectionOrder } from "$lib/utils/store/selection-order";
+  import AppIcon from "#lib/components/card/AppIcon.svelte";
+  import ClipboardCard from "#lib/components/card/ClipboardCard.svelte";
+  import type { ClipboardItem } from "#lib/types/clipboard.ts";
+  import type { VirtualListResult } from "#lib/utils/layout/virtual-scroll.ts";
+  import { selectionOrder } from "#lib/utils/store/selection-order.ts";
 
   interface Props {
     items: ClipboardItem[];

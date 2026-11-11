@@ -399,7 +399,7 @@ export interface GeneralSettings {
   useSystemTitleBar: boolean;
   theme: ThemeMode;
   /** 代码预览/编辑器的语法高亮主题；"auto" 随应用主题选择亮/暗配色 */
-  codeTheme: import("$lib/utils/content/code-theme").CodeThemeId;
+  codeTheme: import("#lib/utils/content/code-theme.ts").CodeThemeId;
   customCssEnabled: boolean;
   customCss: string;
   themeColors?: ThemeColors;
@@ -429,7 +429,7 @@ export interface GeneralSettings {
   /** 详情展示模式：'overlay' 同画布切入 | 'split' 左右分栏 */
   detailDisplayMode: "overlay" | "split";
   searchSortRules: SortRule[];
-  savedSearches: import("$lib/utils/settings/saved-searches").SavedSearch[];
+  savedSearches: import("#lib/utils/settings/saved-searches.ts").SavedSearch[];
   pageSizeLimit: number;
   searchPageSizeLimit: number;
   /** 纯文本/HTML/RTF 捕获大小上限（字节），超限的剪贴板内容不保存 */

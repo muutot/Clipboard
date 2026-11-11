@@ -5,12 +5,12 @@
   import { getCurrentWebview } from "@tauri-apps/api/webview";
   import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
   import { PhysicalPosition } from "@tauri-apps/api/dpi";
-  import { showToast } from "$lib/services/toast";
+  import { showToast } from "#lib/services/toast.ts";
   import { emitTo, listen } from "@tauri-apps/api/event";
-  import AppIcon from "$lib/components/card/AppIcon.svelte";
-  import Toast from "$lib/components/common/Toast.svelte";
-  import { messages, resolvePath } from "$lib/i18n";
-  import { isTauriRuntime, isDevtoolsHotkey, openDevtools } from "$lib/services/runtime";
+  import AppIcon from "#lib/components/card/AppIcon.svelte";
+  import Toast from "#lib/components/common/Toast.svelte";
+  import { messages, resolvePath } from "#lib/i18n/index.ts";
+  import { isTauriRuntime, isDevtoolsHotkey, openDevtools } from "#lib/services/runtime.ts";
   import {
     copyClipboardItem,
     loadClipboardHistory,
@@ -18,25 +18,25 @@
     persistDelete,
     persistFavorite,
     persistHardDelete,
-  } from "$lib/services/clipboard";
-  import { getDisplayTitle } from "$lib/utils/content/display-text";
-  import { generalSettings } from "$lib/services/settings";
-  import { applyGeneralSettingsToDocument } from "$lib/services/settings-bootstrap";
-  import { resolveThemeColors } from "$lib/utils/settings/theme";
-  import { showMainWindow } from "$lib/services/window-control";
+  } from "#lib/services/clipboard.ts";
+  import { getDisplayTitle } from "#lib/utils/content/display-text.ts";
+  import { generalSettings } from "#lib/services/settings.ts";
+  import { applyGeneralSettingsToDocument } from "#lib/services/settings-bootstrap.ts";
+  import { resolveThemeColors } from "#lib/utils/settings/theme.ts";
+  import { showMainWindow } from "#lib/services/window-control.ts";
   import type {
     ClipboardItem,
     ClipboardItemsChangedPayload,
     FloatPanelClickAction,
-  } from "$lib/types/clipboard";
+  } from "#lib/types/clipboard.ts";
   import {
     applyItemPatches,
     createItemStore,
     removeItems,
     replaceViewItems,
-  } from "$lib/utils/store/item-store";
-  import { createItemStoreView } from "$lib/utils/store/item-store-view.svelte";
-  import { applyItemsChangedEvent } from "$lib/utils/store/item-changes";
+  } from "#lib/utils/store/item-store.ts";
+  import { createItemStoreView } from "#lib/utils/store/item-store-view.svelte.ts";
+  import { applyItemsChangedEvent } from "#lib/utils/store/item-changes.ts";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);

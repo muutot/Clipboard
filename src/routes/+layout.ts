@@ -3,9 +3,9 @@
 // See: https://svelte.dev/docs/kit/single-page-apps
 // See: https://v2.tauri.app/start/frontend/sveltekit/ for more info
 import { get } from "svelte/store";
-import { generalSettings } from "$lib/services/settings";
-import { ensureSourceMappingRules } from "$lib/services/source-mapping.svelte";
-import { loadOsLocale, setLocale } from "$lib/i18n";
+import { generalSettings } from "#lib/services/settings.ts";
+import { ensureSourceMappingRules } from "#lib/services/source-mapping.svelte.ts";
+import { loadOsLocale, setLocale } from "#lib/i18n/index.ts";
 
 export const ssr = false;
 

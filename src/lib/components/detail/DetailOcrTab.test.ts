@@ -1,19 +1,19 @@
 import { flushSync, mount, unmount } from "svelte";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { generalSettings, DEFAULT_GENERAL_SETTINGS } from "$lib/services/settings";
+import { generalSettings, DEFAULT_GENERAL_SETTINGS } from "#lib/services/settings.ts";
 import DetailOcrTab from "./DetailOcrTab.svelte";
-import type { ClipboardItem } from "$lib/types/clipboard";
+import type { ClipboardItem } from "#lib/types/clipboard.ts";
 const bridge = vi.hoisted(() => ({ write: vi.fn(), invoke: vi.fn() }));
-vi.mock("$lib/services/clipboard", async (original) => ({
-  ...(await original<typeof import("$lib/services/clipboard")>()),
+vi.mock("#lib/services/clipboard.ts", async (original) => ({
+  ...(await original<typeof import("#lib/services/clipboard.ts")>()),
   writeClipboardText: bridge.write,
 }));
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: bridge.invoke,
   convertFileSrc: (p: string) => p,
 }));
-vi.mock("$lib/utils/content/format", async (original) => ({
-  ...(await original<typeof import("$lib/utils/content/format")>()),
+vi.mock("#lib/utils/content/format.ts", async (original) => ({
+  ...(await original<typeof import("#lib/utils/content/format.ts")>()),
   assetUrl: (path: string) => path,
 }));
 let target: HTMLDivElement;

@@ -10,8 +10,8 @@
 // of used rows. A removal has to win, because an id that is gone must not survive
 // a later patch — or be pulled back to the top after it was dropped.
 
-import { toClipboardItem } from "$lib/services/clipboard/mapping";
-import type { ClipboardItemsChangedPayload, PersistedClipboardItem } from "$lib/types/clipboard";
+import { toClipboardItem } from "#lib/services/clipboard/mapping.ts";
+import type { ClipboardItemsChangedPayload, PersistedClipboardItem } from "#lib/types/clipboard.ts";
 import {
   applyItemPatches,
   promoteItem,

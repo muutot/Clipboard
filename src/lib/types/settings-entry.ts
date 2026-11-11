@@ -1,4 +1,4 @@
-import type { IconName } from "$lib/types/clipboard";
+import type { IconName } from "#lib/types/clipboard.ts";
 
 export type SizeUnit = "byte" | "KB" | "MB" | "GB";
 

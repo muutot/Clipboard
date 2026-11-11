@@ -1,6 +1,6 @@
 <script lang="ts">
-  import AppIcon from "$lib/components/card/AppIcon.svelte";
-  import type { ToggleEntryConfig } from "$lib/types/settings-entry";
+  import AppIcon from "#lib/components/card/AppIcon.svelte";
+  import type { ToggleEntryConfig } from "#lib/types/settings-entry.ts";
   import EntryHeading from "./EntryHeading.svelte";
 
   interface Props {

@@ -1,9 +1,13 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { get } from "svelte/store";
-import { generalSettings, restoreWindowPosition, saveWindowPosition } from "$lib/services/settings";
-import { isTauriRuntime } from "$lib/services/runtime";
-import { applyGeneralSettingsToDocument } from "$lib/services/settings-bootstrap";
-import { createWindowBoundsController } from "$lib/utils/layout/window-bounds";
+import {
+  generalSettings,
+  restoreWindowPosition,
+  saveWindowPosition,
+} from "#lib/services/settings.ts";
+import { isTauriRuntime } from "#lib/services/runtime.ts";
+import { applyGeneralSettingsToDocument } from "#lib/services/settings-bootstrap.ts";
+import { createWindowBoundsController } from "#lib/utils/layout/window-bounds.ts";
 
 /** Handles both already-registered listeners and registrations that resolve after disposal. */
 export function createListenerScope() {

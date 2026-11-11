@@ -1,17 +1,17 @@
 import { flushSync, mount, unmount } from "svelte";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { locale } from "$lib/i18n";
-import { listAllTags, renameTag, setTagColor } from "$lib/services/clipboard";
-import { showToast } from "$lib/services/toast";
+import { locale } from "#lib/i18n/index.ts";
+import { listAllTags, renameTag, setTagColor } from "#lib/services/clipboard.ts";
+import { showToast } from "#lib/services/toast.ts";
 import { emit } from "@tauri-apps/api/event";
 import TagEditDialog from "./TagEditDialog.svelte";
 
-vi.mock("$lib/services/clipboard", () => ({
+vi.mock("#lib/services/clipboard.ts", () => ({
   listAllTags: vi.fn(),
   renameTag: vi.fn(),
   setTagColor: vi.fn(),
 }));
-vi.mock("$lib/services/toast", () => ({ showToast: vi.fn() }));
+vi.mock("#lib/services/toast.ts", () => ({ showToast: vi.fn() }));
 vi.mock("@tauri-apps/api/event", () => ({ emit: vi.fn(async () => {}) }));
 
 let host: HTMLDivElement;

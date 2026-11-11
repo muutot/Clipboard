@@ -1,5 +1,5 @@
 <script module lang="ts">
-  import type { ClipboardItem } from "$lib/types/clipboard";
+  import type { ClipboardItem } from "#lib/types/clipboard.ts";
   export interface DetailProbeState {
     setItem?: (item: ClipboardItem | null) => void;
   }

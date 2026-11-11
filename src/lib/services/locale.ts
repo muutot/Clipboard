@@ -1,4 +1,4 @@
-import { invokeTauri } from "$lib/services/runtime";
+import { invokeTauri } from "#lib/services/runtime.ts";
 
 /**
  * OS UI locale name (`zh-CN`, `en-US`, …) reported by the desktop backend.

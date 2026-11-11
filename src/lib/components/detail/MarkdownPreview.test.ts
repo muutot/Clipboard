@@ -1,7 +1,7 @@
 import { flushSync, mount, unmount } from "svelte";
 import { afterEach, describe, expect, it } from "vitest";
 import MarkdownPreview from "./MarkdownPreview.svelte";
-import { t, locale } from "$lib/i18n";
+import { t, locale } from "#lib/i18n/index.ts";
 import { get } from "svelte/store";
 
 const cleanup: Array<() => void> = [];

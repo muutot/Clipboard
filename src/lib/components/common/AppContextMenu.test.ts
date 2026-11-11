@@ -1,10 +1,10 @@
 import { flushSync, mount, unmount } from "svelte";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import AppContextMenu from "./AppContextMenu.svelte";
-import { locale } from "$lib/i18n";
-import { readClipboardText, writeClipboardText } from "$lib/services/clipboard";
+import { locale } from "#lib/i18n/index.ts";
+import { readClipboardText, writeClipboardText } from "#lib/services/clipboard.ts";
 
-vi.mock("$lib/services/clipboard", () => ({
+vi.mock("#lib/services/clipboard.ts", () => ({
   writeClipboardText: vi.fn(() => Promise.resolve()),
   readClipboardText: vi.fn(async () => "PASTE"),
 }));

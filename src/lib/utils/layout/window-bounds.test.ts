@@ -6,7 +6,7 @@ import {
   readLegacyWindowPosition,
   type WindowBoundsTarget,
 } from "./window-bounds";
-import type { WindowPosition } from "$lib/types/clipboard";
+import type { WindowPosition } from "#lib/types/clipboard.ts";
 
 class MemoryStorage implements Storage {
   private store = new Map<string, string>();

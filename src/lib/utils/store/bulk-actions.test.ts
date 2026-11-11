@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { planBulkCopy, planBulkDelete, planBulkPaste } from "./bulk-actions";
-import type { ClipboardItem } from "$lib/types/clipboard";
+import type { ClipboardItem } from "#lib/types/clipboard.ts";
 
 function item(id: string, overrides: Partial<ClipboardItem> = {}): ClipboardItem {
   return {

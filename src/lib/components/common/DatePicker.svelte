@@ -1,7 +1,7 @@
 <script lang="ts">
-  import AppIcon from "$lib/components/card/AppIcon.svelte";
-  import { locale, messages, resolvePath } from "$lib/i18n";
-  import { resolveFixedPopoverPosition } from "$lib/utils/settings/dropdown";
+  import AppIcon from "#lib/components/card/AppIcon.svelte";
+  import { locale, messages, resolvePath } from "#lib/i18n/index.ts";
+  import { resolveFixedPopoverPosition } from "#lib/utils/settings/dropdown.ts";
 
   interface Props {
     value: string;

@@ -2,7 +2,7 @@
 // contains no IPC, stores, or DOM — the route applies the returned plan
 // through its persistence wrappers and the item-store mutators.
 
-import type { ClipboardItem } from "$lib/types/clipboard";
+import type { ClipboardItem } from "#lib/types/clipboard.ts";
 
 export interface BulkDeletePlan {
   /** Recycle-bin candidates: soft delete + keep in list as deleted. */

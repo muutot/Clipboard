@@ -12,7 +12,7 @@ const bridge = vi.hoisted(() => ({
   hide: vi.fn(async () => {}),
 }));
 
-vi.mock("$lib/services/window-control", () => ({
+vi.mock("#lib/services/window-control.ts", () => ({
   hideMainWindow: bridge.hide,
   showMainWindow: vi.fn(),
 }));

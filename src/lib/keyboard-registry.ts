@@ -1,5 +1,5 @@
-import { defaultShortcutsFor } from "$lib/keyboard-defaults";
-import type { IconName } from "$lib/types/clipboard";
+import { defaultShortcutsFor } from "#lib/keyboard-defaults.ts";
+import type { IconName } from "#lib/types/clipboard.ts";
 
 /**
  * Single frontend registry for every `conf/keyboard.json` action.

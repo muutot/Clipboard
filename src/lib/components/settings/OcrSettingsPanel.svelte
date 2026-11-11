@@ -2,12 +2,12 @@
   import { onDestroy, untrack } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
-  import AppIcon from "$lib/components/card/AppIcon.svelte";
-  import CustomSelect from "$lib/components/common/CustomSelect.svelte";
-  import SelectEntry from "$lib/components/settings/settings-entries/SelectEntry.svelte";
-  import SliderEntry from "$lib/components/settings/settings-entries/SliderEntry.svelte";
-  import EntryHeading from "$lib/components/settings/settings-entries/EntryHeading.svelte";
-  import { messages, resolvePath } from "$lib/i18n";
+  import AppIcon from "#lib/components/card/AppIcon.svelte";
+  import CustomSelect from "#lib/components/common/CustomSelect.svelte";
+  import SelectEntry from "#lib/components/settings/settings-entries/SelectEntry.svelte";
+  import SliderEntry from "#lib/components/settings/settings-entries/SliderEntry.svelte";
+  import EntryHeading from "#lib/components/settings/settings-entries/EntryHeading.svelte";
+  import { messages, resolvePath } from "#lib/i18n/index.ts";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);

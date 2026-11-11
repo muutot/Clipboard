@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { currentConfirm, settleConfirm } from "$lib/services/ui/confirm.svelte";
-  import { t } from "$lib/i18n";
+  import { currentConfirm, settleConfirm } from "#lib/services/ui/confirm.svelte.ts";
+  import { t } from "#lib/i18n/index.ts";
 
   let dialog = $state<HTMLDialogElement | null>(null);
   let confirmButton = $state<HTMLButtonElement | null>(null);

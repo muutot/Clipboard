@@ -1,15 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { copyClipboardItem, pasteClipboardItem, hydrateClipboardItem } from "./clipboard";
-import type { ClipboardItem } from "$lib/types/clipboard";
+import type { ClipboardItem } from "#lib/types/clipboard.ts";
 
 const bridge = vi.hoisted(() => ({ invoke: vi.fn(), write: vi.fn(), toast: vi.fn(), pin: true }));
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: bridge.invoke,
   convertFileSrc: (x: string) => x,
 }));
-vi.mock("$lib/services/toast", () => ({ showToast: bridge.toast }));
-vi.mock("$lib/services/log", () => ({ logFrontendError: vi.fn(), logFrontendMessage: vi.fn() }));
-vi.mock("$lib/services/settings", () => ({
+vi.mock("#lib/services/toast.ts", () => ({ showToast: bridge.toast }));
+vi.mock("#lib/services/log.ts", () => ({ logFrontendError: vi.fn(), logFrontendMessage: vi.fn() }));
+vi.mock("#lib/services/settings.ts", () => ({
   generalSettings: {
     subscribe(run: (value: unknown) => void) {
       run({ pinCopiedToTop: bridge.pin, pasteCleaningEnabled: false });

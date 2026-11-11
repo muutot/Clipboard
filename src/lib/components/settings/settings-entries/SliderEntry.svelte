@@ -1,6 +1,6 @@
 <script lang="ts">
-  import type { SliderEntryConfig } from "$lib/types/settings-entry";
-  import { sliderPercentage } from "$lib/utils/content/format";
+  import type { SliderEntryConfig } from "#lib/types/settings-entry.ts";
+  import { sliderPercentage } from "#lib/utils/content/format.ts";
   import EntryHeading from "./EntryHeading.svelte";
 
   interface Props {

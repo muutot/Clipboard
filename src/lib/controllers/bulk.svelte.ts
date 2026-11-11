@@ -1,13 +1,13 @@
-import type { ClipboardItem, GeneralSettings } from "$lib/types/clipboard";
-import type { ItemStoreView } from "$lib/utils/store/item-store-view.svelte";
-import type { createItemMutations } from "$lib/utils/store/item-mutations";
+import type { ClipboardItem, GeneralSettings } from "#lib/types/clipboard.ts";
+import type { ItemStoreView } from "#lib/utils/store/item-store-view.svelte.ts";
+import type { createItemMutations } from "#lib/utils/store/item-mutations.ts";
 import type { createHistoryController } from "./history.svelte";
 import {
   removeItems,
   restoreAffectedItems,
   type AffectedItemOptions,
   type AffectedItemSnapshot,
-} from "$lib/utils/store/item-store";
+} from "#lib/utils/store/item-store.ts";
 import {
   hydrateClipboardItem,
   pasteBulkPayload,
@@ -20,9 +20,9 @@ import {
   persistBatchPermanentDelete,
   persistBatchDelete,
   persistHardDelete,
-} from "$lib/services/clipboard";
-import { showToast } from "$lib/services/toast";
-import { planBulkCopy, planBulkDelete, planBulkPaste } from "$lib/utils/store/bulk-actions";
+} from "#lib/services/clipboard.ts";
+import { showToast } from "#lib/services/toast.ts";
+import { planBulkCopy, planBulkDelete, planBulkPaste } from "#lib/utils/store/bulk-actions.ts";
 export interface BulkDependencies {
   itemStore: ItemStoreView;
   metadataMutations: ReturnType<typeof createItemMutations>;

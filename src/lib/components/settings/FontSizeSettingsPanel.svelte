@@ -1,13 +1,13 @@
 <script lang="ts">
-  import SettingEntry from "$lib/components/settings/SettingEntry.svelte";
-  import { messages, resolvePath } from "$lib/i18n";
-  import { generalSettings } from "$lib/services/settings";
+  import SettingEntry from "#lib/components/settings/SettingEntry.svelte";
+  import { messages, resolvePath } from "#lib/i18n/index.ts";
+  import { generalSettings } from "#lib/services/settings.ts";
   import {
     applyFontSizesToDocument,
     applyUiFontToDocument,
-  } from "$lib/services/settings-bootstrap";
-  import type { SettingEntryConfig } from "$lib/types/settings-entry";
-  import type { UiFontFamily } from "$lib/types/clipboard";
+  } from "#lib/services/settings-bootstrap.ts";
+  import type { SettingEntryConfig } from "#lib/types/settings-entry.ts";
+  import type { UiFontFamily } from "#lib/types/clipboard.ts";
   import { emit } from "@tauri-apps/api/event";
 
   const _t = (path: string, params?: Record<string, string | number>) =>

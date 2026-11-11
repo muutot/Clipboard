@@ -1,5 +1,5 @@
 <script lang="ts">
-  import AppIcon from "$lib/components/card/AppIcon.svelte";
+  import AppIcon from "#lib/components/card/AppIcon.svelte";
 
   interface Props {
     tag: string;

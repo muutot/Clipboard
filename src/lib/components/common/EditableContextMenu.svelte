@@ -1,10 +1,10 @@
 <script lang="ts">
   import { untrack } from "svelte";
-  import ContextMenu from "$lib/components/common/ContextMenu.svelte";
-  import type { ContextMenuItem } from "$lib/components/common/ContextMenu.svelte";
-  import { messages, resolvePath } from "$lib/i18n";
-  import { readClipboardText, writeClipboardText } from "$lib/services/clipboard";
-  import { showToast } from "$lib/services/toast";
+  import ContextMenu from "#lib/components/common/ContextMenu.svelte";
+  import type { ContextMenuItem } from "#lib/components/common/ContextMenu.svelte";
+  import { messages, resolvePath } from "#lib/i18n/index.ts";
+  import { readClipboardText, writeClipboardText } from "#lib/services/clipboard.ts";
+  import { showToast } from "#lib/services/toast.ts";
 
   interface Props {
     x: number;

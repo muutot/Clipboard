@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { RuntimeInfo } from "$lib/types/clipboard";
+import type { RuntimeInfo } from "#lib/types/clipboard.ts";
 
 export function isTauriRuntime(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;

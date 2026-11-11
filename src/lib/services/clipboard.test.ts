@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { clipboardPathLines, deriveTextEditPatch, isFilesCopySourceMissing } from "./clipboard";
 import { formatTextLength } from "./clipboard/mapping";
-import { generatedClipboardTitle } from "$lib/utils/content/display-text";
-import type { ClipboardItem } from "$lib/types/clipboard";
+import { generatedClipboardTitle } from "#lib/utils/content/display-text.ts";
+import type { ClipboardItem } from "#lib/types/clipboard.ts";
 
 function item(overrides: Partial<ClipboardItem> & { id: string }): ClipboardItem {
   return {

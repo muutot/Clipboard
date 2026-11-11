@@ -2,11 +2,11 @@
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { onMount } from "svelte";
   import { get } from "svelte/store";
-  import StorageSettingsDialog from "$lib/components/settings/StorageSettingsDialog.svelte";
-  import ConfirmDialog from "$lib/components/common/ConfirmDialog.svelte";
-  import { generalSettings } from "$lib/services/settings";
-  import { applyGeneralSettingsToDocument } from "$lib/services/settings-bootstrap";
-  import { isTauriRuntime, isDevtoolsHotkey, openDevtools } from "$lib/services/runtime";
+  import StorageSettingsDialog from "#lib/components/settings/StorageSettingsDialog.svelte";
+  import ConfirmDialog from "#lib/components/common/ConfirmDialog.svelte";
+  import { generalSettings } from "#lib/services/settings.ts";
+  import { applyGeneralSettingsToDocument } from "#lib/services/settings-bootstrap.ts";
+  import { isTauriRuntime, isDevtoolsHotkey, openDevtools } from "#lib/services/runtime.ts";
 
   function handleDevtoolsKeydown(event: KeyboardEvent) {
     if (isDevtoolsHotkey(event) && s.devtoolsShortcutEnabled) {

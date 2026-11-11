@@ -1,22 +1,22 @@
 <script lang="ts">
   import { tick } from "svelte";
-  import { generalSettings } from "$lib/services/settings";
-  import AppIcon from "$lib/components/card/AppIcon.svelte";
-  import SearchField from "$lib/components/common/SearchField.svelte";
-  import { getStorageStatus, type StorageStatus } from "$lib/services/storage";
-  import { isTauriRuntime, getRuntimeInfo } from "$lib/services/runtime";
+  import { generalSettings } from "#lib/services/settings.ts";
+  import AppIcon from "#lib/components/card/AppIcon.svelte";
+  import SearchField from "#lib/components/common/SearchField.svelte";
+  import { getStorageStatus, type StorageStatus } from "#lib/services/storage.ts";
+  import { isTauriRuntime, getRuntimeInfo } from "#lib/services/runtime.ts";
   import { getVersion } from "@tauri-apps/api/app";
-  import { messages, resolvePath } from "$lib/i18n";
+  import { messages, resolvePath } from "#lib/i18n/index.ts";
   import {
     SETTINGS_NAV_GROUP_DEFINITIONS,
     type FontSubsection,
     type SettingsNavGroupId,
     type SettingsSection,
     type StatisticsTab,
-  } from "$lib/settings-navigation";
-  import type { IconName } from "$lib/types/clipboard";
-  import { formatBytes } from "$lib/utils/content/format";
-  import { captureFocusRestore, trapTabFocus } from "$lib/utils/keyboard/focus";
+  } from "#lib/settings-navigation.ts";
+  import type { IconName } from "#lib/types/clipboard.ts";
+  import { formatBytes } from "#lib/utils/content/format.ts";
+  import { captureFocusRestore, trapTabFocus } from "#lib/utils/keyboard/focus.ts";
   import { createLazyPanelRegistry } from "./lazy-panels";
   import { createSettingsSearchController } from "./settings-search-controller.svelte";
 

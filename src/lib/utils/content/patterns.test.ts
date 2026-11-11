@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { COLOR_RE, detectQuickActions, extractColors, quickActionKind } from "./patterns";
-import type { QuickAction } from "$lib/services/clipboard";
+import type { QuickAction } from "#lib/services/clipboard.ts";
 
 function action(overrides: Partial<QuickAction> & { payload: string }): QuickAction {
   return { label: "action", actionType: "open", ...overrides };

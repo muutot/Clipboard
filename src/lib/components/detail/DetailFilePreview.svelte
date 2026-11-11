@@ -1,11 +1,11 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
-  import AppIcon from "$lib/components/card/AppIcon.svelte";
-  import type { ClipboardItem } from "$lib/types/clipboard";
-  import { messages, resolvePath } from "$lib/i18n";
-  import { formatBytes, assetUrl } from "$lib/utils/content/format";
-  import { isTauriRuntime } from "$lib/services/runtime";
-  import { FILE_PREVIEW_LIMIT, loadFilePreview } from "$lib/utils/content/file-preview";
+  import AppIcon from "#lib/components/card/AppIcon.svelte";
+  import type { ClipboardItem } from "#lib/types/clipboard.ts";
+  import { messages, resolvePath } from "#lib/i18n/index.ts";
+  import { formatBytes, assetUrl } from "#lib/utils/content/format.ts";
+  import { isTauriRuntime } from "#lib/services/runtime.ts";
+  import { FILE_PREVIEW_LIMIT, loadFilePreview } from "#lib/utils/content/file-preview.ts";
 
   interface Props {
     item: ClipboardItem;

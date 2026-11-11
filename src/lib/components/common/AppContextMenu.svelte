@@ -1,16 +1,16 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import ContextMenu from "$lib/components/common/ContextMenu.svelte";
-  import type { ContextMenuItem } from "$lib/components/common/ContextMenu.svelte";
-  import EditableContextMenu from "$lib/components/common/EditableContextMenu.svelte";
-  import { messages, resolvePath } from "$lib/i18n";
-  import { writeClipboardText } from "$lib/services/clipboard";
-  import { showToast } from "$lib/services/toast";
+  import ContextMenu from "#lib/components/common/ContextMenu.svelte";
+  import type { ContextMenuItem } from "#lib/components/common/ContextMenu.svelte";
+  import EditableContextMenu from "#lib/components/common/EditableContextMenu.svelte";
+  import { messages, resolvePath } from "#lib/i18n/index.ts";
+  import { writeClipboardText } from "#lib/services/clipboard.ts";
+  import { showToast } from "#lib/services/toast.ts";
   import {
     notifyContextMenuOpened,
     onContextMenuOpened,
     trackContextMenuOpen,
-  } from "$lib/services/context-menu";
+  } from "#lib/services/context-menu.ts";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);

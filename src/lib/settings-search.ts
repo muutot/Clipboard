@@ -1,5 +1,5 @@
-import type { FontSubsection, SettingsSection, StatisticsTab } from "$lib/settings-navigation";
-import { defaultShortcutsFor } from "$lib/keyboard-defaults";
+import type { FontSubsection, SettingsSection, StatisticsTab } from "#lib/settings-navigation.ts";
+import { defaultShortcutsFor } from "#lib/keyboard-defaults.ts";
 
 export {
   SETTINGS_SECTIONS,
@@ -7,7 +7,7 @@ export {
   resolveSettingsNavPath,
   type SettingsSection,
   type StatisticsTab,
-} from "$lib/settings-navigation";
+} from "#lib/settings-navigation.ts";
 
 export interface SettingsSearchTarget {
   section: SettingsSection;

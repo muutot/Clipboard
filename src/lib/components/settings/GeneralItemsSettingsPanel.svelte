@@ -1,9 +1,9 @@
 <script lang="ts">
-  import SettingEntry from "$lib/components/settings/SettingEntry.svelte";
-  import { messages, resolvePath } from "$lib/i18n";
-  import type { CardActionsDisplay, GroupDisplayMode } from "$lib/types/clipboard";
-  import { generalSettings } from "$lib/services/settings";
-  import type { SettingEntryConfig } from "$lib/types/settings-entry";
+  import SettingEntry from "#lib/components/settings/SettingEntry.svelte";
+  import { messages, resolvePath } from "#lib/i18n/index.ts";
+  import type { CardActionsDisplay, GroupDisplayMode } from "#lib/types/clipboard.ts";
+  import { generalSettings } from "#lib/services/settings.ts";
+  import type { SettingEntryConfig } from "#lib/types/settings-entry.ts";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);

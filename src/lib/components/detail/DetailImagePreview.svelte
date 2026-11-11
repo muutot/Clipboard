@@ -1,9 +1,9 @@
 <script lang="ts">
-  import AppIcon from "$lib/components/card/AppIcon.svelte";
-  import OcrImageOverlay from "$lib/components/detail/OcrImageOverlay.svelte";
-  import type { ClipboardItem } from "$lib/types/clipboard";
-  import { messages, resolvePath } from "$lib/i18n";
-  import { assetUrl } from "$lib/utils/content/format";
+  import AppIcon from "#lib/components/card/AppIcon.svelte";
+  import OcrImageOverlay from "#lib/components/detail/OcrImageOverlay.svelte";
+  import type { ClipboardItem } from "#lib/types/clipboard.ts";
+  import { messages, resolvePath } from "#lib/i18n/index.ts";
+  import { assetUrl } from "#lib/utils/content/format.ts";
 
   interface Props {
     item: ClipboardItem;

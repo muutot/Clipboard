@@ -9,11 +9,11 @@ import type {
   SortRule,
   ThemeColors,
   ThemePreset,
-} from "$lib/types/clipboard";
-import { DARK_THEME_COLORS, ICON_NAMES, type IconColors } from "$lib/types/clipboard";
+} from "#lib/types/clipboard.ts";
+import { DARK_THEME_COLORS, ICON_NAMES, type IconColors } from "#lib/types/clipboard.ts";
 
 import { DEFAULT_GENERAL_SETTINGS } from "./defaults";
-import { validCodeTheme } from "$lib/utils/content/code-theme";
+import { validCodeTheme } from "#lib/utils/content/code-theme.ts";
 
 export { validCodeTheme };
 

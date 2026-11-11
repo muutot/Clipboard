@@ -1,4 +1,4 @@
-import { invokeTauriRequired } from "$lib/services/runtime";
+import { invokeTauriRequired } from "#lib/services/runtime.ts";
 
 export interface UpdateInfo {
   currentVersion: string;

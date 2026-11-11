@@ -1,8 +1,8 @@
 <script lang="ts">
-  import AppIcon from "$lib/components/card/AppIcon.svelte";
-  import TagChip from "$lib/components/card/TagChip.svelte";
-  import type { ClipboardItem } from "$lib/types/clipboard";
-  import { messages, resolvePath } from "$lib/i18n";
+  import AppIcon from "#lib/components/card/AppIcon.svelte";
+  import TagChip from "#lib/components/card/TagChip.svelte";
+  import type { ClipboardItem } from "#lib/types/clipboard.ts";
+  import { messages, resolvePath } from "#lib/i18n/index.ts";
 
   interface Props {
     item: ClipboardItem;

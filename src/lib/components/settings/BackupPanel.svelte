@@ -1,18 +1,18 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
-  import { messages, resolvePath } from "$lib/i18n";
-  import { isTauriRuntime } from "$lib/services/runtime";
+  import { messages, resolvePath } from "#lib/i18n/index.ts";
+  import { isTauriRuntime } from "#lib/services/runtime.ts";
   import {
     createResourceBackup,
     previewResourceBackup,
     restoreResourceBackup,
     type BackupPreview,
-  } from "$lib/services/storage";
-  import { formatBytes } from "$lib/utils/content/format";
+  } from "#lib/services/storage.ts";
+  import { formatBytes } from "#lib/utils/content/format.ts";
   import {
     createOperationMonitor,
     isOperationCancelled,
-  } from "$lib/services/background-operations.svelte";
+  } from "#lib/services/background-operations.svelte.ts";
   import BackgroundOperationStatus from "../layout/BackgroundOperationStatus.svelte";
   import EntryHeading from "./settings-entries/EntryHeading.svelte";
   let {

@@ -9,7 +9,7 @@ import MainPage from "./+page.svelte";
 // user selected: starting low and shift-clicking upward reads 6-1 down the
 // list, not 1-6.
 
-vi.mock("$lib/services/window-control", () => ({
+vi.mock("#lib/services/window-control.ts", () => ({
   hideMainWindow: vi.fn(async () => {}),
   showMainWindow: vi.fn(),
 }));

@@ -1,25 +1,25 @@
 import { mount, unmount, flushSync } from "svelte";
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
 import Probe, { type ProbeState } from "./controllers.probe.svelte";
-import { appendItems } from "$lib/utils/store/item-store";
-import type { ClipboardItem } from "$lib/types/clipboard";
+import { appendItems } from "#lib/utils/store/item-store.ts";
+import type { ClipboardItem } from "#lib/types/clipboard.ts";
 
 const bridge = vi.hoisted(() => ({ invoke: vi.fn(), write: vi.fn(), toast: vi.fn(), staged: "" }));
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: bridge.invoke,
   convertFileSrc: (path: string) => path,
 }));
-vi.mock("$lib/services/toast", () => ({ showToast: bridge.toast }));
-vi.mock("$lib/services/settings", async () => {
+vi.mock("#lib/services/toast.ts", () => ({ showToast: bridge.toast }));
+vi.mock("#lib/services/settings.ts", async () => {
   const { writable } = await import("svelte/store");
-  const { DEFAULT_GENERAL_SETTINGS } = await import("$lib/services/settings/defaults");
+  const { DEFAULT_GENERAL_SETTINGS } = await import("#lib/services/settings/defaults.ts");
   return {
     DEFAULT_GENERAL_SETTINGS,
     generalSettings: writable({ ...DEFAULT_GENERAL_SETTINGS, pasteCleaningEnabled: false }),
   };
 });
-vi.mock("$lib/services/clipboard", async (original) => ({
-  ...(await original<typeof import("$lib/services/clipboard")>()),
+vi.mock("#lib/services/clipboard.ts", async (original) => ({
+  ...(await original<typeof import("#lib/services/clipboard.ts")>()),
   loadClipboardHistory: vi.fn(async () => []),
   loadDeletedClipboardHistory: vi.fn(async () => []),
   searchClipboardHistory: vi.fn(async () => ({ items: [], totalCount: 0, truncated: false })),

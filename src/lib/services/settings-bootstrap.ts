@@ -1,16 +1,20 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
-import { applyThemeColors, resolveThemeColors, resolveThemeMode } from "$lib/utils/settings/theme";
-import { applyCustomCss } from "$lib/utils/settings/custom-css";
-import { applyCodeTheme } from "$lib/utils/content/code-theme";
-import { isTauriRuntime } from "$lib/services/runtime";
+import {
+  applyThemeColors,
+  resolveThemeColors,
+  resolveThemeMode,
+} from "#lib/utils/settings/theme.ts";
+import { applyCustomCss } from "#lib/utils/settings/custom-css.ts";
+import { applyCodeTheme } from "#lib/utils/content/code-theme.ts";
+import { isTauriRuntime } from "#lib/services/runtime.ts";
 import type {
   FontSizeSettings,
   GeneralSettings,
   UiFontFamily,
   WindowEffect,
   ThemeColors,
-} from "$lib/types/clipboard";
+} from "#lib/types/clipboard.ts";
 
 /** Interface font stacks keyed by the `uiFontFamily` setting; the app.css
     fallback mirrors the mono stack so first paint needs no script. */

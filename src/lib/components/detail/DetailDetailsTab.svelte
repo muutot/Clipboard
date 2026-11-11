@@ -1,17 +1,17 @@
 <script lang="ts">
-  import AppIcon from "$lib/components/card/AppIcon.svelte";
-  import CustomSelect from "$lib/components/common/CustomSelect.svelte";
-  import type { ClipboardItem, IconName } from "$lib/types/clipboard";
-  import { messages, resolvePath } from "$lib/i18n";
-  import { writeClipboardText } from "$lib/services/clipboard";
-  import { resolveWebSourceName } from "$lib/services/source-mapping.svelte";
+  import AppIcon from "#lib/components/card/AppIcon.svelte";
+  import CustomSelect from "#lib/components/common/CustomSelect.svelte";
+  import type { ClipboardItem, IconName } from "#lib/types/clipboard.ts";
+  import { messages, resolvePath } from "#lib/i18n/index.ts";
+  import { writeClipboardText } from "#lib/services/clipboard.ts";
+  import { resolveWebSourceName } from "#lib/services/source-mapping.svelte.ts";
   import {
     extractEmails,
     extractUrls,
     extractPhones,
     extractColors,
     extractDates,
-  } from "$lib/utils/content/patterns";
+  } from "#lib/utils/content/patterns.ts";
 
   interface Props {
     item: ClipboardItem;

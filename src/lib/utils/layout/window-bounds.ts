@@ -4,7 +4,7 @@
 // the `rememberWindowPosition` setting, and the settings service wrappers.
 
 import { PhysicalPosition, PhysicalSize } from "@tauri-apps/api/window";
-import type { WindowPosition } from "$lib/types/clipboard";
+import type { WindowPosition } from "#lib/types/clipboard.ts";
 
 export const WINDOW_POSITION_LEGACY_KEY = "windowPosition";
 export const MIN_WINDOW_WIDTH = 710;

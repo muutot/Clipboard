@@ -1,7 +1,7 @@
 import { flushSync, mount, tick, unmount } from "svelte";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-import type { MemoryDiagnostics, MemoryProcess } from "$lib/types/memory";
+import type { MemoryDiagnostics, MemoryProcess } from "#lib/types/memory.ts";
 
 import StatisticsSettingsPanel from "./StatisticsSettingsPanel.svelte";
 
@@ -10,7 +10,7 @@ const bridge = vi.hoisted(() => ({ memory: vi.fn() }));
 vi.mock("@tauri-apps/api/event", () => ({
   listen: vi.fn().mockResolvedValue(() => {}),
 }));
-vi.mock("$lib/services/memory", () => ({
+vi.mock("#lib/services/memory.ts", () => ({
   getMemoryDiagnostics: bridge.memory,
 }));
 

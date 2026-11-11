@@ -4,17 +4,17 @@ import Panel from "../settings/SensitiveContentSettingsPanel.svelte";
 const bridge = vi.hoisted(() => ({ invoke: vi.fn(), listen: vi.fn(), unlisten: vi.fn() }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: bridge.invoke }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: bridge.listen }));
-vi.mock("$lib/services/capture", () => ({
+vi.mock("#lib/services/capture.ts", () => ({
   getPrivacySettings: vi
     .fn()
     .mockResolvedValue({ paused: false, localOnly: true, sensitivePatterns: [] }),
   setPrivacySettings: vi.fn(),
 }));
-vi.mock("$lib/services/settings", async () => {
+vi.mock("#lib/services/settings.ts", async () => {
   const { writable } = await import("svelte/store");
   return { generalSettings: writable({ colorIcons: false }) };
 });
-vi.mock("$lib/services/runtime", () => ({
+vi.mock("#lib/services/runtime.ts", () => ({
   isTauriRuntime: () => true,
   getRuntimeInfo: vi.fn().mockResolvedValue({ operatingSystem: "windows" }),
 }));

@@ -1,21 +1,21 @@
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
-import { showToast } from "$lib/services/toast";
-import { invokeTauri, invokeTauriRequired, isTauriRuntime } from "$lib/services/runtime";
-import { logFrontendError, logFrontendMessage } from "$lib/services/log";
-import { generalSettings } from "$lib/services/settings";
+import { showToast } from "#lib/services/toast.ts";
+import { invokeTauri, invokeTauriRequired, isTauriRuntime } from "#lib/services/runtime.ts";
+import { logFrontendError, logFrontendMessage } from "#lib/services/log.ts";
+import { generalSettings } from "#lib/services/settings.ts";
 import { get } from "svelte/store";
 import type {
   ClipboardItem,
   HistoryFilterArgs,
   PersistedClipboardItem,
   SortRule,
-} from "$lib/types/clipboard";
-import { getLocale, resolvePath } from "$lib/i18n";
-import { generatedClipboardTitle, getDisplayTitle } from "$lib/utils/content/display-text";
-import { formatTextLength, toClipboardItem } from "$lib/services/clipboard/mapping";
-import type { BulkPastePayload } from "$lib/utils/store/bulk-actions";
-import zhCN from "$lib/i18n/locales/zh-CN";
-import en from "$lib/i18n/locales/en";
+} from "#lib/types/clipboard.ts";
+import { getLocale, resolvePath } from "#lib/i18n/index.ts";
+import { generatedClipboardTitle, getDisplayTitle } from "#lib/utils/content/display-text.ts";
+import { formatTextLength, toClipboardItem } from "#lib/services/clipboard/mapping.ts";
+import type { BulkPastePayload } from "#lib/utils/store/bulk-actions.ts";
+import zhCN from "#lib/i18n/locales/zh-CN.ts";
+import en from "#lib/i18n/locales/en.ts";
 
 const locales = { "zh-CN": zhCN, en };
 const materializationRequests = new Map<string, Promise<ClipboardItem>>();

@@ -2,8 +2,8 @@ import { flushSync, mount, unmount } from "svelte";
 import { get } from "svelte/store";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import SavedSearchDialog from "./SavedSearchDialog.svelte";
-import { generalSettings, DEFAULT_GENERAL_SETTINGS } from "$lib/services/settings";
-import type { SavedSearchState } from "$lib/utils/settings/saved-searches";
+import { generalSettings, DEFAULT_GENERAL_SETTINGS } from "#lib/services/settings.ts";
+import type { SavedSearchState } from "#lib/utils/settings/saved-searches.ts";
 
 const state: SavedSearchState = {
   query: "账",

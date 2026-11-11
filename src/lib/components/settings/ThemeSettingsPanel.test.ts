@@ -2,9 +2,9 @@ import { flushSync, mount, unmount } from "svelte";
 import { get } from "svelte/store";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import Panel from "./ThemeSettingsPanel.svelte";
-import { generalSettings, DEFAULT_GENERAL_SETTINGS } from "$lib/services/settings";
-import { locale } from "$lib/i18n";
-import { LIGHT_THEME_COLORS, DARK_THEME_COLORS } from "$lib/types/clipboard";
+import { generalSettings, DEFAULT_GENERAL_SETTINGS } from "#lib/services/settings.ts";
+import { locale } from "#lib/i18n/index.ts";
+import { LIGHT_THEME_COLORS, DARK_THEME_COLORS } from "#lib/types/clipboard.ts";
 
 let target: HTMLDivElement;
 let component: ReturnType<typeof mount>;

@@ -1,8 +1,8 @@
 import { flushSync, mount, unmount } from "svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import MainPage from "./+page.svelte";
-import { t } from "$lib/i18n";
-import type { ClipboardItem, PersistedClipboardItem } from "$lib/types/clipboard";
+import { t } from "#lib/i18n/index.ts";
+import type { ClipboardItem, PersistedClipboardItem } from "#lib/types/clipboard.ts";
 
 // The browser (non-Tauri) runtime seeds `demoClipboardItems`, so the mounted
 // main route renders real rows without a backend. The inline-edit draft is
@@ -24,8 +24,8 @@ vi.mock("@tauri-apps/api/event", () => ({
     return () => bridge.listeners.delete(name);
   }),
 }));
-vi.mock("$lib/services/clipboard", async (original) => ({
-  ...(await original<typeof import("$lib/services/clipboard")>()),
+vi.mock("#lib/services/clipboard.ts", async (original) => ({
+  ...(await original<typeof import("#lib/services/clipboard.ts")>()),
   hydrateClipboardItem: bridge.hydrate,
 }));
 

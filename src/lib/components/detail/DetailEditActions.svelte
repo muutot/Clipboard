@@ -1,6 +1,6 @@
 <script lang="ts">
-  import AppIcon from "$lib/components/card/AppIcon.svelte";
-  import { messages, resolvePath } from "$lib/i18n";
+  import AppIcon from "#lib/components/card/AppIcon.svelte";
+  import { messages, resolvePath } from "#lib/i18n/index.ts";
 
   interface Props {
     onsave: () => void;

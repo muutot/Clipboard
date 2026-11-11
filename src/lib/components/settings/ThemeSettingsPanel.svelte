@@ -1,19 +1,19 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
-  import ColorField from "$lib/components/common/ColorField.svelte";
-  import CustomSelect from "$lib/components/common/CustomSelect.svelte";
-  import EntryHeading from "$lib/components/settings/settings-entries/EntryHeading.svelte";
-  import { messages, resolvePath } from "$lib/i18n";
-  import type { ThemeColors, ThemeMode, ThemePreset } from "$lib/types/clipboard";
-  import { DARK_THEME_COLORS, LIGHT_THEME_COLORS } from "$lib/types/clipboard";
-  import { generalSettings } from "$lib/services/settings";
-  import { validCodeTheme } from "$lib/utils/content/code-theme";
-  import { createFeedback } from "$lib/utils/settings/feedback.svelte";
+  import ColorField from "#lib/components/common/ColorField.svelte";
+  import CustomSelect from "#lib/components/common/CustomSelect.svelte";
+  import EntryHeading from "#lib/components/settings/settings-entries/EntryHeading.svelte";
+  import { messages, resolvePath } from "#lib/i18n/index.ts";
+  import type { ThemeColors, ThemeMode, ThemePreset } from "#lib/types/clipboard.ts";
+  import { DARK_THEME_COLORS, LIGHT_THEME_COLORS } from "#lib/types/clipboard.ts";
+  import { generalSettings } from "#lib/services/settings.ts";
+  import { validCodeTheme } from "#lib/utils/content/code-theme.ts";
+  import { createFeedback } from "#lib/utils/settings/feedback.svelte.ts";
   import {
     resolveThemeColors,
     systemPrefersDark,
     watchSystemTheme,
-  } from "$lib/utils/settings/theme";
+  } from "#lib/utils/settings/theme.ts";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);

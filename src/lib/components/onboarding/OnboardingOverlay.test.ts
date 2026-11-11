@@ -1,6 +1,6 @@
 import { flushSync, mount, unmount } from "svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { setLocale, t } from "$lib/i18n";
+import { setLocale, t } from "#lib/i18n/index.ts";
 import OnboardingOverlay from "./OnboardingOverlay.svelte";
 
 // The overlay is the first-run teaching surface: it must walk its steps in

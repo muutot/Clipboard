@@ -2,22 +2,22 @@ import { mount, unmount, flushSync } from "svelte";
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
 import Probe, { type ProbeState } from "./controllers.probe.svelte";
 import { createListenerScope } from "./window-lifecycle";
-import * as service from "$lib/services/clipboard";
-import { showToast } from "$lib/services/toast";
+import * as service from "#lib/services/clipboard.ts";
+import { showToast } from "#lib/services/toast.ts";
 import {
   appendItems,
   applyItemPatches,
   removeItems,
   setDetailItem,
-} from "$lib/utils/store/item-store";
-import { applyItemsChangedEvent } from "$lib/utils/store/item-changes";
-import type { ClipboardItem } from "$lib/types/clipboard";
-vi.mock("$lib/services/runtime", async (original) => ({
-  ...(await original<typeof import("$lib/services/runtime")>()),
+} from "#lib/utils/store/item-store.ts";
+import { applyItemsChangedEvent } from "#lib/utils/store/item-changes.ts";
+import type { ClipboardItem } from "#lib/types/clipboard.ts";
+vi.mock("#lib/services/runtime.ts", async (original) => ({
+  ...(await original<typeof import("#lib/services/runtime.ts")>()),
   isTauriRuntime: () => true,
 }));
-vi.mock("$lib/services/clipboard", async (original) => ({
-  ...(await original<typeof import("$lib/services/clipboard")>()),
+vi.mock("#lib/services/clipboard.ts", async (original) => ({
+  ...(await original<typeof import("#lib/services/clipboard.ts")>()),
   loadClipboardHistory: vi.fn(),
   loadDeletedClipboardHistory: vi.fn(async () => []),
   searchClipboardHistory: vi.fn(),
@@ -31,7 +31,7 @@ vi.mock("$lib/services/clipboard", async (original) => ({
   beginPasteBatch: vi.fn(async () => "batch"),
   endPasteBatch: vi.fn(async () => {}),
 }));
-vi.mock("$lib/services/toast", () => ({ showToast: vi.fn() }));
+vi.mock("#lib/services/toast.ts", () => ({ showToast: vi.fn() }));
 const item = (id: string): ClipboardItem => ({
   id,
   kind: "text",

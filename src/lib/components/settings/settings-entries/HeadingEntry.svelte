@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { HeadingEntryConfig } from "$lib/types/settings-entry";
+  import type { HeadingEntryConfig } from "#lib/types/settings-entry.ts";
   import EntryHeading from "./EntryHeading.svelte";
 
   interface Props {

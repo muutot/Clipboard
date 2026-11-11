@@ -1,6 +1,6 @@
 <script lang="ts">
-  import type { TagInfo } from "$lib/services/clipboard";
-  import { messages, resolvePath } from "$lib/i18n";
+  import type { TagInfo } from "#lib/services/clipboard.ts";
+  import { messages, resolvePath } from "#lib/i18n/index.ts";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);

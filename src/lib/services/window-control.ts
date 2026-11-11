@@ -1,4 +1,4 @@
-import { invokeTauriRequired } from "$lib/services/runtime";
+import { invokeTauriRequired } from "#lib/services/runtime.ts";
 
 /**
  * Main-window visibility goes through the backend so the WebView2 lifecycle

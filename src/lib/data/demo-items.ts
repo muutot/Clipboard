@@ -1,4 +1,4 @@
-import type { ClipboardItem } from "$lib/types/clipboard";
+import type { ClipboardItem } from "#lib/types/clipboard.ts";
 
 const now = Date.now();
 const minute = 60_000;

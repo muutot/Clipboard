@@ -1,9 +1,9 @@
 <script lang="ts">
-  import AppIcon from "$lib/components/card/AppIcon.svelte";
+  import AppIcon from "#lib/components/card/AppIcon.svelte";
   import {
     alignDropdownOptionText,
     resolveFixedPopoverPosition,
-  } from "$lib/utils/settings/dropdown";
+  } from "#lib/utils/settings/dropdown.ts";
 
   export interface CustomSelectOption {
     value: string | number;

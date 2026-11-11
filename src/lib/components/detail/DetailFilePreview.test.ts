@@ -1,20 +1,20 @@
 import { flushSync, mount, unmount } from "svelte";
 import { fromStore, writable } from "svelte/store";
 import { afterEach, expect, it, vi } from "vitest";
-import type { ClipboardItem } from "$lib/types/clipboard";
+import type { ClipboardItem } from "#lib/types/clipboard.ts";
 import DetailFilePreview from "./DetailFilePreview.svelte";
-import { loadFilePreview } from "$lib/utils/content/file-preview";
+import { loadFilePreview } from "#lib/utils/content/file-preview.ts";
 
-vi.mock("$lib/services/settings", async () => {
+vi.mock("#lib/services/settings.ts", async () => {
   const { writable } = await import("svelte/store");
   return { generalSettings: writable({ colorIcons: false }) };
 });
 
-vi.mock("$lib/services/runtime", () => ({
+vi.mock("#lib/services/runtime.ts", () => ({
   isTauriRuntime: () => true,
   invokeTauri: async () => null,
 }));
-vi.mock("$lib/utils/content/format", async (original) => ({
+vi.mock("#lib/utils/content/format.ts", async (original) => ({
   ...(await original<object>()),
   assetUrl: (path: string) => path,
 }));

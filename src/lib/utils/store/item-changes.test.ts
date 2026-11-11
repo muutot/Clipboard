@@ -3,7 +3,7 @@ import type {
   ClipboardItem,
   ClipboardItemsChangedPayload,
   PersistedClipboardItem,
-} from "$lib/types/clipboard";
+} from "#lib/types/clipboard.ts";
 import { appendItems, createItemStore, getDetailItem, getItems, setDetailItem } from "./item-store";
 import { applyItemsChangedEvent } from "./item-changes";
 

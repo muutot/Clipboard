@@ -1,27 +1,27 @@
 <script lang="ts">
-  import { createMainWindowController } from "$lib/controllers/window-lifecycle";
-  import { hideMainWindow, showMainWindow } from "$lib/services/window-control";
-  import { createBulkController } from "$lib/controllers/bulk.svelte";
-  import { createSearchController } from "$lib/controllers/search.svelte";
-  import { createHistoryController } from "$lib/controllers/history.svelte";
+  import { createMainWindowController } from "#lib/controllers/window-lifecycle.ts";
+  import { hideMainWindow, showMainWindow } from "#lib/services/window-control.ts";
+  import { createBulkController } from "#lib/controllers/bulk.svelte.ts";
+  import { createSearchController } from "#lib/controllers/search.svelte.ts";
+  import { createHistoryController } from "#lib/controllers/history.svelte.ts";
   import { flushSync, onDestroy, onMount, tick, untrack } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
-  import BulkBar from "$lib/components/layout/BulkBar.svelte";
-  import StatusBar from "$lib/components/layout/StatusBar.svelte";
-  import Toolbar from "$lib/components/layout/Toolbar.svelte";
-  import HistoryList from "$lib/components/layout/HistoryList.svelte";
-  import SearchHeader from "$lib/components/layout/SearchHeader.svelte";
-  import DetailPanel from "$lib/components/detail/DetailPanel.svelte";
-  import ImageFullscreenOverlay from "$lib/components/detail/ImageFullscreenOverlay.svelte";
-  import TagEditDialog from "$lib/components/card/TagEditDialog.svelte";
-  import SavedSearchDialog from "$lib/components/common/SavedSearchDialog.svelte";
-  import OnboardingOverlay from "$lib/components/onboarding/OnboardingOverlay.svelte";
-  import { hydrateClipboardItem } from "$lib/services/clipboard";
-  import type { SavedSearch } from "$lib/utils/settings/saved-searches";
-  import type { HistoryDateFilter } from "$lib/utils/search/history-filter";
-  import { createSearchAutoClear } from "$lib/utils/search/search-auto-clear";
-  import Toast from "$lib/components/common/Toast.svelte";
-  import { demoClipboardItems } from "$lib/data/demo-items";
+  import BulkBar from "#lib/components/layout/BulkBar.svelte";
+  import StatusBar from "#lib/components/layout/StatusBar.svelte";
+  import Toolbar from "#lib/components/layout/Toolbar.svelte";
+  import HistoryList from "#lib/components/layout/HistoryList.svelte";
+  import SearchHeader from "#lib/components/layout/SearchHeader.svelte";
+  import DetailPanel from "#lib/components/detail/DetailPanel.svelte";
+  import ImageFullscreenOverlay from "#lib/components/detail/ImageFullscreenOverlay.svelte";
+  import TagEditDialog from "#lib/components/card/TagEditDialog.svelte";
+  import SavedSearchDialog from "#lib/components/common/SavedSearchDialog.svelte";
+  import OnboardingOverlay from "#lib/components/onboarding/OnboardingOverlay.svelte";
+  import { hydrateClipboardItem } from "#lib/services/clipboard.ts";
+  import type { SavedSearch } from "#lib/utils/settings/saved-searches.ts";
+  import type { HistoryDateFilter } from "#lib/utils/search/history-filter.ts";
+  import { createSearchAutoClear } from "#lib/utils/search/search-auto-clear.ts";
+  import Toast from "#lib/components/common/Toast.svelte";
+  import { demoClipboardItems } from "#lib/data/demo-items.ts";
   import {
     persistDelete,
     persistHardDelete,
@@ -37,41 +37,41 @@
     pasteClipboardItem,
     deriveTextEditPatch,
     writeClipboardText,
-  } from "$lib/services/clipboard";
-  import { toClipboardItem } from "$lib/services/clipboard/mapping";
+  } from "#lib/services/clipboard.ts";
+  import { toClipboardItem } from "#lib/services/clipboard/mapping.ts";
   import {
     getRuntimeInfo,
     isTauriRuntime,
     isDevtoolsHotkey,
     openDevtools,
-  } from "$lib/services/runtime";
-  import { showToast } from "$lib/services/toast";
-  import { onContextMenuOpenChanged } from "$lib/services/context-menu";
-  import { getKeyboardConfig, type KeyboardConfig } from "$lib/services/keyboard";
-  import { defaultShortcutsFor } from "$lib/keyboard-defaults";
-  import type { ClipboardFilter, ClipboardItem } from "$lib/types/clipboard";
-  import type { IconName } from "$lib/types/clipboard";
-  import { messages, resolvePath } from "$lib/i18n";
+  } from "#lib/services/runtime.ts";
+  import { showToast } from "#lib/services/toast.ts";
+  import { onContextMenuOpenChanged } from "#lib/services/context-menu.ts";
+  import { getKeyboardConfig, type KeyboardConfig } from "#lib/services/keyboard.ts";
+  import { defaultShortcutsFor } from "#lib/keyboard-defaults.ts";
+  import type { ClipboardFilter, ClipboardItem } from "#lib/types/clipboard.ts";
+  import type { IconName } from "#lib/types/clipboard.ts";
+  import { messages, resolvePath } from "#lib/i18n/index.ts";
   import {
     createVirtualList,
     editHeight,
     buildPositions,
     type VirtualScrollConfig,
-  } from "$lib/utils/layout/virtual-scroll";
-  import type { CardEstimateInputs } from "$lib/utils/layout/card-height";
+  } from "#lib/utils/layout/virtual-scroll.ts";
+  import type { CardEstimateInputs } from "#lib/utils/layout/card-height.ts";
   import {
     createCardMeasurementCache,
     createHeightSequence,
-  } from "$lib/utils/layout/card-measurements";
-  import { parseDateQuery } from "$lib/utils/search/date-query";
-  import { buildHistoryFilterArgs, filterHistoryItems } from "$lib/utils/search/history-filter";
+  } from "#lib/utils/layout/card-measurements.ts";
+  import { parseDateQuery } from "#lib/utils/search/date-query.ts";
+  import { buildHistoryFilterArgs, filterHistoryItems } from "#lib/utils/search/history-filter.ts";
   import {
     resolveActionBindings,
     resolveFilterShortcutBindings,
     resolveNavigationBindings,
-  } from "$lib/utils/keyboard/shortcut-bindings";
-  import { resolveKeyAction, type KeyAction } from "$lib/utils/keyboard/keyboard-actions";
-  import { resolveSearchInputAction } from "$lib/utils/search/search-input-actions";
+  } from "#lib/utils/keyboard/shortcut-bindings.ts";
+  import { resolveKeyAction, type KeyAction } from "#lib/utils/keyboard/keyboard-actions.ts";
+  import { resolveSearchInputAction } from "#lib/utils/search/search-input-actions.ts";
   import {
     applyItemPatches,
     captureAffectedItems,
@@ -89,12 +89,12 @@
     type AffectedItemOptions,
     type AffectedItemSnapshot,
     createRemovalRollbackGuard,
-  } from "$lib/utils/store/item-store";
-  import { createItemStoreView } from "$lib/utils/store/item-store-view.svelte";
-  import { createItemMutations } from "$lib/utils/store/item-mutations";
-  import { applyItemsChangedEvent, sortRecentHistory } from "$lib/utils/store/item-changes";
-  import { shiftSelectionIds } from "$lib/utils/store/selection-range";
-  import { isEditableKeyboardTarget, findItemElement } from "$lib/utils/keyboard/keyboard";
+  } from "#lib/utils/store/item-store.ts";
+  import { createItemStoreView } from "#lib/utils/store/item-store-view.svelte.ts";
+  import { createItemMutations } from "#lib/utils/store/item-mutations.ts";
+  import { applyItemsChangedEvent, sortRecentHistory } from "#lib/utils/store/item-changes.ts";
+  import { shiftSelectionIds } from "#lib/utils/store/selection-range.ts";
+  import { isEditableKeyboardTarget, findItemElement } from "#lib/utils/keyboard/keyboard.ts";
   import {
     SEARCH_SUGGESTION_LIMIT,
     loadSearchHistory as loadStoredSearchHistory,
@@ -102,21 +102,21 @@
     normalizeSearchTerm,
     persistSearchHistory as persistStoredSearchHistory,
     suggestionCandidate,
-  } from "$lib/utils/search/search-history";
+  } from "#lib/utils/search/search-history.ts";
   import {
     applyFontSizesToDocument,
     applyUiFontToDocument,
-  } from "$lib/services/settings-bootstrap";
+  } from "#lib/services/settings-bootstrap.ts";
   import { listen } from "@tauri-apps/api/event";
   import type {
     ClipboardItemsChangedPayload,
     PersistedClipboardItem,
     TagsChangedPayload,
     UiFontFamily,
-  } from "$lib/types/clipboard";
-  import { generalSettings } from "$lib/services/settings";
-  import { iconsDir } from "$lib/services/paths";
-  import { getStorageStatus } from "$lib/services/storage";
+  } from "#lib/types/clipboard.ts";
+  import { generalSettings } from "#lib/services/settings.ts";
+  import { iconsDir } from "#lib/services/paths.ts";
+  import { getStorageStatus } from "#lib/services/storage.ts";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);

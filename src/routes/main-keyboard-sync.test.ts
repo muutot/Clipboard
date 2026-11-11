@@ -1,7 +1,7 @@
 import { flushSync, mount, unmount } from "svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import MainPage from "./+page.svelte";
-import type { KeyboardConfig } from "$lib/services/keyboard";
+import type { KeyboardConfig } from "#lib/services/keyboard.ts";
 
 // The settings window saves bindings through the backend, which broadcasts
 // `keyboard-config-changed`. The main window used to re-read keyboard.json
@@ -16,8 +16,8 @@ const bridge = vi.hoisted(() => ({
   keyboard: vi.fn<() => Promise<KeyboardConfig | null>>(),
 }));
 
-vi.mock("$lib/data/demo-items", async (original) => {
-  const source = await original<typeof import("$lib/data/demo-items")>();
+vi.mock("#lib/data/demo-items.ts", async (original) => {
+  const source = await original<typeof import("#lib/data/demo-items.ts")>();
   return {
     ...source,
     demoClipboardItems: source.demoClipboardItems.map((item, index) => ({
@@ -33,8 +33,8 @@ vi.mock("@tauri-apps/api/event", () => ({
     return () => bridge.listeners.delete(name);
   }),
 }));
-vi.mock("$lib/services/keyboard", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("$lib/services/keyboard")>()),
+vi.mock("#lib/services/keyboard.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("#lib/services/keyboard.ts")>()),
   getKeyboardConfig: () => bridge.keyboard(),
 }));
 

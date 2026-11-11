@@ -1,8 +1,8 @@
 <script lang="ts">
-  import AppIcon from "$lib/components/card/AppIcon.svelte";
-  import CustomSelect from "$lib/components/common/CustomSelect.svelte";
-  import type { SizeEntryConfig, SizeUnit } from "$lib/types/settings-entry";
-  import { SIZE_UNIT_OPTIONS } from "$lib/utils/content/size";
+  import AppIcon from "#lib/components/card/AppIcon.svelte";
+  import CustomSelect from "#lib/components/common/CustomSelect.svelte";
+  import type { SizeEntryConfig, SizeUnit } from "#lib/types/settings-entry.ts";
+  import { SIZE_UNIT_OPTIONS } from "#lib/utils/content/size.ts";
 
   interface Props {
     config: SizeEntryConfig;

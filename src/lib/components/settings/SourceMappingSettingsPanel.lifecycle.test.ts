@@ -1,6 +1,6 @@
 import { flushSync, mount, unmount } from "svelte";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { locale } from "$lib/i18n";
+import { locale } from "#lib/i18n/index.ts";
 import Panel from "./SourceMappingSettingsPanel.svelte";
 
 const bridge = vi.hoisted(() => ({
@@ -11,7 +11,7 @@ const bridge = vi.hoisted(() => ({
   feedback: vi.fn(),
 }));
 
-vi.mock("$lib/services/runtime", () => ({
+vi.mock("#lib/services/runtime.ts", () => ({
   invokeTauri: vi.fn(async () => null),
   invokeTauriRequired: vi.fn(async () => null),
   isTauriRuntime: () => true,
@@ -19,15 +19,15 @@ vi.mock("$lib/services/runtime", () => ({
   openDevtools: vi.fn(),
   isDevtoolsHotkey: () => false,
 }));
-vi.mock("$lib/services/settings", async () => {
+vi.mock("#lib/services/settings.ts", async () => {
   const { writable } = await import("svelte/store");
   return { generalSettings: writable({ colorIcons: false }) };
 });
-vi.mock("$lib/services/clipboard", () => ({
+vi.mock("#lib/services/clipboard.ts", () => ({
   getSourceMappingRules: bridge.get,
   setSourceMappingRules: bridge.set,
 }));
-vi.mock("$lib/services/source-mapping.svelte", () => ({
+vi.mock("#lib/services/source-mapping.svelte.ts", () => ({
   refreshSourceMappingRules: bridge.refresh,
   readSourceMappingRules: bridge.read,
 }));

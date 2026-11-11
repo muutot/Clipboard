@@ -1,6 +1,6 @@
 // Settings service entry point: the reactive `generalSettings` store, the general
 // settings IPC calls, and the re-exports every caller imports from
-// `$lib/services/settings`. Field validation, normalization, browser storage,
+// `#lib/services/settings.ts`. Field validation, normalization, browser storage,
 // and window config live in `./settings/*`.
 
 import {
@@ -8,12 +8,12 @@ import {
   diffSettings,
   mergeSettingsPatches,
   type SettingsPatch,
-} from "$lib/utils/settings/settings-patch";
+} from "#lib/utils/settings/settings-patch.ts";
 import { listen } from "@tauri-apps/api/event";
 import { get, writable } from "svelte/store";
-import { setLocale } from "$lib/i18n";
-import { invokeTauri, isTauriRuntime } from "$lib/services/runtime";
-import type { GeneralSettings, GeneralSettingsInfo } from "$lib/types/clipboard";
+import { setLocale } from "#lib/i18n/index.ts";
+import { invokeTauri, isTauriRuntime } from "#lib/services/runtime.ts";
+import type { GeneralSettings, GeneralSettingsInfo } from "#lib/types/clipboard.ts";
 
 import { normalizeGeneralSettings } from "./settings/normalize";
 import {

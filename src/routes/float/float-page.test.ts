@@ -4,10 +4,10 @@ import type {
   ClipboardItem,
   ClipboardItemsChangedPayload,
   PersistedClipboardItem,
-} from "$lib/types/clipboard";
-import { generalSettings } from "$lib/services/settings";
-import { onToast, type ToastEntry } from "$lib/services/toast";
-import { t } from "$lib/i18n";
+} from "#lib/types/clipboard.ts";
+import { generalSettings } from "#lib/services/settings.ts";
+import { onToast, type ToastEntry } from "#lib/services/toast.ts";
+import { t } from "#lib/i18n/index.ts";
 import FloatPage from "./+page.svelte";
 
 const bridge = vi.hoisted(() => ({
@@ -32,16 +32,18 @@ vi.mock("@tauri-apps/api/webviewWindow", () => ({
   },
 }));
 vi.mock("@tauri-apps/api/window", () => ({ getCurrentWindow: () => null }));
-vi.mock("$lib/services/window-control", () => ({
+vi.mock("#lib/services/window-control.ts", () => ({
   showMainWindow: bridge.showMain,
   hideMainWindow: vi.fn(),
 }));
-vi.mock("$lib/services/runtime", async (original) => ({
+vi.mock("#lib/services/runtime.ts", async (original) => ({
   ...(await original<object>()),
   isTauriRuntime: () => true,
 }));
-vi.mock("$lib/services/settings-bootstrap", () => ({ applyGeneralSettingsToDocument: () => {} }));
-vi.mock("$lib/services/settings", async () => {
+vi.mock("#lib/services/settings-bootstrap.ts", () => ({
+  applyGeneralSettingsToDocument: () => {},
+}));
+vi.mock("#lib/services/settings.ts", async () => {
   const { writable } = await import("svelte/store");
   return {
     generalSettings: writable({
@@ -54,7 +56,7 @@ vi.mock("$lib/services/settings", async () => {
     }),
   };
 });
-vi.mock("$lib/services/clipboard", async (original) => ({
+vi.mock("#lib/services/clipboard.ts", async (original) => ({
   ...(await original<object>()),
   loadClipboardHistory: bridge.load,
   persistFavorite: bridge.favorite,

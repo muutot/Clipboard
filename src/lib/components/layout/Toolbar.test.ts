@@ -1,7 +1,7 @@
 import { flushSync, mount, unmount } from "svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import Toolbar from "./Toolbar.svelte";
-import { generalSettings, DEFAULT_GENERAL_SETTINGS } from "$lib/services/settings";
+import { generalSettings, DEFAULT_GENERAL_SETTINGS } from "#lib/services/settings.ts";
 
 vi.mock("@tauri-apps/api/window", () => ({
   getCurrentWindow: () => ({ label: "main" }),

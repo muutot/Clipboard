@@ -3,7 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import Panel from "./IgnoredAppsSettingsPanel.svelte";
 
 const bridge = vi.hoisted(() => ({ configure: vi.fn() }));
-vi.mock("$lib/services/capture", () => ({
+vi.mock("#lib/services/capture.ts", () => ({
   getApplicationFilterSettings: vi.fn().mockResolvedValue({
     discoveredApplications: ["alpha.exe"],
     discoveredApplicationsWithIcons: [],
@@ -11,14 +11,14 @@ vi.mock("$lib/services/capture", () => ({
   }),
   configureIgnoredApplications: bridge.configure,
 }));
-vi.mock("$lib/services/settings", async () => {
+vi.mock("#lib/services/settings.ts", async () => {
   const { writable } = await import("svelte/store");
   return { generalSettings: writable({ colorIcons: false, maxTextCaptureBytes: 512000 }) };
 });
-vi.mock("$lib/services/storage", () => ({
+vi.mock("#lib/services/storage.ts", () => ({
   getStorageConfig: vi.fn().mockResolvedValue({ maxFileCopySizeBytes: 50 * 1024 * 1024 }),
 }));
-vi.mock("$lib/services/runtime", () => ({ isTauriRuntime: () => false }));
+vi.mock("#lib/services/runtime.ts", () => ({ isTauriRuntime: () => false }));
 
 let target: HTMLDivElement;
 let app: ReturnType<typeof mount>;

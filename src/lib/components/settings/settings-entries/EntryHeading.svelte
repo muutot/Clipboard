@@ -1,6 +1,6 @@
 <script lang="ts">
-  import AppIcon from "$lib/components/card/AppIcon.svelte";
-  import type { IconName } from "$lib/types/clipboard";
+  import AppIcon from "#lib/components/card/AppIcon.svelte";
+  import type { IconName } from "#lib/types/clipboard.ts";
   import type { Snippet } from "svelte";
 
   interface Props {

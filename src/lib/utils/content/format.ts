@@ -1,5 +1,5 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { isTauriRuntime } from "$lib/services/runtime";
+import { isTauriRuntime } from "#lib/services/runtime.ts";
 
 const UNITS = ["B", "KB", "MB", "GB", "TB"];
 

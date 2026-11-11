@@ -1,6 +1,6 @@
 import { it, expect } from "vitest";
 import { createCardMeasurementCache } from "./card-measurements";
-import type { ClipboardItem } from "$lib/types/clipboard";
+import type { ClipboardItem } from "#lib/types/clipboard.ts";
 
 const runtime = globalThis as unknown as {
   process: { env: Record<string, string | undefined>; stdout: { write(value: string): void } };

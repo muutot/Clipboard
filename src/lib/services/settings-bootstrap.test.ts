@@ -1,9 +1,9 @@
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
 import { DEFAULT_GENERAL_SETTINGS } from "./settings/defaults";
-import { LIGHT_THEME_COLORS, DARK_THEME_COLORS } from "$lib/types/clipboard";
+import { LIGHT_THEME_COLORS, DARK_THEME_COLORS } from "#lib/types/clipboard.ts";
 
 const native = vi.hoisted(() => ({ label: "main", windowColor: vi.fn(), webviewColor: vi.fn() }));
-vi.mock("$lib/services/runtime", () => ({ isTauriRuntime: () => true }));
+vi.mock("#lib/services/runtime.ts", () => ({ isTauriRuntime: () => true }));
 vi.mock("@tauri-apps/api/window", () => ({
   getCurrentWindow: () => ({
     get label() {

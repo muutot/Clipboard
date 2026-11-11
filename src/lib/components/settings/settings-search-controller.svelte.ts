@@ -9,13 +9,13 @@ import {
   type FontSubsection,
   type SettingsSection,
   type StatisticsTab,
-} from "$lib/settings-navigation";
+} from "#lib/settings-navigation.ts";
 import {
   filterSettingsSearchItems,
   normalizeSettingsSearch,
   resolveSettingsSearchItems,
   type SettingsSearchItem,
-} from "$lib/settings-search";
+} from "#lib/settings-search.ts";
 
 export interface SettingsSearchDeps {
   /** The dialog's scroll container; reactive so the observer re-attaches. */

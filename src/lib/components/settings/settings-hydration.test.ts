@@ -10,16 +10,16 @@ vi.mock("@tauri-apps/api/core", () => ({
   convertFileSrc: (v: string) => v,
 }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn().mockResolvedValue(() => {}) }));
-vi.mock("$lib/services/settings", async () => {
+vi.mock("#lib/services/settings.ts", async () => {
   const { writable } = await import("svelte/store");
   return { generalSettings: writable({ colorIcons: false, maxTextCaptureBytes: 512000 }) };
 });
-vi.mock("$lib/services/storage", () => ({
+vi.mock("#lib/services/storage.ts", () => ({
   getStorageConfig: bridge.storage,
   getStorageKindStats: vi.fn().mockResolvedValue({ itemCount: 0, sizeBytes: 0 }),
   permanentlyDeleteStorageKind: vi.fn(),
 }));
-vi.mock("$lib/services/capture", () => ({
+vi.mock("#lib/services/capture.ts", () => ({
   getApplicationFilterSettings: vi
     .fn()
     .mockResolvedValue({ ignoredApplications: [], discoveredApplications: [] }),

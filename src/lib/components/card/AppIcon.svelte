@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { generalSettings } from "$lib/services/settings";
-  import { DEFAULT_ICON_COLORS, type IconName } from "$lib/types/clipboard";
+  import { generalSettings } from "#lib/services/settings.ts";
+  import { DEFAULT_ICON_COLORS, type IconName } from "#lib/types/clipboard.ts";
 
   interface Props {
     name: IconName;

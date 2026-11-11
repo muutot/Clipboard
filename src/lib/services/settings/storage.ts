@@ -1,7 +1,7 @@
 // Browser-storage accessors for the localStorage fallback and the legacy
 // settings/locale read performed before the Tauri bridge answers.
 
-import type { GeneralSettings, Language } from "$lib/types/clipboard";
+import type { GeneralSettings, Language } from "#lib/types/clipboard.ts";
 
 export const STORAGE_KEY = "generalSettings";
 export const LOCALE_STORAGE_KEY = "clipboard-locale";

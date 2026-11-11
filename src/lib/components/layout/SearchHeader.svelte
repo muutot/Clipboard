@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { assets } from "$app/paths";
+  import { asset } from "$app/paths";
   import { getCurrentWindow } from "@tauri-apps/api/window";
-  import AppIcon from "$lib/components/card/AppIcon.svelte";
-  import { messages, resolvePath } from "$lib/i18n";
-  import { normalizeSearchTerm } from "$lib/utils/search/search-history";
+  import AppIcon from "#lib/components/card/AppIcon.svelte";
+  import { messages, resolvePath } from "#lib/i18n/index.ts";
+  import { normalizeSearchTerm } from "#lib/utils/search/search-history.ts";
 
   interface SearchOption {
     value: string;
@@ -143,7 +143,7 @@
   </div>
   <img
     class="brand-icon"
-    src="{assets}/app-icon.png"
+    src={asset("app-icon.png")}
     alt="Clipboard"
     title="Clipboard"
     width="28"

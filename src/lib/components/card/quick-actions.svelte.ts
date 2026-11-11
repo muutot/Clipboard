@@ -8,9 +8,9 @@ import {
   detectContentActions,
   type QuickAction,
   writeClipboardText,
-} from "$lib/services/clipboard";
-import { isTauriRuntime } from "$lib/services/runtime";
-import { detectQuickActions, parseIsoDate, quickActionKind } from "$lib/utils/content/patterns";
+} from "#lib/services/clipboard.ts";
+import { isTauriRuntime } from "#lib/services/runtime.ts";
+import { detectQuickActions, parseIsoDate, quickActionKind } from "#lib/utils/content/patterns.ts";
 
 export interface QuickActionsDeps {
   /** Read inside the reset effect so a recycled card clears its actions. */

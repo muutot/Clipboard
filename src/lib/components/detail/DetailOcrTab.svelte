@@ -1,13 +1,13 @@
 <script lang="ts">
-  import AppIcon from "$lib/components/card/AppIcon.svelte";
-  import Checkbox from "$lib/components/common/Checkbox.svelte";
-  import OcrImageOverlay from "$lib/components/detail/OcrImageOverlay.svelte";
-  import { ocrBlockMatches, selectedOcrText } from "$lib/utils/content/ocr-blocks";
-  import { assetUrl } from "$lib/utils/content/format";
-  import { showToast } from "$lib/services/toast";
-  import type { ClipboardItem } from "$lib/types/clipboard";
-  import { messages, resolvePath } from "$lib/i18n";
-  import { writeClipboardText } from "$lib/services/clipboard";
+  import AppIcon from "#lib/components/card/AppIcon.svelte";
+  import Checkbox from "#lib/components/common/Checkbox.svelte";
+  import OcrImageOverlay from "#lib/components/detail/OcrImageOverlay.svelte";
+  import { ocrBlockMatches, selectedOcrText } from "#lib/utils/content/ocr-blocks.ts";
+  import { assetUrl } from "#lib/utils/content/format.ts";
+  import { showToast } from "#lib/services/toast.ts";
+  import type { ClipboardItem } from "#lib/types/clipboard.ts";
+  import { messages, resolvePath } from "#lib/i18n/index.ts";
+  import { writeClipboardText } from "#lib/services/clipboard.ts";
   import { invoke } from "@tauri-apps/api/core";
 
   interface Props {

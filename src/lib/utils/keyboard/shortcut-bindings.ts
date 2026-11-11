@@ -5,8 +5,8 @@
 // configured to empty disables that binding (the settings panel exposes
 // the same keys).
 
-import { defaultShortcutsFor } from "$lib/keyboard-defaults";
-import { HOTKEY_ACTIONS } from "$lib/keyboard-registry";
+import { defaultShortcutsFor } from "#lib/keyboard-defaults.ts";
+import { HOTKEY_ACTIONS } from "#lib/keyboard-registry.ts";
 
 export type NavigationAction =
   "moveSelectionUp" | "moveSelectionDown" | "switchFilterNext" | "switchFilterPrev";

@@ -1,22 +1,22 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
-  import { messages, resolvePath } from "$lib/i18n";
-  import { isTauriRuntime } from "$lib/services/runtime";
-  import { getAutoTagRules, setAutoTagRules, type AutoTagRule } from "$lib/services/clipboard";
-  import { createFeedback } from "$lib/utils/settings/feedback.svelte";
-  import CustomSelect from "$lib/components/common/CustomSelect.svelte";
-  import EntryHeading from "$lib/components/settings/settings-entries/EntryHeading.svelte";
+  import { messages, resolvePath } from "#lib/i18n/index.ts";
+  import { isTauriRuntime } from "#lib/services/runtime.ts";
+  import { getAutoTagRules, setAutoTagRules, type AutoTagRule } from "#lib/services/clipboard.ts";
+  import { createFeedback } from "#lib/utils/settings/feedback.svelte.ts";
+  import CustomSelect from "#lib/components/common/CustomSelect.svelte";
+  import EntryHeading from "#lib/components/settings/settings-entries/EntryHeading.svelte";
   import {
     previewAutoTagRules,
     previewAutoTagHistory,
     applyAutoTagHistory,
     type AutoTagHistoryPreview,
-  } from "$lib/services/clipboard";
-  import type { ClipboardKind } from "$lib/types/clipboard";
+  } from "#lib/services/clipboard.ts";
+  import type { ClipboardKind } from "#lib/types/clipboard.ts";
   import {
     createOperationMonitor,
     isOperationCancelled,
-  } from "$lib/services/background-operations.svelte";
+  } from "#lib/services/background-operations.svelte.ts";
   import BackgroundOperationStatus from "../layout/BackgroundOperationStatus.svelte";
 
   const _t = (path: string, params?: Record<string, string | number>) =>

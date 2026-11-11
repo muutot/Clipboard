@@ -1,14 +1,14 @@
 import { flushSync, mount, unmount } from "svelte";
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from "vitest";
-import type { StorageStatus } from "$lib/services/storage";
-import { locale } from "$lib/i18n";
-import { confirmDialog, currentConfirm, settleConfirm } from "$lib/services/ui/confirm.svelte";
+import type { StorageStatus } from "#lib/services/storage.ts";
+import { locale } from "#lib/i18n/index.ts";
+import { confirmDialog, currentConfirm, settleConfirm } from "#lib/services/ui/confirm.svelte.ts";
 import Panel from "./StoragePathsPanel.svelte";
 import ConfirmHost from "../common/ConfirmDialog.svelte";
 
 const bridge = vi.hoisted(() => ({ invoke: vi.fn(), feedback: vi.fn() }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: bridge.invoke }));
-vi.mock("$lib/services/settings", async () => {
+vi.mock("#lib/services/settings.ts", async () => {
   const { writable } = await import("svelte/store");
   return { generalSettings: writable({ colorIcons: false }) };
 });

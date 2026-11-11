@@ -1,11 +1,11 @@
 import { flushSync, mount, unmount } from "svelte";
 import { fromStore, writable } from "svelte/store";
 import { afterEach, expect, it, vi } from "vitest";
-import { t } from "$lib/i18n";
-import { writeClipboardText } from "$lib/services/clipboard";
+import { t } from "#lib/i18n/index.ts";
+import { writeClipboardText } from "#lib/services/clipboard.ts";
 import CodeEditor from "./CodeEditor.svelte";
 
-vi.mock("$lib/services/clipboard", () => ({
+vi.mock("#lib/services/clipboard.ts", () => ({
   writeClipboardText: vi.fn(async () => {}),
   readClipboardText: vi.fn(async () => ""),
 }));

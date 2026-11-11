@@ -1,4 +1,4 @@
-import type { ClipboardItem, HistoryFilterArgs } from "$lib/types/clipboard";
+import type { ClipboardItem, HistoryFilterArgs } from "#lib/types/clipboard.ts";
 
 /**
  * Client-side search over the browser-preview demo records (the desktop path

@@ -1,10 +1,10 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import CustomSelect from "$lib/components/common/CustomSelect.svelte";
-  import EditableContextMenu from "$lib/components/common/EditableContextMenu.svelte";
-  import { t } from "$lib/i18n";
-  import { detectCodeLang, tokenizeCode } from "$lib/utils/content/code-tokenize";
-  import { FILE_PREVIEW_LIMIT } from "$lib/utils/content/file-preview";
+  import CustomSelect from "#lib/components/common/CustomSelect.svelte";
+  import EditableContextMenu from "#lib/components/common/EditableContextMenu.svelte";
+  import { t } from "#lib/i18n/index.ts";
+  import { detectCodeLang, tokenizeCode } from "#lib/utils/content/code-tokenize.ts";
+  import { FILE_PREVIEW_LIMIT } from "#lib/utils/content/file-preview.ts";
 
   interface Props {
     content: string;

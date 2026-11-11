@@ -1,10 +1,10 @@
 import { mount, unmount, flushSync } from "svelte";
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
-import { locale } from "$lib/i18n";
-import * as storage from "$lib/services/storage";
+import { locale } from "#lib/i18n/index.ts";
+import * as storage from "#lib/services/storage.ts";
 import Panel from "./BackupPanel.svelte";
-vi.mock("$lib/services/runtime", () => ({ isTauriRuntime: () => true }));
-vi.mock("$lib/services/storage", () => ({
+vi.mock("#lib/services/runtime.ts", () => ({ isTauriRuntime: () => true }));
+vi.mock("#lib/services/storage.ts", () => ({
   createResourceBackup: vi.fn(),
   previewResourceBackup: vi.fn(),
   restoreResourceBackup: vi.fn(),

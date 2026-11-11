@@ -9,8 +9,8 @@ import {
   itemHeight,
   measureVisualLines,
   trimTrailingBlankLines,
-} from "$lib/utils/layout/virtual-scroll";
-import { getDisplayRemainingLines } from "$lib/utils/content/display-text";
+} from "#lib/utils/layout/virtual-scroll.ts";
+import { getDisplayRemainingLines } from "#lib/utils/content/display-text.ts";
 
 export interface CardEstimateInputs {
   imageHeight: number;

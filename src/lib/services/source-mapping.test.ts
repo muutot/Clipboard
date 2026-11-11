@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { getSourceMappingRules } from "$lib/services/clipboard";
+import { getSourceMappingRules } from "#lib/services/clipboard.ts";
 import { createSourceMappingStore, type SourceMappingStore } from "./source-mapping.svelte";
-import type { WebSourceMetadata } from "$lib/types/clipboard";
+import type { WebSourceMetadata } from "#lib/types/clipboard.ts";
 
-vi.mock("$lib/services/clipboard", () => ({
+vi.mock("#lib/services/clipboard.ts", () => ({
   getSourceMappingRules: vi.fn().mockResolvedValue([]),
 }));
 

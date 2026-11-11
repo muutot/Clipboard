@@ -1,8 +1,8 @@
 import { flushSync, mount, unmount } from "svelte";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import ConfirmDialog from "./ConfirmDialog.svelte";
-import { confirmDialog, settleConfirm } from "$lib/services/ui/confirm.svelte";
-import { t } from "$lib/i18n";
+import { confirmDialog, settleConfirm } from "#lib/services/ui/confirm.svelte.ts";
+import { t } from "#lib/i18n/index.ts";
 
 const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => {

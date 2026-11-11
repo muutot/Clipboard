@@ -1,11 +1,11 @@
 <script lang="ts">
-  import AppIcon from "$lib/components/card/AppIcon.svelte";
+  import AppIcon from "#lib/components/card/AppIcon.svelte";
   import {
     isTagColorPreset,
     isValidTagColor,
     TAG_COLOR_FALLBACK,
     TAG_COLOR_PRESETS,
-  } from "$lib/data/tag-colors";
+  } from "#lib/data/tag-colors.ts";
 
   interface Props {
     value: string;

@@ -1,6 +1,6 @@
 import { expect, it, vi } from "vitest";
 import { createCardMeasurementCache, createHeightSequence } from "./card-measurements";
-import type { ClipboardItem } from "$lib/types/clipboard";
+import type { ClipboardItem } from "#lib/types/clipboard.ts";
 import type { CardEstimateInputs } from "./card-height";
 const item = { id: "a", kind: "text", title: "aaaa", textContent: "aaaa\nbbbb" } as ClipboardItem;
 const inputs = { textHeight: 60 } as CardEstimateInputs;

@@ -1,12 +1,12 @@
 <script lang="ts">
-  import AppIcon from "$lib/components/card/AppIcon.svelte";
-  import CustomSelect from "$lib/components/common/CustomSelect.svelte";
-  import UpdateDialog from "$lib/components/settings/UpdateDialog.svelte";
-  import EntryHeading from "$lib/components/settings/settings-entries/EntryHeading.svelte";
-  import { messages, resolvePath } from "$lib/i18n";
-  import { generalSettings } from "$lib/services/settings";
-  import { isTauriRuntime } from "$lib/services/runtime";
-  import { checkForUpdate, getRelease, type UpdateInfo } from "$lib/services/update";
+  import AppIcon from "#lib/components/card/AppIcon.svelte";
+  import CustomSelect from "#lib/components/common/CustomSelect.svelte";
+  import UpdateDialog from "#lib/components/settings/UpdateDialog.svelte";
+  import EntryHeading from "#lib/components/settings/settings-entries/EntryHeading.svelte";
+  import { messages, resolvePath } from "#lib/i18n/index.ts";
+  import { generalSettings } from "#lib/services/settings.ts";
+  import { isTauriRuntime } from "#lib/services/runtime.ts";
+  import { checkForUpdate, getRelease, type UpdateInfo } from "#lib/services/update.ts";
   import { invoke } from "@tauri-apps/api/core";
 
   const _t = (path: string, params?: Record<string, string | number>) =>

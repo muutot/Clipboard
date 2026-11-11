@@ -1,8 +1,8 @@
 import { expect, it, vi } from "vitest";
-import { ensureSourceMappingRules } from "$lib/services/source-mapping.svelte";
+import { ensureSourceMappingRules } from "#lib/services/source-mapping.svelte.ts";
 import { load } from "./+layout";
 
-vi.mock("$lib/services/settings", () => ({
+vi.mock("#lib/services/settings.ts", () => ({
   generalSettings: {
     initialize: vi.fn(async () => {}),
     subscribe: (listener: (settings: { language: string }) => void) => {
@@ -11,8 +11,8 @@ vi.mock("$lib/services/settings", () => ({
     },
   },
 }));
-vi.mock("$lib/i18n", () => ({ loadOsLocale: vi.fn(async () => {}), setLocale: vi.fn() }));
-vi.mock("$lib/services/source-mapping.svelte", () => ({ ensureSourceMappingRules: vi.fn() }));
+vi.mock("#lib/i18n/index.ts", () => ({ loadOsLocale: vi.fn(async () => {}), setLocale: vi.fn() }));
+vi.mock("#lib/services/source-mapping.svelte.ts", () => ({ ensureSourceMappingRules: vi.fn() }));
 
 it("waits for source mapping hydration before allowing the first layout render", async () => {
   let finish!: () => void;

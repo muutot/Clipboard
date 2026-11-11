@@ -2,17 +2,20 @@ import { flushSync, mount, unmount } from "svelte";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import Panel from "./SensitiveContentSettingsPanel.svelte";
 const bridge = vi.hoisted(() => ({ save: vi.fn() }));
-vi.mock("$lib/services/capture", () => ({
+vi.mock("#lib/services/capture.ts", () => ({
   getPrivacySettings: vi
     .fn()
     .mockResolvedValue({ paused: false, localOnly: true, sensitivePatterns: ["stored"] }),
   setPrivacySettings: bridge.save,
 }));
-vi.mock("$lib/services/settings", async () => {
+vi.mock("#lib/services/settings.ts", async () => {
   const { writable } = await import("svelte/store");
   return { generalSettings: writable({ colorIcons: false }) };
 });
-vi.mock("$lib/services/runtime", () => ({ isTauriRuntime: () => false, getRuntimeInfo: vi.fn() }));
+vi.mock("#lib/services/runtime.ts", () => ({
+  isTauriRuntime: () => false,
+  getRuntimeInfo: vi.fn(),
+}));
 let target: HTMLDivElement;
 let app: ReturnType<typeof mount>;
 async function settle() {

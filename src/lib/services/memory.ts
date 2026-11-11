@@ -1,5 +1,5 @@
-import { invokeTauri } from "$lib/services/runtime";
-import type { MemoryDiagnostics } from "$lib/types/memory";
+import { invokeTauri } from "#lib/services/runtime.ts";
+import type { MemoryDiagnostics } from "#lib/types/memory.ts";
 
 /**
  * Read a best-effort memory snapshot from the desktop backend.

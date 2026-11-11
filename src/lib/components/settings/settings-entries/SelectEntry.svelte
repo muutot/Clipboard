@@ -1,7 +1,7 @@
 <script lang="ts">
-  import AppIcon from "$lib/components/card/AppIcon.svelte";
-  import CustomSelect from "$lib/components/common/CustomSelect.svelte";
-  import type { SelectEntryConfig } from "$lib/types/settings-entry";
+  import AppIcon from "#lib/components/card/AppIcon.svelte";
+  import CustomSelect from "#lib/components/common/CustomSelect.svelte";
+  import type { SelectEntryConfig } from "#lib/types/settings-entry.ts";
   import EntryHeading from "./EntryHeading.svelte";
 
   interface Props {

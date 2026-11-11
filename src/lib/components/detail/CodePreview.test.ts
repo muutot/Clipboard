@@ -1,8 +1,8 @@
 import { flushSync, mount, unmount } from "svelte";
 import { fromStore, writable } from "svelte/store";
 import { afterEach, expect, it } from "vitest";
-import { getLocale, setLocale, t } from "$lib/i18n";
-import { FILE_PREVIEW_LIMIT } from "$lib/utils/content/file-preview";
+import { getLocale, setLocale, t } from "#lib/i18n/index.ts";
+import { FILE_PREVIEW_LIMIT } from "#lib/utils/content/file-preview.ts";
 import CodePreview from "./CodePreview.svelte";
 
 const initialLocale = getLocale();

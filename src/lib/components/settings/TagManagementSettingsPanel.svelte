@@ -1,19 +1,19 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import AppIcon from "$lib/components/card/AppIcon.svelte";
-  import SearchField from "$lib/components/common/SearchField.svelte";
-  import TagColorPicker from "$lib/components/card/TagColorPicker.svelte";
-  import TagRow from "$lib/components/card/TagRow.svelte";
-  import { messages, resolvePath } from "$lib/i18n";
-  import { resolveFixedPopoverPosition } from "$lib/utils/settings/dropdown";
-  import type { TagsChangedPayload } from "$lib/types/clipboard";
+  import AppIcon from "#lib/components/card/AppIcon.svelte";
+  import SearchField from "#lib/components/common/SearchField.svelte";
+  import TagColorPicker from "#lib/components/card/TagColorPicker.svelte";
+  import TagRow from "#lib/components/card/TagRow.svelte";
+  import { messages, resolvePath } from "#lib/i18n/index.ts";
+  import { resolveFixedPopoverPosition } from "#lib/utils/settings/dropdown.ts";
+  import type { TagsChangedPayload } from "#lib/types/clipboard.ts";
   import {
     deleteTag,
     listAllTags,
     renameTag,
     setTagColor,
     type TagInfo,
-  } from "$lib/services/clipboard";
+  } from "#lib/services/clipboard.ts";
   import { emit, listen } from "@tauri-apps/api/event";
 
   const _t = (path: string, params?: Record<string, string | number>) =>

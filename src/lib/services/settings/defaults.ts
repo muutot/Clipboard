@@ -1,9 +1,9 @@
 // Default `generalSettings` values (the shape of `conf/conf.json`); the fallback
 // every field validator and the settings store starts from.
 
-import type { GeneralSettings } from "$lib/types/clipboard";
-import { LIGHT_THEME_COLORS } from "$lib/types/clipboard";
-import { DEFAULT_CODE_THEME } from "$lib/utils/content/code-theme";
+import type { GeneralSettings } from "#lib/types/clipboard.ts";
+import { LIGHT_THEME_COLORS } from "#lib/types/clipboard.ts";
+import { DEFAULT_CODE_THEME } from "#lib/utils/content/code-theme.ts";
 
 export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   language: "system",

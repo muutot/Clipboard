@@ -1,7 +1,7 @@
 <script lang="ts">
-  import type { ClipboardItem } from "$lib/types/clipboard";
-  import { assetUrl } from "$lib/utils/content/format";
-  import { ocrBlockMatches, ocrBlockRect } from "$lib/utils/content/ocr-blocks";
+  import type { ClipboardItem } from "#lib/types/clipboard.ts";
+  import { assetUrl } from "#lib/utils/content/format.ts";
+  import { ocrBlockMatches, ocrBlockRect } from "#lib/utils/content/ocr-blocks.ts";
   let {
     item,
     query = "",

@@ -1,10 +1,10 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
-  import AppIcon from "$lib/components/card/AppIcon.svelte";
-  import EntryHeading from "$lib/components/settings/settings-entries/EntryHeading.svelte";
-  import { messages, resolvePath } from "$lib/i18n";
-  import { confirmDialog } from "$lib/services/ui/confirm.svelte";
+  import AppIcon from "#lib/components/card/AppIcon.svelte";
+  import EntryHeading from "#lib/components/settings/settings-entries/EntryHeading.svelte";
+  import { messages, resolvePath } from "#lib/i18n/index.ts";
+  import { confirmDialog } from "#lib/services/ui/confirm.svelte.ts";
   import {
     configureStorageDirectory,
     getStorageConfig,
@@ -12,7 +12,7 @@
     setResourceStoragePaths,
     type StorageDirectoryUpdate,
     type StorageStatus,
-  } from "$lib/services/storage";
+  } from "#lib/services/storage.ts";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);

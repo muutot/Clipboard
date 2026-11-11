@@ -1,11 +1,11 @@
 <script lang="ts">
-  import SettingEntry from "$lib/components/settings/SettingEntry.svelte";
-  import { messages, resolvePath, setLocale } from "$lib/i18n";
-  import type { GeneralSettings, Language } from "$lib/types/clipboard";
-  import { generalSettings, windowConfig } from "$lib/services/settings";
+  import SettingEntry from "#lib/components/settings/SettingEntry.svelte";
+  import { messages, resolvePath, setLocale } from "#lib/i18n/index.ts";
+  import type { GeneralSettings, Language } from "#lib/types/clipboard.ts";
+  import { generalSettings, windowConfig } from "#lib/services/settings.ts";
   import { onDestroy } from "svelte";
-  import { createFeedback } from "$lib/utils/settings/feedback.svelte";
-  import type { SettingEntryConfig } from "$lib/types/settings-entry";
+  import { createFeedback } from "#lib/utils/settings/feedback.svelte.ts";
+  import type { SettingEntryConfig } from "#lib/types/settings-entry.ts";
   import { emit } from "@tauri-apps/api/event";
 
   const _t = (path: string, params?: Record<string, string | number>) =>

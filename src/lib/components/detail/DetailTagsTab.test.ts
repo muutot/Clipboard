@@ -1,6 +1,6 @@
 import { flushSync, mount, unmount } from "svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ClipboardItem } from "$lib/types/clipboard";
+import type { ClipboardItem } from "#lib/types/clipboard.ts";
 import DetailTagsTab from "./DetailTagsTab.svelte";
 
 // The add control is the tab's first row and never scrolls away: only the tag

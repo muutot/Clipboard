@@ -1,8 +1,8 @@
 import { flushSync, mount, unmount } from "svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import MainPage from "./+page.svelte";
-import { DEFAULT_GENERAL_SETTINGS, generalSettings } from "$lib/services/settings";
-import type { ClipboardItem, PersistedClipboardItem } from "$lib/types/clipboard";
+import { DEFAULT_GENERAL_SETTINGS, generalSettings } from "#lib/services/settings.ts";
+import type { ClipboardItem, PersistedClipboardItem } from "#lib/types/clipboard.ts";
 
 const bridge = vi.hoisted(() => ({
   listeners: new Map<string, (event: { payload: unknown }) => void>(),
@@ -27,12 +27,12 @@ vi.mock("@tauri-apps/api/window", () => ({
     onFocusChanged: async () => () => {},
   }),
 }));
-vi.mock("$lib/services/runtime", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("$lib/services/runtime")>()),
+vi.mock("#lib/services/runtime.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("#lib/services/runtime.ts")>()),
   isTauriRuntime: () => bridge.desktop,
 }));
-vi.mock("$lib/services/clipboard", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("$lib/services/clipboard")>()),
+vi.mock("#lib/services/clipboard.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("#lib/services/clipboard.ts")>()),
   searchClipboardHistory: bridge.search,
   loadClipboardHistory: bridge.history,
   hydrateClipboardItem: bridge.hydrate,

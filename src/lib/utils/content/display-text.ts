@@ -1,9 +1,9 @@
 // Pure display-text helpers shared by the card, the detail panel, the float
-// panel and the clipboard service. They live outside `$lib/services/clipboard`
+// panel and the clipboard service. They live outside `#lib/services/clipboard.ts`
 // so layout and content utils can use them without depending on the service
 // layer (and the i18n/Tauri imports that come with it).
 
-import type { PersistedClipboardItem } from "$lib/types/clipboard";
+import type { PersistedClipboardItem } from "#lib/types/clipboard.ts";
 
 /** True when the stored title was set by the user instead of generated from the
  * captured text: the metadata flag wins, then the legacy title comparison. */

@@ -1,19 +1,19 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import AppIcon from "$lib/components/card/AppIcon.svelte";
-  import CustomSelect from "$lib/components/common/CustomSelect.svelte";
-  import SearchField from "$lib/components/common/SearchField.svelte";
+  import AppIcon from "#lib/components/card/AppIcon.svelte";
+  import CustomSelect from "#lib/components/common/CustomSelect.svelte";
+  import SearchField from "#lib/components/common/SearchField.svelte";
   import {
     configureIgnoredApplications,
     getApplicationFilterSettings,
     type ApplicationFilterSettings,
-  } from "$lib/services/capture";
-  import { generalSettings } from "$lib/services/settings";
-  import { getStorageConfig } from "$lib/services/storage";
-  import { messages, resolvePath } from "$lib/i18n";
+  } from "#lib/services/capture.ts";
+  import { generalSettings } from "#lib/services/settings.ts";
+  import { getStorageConfig } from "#lib/services/storage.ts";
+  import { messages, resolvePath } from "#lib/i18n/index.ts";
   import { invoke, convertFileSrc } from "@tauri-apps/api/core";
-  import { isTauriRuntime } from "$lib/services/runtime";
-  import { fromDisplaySize, toDisplaySize } from "$lib/utils/content/size";
+  import { isTauriRuntime } from "#lib/services/runtime.ts";
+  import { fromDisplaySize, toDisplaySize } from "#lib/utils/content/size.ts";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);

@@ -2,10 +2,10 @@
 // goes through `validators.ts`, unknown keys are dropped, and the derived
 // structures (saved searches, custom CSS, theme presets) are normalized too.
 
-import { normalizeCustomCss } from "$lib/utils/settings/custom-css";
-import { normalizeSavedSearches } from "$lib/utils/settings/saved-searches";
-import type { GeneralSettings } from "$lib/types/clipboard";
-import { DARK_THEME_COLORS, LIGHT_THEME_COLORS } from "$lib/types/clipboard";
+import { normalizeCustomCss } from "#lib/utils/settings/custom-css.ts";
+import { normalizeSavedSearches } from "#lib/utils/settings/saved-searches.ts";
+import type { GeneralSettings } from "#lib/types/clipboard.ts";
+import { DARK_THEME_COLORS, LIGHT_THEME_COLORS } from "#lib/types/clipboard.ts";
 
 import { DEFAULT_GENERAL_SETTINGS } from "./defaults";
 import {

@@ -1,30 +1,30 @@
 <script lang="ts">
-  import AppIcon from "$lib/components/card/AppIcon.svelte";
-  import CardDateDialog from "$lib/components/card/CardDateDialog.svelte";
-  import CardActions from "$lib/components/card/CardActions.svelte";
-  import Checkbox from "$lib/components/common/Checkbox.svelte";
-  import TagChip from "$lib/components/card/TagChip.svelte";
-  import type { IconName } from "$lib/types/clipboard";
-  import ContextMenu from "$lib/components/common/ContextMenu.svelte";
-  import type { ContextMenuItem } from "$lib/components/common/ContextMenu.svelte";
-  import { CARD_ACTION_IDS, type ClipboardItem, type CardActionId } from "$lib/types/clipboard";
-  import { messages, resolvePath } from "$lib/i18n";
-  import { formatRelativeTime } from "$lib/utils/content/time";
-  import { isTauriRuntime } from "$lib/services/runtime";
-  import { writeClipboardText } from "$lib/services/clipboard";
-  import { SOURCE_TONE_COLORS } from "$lib/services/clipboard/mapping";
-  import { resolveWebSourceName } from "$lib/services/source-mapping.svelte";
-  import { getDisplayRemainingLines, getDisplayTitle } from "$lib/utils/content/display-text";
-  import { trimTrailingBlankLines } from "$lib/utils/layout/virtual-scroll";
-  import { assetUrl as baseAssetUrl } from "$lib/utils/content/format";
+  import AppIcon from "#lib/components/card/AppIcon.svelte";
+  import CardDateDialog from "#lib/components/card/CardDateDialog.svelte";
+  import CardActions from "#lib/components/card/CardActions.svelte";
+  import Checkbox from "#lib/components/common/Checkbox.svelte";
+  import TagChip from "#lib/components/card/TagChip.svelte";
+  import type { IconName } from "#lib/types/clipboard.ts";
+  import ContextMenu from "#lib/components/common/ContextMenu.svelte";
+  import type { ContextMenuItem } from "#lib/components/common/ContextMenu.svelte";
+  import { CARD_ACTION_IDS, type ClipboardItem, type CardActionId } from "#lib/types/clipboard.ts";
+  import { messages, resolvePath } from "#lib/i18n/index.ts";
+  import { formatRelativeTime } from "#lib/utils/content/time.ts";
+  import { isTauriRuntime } from "#lib/services/runtime.ts";
+  import { writeClipboardText } from "#lib/services/clipboard.ts";
+  import { SOURCE_TONE_COLORS } from "#lib/services/clipboard/mapping.ts";
+  import { resolveWebSourceName } from "#lib/services/source-mapping.svelte.ts";
+  import { getDisplayRemainingLines, getDisplayTitle } from "#lib/utils/content/display-text.ts";
+  import { trimTrailingBlankLines } from "#lib/utils/layout/virtual-scroll.ts";
+  import { assetUrl as baseAssetUrl } from "#lib/utils/content/format.ts";
   import { convertFileSrc } from "@tauri-apps/api/core";
-  import { iconsDir } from "$lib/services/paths";
+  import { iconsDir } from "#lib/services/paths.ts";
   import {
     onContextMenuOpened,
     notifyContextMenuOpened,
     trackContextMenuOpen,
-  } from "$lib/services/context-menu";
-  import { showToast } from "$lib/services/toast";
+  } from "#lib/services/context-menu.ts";
+  import { showToast } from "#lib/services/toast.ts";
   import { createQuickActionsController } from "./quick-actions.svelte";
 
   let iconsBase = $derived($iconsDir);

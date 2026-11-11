@@ -8,8 +8,8 @@
 // The props builders read and write live dialog state, so the registry takes a
 // host of accessors instead of owning that state itself.
 import type { Component } from "svelte";
-import type { StorageStatus } from "$lib/services/storage";
-import type { FontSubsection, SettingsSection, StatisticsTab } from "$lib/settings-navigation";
+import type { StorageStatus } from "#lib/services/storage.ts";
+import type { FontSubsection, SettingsSection, StatisticsTab } from "#lib/settings-navigation.ts";
 
 export type LazyPanelModule = { default: Component<any> };
 
@@ -52,32 +52,32 @@ export function createLazyPanelRegistry(host: LazyPanelHost): LazyPanelRegistry 
   const descriptors: LazyPanelDescriptor[] = [
     {
       sections: ["general_general"],
-      load: () => import("$lib/components/settings/GeneralGeneralSettingsPanel.svelte"),
+      load: () => import("#lib/components/settings/GeneralGeneralSettingsPanel.svelte"),
       props: () => ({ onclose: host.onclose, showHeader: false }),
     },
     {
       sections: ["general_window"],
-      load: () => import("$lib/components/settings/GeneralWindowSettingsPanel.svelte"),
+      load: () => import("#lib/components/settings/GeneralWindowSettingsPanel.svelte"),
       props: () => ({ onclose: host.onclose, showHeader: false }),
     },
     {
       sections: ["general_search"],
-      load: () => import("$lib/components/settings/GeneralSearchSettingsPanel.svelte"),
+      load: () => import("#lib/components/settings/GeneralSearchSettingsPanel.svelte"),
       props: () => ({ onclose: host.onclose, showHeader: false }),
     },
     {
       sections: ["general_items"],
-      load: () => import("$lib/components/settings/GeneralItemsSettingsPanel.svelte"),
+      load: () => import("#lib/components/settings/GeneralItemsSettingsPanel.svelte"),
       props: () => ({ onclose: host.onclose, showHeader: false }),
     },
     {
       sections: ["layout"],
-      load: () => import("$lib/components/settings/LayoutSettingsPanel.svelte"),
+      load: () => import("#lib/components/settings/LayoutSettingsPanel.svelte"),
       props: () => ({ onclose: host.onclose, showHeader: false }),
     },
     {
       sections: ["font"],
-      load: () => import("$lib/components/settings/FontSizeSettingsPanel.svelte"),
+      load: () => import("#lib/components/settings/FontSizeSettingsPanel.svelte"),
       props: () => ({
         onclose: host.onclose,
         showHeader: false,
@@ -87,37 +87,37 @@ export function createLazyPanelRegistry(host: LazyPanelHost): LazyPanelRegistry 
     },
     {
       sections: ["theme"],
-      load: () => import("$lib/components/settings/ThemeSettingsPanel.svelte"),
+      load: () => import("#lib/components/settings/ThemeSettingsPanel.svelte"),
       props: () => ({ onclose: host.onclose, showHeader: false }),
     },
     {
       sections: ["custom_css"],
-      load: () => import("$lib/components/settings/CustomCssSettingsPanel.svelte"),
+      load: () => import("#lib/components/settings/CustomCssSettingsPanel.svelte"),
       props: () => ({ onclose: host.onclose, showHeader: false }),
     },
     {
       sections: ["icons"],
-      load: () => import("$lib/components/settings/IconColorsSettingsPanel.svelte"),
+      load: () => import("#lib/components/settings/IconColorsSettingsPanel.svelte"),
       props: () => ({ onclose: host.onclose, showHeader: false }),
     },
     {
       sections: ["capture"],
-      load: () => import("$lib/components/settings/IgnoredAppsSettingsPanel.svelte"),
+      load: () => import("#lib/components/settings/IgnoredAppsSettingsPanel.svelte"),
       props: () => ({ iconsDir: host.status?.iconsDir, onclose: host.onclose, showHeader: false }),
     },
     {
       sections: ["capture_source"],
-      load: () => import("$lib/components/settings/SourceMappingSettingsPanel.svelte"),
+      load: () => import("#lib/components/settings/SourceMappingSettingsPanel.svelte"),
       props: () => ({ onclose: host.onclose, showHeader: false, onfeedback: host.showFeedback }),
     },
     {
       sections: ["capture_privacy"],
-      load: () => import("$lib/components/settings/SensitiveContentSettingsPanel.svelte"),
+      load: () => import("#lib/components/settings/SensitiveContentSettingsPanel.svelte"),
       props: () => ({ onclose: host.onclose, showHeader: false }),
     },
     {
       sections: ["capture_icons"],
-      load: () => import("$lib/components/settings/IconCacheSettingsPanel.svelte"),
+      load: () => import("#lib/components/settings/IconCacheSettingsPanel.svelte"),
       props: () => ({
         iconsDir: host.status?.iconsDir ?? "",
         onfeedback: host.showFeedback,
@@ -125,7 +125,7 @@ export function createLazyPanelRegistry(host: LazyPanelHost): LazyPanelRegistry 
     },
     {
       sections: ["tags"],
-      load: () => import("$lib/components/settings/TagManagementSettingsPanel.svelte"),
+      load: () => import("#lib/components/settings/TagManagementSettingsPanel.svelte"),
       props: () => ({
         onclose: host.onclose,
         showHeader: false,
@@ -135,7 +135,7 @@ export function createLazyPanelRegistry(host: LazyPanelHost): LazyPanelRegistry 
     },
     {
       sections: ["tags_rules"],
-      load: () => import("$lib/components/settings/TagRulesSettingsPanel.svelte"),
+      load: () => import("#lib/components/settings/TagRulesSettingsPanel.svelte"),
       props: () => ({
         onclose: host.onclose,
         showHeader: false,
@@ -143,14 +143,14 @@ export function createLazyPanelRegistry(host: LazyPanelHost): LazyPanelRegistry 
     },
     {
       sections: ["ocr"],
-      load: () => import("$lib/components/settings/OcrSettingsPanel.svelte"),
+      load: () => import("#lib/components/settings/OcrSettingsPanel.svelte"),
       props: () => ({
         onfeedback: host.showFeedback,
       }),
     },
     {
       sections: ["storage_paths"],
-      load: () => import("$lib/components/settings/StoragePathsPanel.svelte"),
+      load: () => import("#lib/components/settings/StoragePathsPanel.svelte"),
       props: () => ({
         status: host.status as StorageStatus,
         onfeedback: host.showFeedback,
@@ -158,14 +158,14 @@ export function createLazyPanelRegistry(host: LazyPanelHost): LazyPanelRegistry 
     },
     {
       sections: ["storage_limits"],
-      load: () => import("$lib/components/settings/StorageLimitsPanel.svelte"),
+      load: () => import("#lib/components/settings/StorageLimitsPanel.svelte"),
       props: () => ({
         onfeedback: host.showFeedback,
       }),
     },
     {
       sections: ["storage_tools"],
-      load: () => import("$lib/components/settings/StorageToolsPanel.svelte"),
+      load: () => import("#lib/components/settings/StorageToolsPanel.svelte"),
       props: () => ({
         onfeedback: host.showFeedback,
         onadjustlimit: () => host.setActiveSection("storage_limits"),
@@ -174,7 +174,7 @@ export function createLazyPanelRegistry(host: LazyPanelHost): LazyPanelRegistry 
     {
       sections: ["sync_cloud"],
       cacheKey: "sync",
-      load: () => import("$lib/components/settings/SyncPanel.svelte"),
+      load: () => import("#lib/components/settings/SyncPanel.svelte"),
       props: () => ({
         tab: "cloud" as const,
         onfeedback: host.showFeedback,
@@ -183,7 +183,7 @@ export function createLazyPanelRegistry(host: LazyPanelHost): LazyPanelRegistry 
     {
       sections: ["sync_advanced"],
       cacheKey: "sync",
-      load: () => import("$lib/components/settings/SyncPanel.svelte"),
+      load: () => import("#lib/components/settings/SyncPanel.svelte"),
       props: () => ({
         tab: "advanced" as const,
         onfeedback: host.showFeedback,
@@ -192,7 +192,7 @@ export function createLazyPanelRegistry(host: LazyPanelHost): LazyPanelRegistry 
     {
       sections: ["sync_s3"],
       cacheKey: "sync",
-      load: () => import("$lib/components/settings/SyncPanel.svelte"),
+      load: () => import("#lib/components/settings/SyncPanel.svelte"),
       props: () => ({
         tab: "s3" as const,
         onfeedback: host.showFeedback,
@@ -200,7 +200,7 @@ export function createLazyPanelRegistry(host: LazyPanelHost): LazyPanelRegistry 
     },
     {
       sections: ["keyboard_item", "keyboard_quick", "keyboard_system", "keyboard_switch"],
-      load: () => import("$lib/components/settings/KeyboardSettingsPanel.svelte"),
+      load: () => import("#lib/components/settings/KeyboardSettingsPanel.svelte"),
       props: () => ({
         onclose: host.onclose,
         category: host.activeSection.startsWith("keyboard_")
@@ -212,14 +212,14 @@ export function createLazyPanelRegistry(host: LazyPanelHost): LazyPanelRegistry 
     },
     {
       sections: ["keyboard_float"],
-      load: () => import("$lib/components/settings/FloatPanelClickSettingsPanel.svelte"),
+      load: () => import("#lib/components/settings/FloatPanelClickSettingsPanel.svelte"),
       props: () => ({
         showHeader: false,
       }),
     },
     {
       sections: ["statistics"],
-      load: () => import("$lib/components/settings/StatisticsSettingsPanel.svelte"),
+      load: () => import("#lib/components/settings/StatisticsSettingsPanel.svelte"),
       props: () => ({
         activeTab: host.activeStatisticsTab,
         status: host.status,
@@ -230,7 +230,7 @@ export function createLazyPanelRegistry(host: LazyPanelHost): LazyPanelRegistry 
     },
     {
       sections: ["about"],
-      load: () => import("$lib/components/settings/AboutSettingsPanel.svelte"),
+      load: () => import("#lib/components/settings/AboutSettingsPanel.svelte"),
       props: () => ({
         appVersion: host.appVersion,
         appExecutablePath: host.appExecutablePath,

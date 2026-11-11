@@ -1,8 +1,8 @@
 import { flushSync, mount, unmount } from "svelte";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import DetailPanel from "./DetailPanel.svelte";
-import { t } from "$lib/i18n";
-import type { ClipboardItem } from "$lib/types/clipboard";
+import { t } from "#lib/i18n/index.ts";
+import type { ClipboardItem } from "#lib/types/clipboard.ts";
 import Probe, { type DetailProbeState } from "./DetailPanel.probe.svelte";
 
 vi.mock("@tauri-apps/api/window", () => ({

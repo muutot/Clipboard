@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { CustomEntryConfig } from "$lib/types/settings-entry";
+  import type { CustomEntryConfig } from "#lib/types/settings-entry.ts";
   import type { Snippet } from "svelte";
   import EntryHeading from "./EntryHeading.svelte";
 

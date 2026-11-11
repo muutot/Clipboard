@@ -13,7 +13,7 @@
 //   drives the same code path the route uses, which inline component runes
 //   cannot be tested for (the repo has no component-mount test setup).
 
-import type { ClipboardItem } from "$lib/types/clipboard";
+import type { ClipboardItem } from "#lib/types/clipboard.ts";
 import { getDetailItem, getIndexedItems, getItems, type ItemStore } from "./item-store";
 
 export interface ItemStoreView {

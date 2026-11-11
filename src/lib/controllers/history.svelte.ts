@@ -1,20 +1,20 @@
 import { onDestroy } from "svelte";
-import { loadClipboardHistory, loadDeletedClipboardHistory } from "$lib/services/clipboard";
-import { isTauriRuntime } from "$lib/services/runtime";
+import { loadClipboardHistory, loadDeletedClipboardHistory } from "#lib/services/clipboard.ts";
+import { isTauriRuntime } from "#lib/services/runtime.ts";
 import type {
   HistoryCursorPayload,
   HistoryFilterArgs,
   GeneralSettings,
   ClipboardItem,
-} from "$lib/types/clipboard";
-import type { ItemStoreView } from "$lib/utils/store/item-store-view.svelte";
+} from "#lib/types/clipboard.ts";
+import type { ItemStoreView } from "#lib/utils/store/item-store-view.svelte.ts";
 import {
   appendItems,
   replaceViewItems,
   mergeDeletedHistoryPage,
   promoteFromCache as promoteCachedEntries,
   trimLoadedHistory,
-} from "$lib/utils/store/item-store";
+} from "#lib/utils/store/item-store.ts";
 export interface HistoryDependencies {
   itemStore: ItemStoreView;
   readonly settings: GeneralSettings;

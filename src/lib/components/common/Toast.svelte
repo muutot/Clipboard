@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
-  import { generalSettings } from "$lib/services/settings";
-  import { onToast, type ToastType } from "$lib/services/toast";
+  import { generalSettings } from "#lib/services/settings.ts";
+  import { onToast, type ToastType } from "#lib/services/toast.ts";
 
   interface ToastEntry {
     id: number;

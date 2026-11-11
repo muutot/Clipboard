@@ -2,8 +2,8 @@ import { mount, unmount, flushSync } from "svelte";
 import { get } from "svelte/store";
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
 import Panel from "./CustomCssSettingsPanel.svelte";
-import { generalSettings, DEFAULT_GENERAL_SETTINGS } from "$lib/services/settings";
-import { locale } from "$lib/i18n";
+import { generalSettings, DEFAULT_GENERAL_SETTINGS } from "#lib/services/settings.ts";
+import { locale } from "#lib/i18n/index.ts";
 
 let target: HTMLDivElement;
 let component: ReturnType<typeof mount> | undefined;

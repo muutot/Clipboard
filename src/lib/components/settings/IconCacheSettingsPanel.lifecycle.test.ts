@@ -1,6 +1,6 @@
 import { flushSync, mount, unmount } from "svelte";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { locale } from "$lib/i18n";
+import { locale } from "#lib/i18n/index.ts";
 import Panel from "./IconCacheSettingsPanel.svelte";
 
 const bridge = vi.hoisted(() => ({
@@ -13,12 +13,12 @@ const bridge = vi.hoisted(() => ({
 
 vi.mock("@tauri-apps/api/core", () => ({ convertFileSrc: (path: string) => `asset://${path}` }));
 vi.mock("@tauri-apps/plugin-dialog", () => ({ open: bridge.open }));
-vi.mock("$lib/services/runtime", () => ({ isTauriRuntime: () => true }));
-vi.mock("$lib/services/settings", async () => {
+vi.mock("#lib/services/runtime.ts", () => ({ isTauriRuntime: () => true }));
+vi.mock("#lib/services/settings.ts", async () => {
   const { writable } = await import("svelte/store");
   return { generalSettings: writable({ colorIcons: false }) };
 });
-vi.mock("$lib/services/storage", () => ({
+vi.mock("#lib/services/storage.ts", () => ({
   listIconCache: bridge.list,
   deleteIconFiles: bridge.delete,
   replaceIconFile: bridge.replace,

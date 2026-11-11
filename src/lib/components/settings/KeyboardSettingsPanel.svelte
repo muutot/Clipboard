@@ -1,26 +1,26 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
-  import { createFeedback } from "$lib/utils/settings/feedback.svelte";
+  import { createFeedback } from "#lib/utils/settings/feedback.svelte.ts";
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
-  import AppIcon from "$lib/components/card/AppIcon.svelte";
-  import type { IconName } from "$lib/types/clipboard";
-  import EntryHeading from "$lib/components/settings/settings-entries/EntryHeading.svelte";
+  import AppIcon from "#lib/components/card/AppIcon.svelte";
+  import type { IconName } from "#lib/types/clipboard.ts";
+  import EntryHeading from "#lib/components/settings/settings-entries/EntryHeading.svelte";
   import {
     configureKeyboardShortcuts,
     getKeyboardConfig,
     isKeyboardShortcutConflict,
     resetKeyboardConfig,
     type KeyboardConfig,
-  } from "$lib/services/keyboard";
-  import { defaultShortcutsFor } from "$lib/keyboard-defaults";
-  import { getRuntimeInfo, isTauriRuntime } from "$lib/services/runtime";
+  } from "#lib/services/keyboard.ts";
+  import { defaultShortcutsFor } from "#lib/keyboard-defaults.ts";
+  import { getRuntimeInfo, isTauriRuntime } from "#lib/services/runtime.ts";
   import {
     HOTKEY_ACTIONS,
     type HotkeyActionDef,
     type HotkeyCategory,
-  } from "$lib/keyboard-registry";
-  import { messages, resolvePath } from "$lib/i18n";
+  } from "#lib/keyboard-registry.ts";
+  import { messages, resolvePath } from "#lib/i18n/index.ts";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);
@@ -70,7 +70,7 @@
   }
 
   // Display metadata comes from the single action registry
-  // (`$lib/keyboard-registry.ts`): a new shortcut appears here with no panel
+  // (`#lib/keyboard-registry.ts`): a new shortcut appears here with no panel
   // edits once its registry row (+ `keyboard-defaults.json` default) lands.
   const SYSTEM_ACTIONS: SystemAction[] = HOTKEY_ACTIONS.map((def: HotkeyActionDef) => ({
     id: def.id,

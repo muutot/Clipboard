@@ -1,4 +1,4 @@
-import type { ClipboardItem } from "$lib/types/clipboard";
+import type { ClipboardItem } from "#lib/types/clipboard.ts";
 import { applyItemPatches, type ItemStore } from "./item-store";
 import type { ItemStoreView } from "./item-store-view.svelte";
 

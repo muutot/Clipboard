@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { parseMarkdown } from "$lib/utils/content/markdown";
-  import { messages, resolvePath } from "$lib/i18n";
+  import { parseMarkdown } from "#lib/utils/content/markdown.ts";
+  import { messages, resolvePath } from "#lib/i18n/index.ts";
 
   interface Props {
     content: string;

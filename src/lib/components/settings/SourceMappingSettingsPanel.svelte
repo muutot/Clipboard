@@ -1,17 +1,17 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
-  import { messages, resolvePath } from "$lib/i18n";
-  import { isTauriRuntime } from "$lib/services/runtime";
-  import EntryHeading from "$lib/components/settings/settings-entries/EntryHeading.svelte";
+  import { messages, resolvePath } from "#lib/i18n/index.ts";
+  import { isTauriRuntime } from "#lib/services/runtime.ts";
+  import EntryHeading from "#lib/components/settings/settings-entries/EntryHeading.svelte";
   import {
     getSourceMappingRules,
     setSourceMappingRules,
     type SourceMappingRule,
-  } from "$lib/services/clipboard";
+  } from "#lib/services/clipboard.ts";
   import {
     readSourceMappingRules,
     refreshSourceMappingRules,
-  } from "$lib/services/source-mapping.svelte";
+  } from "#lib/services/source-mapping.svelte.ts";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);

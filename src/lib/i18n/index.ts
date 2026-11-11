@@ -1,8 +1,8 @@
 import { writable, derived, get } from "svelte/store";
 import type { Locale, LocaleDefinition } from "./types";
-import { isTauriRuntime } from "$lib/services/runtime";
-import { getOsLocaleName } from "$lib/services/locale";
-import type { Language } from "$lib/types/clipboard";
+import { isTauriRuntime } from "#lib/services/runtime.ts";
+import { getOsLocaleName } from "#lib/services/locale.ts";
+import type { Language } from "#lib/types/clipboard.ts";
 import zhCN from "./locales/zh-CN";
 import en from "./locales/en";
 

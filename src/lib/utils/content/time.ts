@@ -1,4 +1,4 @@
-import { getLocale } from "$lib/i18n";
+import { getLocale } from "#lib/i18n/index.ts";
 
 const units = [
   { unit: "year", milliseconds: 365 * 24 * 60 * 60 * 1_000 },

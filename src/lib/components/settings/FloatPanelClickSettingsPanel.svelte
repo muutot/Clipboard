@@ -1,9 +1,9 @@
 <script lang="ts">
-  import CustomSelect from "$lib/components/common/CustomSelect.svelte";
-  import EntryHeading from "$lib/components/settings/settings-entries/EntryHeading.svelte";
-  import { generalSettings } from "$lib/services/settings";
-  import type { FloatPanelClickAction } from "$lib/types/clipboard";
-  import { messages, resolvePath } from "$lib/i18n";
+  import CustomSelect from "#lib/components/common/CustomSelect.svelte";
+  import EntryHeading from "#lib/components/settings/settings-entries/EntryHeading.svelte";
+  import { generalSettings } from "#lib/services/settings.ts";
+  import type { FloatPanelClickAction } from "#lib/types/clipboard.ts";
+  import { messages, resolvePath } from "#lib/i18n/index.ts";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);

@@ -1,4 +1,4 @@
-import type { OcrTextBlock } from "$lib/types/clipboard";
+import type { OcrTextBlock } from "#lib/types/clipboard.ts";
 
 export function ocrBlockMatches(block: OcrTextBlock, query: string): boolean {
   const terms = query.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);

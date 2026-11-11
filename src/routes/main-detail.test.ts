@@ -1,17 +1,17 @@
 import { flushSync, mount, unmount } from "svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import MainPage from "./+page.svelte";
-import type { ClipboardItem, PersistedClipboardItem } from "$lib/types/clipboard";
-import { t } from "$lib/i18n";
-import { toClipboardItem } from "$lib/services/clipboard/mapping";
+import type { ClipboardItem, PersistedClipboardItem } from "#lib/types/clipboard.ts";
+import { t } from "#lib/i18n/index.ts";
+import { toClipboardItem } from "#lib/services/clipboard/mapping.ts";
 
 const bridge = vi.hoisted(() => ({
   listeners: new Map<string, (event: { payload: unknown }) => void>(),
   hydrate: vi.fn(),
   materialize: vi.fn(),
 }));
-vi.mock("$lib/services/clipboard", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("$lib/services/clipboard")>()),
+vi.mock("#lib/services/clipboard.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("#lib/services/clipboard.ts")>()),
   hydrateClipboardItem: bridge.hydrate,
   materializeClipboardItem: bridge.materialize,
 }));

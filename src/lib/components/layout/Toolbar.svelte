@@ -1,11 +1,11 @@
 <script lang="ts">
   import { tick } from "svelte";
   import { getCurrentWindow } from "@tauri-apps/api/window";
-  import AppIcon from "$lib/components/card/AppIcon.svelte";
-  import { messages, resolvePath } from "$lib/i18n";
-  import { generalSettings } from "$lib/services/settings";
-  import { alignDropdownOptionText } from "$lib/utils/settings/dropdown";
-  import type { ClipboardFilter, IconName } from "$lib/types/clipboard";
+  import AppIcon from "#lib/components/card/AppIcon.svelte";
+  import { messages, resolvePath } from "#lib/i18n/index.ts";
+  import { generalSettings } from "#lib/services/settings.ts";
+  import { alignDropdownOptionText } from "#lib/utils/settings/dropdown.ts";
+  import type { ClipboardFilter, IconName } from "#lib/types/clipboard.ts";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);

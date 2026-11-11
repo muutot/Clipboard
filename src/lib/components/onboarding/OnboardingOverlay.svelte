@@ -1,9 +1,9 @@
 <script lang="ts">
-  import AppIcon from "$lib/components/card/AppIcon.svelte";
-  import { messages, resolvePath } from "$lib/i18n";
+  import AppIcon from "#lib/components/card/AppIcon.svelte";
+  import { messages, resolvePath } from "#lib/i18n/index.ts";
   import { onMount } from "svelte";
-  import { trapTabFocus } from "$lib/utils/keyboard/focus";
-  import type { IconName } from "$lib/types/clipboard";
+  import { trapTabFocus } from "#lib/utils/keyboard/focus.ts";
+  import type { IconName } from "#lib/types/clipboard.ts";
 
   interface Props {
     onclose: () => void;

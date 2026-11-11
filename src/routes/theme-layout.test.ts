@@ -1,8 +1,8 @@
 import { createRawSnippet, flushSync, mount, unmount } from "svelte";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import Layout from "./+layout.svelte";
-import { generalSettings, DEFAULT_GENERAL_SETTINGS } from "$lib/services/settings";
-import { LIGHT_THEME_COLORS, DARK_THEME_COLORS } from "$lib/types/clipboard";
+import { generalSettings, DEFAULT_GENERAL_SETTINGS } from "#lib/services/settings.ts";
+import { LIGHT_THEME_COLORS, DARK_THEME_COLORS } from "#lib/types/clipboard.ts";
 
 let target: HTMLDivElement;
 let component: ReturnType<typeof mount> | undefined;

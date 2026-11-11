@@ -1,33 +1,37 @@
 <script lang="ts">
   import { tick, untrack } from "svelte";
-  import AppIcon from "$lib/components/card/AppIcon.svelte";
-  import type { IconName } from "$lib/types/clipboard";
-  import CustomSelect from "$lib/components/common/CustomSelect.svelte";
-  import DetailEditActions from "$lib/components/detail/DetailEditActions.svelte";
-  import DetailOcrTab from "$lib/components/detail/DetailOcrTab.svelte";
-  import DetailFilePreview from "$lib/components/detail/DetailFilePreview.svelte";
-  import DetailDetailsTab from "$lib/components/detail/DetailDetailsTab.svelte";
-  import DetailTagsTab from "$lib/components/detail/DetailTagsTab.svelte";
-  import DetailImagePreview from "$lib/components/detail/DetailImagePreview.svelte";
-  import CodeEditor from "$lib/components/detail/CodeEditor.svelte";
-  import CodePreview from "$lib/components/detail/CodePreview.svelte";
-  import MarkdownPreview from "$lib/components/detail/MarkdownPreview.svelte";
-  import type { ClipboardItem, OcrTextBlock } from "$lib/types/clipboard";
-  import { messages, resolvePath } from "$lib/i18n";
-  import { isEditableKeyboardTarget } from "$lib/utils/keyboard/keyboard";
+  import AppIcon from "#lib/components/card/AppIcon.svelte";
+  import type { IconName } from "#lib/types/clipboard.ts";
+  import CustomSelect from "#lib/components/common/CustomSelect.svelte";
+  import DetailEditActions from "#lib/components/detail/DetailEditActions.svelte";
+  import DetailOcrTab from "#lib/components/detail/DetailOcrTab.svelte";
+  import DetailFilePreview from "#lib/components/detail/DetailFilePreview.svelte";
+  import DetailDetailsTab from "#lib/components/detail/DetailDetailsTab.svelte";
+  import DetailTagsTab from "#lib/components/detail/DetailTagsTab.svelte";
+  import DetailImagePreview from "#lib/components/detail/DetailImagePreview.svelte";
+  import CodeEditor from "#lib/components/detail/CodeEditor.svelte";
+  import CodePreview from "#lib/components/detail/CodePreview.svelte";
+  import MarkdownPreview from "#lib/components/detail/MarkdownPreview.svelte";
+  import type { ClipboardItem, OcrTextBlock } from "#lib/types/clipboard.ts";
+  import { messages, resolvePath } from "#lib/i18n/index.ts";
+  import { isEditableKeyboardTarget } from "#lib/utils/keyboard/keyboard.ts";
   import {
     captureFocusRestore,
     getFocusableElements,
     trapTabFocus,
-  } from "$lib/utils/keyboard/focus";
-  import { formatRelativeTime } from "$lib/utils/content/time";
+  } from "#lib/utils/keyboard/focus.ts";
+  import { formatRelativeTime } from "#lib/utils/content/time.ts";
   import { invoke } from "@tauri-apps/api/core";
   import { getCurrentWindow } from "@tauri-apps/api/window";
-  import { isTauriRuntime } from "$lib/services/runtime";
-  import { parseCodeLanguage } from "$lib/services/clipboard/mapping";
-  import { getDisplayTitle } from "$lib/utils/content/display-text";
-  import FindBar from "$lib/components/detail/FindBar.svelte";
-  import { setCurrentMatch, unwrapMatches, wrapMatches } from "$lib/utils/content/find-highlight";
+  import { isTauriRuntime } from "#lib/services/runtime.ts";
+  import { parseCodeLanguage } from "#lib/services/clipboard/mapping.ts";
+  import { getDisplayTitle } from "#lib/utils/content/display-text.ts";
+  import FindBar from "#lib/components/detail/FindBar.svelte";
+  import {
+    setCurrentMatch,
+    unwrapMatches,
+    wrapMatches,
+  } from "#lib/utils/content/find-highlight.ts";
 
   const MARKDOWN_RE = /^#{1,6}\s|^>\s|^-\s|^\*\*|^\`\`\`|^\[.+\]\(.+\)/m;
   const CODE_PATTERNS: [RegExp, string][] = [

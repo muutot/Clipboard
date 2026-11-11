@@ -1,4 +1,4 @@
-import type { ClipboardFilter, SortRule } from "$lib/types/clipboard";
+import type { ClipboardFilter, SortRule } from "#lib/types/clipboard.ts";
 import type { HistoryDateFilter } from "../search/history-filter";
 
 export interface SavedSearchState {

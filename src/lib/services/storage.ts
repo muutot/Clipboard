@@ -1,4 +1,4 @@
-import { invokeTauri, invokeTauriRequired } from "$lib/services/runtime";
+import { invokeTauri, invokeTauriRequired } from "#lib/services/runtime.ts";
 
 export interface StorageStatus {
   itemCount: number;

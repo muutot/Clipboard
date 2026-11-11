@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { ClipboardItem } from "$lib/types/clipboard";
+import type { ClipboardItem } from "#lib/types/clipboard.ts";
 import { createItemMutations, type ItemMetadataPatch } from "./item-mutations";
 import {
   applyItemPatches,

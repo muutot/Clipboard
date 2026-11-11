@@ -8,8 +8,8 @@ import {
   startOfDay,
   endOfDay,
   startOfWeek,
-} from "$lib/utils/search/date-query";
-import type { ClipboardFilter, ClipboardItem, HistoryFilterArgs } from "$lib/types/clipboard";
+} from "#lib/utils/search/date-query.ts";
+import type { ClipboardFilter, ClipboardItem, HistoryFilterArgs } from "#lib/types/clipboard.ts";
 
 export type HistoryDateFilter = "all" | "today" | "yesterday" | "week" | "month";
 

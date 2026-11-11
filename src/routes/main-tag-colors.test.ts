@@ -22,8 +22,8 @@ vi.mock("@tauri-apps/api/event", () => ({
   }),
 }));
 
-vi.mock("$lib/services/clipboard", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("$lib/services/clipboard")>();
+vi.mock("#lib/services/clipboard.ts", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("#lib/services/clipboard.ts")>();
   return { ...actual, listAllTags: bridge.listAllTags };
 });
 

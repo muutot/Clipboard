@@ -1,9 +1,9 @@
 <script lang="ts">
-  import AppIcon from "$lib/components/card/AppIcon.svelte";
-  import type { ClipboardItem, CardActionId } from "$lib/types/clipboard";
-  import type { QuickAction } from "$lib/services/clipboard";
-  import { messages, resolvePath } from "$lib/i18n";
-  import { quickActionKind } from "$lib/utils/content/patterns";
+  import AppIcon from "#lib/components/card/AppIcon.svelte";
+  import type { ClipboardItem, CardActionId } from "#lib/types/clipboard.ts";
+  import type { QuickAction } from "#lib/services/clipboard.ts";
+  import { messages, resolvePath } from "#lib/i18n/index.ts";
+  import { quickActionKind } from "#lib/utils/content/patterns.ts";
 
   interface Props {
     item: ClipboardItem;

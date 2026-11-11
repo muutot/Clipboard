@@ -1,10 +1,10 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
-  import AppIcon from "$lib/components/card/AppIcon.svelte";
-  import TransferPanel from "$lib/components/settings/TransferPanel.svelte";
-  import EntryHeading from "$lib/components/settings/settings-entries/EntryHeading.svelte";
-  import { messages, resolvePath } from "$lib/i18n";
-  import { rebuildSearchIndex, repairDatabase, type RepairResult } from "$lib/services/storage";
+  import AppIcon from "#lib/components/card/AppIcon.svelte";
+  import TransferPanel from "#lib/components/settings/TransferPanel.svelte";
+  import EntryHeading from "#lib/components/settings/settings-entries/EntryHeading.svelte";
+  import { messages, resolvePath } from "#lib/i18n/index.ts";
+  import { rebuildSearchIndex, repairDatabase, type RepairResult } from "#lib/services/storage.ts";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);

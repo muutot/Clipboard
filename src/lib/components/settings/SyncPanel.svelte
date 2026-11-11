@@ -1,20 +1,20 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
-  import AppIcon from "$lib/components/card/AppIcon.svelte";
-  import SelectEntry from "$lib/components/settings/settings-entries/SelectEntry.svelte";
-  import TextEntry from "$lib/components/settings/settings-entries/TextEntry.svelte";
-  import ToggleEntry from "$lib/components/settings/settings-entries/ToggleEntry.svelte";
-  import NumberEntry from "$lib/components/settings/settings-entries/NumberEntry.svelte";
-  import SizeEntry from "$lib/components/settings/settings-entries/SizeEntry.svelte";
-  import HeadingEntry from "$lib/components/settings/settings-entries/HeadingEntry.svelte";
-  import EntryHeading from "$lib/components/settings/settings-entries/EntryHeading.svelte";
-  import { messages, resolvePath } from "$lib/i18n";
-  import { isTauriRuntime } from "$lib/services/runtime";
-  import { fromDisplaySize, toDisplaySize } from "$lib/utils/content/size";
+  import AppIcon from "#lib/components/card/AppIcon.svelte";
+  import SelectEntry from "#lib/components/settings/settings-entries/SelectEntry.svelte";
+  import TextEntry from "#lib/components/settings/settings-entries/TextEntry.svelte";
+  import ToggleEntry from "#lib/components/settings/settings-entries/ToggleEntry.svelte";
+  import NumberEntry from "#lib/components/settings/settings-entries/NumberEntry.svelte";
+  import SizeEntry from "#lib/components/settings/settings-entries/SizeEntry.svelte";
+  import HeadingEntry from "#lib/components/settings/settings-entries/HeadingEntry.svelte";
+  import EntryHeading from "#lib/components/settings/settings-entries/EntryHeading.svelte";
+  import { messages, resolvePath } from "#lib/i18n/index.ts";
+  import { isTauriRuntime } from "#lib/services/runtime.ts";
+  import { fromDisplaySize, toDisplaySize } from "#lib/utils/content/size.ts";
   import {
     createOperationMonitor,
     isOperationCancelled,
-  } from "$lib/services/background-operations.svelte";
+  } from "#lib/services/background-operations.svelte.ts";
   import BackgroundOperationStatus from "../layout/BackgroundOperationStatus.svelte";
   import {
     getSyncConfig,
@@ -24,7 +24,7 @@
     testSyncConnection,
     type SyncConfig,
     type SyncResourceGcMode,
-  } from "$lib/services/storage";
+  } from "#lib/services/storage.ts";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);

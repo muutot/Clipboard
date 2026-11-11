@@ -1,4 +1,4 @@
-import type { QuickAction } from "$lib/services/clipboard";
+import type { QuickAction } from "#lib/services/clipboard.ts";
 
 export const EMAIL_RE = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
 export const URL_RE = /https?:\/\/[^\s)\u3000-\u303F\uFF00-\uFFEF]+/g;

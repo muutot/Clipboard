@@ -1,6 +1,6 @@
 import { flushSync, mount, unmount } from "svelte";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { locale } from "$lib/i18n";
+import { locale } from "#lib/i18n/index.ts";
 import Panel from "./StorageToolsPanel.svelte";
 
 const bridge = vi.hoisted(() => ({
@@ -14,13 +14,13 @@ const bridge = vi.hoisted(() => ({
   rebuild: vi.fn(),
 }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: bridge.invoke }));
-vi.mock("$lib/services/runtime", () => ({ isTauriRuntime: () => true }));
-vi.mock("$lib/services/settings", async () => {
+vi.mock("#lib/services/runtime.ts", () => ({ isTauriRuntime: () => true }));
+vi.mock("#lib/services/settings.ts", async () => {
   const { writable } = await import("svelte/store");
   return { generalSettings: writable({ colorIcons: false }) };
 });
 vi.mock("@tauri-apps/plugin-dialog", () => ({ open: bridge.open, save: bridge.save }));
-vi.mock("$lib/services/storage", () => ({
+vi.mock("#lib/services/storage.ts", () => ({
   getImportFormats: vi.fn(async () => [{ id: "json", label: "JSON", extension: ".json" }]),
   getExportFormats: vi.fn(async () => [{ id: "json", label: "JSON", extension: ".json" }]),
   importFromFile: bridge.importFile,

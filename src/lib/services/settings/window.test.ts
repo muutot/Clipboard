@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { get } from "svelte/store";
 
 const bridge = vi.hoisted(() => ({ invoke: vi.fn() }));
-vi.mock("$lib/services/runtime", () => ({ invokeTauri: bridge.invoke }));
+vi.mock("#lib/services/runtime.ts", () => ({ invokeTauri: bridge.invoke }));
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
