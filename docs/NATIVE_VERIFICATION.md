@@ -1,10 +1,11 @@
 # Native desktop verification
 
-`TODO.md` section B lists the v1.8 native checks that CI cannot prove. Every
-line there is a **runtime or visual evidence gap**, not a missing feature: the
-underlying capture, write, broadcast and shutdown paths exist and are covered
-by unit/contract tests, but the real OS clipboard, real second window and real
-window compositor are outside the scope of `npm run verify`.
+`TODO.md` lists the native checks that CI cannot prove (F02/F06/F07/F08 and
+V01). Every referenced item is a **runtime or visual evidence gap**, not a
+missing feature: the underlying capture, write, broadcast and shutdown paths
+exist and are covered by unit/contract tests, but the real OS clipboard, real
+second window and real window compositor are outside the scope of
+`npm run verify`.
 
 This document is the reproducible procedure. Record the observed result next to
 the matching checkbox in `TODO.md`; leave the box unchecked until it is actually
@@ -168,3 +169,52 @@ cannot prove the _translucency_ itself. Judge that from an on-screen capture of
 the window over a controlled backdrop. A washed-out `light` + `mica` +
 text-transparency-at-85% frame was observed but is not yet attributed between
 real appearance and the capture method.
+
+## Item 5 — Batch paste platform support and degradation (F02)
+
+Windows delivery is natively verified (2026-11-11, see the F02 record in
+`TODO.md`): three items delivered in list order into Notepad, UIA-verified
+content and order, lease rejection/focus-loss/end-of-batch behaviours exercised
+with the real commands. The remaining platform surface is recorded here as
+supported-with-conditions; none of it can be exercised on a Windows machine or
+a headless CI runner, so these stay unverified rather than passing:
+
+- macOS (`platform/quick_paste.rs` mac backend): activates the target via
+  NSWorkspace `activateWithOptions:`, waits for focus, waits for held modifiers
+  to release, then posts CGEvent Cmd-V. Requires Accessibility permission and
+  returns an explicit error without it.
+- Linux X11 (`quick_paste.rs` x11 backend): re-checks `_NET_WM_PID` ownership,
+  reactivates via `_NET_ACTIVE_WINDOW`, waits for a clear keymap, then fakes
+  Ctrl+V through XTEST.
+- Linux Wayland (`linux/wayland/paste.rs`): only Sway (`swaymsg` + `wtype`) and
+  Hyprland (`hyprctl` + `wtype`) are supported; other compositors return an
+  explicit unsupported error instead of degrading silently.
+- The batch lease itself (`begin_paste_batch`/`validate_paste_batch`/
+  `end_paste_batch`) is platform-independent and covered by the Windows native
+  record plus the frontend/Rust suites.
+
+## Item 6 — Markdown remote images (F07)
+
+Verified 2026-11-11 on Windows with the v1.8.5 release build in an isolated
+profile, real CSP, both `zh-CN` and `en` locales:
+
+1. Seed two markdown rows directly into the isolated database (capture paused;
+   the OS clipboard is never touched): one referencing remote images
+   (`https://example.com/pixel.png`, an `http://127.0.0.1:<port>/probe.png`
+   recorder, a forged `https://asset.localhost.evil/a.png`, and a `data:` URI),
+   one referencing a real PNG inside the isolated `storage` root via
+   `http://asset.localhost/<percent-encoded path>`.
+2. Run an HTTP request recorder on `127.0.0.1:<port>`. Result: **zero requests
+   arrived during either session** — network-level proof that no background or
+   preview fetch is issued for blocked images.
+3. Drive the real window with UI Automation: open each card's detail panel via
+   the eye button, read the accessibility tree, capture the window with
+   `scripts/capture-window.ps1`. Observed: every remote/forged/`data:` image
+   renders as the localized placeholder text
+   （「为保护隐私，未加载远程图片： …」/ "Remote image blocked for privacy: …"）
+   with no `<img>` element; the local asset-protocol image renders as a real
+   loaded image (visible pixels in the preview, alt text present as its
+   accessible name).
+4. Evidence (per-row screenshots, UIA dumps, recorder output) lives in the
+   local git-ignored `code-auditor/result/` directory; this document records
+   the procedure and observed outcome.
