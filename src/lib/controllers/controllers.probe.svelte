@@ -11,6 +11,7 @@
     history?: ReturnType<typeof createHistoryController>;
     search?: ReturnType<typeof createSearchController>;
     bulk?: ReturnType<typeof createBulkController>;
+    setDebounce?: (value: number) => void;
     setQuery?: (value: string) => void;
     removeCanonical?: (ids: ReadonlySet<string>) => void;
     changeMembership?: (deletedIds: string[], restoredIds: string[]) => void;
@@ -98,6 +99,9 @@
       history,
       search,
       bulk,
+      setDebounce: (value: number) => {
+        settings.searchDebounceMs = value;
+      },
       removeCanonical: (ids: ReadonlySet<string>) => {
         removalRollbacks.invalidate(ids);
         store.current = removeItems(store.current, ids);

@@ -1003,6 +1003,9 @@ export interface LocaleDefinition {
     searchCacheEvictionDescription: string;
     searchCacheEvictionFifo: string;
     searchCacheEvictionLru: string;
+    searchDebounceMs: string;
+    searchDebounceMsDescription: string;
+    searchDebounceMsUnit: string;
     searchIndexSyncMode: string;
     searchIndexSyncModeDescription: string;
     searchIndexSyncModeLazy: string;

@@ -80,44 +80,28 @@ export function createSearchController(deps: SearchDependencies) {
   }
 
   const searchSettingsKey = $derived(
-    `${deps.settings.display.searchPageSize}\u0000${deps.settings.searchPageSizeLimit}\u0000${JSON.stringify(deps.settings.searchSortRules)}`,
+    `${deps.settings.display.searchPageSize}\u0000${deps.settings.searchPageSizeLimit}\u0000${deps.settings.searchDebounceMs}\u0000${JSON.stringify(deps.settings.searchSortRules)}`,
   );
 
-  $effect(() => {
-    const requestedQuery = deps.query.trim();
-    // A changed query starts a new measurement. Re-runs for the same query
-    // (history invalidation, settings change) keep the pending interaction so
-    // the restarted search reports the same user-visible latency once.
-    if (requestedQuery !== measuredQuery) {
-      measuredQuery = requestedQuery;
-      activeInteraction = paintTracker.input();
-    }
-    const interaction = activeInteraction;
-    const requestedFilter = deps.filter();
-    void searchSettingsKey; // dependency: narrow key, not the whole store
-    const requestedMaxResults = untrack(() => deps.settings.searchPageSizeLimit);
-    const requestedPageSize = untrack(() => deps.settings.display.searchPageSize);
-    const requestedSortRules = untrack(() => deps.settings.searchSortRules);
-    const requestedEpoch = searchEpoch;
-    const requestId = ++searchRequestId;
-    searchLoadRequestId += 1;
-    searchLoading = false;
-    searchHasMore = false;
-    searchOffset = 0;
-
-    if (!requestedQuery || deps.isDeleted) {
-      deps.itemStore.current = closeSearchResults(deps.itemStore.current);
-      indexedQuery = "";
-      searchPending = false;
-      return;
-    }
+  // Performs one first-page search. Called by the debounce timer in automatic
+  // mode and by `commitSearch` in manual mode (debounce 0, Enter to search).
+  // `requestId`/`requestedEpoch` fence results so a stale query cannot paint.
+  function performSearch(
+    requestedQuery: string,
+    interaction: SearchInteraction | null,
+    requestId: number,
+    requestedEpoch: number,
+    requestedFilter: HistoryFilterArgs,
+  ) {
+    const requestedMaxResults = deps.settings.searchPageSizeLimit;
+    const requestedPageSize = deps.settings.display.searchPageSize;
+    const requestedSortRules = deps.settings.searchSortRules;
 
     if (!isTauriRuntime()) {
-      // Browser preview: there is no backend to query, so filter the demo
-      // records client-side into the indexed view the list renders during a
-      // search. The write is deferred like the desktop path because the effect
-      // also reads the item store; writing it synchronously inside the
-      // effect body self-invalidates the effect and freezes the query.
+      // Browser preview: no backend to query, so filter the demo records
+      // client-side into the indexed view the list renders during a search.
+      // The write is deferred because the caller may also read the item store;
+      // writing synchronously there would self-invalidate a Svelte effect.
       searchPending = true;
       const timer = window.setTimeout(() => {
         if (requestId !== searchRequestId || requestedEpoch !== searchEpoch) return;
@@ -137,53 +121,114 @@ export function createSearchController(deps: SearchDependencies) {
     }
 
     searchPending = true;
-    const timer = window.setTimeout(() => {
-      void deps
-        .flushSettings()
-        .then(() => {
-          if (requestId !== searchRequestId || requestedEpoch !== searchEpoch) return null;
-          return searchClipboardHistory(
-            requestedQuery,
-            requestedPageSize,
-            0,
-            requestedSortRules,
-            requestedFilter,
-          );
-        })
-        .then((page) => {
-          if (requestId !== searchRequestId || requestedEpoch !== searchEpoch || page === null)
-            return;
-          // A first page replaces the previous query's results outright; an
-          // empty page is still a displayed search, so the view stays on.
-          deps.acceptRecords?.(page.items, false);
-          deps.itemStore.current = replaceViewItems(deps.itemStore.current, page.items, "indexed");
-          indexedQuery = requestedQuery;
-          searchOffset = page.items.length;
-          searchHasMore = searchOffset < Math.min(page.totalCount, requestedMaxResults);
-          updateSearchCache(page.items);
-          void tick().then(() => {
-            paintTracker.painted(interaction, () => requestId === searchRequestId);
-          });
-          deps.status = page.truncated
-            ? deps.translate("app.searchTruncated", {
-                shown: page.items.length,
-                total: page.totalCount,
-              })
-            : deps.translate("app.searchHitSummary", { count: page.items.length });
-          if (deps.settings.searchHistoryEnabled && pendingSearchHistoryQuery === requestedQuery) {
-            deps.rememberSearchTerm(requestedQuery);
-            pendingSearchHistoryQuery = "";
-          }
-        })
-        .catch((error) => {
-          if (requestId !== searchRequestId) return;
-          console.error("Unable to search clipboard history", error);
-          deps.status = deps.translate("app.searchFailed");
-        })
-        .finally(() => {
-          if (requestId === searchRequestId) searchPending = false;
+    void deps
+      .flushSettings()
+      .then(() => {
+        if (requestId !== searchRequestId || requestedEpoch !== searchEpoch) return null;
+        return searchClipboardHistory(
+          requestedQuery,
+          requestedPageSize,
+          0,
+          requestedSortRules,
+          requestedFilter,
+        );
+      })
+      .then((page) => {
+        if (requestId !== searchRequestId || requestedEpoch !== searchEpoch || page === null)
+          return;
+        // A first page replaces the previous query's results outright; an
+        // empty page is still a displayed search, so the view stays on.
+        deps.acceptRecords?.(page.items, false);
+        deps.itemStore.current = replaceViewItems(deps.itemStore.current, page.items, "indexed");
+        indexedQuery = requestedQuery;
+        searchOffset = page.items.length;
+        searchHasMore = searchOffset < Math.min(page.totalCount, requestedMaxResults);
+        updateSearchCache(page.items);
+        void tick().then(() => {
+          paintTracker.painted(interaction, () => requestId === searchRequestId);
         });
-    }, 300);
+        deps.status = page.truncated
+          ? deps.translate("app.searchTruncated", {
+              shown: page.items.length,
+              total: page.totalCount,
+            })
+          : deps.translate("app.searchHitSummary", { count: page.items.length });
+        if (deps.settings.searchHistoryEnabled && pendingSearchHistoryQuery === requestedQuery) {
+          deps.rememberSearchTerm(requestedQuery);
+          pendingSearchHistoryQuery = "";
+        }
+      })
+      .catch((error) => {
+        if (requestId !== searchRequestId) return;
+        console.error("Unable to search clipboard history", error);
+        deps.status = deps.translate("app.searchFailed");
+      })
+      .finally(() => {
+        if (requestId === searchRequestId) searchPending = false;
+      });
+    return undefined;
+  }
+
+  // Manual-mode entry point: typing does not query, Enter does. The search box
+  // calls this on its commit action; it is a no-op in automatic mode.
+  function commitSearch() {
+    if (deps.settings.searchDebounceMs !== 0) return;
+    const requestedQuery = deps.query.trim();
+    if (!requestedQuery || deps.isDeleted) return;
+    measuredQuery = requestedQuery;
+    activeInteraction = paintTracker.input();
+    const interaction = activeInteraction;
+    const requestId = ++searchRequestId;
+    searchLoadRequestId += 1;
+    searchLoading = false;
+    searchHasMore = false;
+    searchOffset = 0;
+    performSearch(requestedQuery, interaction, requestId, searchEpoch, deps.filter());
+  }
+
+  $effect(() => {
+    const requestedQuery = deps.query.trim();
+    const requestedFilter = deps.filter();
+    void searchSettingsKey; // dependency: narrow key, not the whole store
+    const requestedDebounceMs = untrack(() => deps.settings.searchDebounceMs);
+
+    // Manual mode (debounce 0): typing must neither query nor bump the request
+    // generation, or it would invalidate a search just committed via Enter.
+    // Empty/deleted queries still close the results view.
+    if (requestedDebounceMs === 0) {
+      if (!requestedQuery || deps.isDeleted) {
+        deps.itemStore.current = closeSearchResults(deps.itemStore.current);
+        indexedQuery = "";
+      }
+      searchPending = false;
+      return;
+    }
+
+    const requestId = ++searchRequestId;
+    searchLoadRequestId += 1;
+    searchLoading = false;
+    searchHasMore = false;
+    searchOffset = 0;
+
+    if (!requestedQuery || deps.isDeleted) {
+      deps.itemStore.current = closeSearchResults(deps.itemStore.current);
+      indexedQuery = "";
+      searchPending = false;
+      return;
+    }
+
+    // A changed query starts a new measurement. Re-runs for the same query
+    // (history invalidation, settings change) keep the pending interaction so
+    // the restarted search reports the same user-visible latency once.
+    if (requestedQuery !== measuredQuery) {
+      measuredQuery = requestedQuery;
+      activeInteraction = paintTracker.input();
+    }
+    const interaction = activeInteraction;
+    const requestedEpoch = searchEpoch;
+    const timer = window.setTimeout(() => {
+      performSearch(requestedQuery, interaction, requestId, requestedEpoch, requestedFilter);
+    }, requestedDebounceMs);
 
     return () => window.clearTimeout(timer);
   });
@@ -252,6 +297,7 @@ export function createSearchController(deps: SearchDependencies) {
     invalidateSearchResults,
     loadSearchPage,
     updateSearchCache,
+    commitSearch,
     get indexedQuery() {
       return indexedQuery;
     },

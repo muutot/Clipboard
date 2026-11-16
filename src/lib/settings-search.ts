@@ -294,6 +294,13 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
     ["提示文案", "占位", "placeholder", "hint"],
   ),
   entry(
+    "general.search-debounce-ms",
+    { section: "general_search" },
+    i18n("general.searchDebounceMs"),
+    i18n("general.searchDebounceMsDescription"),
+    ["防抖", "延迟", "输入", "debounce", "delay", "latency", "ms"],
+  ),
+  entry(
     "general.search-index-sync-mode",
     { section: "general_search" },
     i18n("general.searchIndexSyncMode"),

@@ -46,6 +46,13 @@ Turning `windowOpacityAffectsText` off restores the main window's native alpha t
 
 `display.searchPageSize` is additionally clamped to `searchPageSizeLimit` during normalization. Changing the candidate cap refreshes the active search and invalidates its sorted cache in either direction. Reducing `searchCacheSize` trims the spare frontend cache immediately.
 
+`searchDebounceMs` controls the first-page search trigger and is a frontend-only
+setting (persisted through the Rust config's flattened `extra` map; no typed
+backend member). A nonzero value is the delay after typing before the automatic
+query; `0` switches to manual mode where typing does not query and the search
+box's Enter commits the query through `commitSearch`. Changing it re-runs the
+search effect via `searchSettingsKey` without a restart.
+
 ## Card layout settings
 
 There is no layout-mode toggle: these fields are the always-on card/search sizing knobs. They were renamed from the historical `compact*` keys; the Rust config keeps serde aliases, so an existing `settings.json` written with old `compact*` keys still loads (values re-save under the new names).
@@ -104,6 +111,7 @@ Every card kind shares one estimator contract: the `*Height` fields are content 
 | `searchPageSizeLimit`         | number                                         | `500`        | 50–1000                                                                                                                                       |
 | `searchCacheSize`             | number                                         | `500`        | 200–2000                                                                                                                                      |
 | `searchCacheEviction`         | `"fifo"` or `"lru"`                            | `"fifo"`     | —                                                                                                                                             |
+| `searchDebounceMs`            | number (milliseconds)                          | `300`        | 0–1000; 0 = manual mode, typing does not search and Enter triggers it                                                                         |
 | `searchIndexSyncMode`         | `"lazy"` or `"background"`                     | `"lazy"`     | —                                                                                                                                             |
 | `updateSource`                | `"github"` or `"gitcode"`                      | `"gitcode"`  | —                                                                                                                                             |
 | `colorIcons`                  | boolean                                        | `false`      | —                                                                                                                                             |

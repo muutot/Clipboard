@@ -71,6 +71,13 @@ describe("generalSettings store normalization", () => {
 
     generalSettings.updateSetting("cardGap", -5 as unknown as number);
     expect(get(generalSettings).cardGap).toBe(0);
+
+    generalSettings.updateSetting("searchDebounceMs", -10 as unknown as number);
+    expect(get(generalSettings).searchDebounceMs).toBe(0);
+    generalSettings.updateSetting("searchDebounceMs", 5000 as unknown as number);
+    expect(get(generalSettings).searchDebounceMs).toBe(1000);
+    generalSettings.updateSetting("searchDebounceMs", 0);
+    expect(get(generalSettings).searchDebounceMs).toBe(0);
   });
 
   it("falls back to defaults for invalid union values", () => {

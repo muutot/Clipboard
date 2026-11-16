@@ -147,6 +147,22 @@ it("keeps only the latest debounced query and ignores responses after disposal",
   await settle();
   expect(out.store!.current.indexedIds).toEqual(["new"]);
 });
+it("manual mode (debounce 0) searches only on explicit commit", async () => {
+  vi.mocked(service.searchClipboardHistory).mockResolvedValue({
+    items: [item("result")],
+    totalCount: 1,
+    truncated: false,
+  });
+  out.setDebounce!(0);
+  out.setQuery!("manual");
+  await settle(400);
+  expect(service.searchClipboardHistory).not.toHaveBeenCalled();
+  expect(out.store!.current.indexedIds).toBeNull();
+  out.search!.commitSearch();
+  await settle();
+  expect(service.searchClipboardHistory).toHaveBeenCalledTimes(1);
+  expect(out.store!.current.indexedIds).toEqual(["result"]);
+});
 it("rolls back a failed bulk favorite without losing a concurrent capture", async () => {
   const result = deferred<boolean>();
   vi.mocked(service.persistBatchFavorite).mockReturnValueOnce(result.promise);

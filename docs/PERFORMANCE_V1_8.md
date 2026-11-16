@@ -35,9 +35,11 @@ This approximation includes the intentional 300 ms debounce, unlike backend quer
 latency. The measurement starts when the search effect observes a changed query, so
 type-to-search, suggestion/history picks, inline suggestions and saved searches are
 covered as well; an earlier version started it from the search box `input` event, which
-is delivered after the effect, and therefore never produced a sample. General native
-WebView interaction latency remains unmeasured; the
-hidden-window resident-memory probe is recorded below.
+is delivered after the effect, and therefore never produced a sample. The debounce
+is user-configurable via `searchDebounceMs` (default 300 ms, range 0–1000); at 0
+the search is manual (Enter to commit), so the reported duration no longer
+necessarily includes a debounce. General native WebView interaction latency
+remains unmeasured; the hidden-window resident-memory probe is recorded below.
 
 File export and capture improvements are additionally covered by behavioral tests:
 one SQLite read transaction under a concurrent WAL writer, atomic destination

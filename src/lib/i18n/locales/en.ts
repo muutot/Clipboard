@@ -1091,6 +1091,10 @@ const en: LocaleDefinition = {
     searchCacheEvictionDescription: "Strategy for removing items when the cache is full",
     searchCacheEvictionFifo: "First-In-First-Out (FIFO)",
     searchCacheEvictionLru: "Least Recently Used (LRU)",
+    searchDebounceMs: "Search Debounce",
+    searchDebounceMsDescription:
+      "Wait after typing before searching; 0 disables auto-search so Enter triggers the search",
+    searchDebounceMsUnit: "ms",
     searchIndexSyncMode: "Index Sync Mode",
     searchIndexSyncModeDescription:
       "How the search index follows clipboard record changes; changes take effect immediately",

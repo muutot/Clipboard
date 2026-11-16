@@ -128,7 +128,13 @@ Live search-worker transitions derive their mode from the merged target of a ful
 
 ## Frontend search request lifecycle
 
-The main route debounces a first-page indexed search by 300 ms.
+The main route debounces a first-page indexed search by `searchDebounceMs`
+(default 300 ms, normalized 0–1000). When it is 0 the controller enters manual
+mode: typing neither queries nor bumps the request generation, and the search
+box's Enter (`commit-query` → `commitSearchQuery` → `controller.commitSearch`)
+performs the first-page search instead. Any nonzero value keeps the automatic
+debounced path. Changing the value re-runs the search effect via
+`searchSettingsKey`, so the new mode applies without a restart.
 
 - Outside Tauri (browser preview) there is no backend: the effect defers one
   `filterDemoSearchResults` pass over the loaded demo history

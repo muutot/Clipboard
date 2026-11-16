@@ -61,6 +61,7 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   maxTextCaptureBytes: 500000,
   searchCacheSize: 500,
   searchCacheEviction: "fifo",
+  searchDebounceMs: 300,
   searchIndexSyncMode: "lazy",
   updateSource: "gitcode",
   colorIcons: false,

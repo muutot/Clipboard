@@ -371,6 +371,12 @@ export function normalizeGeneralSettings(
     source.searchCacheEviction ?? fallback("searchCacheEviction"),
     defaultSettings.searchCacheEviction,
   );
+  result.searchDebounceMs = integerInRange(
+    source.searchDebounceMs ?? fallback("searchDebounceMs"),
+    defaultSettings.searchDebounceMs,
+    0,
+    1000,
+  );
   result.searchIndexSyncMode = validSearchIndexSyncMode(
     source.searchIndexSyncMode ?? fallback("searchIndexSyncMode"),
     defaultSettings.searchIndexSyncMode,

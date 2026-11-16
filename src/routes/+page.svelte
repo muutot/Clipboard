@@ -1167,6 +1167,10 @@
       if ($generalSettings.searchHistoryEnabled) rememberSearchTerm(term);
       search.pendingSearchHistoryQuery = "";
     }
+
+    // Manual mode (search debounce 0): typing does not query; Enter does.
+    // The controller no-ops in automatic mode.
+    search.commitSearch();
   }
 
   function chooseSearchOption(value: string) {
