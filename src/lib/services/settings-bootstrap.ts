@@ -56,6 +56,10 @@ export function applyWindowEffectToDocument(effect: WindowEffect): void {
  * on the backdrop surfaces. When the window transparency also dims the text by
  * design (native layered alpha active), the CSS factors are kept at full
  * opacity so the translucency is not applied twice.
+ *
+ * The shell factor tracks the slider one-to-one: an extra reduction there (it
+ * used to be `opacity * 0.985`) made 100% render 1.5% of the desktop through the
+ * main surface, so the configured color was never actually reached.
  */
 export function applyWindowOpacityToDocument(transparency: number, affectsText: boolean): void {
   if (typeof document === "undefined") return;
@@ -72,7 +76,7 @@ export function applyWindowOpacityToDocument(transparency: number, affectsText: 
   const pct = (value: number) => `${(value * 100).toFixed(1)}%`;
   root.style.setProperty("--window-opacity-mix", pct(opacity));
   root.style.setProperty("--window-opacity-glass", pct(opacity * 0.42));
-  root.style.setProperty("--window-opacity-shell", pct(opacity * 0.985));
+  root.style.setProperty("--window-opacity-shell", pct(opacity));
 }
 
 export function applyGeneralSettingsToDocument(settings: GeneralSettings): void {

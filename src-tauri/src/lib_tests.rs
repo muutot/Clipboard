@@ -1204,3 +1204,32 @@ mod storage_cleanup_tests {
         fs::remove_dir_all(project).unwrap();
     }
 }
+
+#[cfg(test)]
+mod creation_brush_tests {
+    use super::*;
+
+    /// The creation-time brush must keep alpha at 0 so wry leaves the WebView2
+    /// default background transparent; any other alpha promotes it to 255 and
+    /// freezes the window opaque for the whole session.
+    #[test]
+    fn the_creation_brush_is_the_theme_color_with_transparent_alpha() {
+        for background in ["#f8f8f9", "f8f8f9", "#1b1b1b", "#F8F8F9"] {
+            let color = transparent_creation_brush(background).unwrap();
+            assert_eq!(color.3, 0, "{background} must stay translucent");
+        }
+        let (r, g, b, _) = transparent_creation_brush("#f8f8f9").unwrap().into();
+        assert_eq!((r, g, b), (248, 248, 249));
+        let (r, g, b, _) = transparent_creation_brush("#abc").unwrap().into();
+        assert_eq!((r, g, b), (170, 187, 204));
+        let (r, g, b, _) = transparent_creation_brush("#f8f8f9ff").unwrap().into();
+        assert_eq!((r, g, b), (248, 248, 249));
+    }
+
+    #[test]
+    fn an_unparseable_backdrop_has_no_brush_rather_than_a_black_one() {
+        assert!(transparent_creation_brush("").is_err());
+        assert!(transparent_creation_brush("#12").is_err());
+        assert!(transparent_creation_brush("rebeccapurple").is_err());
+    }
+}

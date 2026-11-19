@@ -97,6 +97,28 @@ const MAIN_WINDOW_MIN_HEIGHT: u32 = 500;
 
 const HISTORY_CLEANUP_INTERVAL: Duration = Duration::from_secs(60 * 60);
 
+/// Builds the creation-time window brush for a transparent main window.
+///
+/// `tauri-runtime-wry` fills the window's softbuffer surface with `(r, g, b,
+/// _)`, ignoring alpha, so this color paints the themed backdrop instead of the
+/// opaque black fallback while the window is still unpainted. wry only promotes
+/// the WebView2 default background to opaque for non-zero alpha, so the
+/// resulting `#rrggbb00` keeps the webview surface transparent and the CSS
+/// backdrop alpha can reach the desktop.
+fn transparent_creation_brush(background: &str) -> Result<tauri::window::Color, String> {
+    let hex = background.trim().trim_start_matches('#');
+    let rgb = match hex.len() {
+        6 | 8 => &hex[..6],
+        3 => {
+            return transparent_creation_brush(
+                &hex.chars().flat_map(|c| [c, c]).collect::<String>(),
+            );
+        }
+        _ => return Err(format!("unsupported backdrop color: {background}")),
+    };
+    format!("#{rgb}00").parse()
+}
+
 /// Directory holding config, logs, the database and managed storage.
 /// Portable installs keep data next to the executable while that directory is
 /// writable; otherwise (AppImages, which mount read-only, system install
@@ -692,16 +714,23 @@ pub fn run() {
                 .window_opacity_affects_text
                 .then(|| config.general_settings().window_transparency);
             let startup_window_effect = config.general_settings().window_effect.clone();
-            // The main window is built below (tauri.conf.json sets `create: false`)
-            // so its transparency can follow the saved backdrop. A transparent
-            // window leaves WebView2 compositing an unthemed surface: with a GDI
-            // erase brush it flashed black, without one it flashed white. An opaque
-            // backdrop gets a real opaque window instead — the same shape as the
-            // settings window, which never flashes.
+            // The main window is always built transparent so the CSS backdrop
+            // alpha can composite over the desktop. Building it opaque whenever
+            // the *saved* backdrop was opaque looked safer, but WebView2's
+            // default background is fixed at controller creation and cannot be
+            // made transparent again (`set_background_color` promotes any
+            // non-zero alpha to 255), so a window created opaque stayed opaque
+            // for its whole life and `windowTransparency` only took effect after
+            // a restart recreated it.
+            //
+            // The first-frame flash is handled without going opaque:
+            // - `tauri-runtime-wry` fills the window's softbuffer surface from
+            //   the builder color with `(r, g, b, _)`, ignoring alpha, so an
+            //   `#rrggbb00` brush paints the theme color instead of the black
+            //   `unwrap_or(0)` fallback.
+            // - wry only forces alpha to 255 for non-zero values, so the same
+            //   `#rrggbb00` keeps the WebView2 surface genuinely transparent.
             let general = config.general_settings();
-            let main_backdrop_opaque = general.window_effect == "off"
-                && !general.window_opacity_affects_text
-                && general.window_transparency >= 100;
             // Clone before the store moves into the managed state. The color has
             // to be applied while the webview is created: WebView2 only drops its
             // initial white surface when the default background is set together
@@ -720,20 +749,24 @@ pub fn run() {
                 .cloned()
             {
                 let mut builder =
-                    tauri::WebviewWindowBuilder::from_config(app.handle(), &window_config)?;
-                if main_backdrop_opaque {
-                    builder = builder.transparent(false);
-                    if let Ok(color) = main_backdrop.parse::<tauri::window::Color>() {
-                        builder = builder.background_color(color);
-                    }
+                    tauri::WebviewWindowBuilder::from_config(app.handle(), &window_config)?
+                        .transparent(true);
+                if let Ok(color) = transparent_creation_brush(&main_backdrop) {
+                    builder = builder.background_color(color);
                 }
                 let main_window = builder.build()?;
                 // The window is hidden until hydration. Read the native GTK/OS
                 // preference before reveal; saved system palettes are only hints.
-                if main_backdrop_opaque && startup_general.theme == "system" {
-                    let dark = matches!(main_window.theme(), Ok(tauri::Theme::Dark));
-                    let color = startup_general.theme_background(dark).parse().ok();
-                    if let Err(error) = main_window.set_background_color(color) {
+                if startup_general.theme == "system"
+                    && let Ok(color) =
+                        transparent_creation_brush(startup_general.theme_background(
+                            matches!(main_window.theme(), Ok(tauri::Theme::Dark)),
+                        ))
+                {
+                    // Keep alpha at 0: an opaque value here would promote the
+                    // WebView2 default background to opaque and re-freeze the
+                    // transparency slider for this whole session.
+                    if let Err(error) = main_window.set_background_color(Some(color)) {
                         crate::log_warn!("[window] failed to apply the system-theme backdrop: {error}");
                     }
                 }
