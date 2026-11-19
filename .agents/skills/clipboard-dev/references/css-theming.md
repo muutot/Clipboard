@@ -61,28 +61,28 @@ semantics; see `docs/CUSTOM_CSS.md`.
 
 The current `ThemeColors` interface has 20 semantic values:
 
-| CSS variable          | ThemeColors key    | Purpose                                           |
-| --------------------- | ------------------ | ------------------------------------------------- |
-| `--bg-app`            | `bg`               | application/body and main-window shell background |
-| `--bg-settings`       | `settingsBg`       | settings window shell background                  |
-| `--accent`            | `accent`           | product/focus accent                              |
-| `--text-primary`      | `textPrimary`      | primary content                                   |
-| `--text-secondary`    | `textSecondary`    | secondary content                                 |
-| `--text-muted`        | `textMuted`        | descriptions/metadata                             |
-| `--text-faint`        | `textFaint`        | lowest-emphasis text/icons                        |
-| `--placeholder-color` | `placeholderColor` | placeholders                                      |
-| `--border-color`      | `border`           | regular borders                                   |
-| `--border-subtle`     | `borderSubtle`     | dividers/quiet borders                            |
-| `--card-bg`           | `cardBg`           | card/elevated controls                            |
-| `--surface-bg`        | `surfaceBg`        | popovers/panels                                   |
-| `--statusbar-bg`      | `statusBarBg`      | footer/status bar                                 |
-| `--hover-bg`          | `hoverBg`          | hover and quiet selected surfaces                 |
-| `--input-bg`          | `inputBg`          | inputs and inset surfaces                         |
-| `--selection-color`   | `selectionColor`   | selection/current state                           |
-| `--success-color`     | `successColor`     | successful state                                  |
-| `--danger-color`      | `dangerColor`      | destructive/error state                           |
-| `--warning-color`     | `warningColor`     | caution/emphasis states                           |
-| `--scrollbar-color`   | `scrollbarColor`   | scroll thumb                                      |
+| CSS variable          | ThemeColors key    | Purpose                                                        |
+| --------------------- | ------------------ | -------------------------------------------------------------- |
+| `--bg-app`            | `bg`               | main-window shell background (see the single-layer rule below) |
+| `--bg-settings`       | `settingsBg`       | settings window shell background                               |
+| `--accent`            | `accent`           | product/focus accent                                           |
+| `--text-primary`      | `textPrimary`      | primary content                                                |
+| `--text-secondary`    | `textSecondary`    | secondary content                                              |
+| `--text-muted`        | `textMuted`        | descriptions/metadata                                          |
+| `--text-faint`        | `textFaint`        | lowest-emphasis text/icons                                     |
+| `--placeholder-color` | `placeholderColor` | placeholders                                                   |
+| `--border-color`      | `border`           | regular borders                                                |
+| `--border-subtle`     | `borderSubtle`     | dividers/quiet borders                                         |
+| `--card-bg`           | `cardBg`           | card/elevated controls                                         |
+| `--surface-bg`        | `surfaceBg`        | popovers/panels                                                |
+| `--statusbar-bg`      | `statusBarBg`      | footer/status bar                                              |
+| `--hover-bg`          | `hoverBg`          | hover and quiet selected surfaces                              |
+| `--input-bg`          | `inputBg`          | inputs and inset surfaces                                      |
+| `--selection-color`   | `selectionColor`   | selection/current state                                        |
+| `--success-color`     | `successColor`     | successful state                                               |
+| `--danger-color`      | `dangerColor`      | destructive/error state                                        |
+| `--warning-color`     | `warningColor`     | caution/emphasis states                                        |
+| `--scrollbar-color`   | `scrollbarColor`   | scroll thumb                                                   |
 
 Two static (non-theme-mapped) accent/scrim/shadow tokens live alongside in `app.css` `:root`: `--favorite-color` (favorite star/filter accent), `--modal-scrim` / `--modal-scrim-filter` (shared modal scrim consumed by the global `dialog::backdrop` rule and div-based overlays; full-screen shells keep stronger local scrims), and `--shadow-float` (elevated floating-surface shadow shared by dialogs, context menus, and the find bar).
 
@@ -124,6 +124,23 @@ theme changes; the settings window uses `settingsBg`, and float uses `bg`.
 Native preference delivery and first-frame composition require platform checks.
 
 The native window needs the same treatment, because no CSS can cover the gap between `show()` and the first webview frame. Do not give a transparent window an opaque `backgroundColor`: tao paints that brush with `FillRect` (alpha ignored), so `#00000000` still erases the client area solid black, and without any brush the unpainted surface flashes white. Instead: the config main window is `create: false`, and `src-tauri/src/lib.rs` **always** builds it with `transparent(true)` plus the resolved theme background rewritten to `#rrggbb00` (`transparent_creation_brush`). That one brush satisfies both surfaces: `tauri-runtime-wry` fills the window softbuffer with `(r, g, b, _)` — alpha discarded — so the splash is the theme color rather than the black `unwrap_or(0)` fallback, while wry only promotes the WebView2 default background to opaque for a non-zero alpha, so the webview surface stays genuinely transparent. Never create this window opaque: the transparency decision is fixed at controller creation (`set_background_color` promotes any non-zero alpha to 255 and cannot be undone), so a window built opaque ignores `windowTransparency` for its whole life and only a restart — which rebuilds from saved config — appears to apply the slider. Creation time is what matters: WebView2 only drops its initial white surface when the default background is set while the controller is created — the settings window's creation-time `backgroundColor` is why it never flashes, while `Window.setBackgroundColor` / `Webview.setBackgroundColor` from the page are applied too late and still flash white. The float panel is built at runtime with `transparent(true)`, so `revealFloatPanel` seeds both surfaces with the resolved `bg` before `show()`. Reveal timing: the backend `show`s the window directly (`platform::restore_main_window`) and the window reappears on its last painted WebView2 surface. Do not suspend the hidden webview (`TrySuspend`) to save memory: WebView2 cannot render for a hidden window, so the `Resume` it needs re-creates the composition surface and repaints only after the window is already visible — that is the one-frame content flash a light theme makes obvious. The main window also receives `WS_CLIPCHILDREN` at creation (`platform::enable_child_clipping`): tao's `WM_ERASEBKGND` fills the entire client rectangle with the background brush and tao does not set that style, so otherwise a show or repaint can cover the WebView2 child with the backdrop for one frame. Translucent backdrops keep both surfaces transparent so the desktop shows through. Runtime native backdrops are **settings/float only**: `applyNativeBackdrop` never touches the main window, because `Webview.setBackgroundColor(null)` resolves to opaque white in tauri-runtime-wry (`webview.set_background_color(color.map(Into::into).unwrap_or((255, 255, 255, 255)))`), so one page-driven write freezes that webview opaque and makes `windowTransparency` look dead until a restart recreates the window. CSS alone owns main-window translucency; `lib.rs` owns its creation-time backdrop. Only `settings-bootstrap`-applied post-hydration colors may be cached — applying the store before the load gate resolves would snapshot placeholder defaults.
+
+## Backdrop translucency: exactly one painted layer
+
+`settings-bootstrap.ts` publishes the window transparency as concrete factors on
+`--window-opacity-mix`, `--window-opacity-glass` and `--window-opacity-shell`.
+Only **one** element may paint `--bg-app` with one of them. Two translucent
+layers composite their alphas (`1 - (1 - a)^2`), so the slider value stops being
+the alpha that reaches the desktop: with `body` and `.app-shell` both at 60% the
+effective alpha was 84% and the lower half of the range read as "the slider did
+nothing". `.app-shell` owns the main window's backdrop colour; `body` keeps only
+the top highlight gradient. When adding a full-bleed surface, check whether it
+paints a backdrop colour before the shell already does.
+
+Note the WebView2 limit behind this: the page can only composite against the
+webview surface, not the desktop, unless the window itself uses
+DirectComposition. Zeroing every CSS layer's alpha leaves the default WebView2
+background showing rather than the desktop.
 
 ## Settings semantic metrics
 
