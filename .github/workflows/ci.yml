@@ -114,14 +114,18 @@ jobs:
       # fails and it falls back to `fs::copy(...).unwrap()`, which panics with
       # NotFound when those subdirs do not exist yet (upstream fixed this by
       # guarding with `out_dir.exists()` after rc.13). It derives them from
-      # `OUT_DIR` via `ancestors().nth(3)`, so the destinations are
-      # `target/ci/{examples,deps}` -- NOT under `build/`. Pre-create them so the
-      # copy has a destination; harmless on Linux/macOS where the unix branch
-      # uses symlinks instead.
+      # `OUT_DIR` via `ancestors().nth(3)`, which strips the
+      # `build/<pkg>-<hash>/out` tail, so the destinations are
+      # `target/[<triple>/]ci/{examples,deps}` -- NOT under `build/`. Create both
+      # shapes explicitly; harmless on Linux/macOS where the unix branch uses
+      # symlinks instead.
       - name: Prepare ONNX Runtime DLL destinations
         if: runner.os == 'Windows'
         shell: bash
-        run: mkdir -p src-tauri/target/ci/examples src-tauri/target/ci/deps
+        run: |
+          mkdir -p src-tauri/target/ci/examples src-tauri/target/ci/deps
+          mkdir -p src-tauri/target/x86_64-pc-windows-msvc/ci/examples \
+                   src-tauri/target/x86_64-pc-windows-msvc/ci/deps
 
       - name: Check formatting
         # --all covers every workspace member (e.g. crates/clipboard-sync),

@@ -190,13 +190,19 @@ jobs:
       # Windows only: `ort-sys` 2.0.0-rc.13's `copy_dylibs` (from oar-ocr-core)
       # falls back to `fs::copy(...).unwrap()` when Developer Mode is off and
       # panics if its `examples/`/`deps/` destination dirs are missing. It derives
-      # them from `OUT_DIR` via `ancestors().nth(3)`, so the destinations are
-      # `target/release/{examples,deps}` -- NOT under `build/`. Create them
-      # before the fat-LTO build links; harmless on macOS/Linux.
+      # them from `OUT_DIR` via `ancestors().nth(3)`, which strips the
+      # `build/<pkg>-<hash>/out` tail. tauri-action passes `--target
+      # x86_64-pc-windows-msvc`, so the destinations are
+      # `target/x86_64-pc-windows-msvc/release/{examples,deps}`. Create them
+      # explicitly (the directory does not exist yet, so globbing would miss it)
+      # plus the target-less pair for a plain local build.
       - name: Prepare ONNX Runtime DLL destinations
         if: runner.os == 'Windows'
         shell: bash
-        run: mkdir -p src-tauri/target/release/examples src-tauri/target/release/deps
+        run: |
+          mkdir -p src-tauri/target/release/examples src-tauri/target/release/deps
+          mkdir -p src-tauri/target/x86_64-pc-windows-msvc/release/examples \
+                   src-tauri/target/x86_64-pc-windows-msvc/release/deps
 
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
