@@ -1233,3 +1233,61 @@ mod creation_brush_tests {
         assert!(transparent_creation_brush("rebeccapurple").is_err());
     }
 }
+
+#[cfg(test)]
+mod desktop_transparency_tests {
+    use super::*;
+
+    fn general(effect: &str, affects_text: bool, transparency: u8) -> crate::config::GeneralConfig {
+        let mut general = crate::config::GeneralConfig::default();
+        general.window_effect = effect.to_owned();
+        general.window_opacity_affects_text = affects_text;
+        general.window_transparency = transparency;
+        general
+    }
+
+    /// A translucent effect-free backdrop must leave the window surface unpainted
+    /// so the CSS alpha composites onto the desktop. Seeding that surface is what
+    /// made a light backdrop look completely opaque.
+    #[test]
+    fn a_translucent_effect_free_backdrop_asks_for_desktop_transparency() {
+        assert!(main_window_wants_desktop_transparency(&general(
+            "off", false, 60
+        )));
+        assert!(main_window_wants_desktop_transparency(&general(
+            "off", false, 99
+        )));
+        assert!(main_window_wants_desktop_transparency(&general(
+            "off", false, 60
+        )));
+    }
+
+    /// At 100% there is nothing to show through, so the surface may be painted to
+    /// avoid a black first frame.
+    #[test]
+    fn a_fully_opaque_backdrop_keeps_the_creation_brush() {
+        assert!(!main_window_wants_desktop_transparency(&general(
+            "off", false, 100
+        )));
+    }
+
+    /// Native layered alpha dims the whole window (text included) and the CSS
+    /// factors are disabled in that mode, so the surface stays painted.
+    #[test]
+    fn text_dimmed_transparency_does_not_ask_for_desktop_transparency() {
+        assert!(!main_window_wants_desktop_transparency(&general(
+            "off", true, 60
+        )));
+    }
+
+    /// Acrylic/mica draw their own backdrop; the CSS alpha is not in charge.
+    #[test]
+    fn window_effects_do_not_ask_for_desktop_transparency() {
+        assert!(!main_window_wants_desktop_transparency(&general(
+            "acrylic", false, 60
+        )));
+        assert!(!main_window_wants_desktop_transparency(&general(
+            "mica", false, 60
+        )));
+    }
+}

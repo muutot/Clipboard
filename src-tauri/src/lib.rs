@@ -97,14 +97,28 @@ const MAIN_WINDOW_MIN_HEIGHT: u32 = 500;
 
 const HISTORY_CLEANUP_INTERVAL: Duration = Duration::from_secs(60 * 60);
 
+/// Whether the saved settings ask for a backdrop the desktop must show through.
+///
+/// A translucent, effect-free backdrop without text dimming only works when the
+/// webview is allowed to composite straight onto the desktop, which means the
+/// window's softbuffer surface must stay unpainted (see the builder setup below).
+fn main_window_wants_desktop_transparency(general: &crate::config::GeneralConfig) -> bool {
+    general.window_effect == "off"
+        && !general.window_opacity_affects_text
+        && general.window_transparency < 100
+}
+
 /// Builds the creation-time window brush for a transparent main window.
 ///
 /// `tauri-runtime-wry` fills the window's softbuffer surface with `(r, g, b,
 /// _)`, ignoring alpha, so this color paints the themed backdrop instead of the
 /// opaque black fallback while the window is still unpainted. wry only promotes
 /// the WebView2 default background to opaque for non-zero alpha, so the
-/// resulting `#rrggbb00` keeps the webview surface transparent and the CSS
-/// backdrop alpha can reach the desktop.
+/// resulting `#rrggbb00` keeps the webview surface transparent.
+///
+/// This brush is deliberately NOT used when the saved backdrop is translucent:
+/// the same surface it paints would hide the desktop and make the opacity slider
+/// look dead. It exists to avoid a black first frame on an opaque backdrop.
 fn transparent_creation_brush(background: &str) -> Result<tauri::window::Color, String> {
     let hex = background.trim().trim_start_matches('#');
     let rgb = match hex.len() {
@@ -751,13 +765,31 @@ pub fn run() {
                 let mut builder =
                     tauri::WebviewWindowBuilder::from_config(app.handle(), &window_config)?
                         .transparent(true);
-                if let Ok(color) = transparent_creation_brush(&main_backdrop) {
+                // A softbuffer surface is created for every transparent window and
+                // `tauri-runtime-wry`'s `draw_surface` fills the whole window with
+                // the builder colour, discarding alpha (`unwrap_or(0)` paints
+                // black). That surface sits *below* the webview and defeats
+                // WebView2's per-pixel transparency: the CSS backdrop then
+                // composites against this surface instead of the desktop, so a
+                // light backdrop is mathematically indistinguishable from an
+                // opaque one and the opacity slider looks dead.
+                //
+                // Seed the surface only when the saved backdrop is meant to be
+                // opaque. A translucent backdrop gets no brush at all, which
+                // costs one white frame before the webview paints but is the only
+                // way the CSS alpha can reach the desktop.
+                let wants_desktop_transparency =
+                    main_window_wants_desktop_transparency(&startup_general);
+                if !wants_desktop_transparency
+                    && let Ok(color) = transparent_creation_brush(&main_backdrop)
+                {
                     builder = builder.background_color(color);
                 }
                 let main_window = builder.build()?;
                 // The window is hidden until hydration. Read the native GTK/OS
                 // preference before reveal; saved system palettes are only hints.
-                if startup_general.theme == "system"
+                if !wants_desktop_transparency
+                    && startup_general.theme == "system"
                     && let Ok(color) =
                         transparent_creation_brush(startup_general.theme_background(
                             matches!(main_window.theme(), Ok(tauri::Theme::Dark)),
