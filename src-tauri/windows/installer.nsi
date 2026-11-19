@@ -16,6 +16,13 @@ ManifestDPIAwareness PerMonitorV2
 !include FileFunc.nsh
 !include x64.nsh
 !include WordFunc.nsh
+; NSIS 3.13 moved the Restart Manager helpers into `Win\RestartManager.nsh`,
+; which the headers MUI2 pulls in no longer include. `utils.nsh` (shipped by
+; tauri-bundler) calls `RestartManager_StartSession` /
+; `RestartManager_RegisterFile` unconditionally, so without this include
+; makensis aborts with "macro named ... not found". NSIS 3.11 was the last
+; release that provided them implicitly.
+!include "Win\RestartManager.nsh"
 !include "utils.nsh"
 !include "FileAssociation.nsh"
 !include "Win\COM.nsh"
