@@ -372,6 +372,19 @@ error: could not compile `ort-sys` (lib) due to 1 previous error
 
 而 `cargo fmt` / `cargo clippy`（不链接）与 Windows job（那份构建脚本恰好重跑）依旧全绿，很容易误判成平台专属代码的问题。`ci.yml` 与 `release.yml` 因此在构建前执行 `cargo clean -p ort-sys [--profile …]`，强制构建脚本重跑、重新下载或复用二进制。凡是「构建脚本把 `$HOME` 下的下载目录写进缓存输出」的依赖都适用同一处理。
 
+### Windows 上 `cargo clean` 之后仍 panic：copy_dylibs 的目标目录不存在
+
+`cargo clean` 解决的是陈旧缓存路径，但挡不住第二个坑：`oar-ocr-core` 把 `ort` 钉在 `=2.0.0-rc.13` 并硬编码 `features = ["std","ndarray","tracing","copy-dylibs"]`（Cargo feature 加性，下游关不掉，升 `ort` 又与 `=` 钉版冲突）。rc.13 的 `ort-sys/build/dynamic_link.rs` 在 Windows 下载完预编译库后调用 `copy_dylibs`，把 DLL 镜像到目标目录及其 `examples/`、`deps/` 子目录：
+
+```text
+thread 'main' panicked at ort-sys-2.0.0-rc.13/build/dynamic_link.rs:42:52:
+called `Result::unwrap()` on an `Err` value: Os { code: 3, NotFound, ... }
+```
+
+开发者模式关闭时 `symlink_file` 失败，回退到 `fs::copy(...).unwrap()`（第 42 行），当 `examples/`、`deps/` 还不存在时就 NotFound panic。这是确定性问题，不是 flaky——重跑同 job 一样红。上游 `ort` main 分支已用 `if out_dir.exists()` 守卫修掉，但 rc.13 拿不到。
+
+处理：`cargo clean -p ort-sys` 之后、链接之前，预建 `target/<profile>/build/examples` 与 `target/<profile>/build/deps`。`ci.yml`（Rust windows job，`--profile ci`）与 `release.yml`（build matrix 含 windows-latest，`--profile release`）各加一步带 `if: runner.os == 'Windows'` 的 `mkdir -p`；Linux/macOS 走 symlink 分支，无需也不需要此步。判断依据：日志出现 `downloading from '…+directml.tar.lzma2'` 后紧跟 `dynamic_link.rs:42` 的 NotFound panic，就是本坑。
+
 ## CI 作业有时间上限
 
 GitHub 默认每个 job 上限 6 小时。`ci.yml` 的 `frontend` / `rust` 因此显式设了 `timeout-minutes`（20 / 45；历史全绿耗时分别约 1–2 分钟与 4–11 分钟），让卡住的测试尽快变成 job 失败，而不是把 run 长时间留在 `in_progress`。判断是「卡住」还是「排队」看 Test 步骤尾部的 `SLOW [>Ns]` 行就够（见上一节的 `local_wake` 实例）。
