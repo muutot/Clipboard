@@ -36,7 +36,7 @@ function collectReferencedKeys(): Map<string, string[]> {
   // specifiers are not locale keys; style blocks never contain them.
   const LITERAL = /["'`]([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z0-9_]+)+)["'`]/g;
   const NOT_A_KEY =
-    /\.(png|jpe?g|gif|svg|webp|ico|json|ya?ml|toml|css|jsx?|tsx?|svelte|html?|md|txt|exe|dll|wasm|node|map)$/i;
+    /\.(png|jpe?g|gif|svg|webp|ico|json|ya?ml|toml|css|jsx?|tsx?|rs|svelte|html?|md|txt|exe|dll|wasm|node|map)$/i;
   const referenced = new Map<string, string[]>();
   for (const [file, raw] of Object.entries(SOURCE_FILES)) {
     const base = file.split("/").pop() ?? file;

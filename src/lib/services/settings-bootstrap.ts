@@ -82,7 +82,7 @@ export function applyGeneralSettingsToDocument(settings: GeneralSettings): void 
   const colors = resolveThemeColors(settings.themeColors, settings.theme);
   applyThemeColors(colors, settings.theme);
   applyCodeTheme(settings.codeTheme, resolveThemeMode(settings.theme), colors.bg);
-  applyNativeBackdrop(settings, colors);
+  applyNativeBackdrop(colors);
   applyWindowEffectToDocument(settings.windowEffect);
   applyWindowOpacityToDocument(settings.windowTransparency, settings.windowOpacityAffectsText);
   applyCustomCss(settings.customCss, settings.customCssEnabled);
@@ -90,18 +90,27 @@ export function applyGeneralSettingsToDocument(settings: GeneralSettings): void 
 
 let lastNativeBackdrop: string | undefined;
 
-/** Transparent main windows must retain their transparent native surfaces. */
-function applyNativeBackdrop(settings: GeneralSettings, colors: ThemeColors): void {
+/**
+ * Native backdrop colors are a creation-time concern for the main window.
+ *
+ * `lib.rs` builds that window opaque only when the *saved* backdrop is opaque,
+ * because WebView2 drops its initial white surface only when the default
+ * background is set together with the controller. Writing a native backdrop
+ * from the page is therefore one-way: lowering `windowTransparency` afterwards
+ * only changes the CSS shell, which then composites over the opaque WebView2
+ * surface it just painted, so the slider looks dead until a restart recreates
+ * the window. Keep the main window's native surfaces exactly as created and let
+ * CSS own its translucency.
+ *
+ * The settings and float windows stay opaque for their whole lifetime, so they
+ * can follow live theme changes here (the float panel is seeded by
+ * `revealFloatPanel` before it is shown).
+ */
+function applyNativeBackdrop(colors: ThemeColors): void {
   if (!isTauriRuntime()) return;
   const win = getCurrentWindow();
+  if (win.label === "main") return;
   const bg = win.label === "settings" ? colors.settingsBg : colors.bg;
-  if (
-    win.label === "main" &&
-    (settings.windowEffect !== "off" ||
-      settings.windowOpacityAffectsText ||
-      settings.windowTransparency < 100)
-  )
-    return;
   const key = `${win.label}:${bg}`;
   if (lastNativeBackdrop === key) return;
   lastNativeBackdrop = key;
