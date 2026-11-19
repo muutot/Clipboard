@@ -2,7 +2,7 @@
 // Keep these preset variables and cache keys aligned with utils/settings/theme.ts.
 (function () {
   var light = {
-    "--bg-app": "#f5f5f5",
+    "--bg-app": "#f8f8f9",
     "--bg-settings": "#f7f8fa",
     "--accent": "#1a6ae8",
     "--text-primary": "#1a1a1a",

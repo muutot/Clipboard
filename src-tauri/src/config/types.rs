@@ -187,7 +187,7 @@ impl GeneralConfig {
     /// missing system information is light. Explicit saved choices are retained.
     pub fn theme_background(&self, system_dark: bool) -> &str {
         if self.theme == "system" {
-            return if system_dark { "#1b1b1b" } else { "#f5f5f5" };
+            return if system_dark { "#1b1b1b" } else { "#f8f8f9" };
         }
         self.extra
             .get("themeColors")
@@ -196,7 +196,7 @@ impl GeneralConfig {
             .unwrap_or(if self.theme == "dark" || self.theme == "custom" {
                 "#1b1b1b"
             } else {
-                "#f5f5f5"
+                "#f8f8f9"
             })
     }
 }

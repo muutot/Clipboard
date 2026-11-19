@@ -189,7 +189,7 @@ export const DARK_THEME_COLORS: ThemeColors = {
 };
 
 export const LIGHT_THEME_COLORS: ThemeColors = {
-  bg: "#f5f5f5",
+  bg: "#f8f8f9",
   settingsBg: "#f7f8fa",
   accent: "#1a6ae8",
   textPrimary: "#1a1a1a",

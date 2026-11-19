@@ -85,7 +85,7 @@ fn system_theme_is_the_fresh_and_legacy_missing_default() {
     assert_eq!(store.general_settings().theme, "system");
     let missing: super::types::GeneralConfig = serde_json::from_value(json!({})).unwrap();
     assert_eq!(missing.theme, "system");
-    assert_eq!(missing.theme_background(false), "#f5f5f5");
+    assert_eq!(missing.theme_background(false), "#f8f8f9");
     assert_eq!(missing.theme_background(true), "#1b1b1b");
     fs::remove_dir_all(project).unwrap();
 }
@@ -96,7 +96,7 @@ fn system_theme_ignores_a_saved_palette_from_another_system_appearance() {
         "theme": "system", "themeColors": {"bg": "#123456"}
     }))
     .unwrap();
-    assert_eq!(settings.theme_background(false), "#f5f5f5");
+    assert_eq!(settings.theme_background(false), "#f8f8f9");
     assert_eq!(settings.theme_background(true), "#1b1b1b");
 }
 
@@ -117,7 +117,7 @@ fn system_theme_default_preserves_explicit_persisted_choices() {
         );
     }
     for (mode, background) in [
-        ("light", "#f5f5f5"),
+        ("light", "#f8f8f9"),
         ("dark", "#1b1b1b"),
         ("custom", "#1b1b1b"),
     ] {
