@@ -113,13 +113,15 @@ jobs:
       # `examples/` and `deps/` subdirs. With Developer Mode off, `symlink_file`
       # fails and it falls back to `fs::copy(...).unwrap()`, which panics with
       # NotFound when those subdirs do not exist yet (upstream fixed this by
-      # guarding with `out_dir.exists()` after rc.13). Pre-create them so the
+      # guarding with `out_dir.exists()` after rc.13). It derives them from
+      # `OUT_DIR` via `ancestors().nth(3)`, so the destinations are
+      # `target/ci/{examples,deps}` -- NOT under `build/`. Pre-create them so the
       # copy has a destination; harmless on Linux/macOS where the unix branch
       # uses symlinks instead.
       - name: Prepare ONNX Runtime DLL destinations
         if: runner.os == 'Windows'
         shell: bash
-        run: mkdir -p src-tauri/target/ci/build/examples src-tauri/target/ci/build/deps
+        run: mkdir -p src-tauri/target/ci/examples src-tauri/target/ci/deps
 
       - name: Check formatting
         # --all covers every workspace member (e.g. crates/clipboard-sync),
