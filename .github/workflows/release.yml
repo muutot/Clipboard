@@ -188,21 +188,30 @@ jobs:
         run: cargo clean -p ort-sys --profile release --manifest-path src-tauri/Cargo.toml
 
       # Windows only: `ort-sys` 2.0.0-rc.13's `copy_dylibs` (from oar-ocr-core)
-      # falls back to `fs::copy(...).unwrap()` when Developer Mode is off and
-      # panics if its `examples/`/`deps/` destination dirs are missing. It derives
-      # them from `OUT_DIR` via `ancestors().nth(3)`, which strips the
-      # `build/<pkg>-<hash>/out` tail. tauri-action passes `--target
-      # x86_64-pc-windows-msvc`, so the destinations are
-      # `target/x86_64-pc-windows-msvc/release/{examples,deps}`. Create them
-      # explicitly (the directory does not exist yet, so globbing would miss it)
-      # plus the target-less pair for a plain local build.
+      # mirrors the downloaded DLLs into `OUT_DIR.ancestors().nth(3)` plus its
+      # `examples/`/`deps` siblings. When Developer Mode is off `symlink_file`
+      # fails and it falls back to `fs::copy(...).unwrap()`, which panics with
+      # NotFound if the destination is not there yet (upstream guards this with
+      # `out_dir.exists()` only after rc.13).
+      #
+      # The exact depth depends on whether cargo ran with `--target` (tauri-action
+      # passes `--target x86_64-pc-windows-msvc`), so seed every plausible base
+      # instead of deriving one. The layout is dumped so a future failure shows
+      # which base the crate actually resolved to.
       - name: Prepare ONNX Runtime DLL destinations
         if: runner.os == 'Windows'
         shell: bash
         run: |
-          mkdir -p src-tauri/target/release/examples src-tauri/target/release/deps
-          mkdir -p src-tauri/target/x86_64-pc-windows-msvc/release/examples \
-                   src-tauri/target/x86_64-pc-windows-msvc/release/deps
+          for base in \
+            src-tauri/target/release \
+            src-tauri/target/release/build \
+            src-tauri/target/x86_64-pc-windows-msvc/release \
+            src-tauri/target/x86_64-pc-windows-msvc/release/build
+          do
+            mkdir -p "$base/examples" "$base/deps"
+          done
+          find src-tauri/target -maxdepth 4 -type d \
+            \( -name examples -o -name deps -o -name 'ort-sys-*' \) | sort
 
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
