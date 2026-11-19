@@ -278,6 +278,18 @@ jobs:
       # approval is part of the Foundation's per-release policy. The signed
       # file replaces the draft asset BEFORE checksums run, so checksums-
       # windows-x64.txt matches what users actually download.
+      # Diagnostic for the ort-sys `copy_dylibs` panic: report which base
+      # `OUT_DIR` actually resolved to so the seed paths above can be corrected
+      # without another blind attempt. Runs only after a failure, on Windows.
+      - name: Report ort-sys build layout
+        if: failure() && runner.os == 'Windows'
+        shell: bash
+        run: |
+          find src-tauri/target -maxdepth 5 -type d \
+            \( -name out -path '*ort-sys*' -o -name examples -o -name deps \) 2>/dev/null | sort
+          echo '--- ort-sys out dirs ---'
+          find src-tauri/target -maxdepth 6 -type d -path '*ort-sys*/out' 2>/dev/null | sort
+
       - name: Upload unsigned installer for signing
         id: signable_installer
         if: runner.os == 'Windows' && env.SIGNPATH_API_TOKEN != ''
