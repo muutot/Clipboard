@@ -187,6 +187,15 @@ jobs:
       - name: Refresh the ONNX Runtime link
         run: cargo clean -p ort-sys --profile release --manifest-path src-tauri/Cargo.toml
 
+      # Windows only: `ort-sys` 2.0.0-rc.13's `copy_dylibs` (from oar-ocr-core)
+      # falls back to `fs::copy(...).unwrap()` when Developer Mode is off and
+      # panics if its `examples/`/`deps/` destination dirs are missing. Create
+      # them before the fat-LTO build links; harmless on macOS/Linux.
+      - name: Prepare ONNX Runtime DLL destinations
+        if: runner.os == 'Windows'
+        shell: bash
+        run: mkdir -p src-tauri/target/release/build/examples src-tauri/target/release/build/deps
+
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
         run: |

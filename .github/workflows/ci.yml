@@ -108,6 +108,19 @@ jobs:
       - name: Refresh the ONNX Runtime link
         run: cargo clean -p ort-sys --profile ci --manifest-path src-tauri/Cargo.toml
 
+      # Windows only: `ort-sys` 2.0.0-rc.13's `copy_dylibs` (enabled via
+      # `oar-ocr-core`) mirrors the downloaded DLLs into the target dir and its
+      # `examples/` and `deps/` subdirs. With Developer Mode off, `symlink_file`
+      # fails and it falls back to `fs::copy(...).unwrap()`, which panics with
+      # NotFound when those subdirs do not exist yet (upstream fixed this by
+      # guarding with `out_dir.exists()` after rc.13). Pre-create them so the
+      # copy has a destination; harmless on Linux/macOS where the unix branch
+      # uses symlinks instead.
+      - name: Prepare ONNX Runtime DLL destinations
+        if: runner.os == 'Windows'
+        shell: bash
+        run: mkdir -p src-tauri/target/ci/build/examples src-tauri/target/ci/build/deps
+
       - name: Check formatting
         # --all covers every workspace member (e.g. crates/clipboard-sync),
         # not just the root package.
