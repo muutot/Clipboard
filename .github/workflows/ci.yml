@@ -109,23 +109,24 @@ jobs:
         run: cargo clean -p ort-sys --profile ci --manifest-path src-tauri/Cargo.toml
 
       # Windows only: `ort-sys` 2.0.0-rc.13's `copy_dylibs` (enabled via
-      # `oar-ocr-core`) mirrors the downloaded DLLs into the target dir and its
-      # `examples/` and `deps/` subdirs. With Developer Mode off, `symlink_file`
-      # fails and it falls back to `fs::copy(...).unwrap()`, which panics with
-      # NotFound when those subdirs do not exist yet (upstream fixed this by
-      # guarding with `out_dir.exists()` after rc.13). It derives them from
-      # `OUT_DIR` via `ancestors().nth(3)`, which strips the
-      # `build/<pkg>-<hash>/out` tail, so the destinations are
-      # `target/[<triple>/]ci/{examples,deps}` -- NOT under `build/`. Create both
-      # shapes explicitly; harmless on Linux/macOS where the unix branch uses
-      # symlinks instead.
+      # `oar-ocr-core`) mirrors the downloaded DLLs into `OUT_DIR.ancestors()
+      # .nth(3)` plus its `examples/`/`deps` siblings. With Developer Mode off
+      # `symlink_file` fails and it falls back to `fs::copy(...).unwrap()`, which
+      # panics with NotFound when the destination is missing (upstream guards
+      # this with `out_dir.exists()` only after rc.13). Seed every plausible base
+      # rather than deriving one from the profile name.
       - name: Prepare ONNX Runtime DLL destinations
         if: runner.os == 'Windows'
         shell: bash
         run: |
-          mkdir -p src-tauri/target/ci/examples src-tauri/target/ci/deps
-          mkdir -p src-tauri/target/x86_64-pc-windows-msvc/ci/examples \
-                   src-tauri/target/x86_64-pc-windows-msvc/ci/deps
+          for base in \
+            src-tauri/target/ci \
+            src-tauri/target/ci/build \
+            src-tauri/target/x86_64-pc-windows-msvc/ci \
+            src-tauri/target/x86_64-pc-windows-msvc/ci/build
+          do
+            mkdir -p "$base/examples" "$base/deps"
+          done
 
       - name: Check formatting
         # --all covers every workspace member (e.g. crates/clipboard-sync),
@@ -189,6 +190,16 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -uo pipefail
+          # `ort-sys` resolves its DLL copy targets from OUT_DIR, and a panic
+          # there names only the source path. Dump the seeds it should have
+          # matched so a mismatch is visible without the web log.
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            echo '--- seeded bases ---'
+            find src-tauri/target -maxdepth 3 -type d \
+              \( -name examples -o -name deps \) 2>/dev/null | sort || true
+            echo '--- ort-sys out ---'
+            find src-tauri/target -maxdepth 5 -type d -path '*ort-sys*/out' 2>/dev/null | sort || true
+          fi
           fingerprint="rust job failed without a captured log"
           for log in "$RUNNER_TEMP/test.log" "$RUNNER_TEMP/clippy.log"; do
             [ -f "$log" ] || continue
