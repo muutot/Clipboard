@@ -277,17 +277,17 @@
       <p>{_t("storage.generalSearchDescription")}</p>
     </div>
     {#if s.showSettingsCloseButton}
-      <button class="close-button" type="button" aria-label={_t("actions.close")} onclick={onclose}
-        >×</button
-      >
+      <button class="close-button" type="button" aria-label={_t("actions.close")} onclick={onclose}>
+        ×
+      </button>
     {/if}
   </header>
 {/if}
 
 <div class="settings-scroll">
   {#each searchEntries as config}
-    <SettingEntry {config}
-      >{#snippet children()}
+    <SettingEntry {config}>
+      {#snippet children()}
         {#if config.type === "custom" && config.id === "general.search-sort-rules"}
           <div class="sort-rules-list" role="list" bind:this={sortListEl}>
             {#each s.searchSortRules as rule, idx (idx)}
@@ -348,8 +348,10 @@
                     onclick={() => {
                       const newRules = s.searchSortRules.filter((_, i) => i !== idx);
                       generalSettings.updateSetting("searchSortRules", newRules);
-                    }}>×</button
+                    }}
                   >
+                    ×
+                  </button>
                 {/if}
               </div>
             {/each}

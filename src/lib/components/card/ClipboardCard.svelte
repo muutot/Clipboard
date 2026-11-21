@@ -643,8 +643,10 @@
       class="card-order"
       title={_t("card.pasteOrder", { position: selectIndex })}
       aria-label={_t("card.pasteOrder", { position: selectIndex })}
-      data-testid="card-order">{selectIndex}</span
+      data-testid="card-order"
     >
+      {selectIndex}
+    </span>
   {/if}
 
   {#if showCheckbox}
@@ -681,11 +683,11 @@
         <div class="file-title">
           <span class="file-icon"><AppIcon name="file" size={15} /></span>
           {#if item.fileMeta && item.fileMeta.length > 1}
-            <span
-              >{item.fileMeta[0].name}, {item.fileMeta[1].name}{item.fileMeta.length > 2
+            <span>
+              {item.fileMeta[0].name}, {item.fileMeta[1].name}{item.fileMeta.length > 2
                 ? ` ${_t("card.fileCountSuffix", { count: item.fileMeta.length - 2 })}`
-                : ""}</span
-            >
+                : ""}
+            </span>
           {:else}
             <span class="file-name">{item.fileName ?? item.title}</span>
           {/if}

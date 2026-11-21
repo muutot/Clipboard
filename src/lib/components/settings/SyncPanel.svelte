@@ -628,8 +628,10 @@
       <strong>{_t("storage.syncRotate")}</strong><button
         type="button"
         onclick={closeRotateDialog}
-        aria-label={_t("storage.syncRotateCancel")}>×</button
+        aria-label={_t("storage.syncRotateCancel")}
       >
+        ×
+      </button>
     </header>
     <p class="hint">{_t("storage.syncRotateDesc")}</p>
     <form
@@ -646,9 +648,9 @@
         aria-label={_t("storage.syncRotateNewPassword")}
       />
       <div class="rotate-actions">
-        <button type="submit" disabled={rotating || syncBusy}
-          >{rotating ? _t("storage.syncRotating") : _t("storage.syncRotateConfirm")}</button
-        >
+        <button type="submit" disabled={rotating || syncBusy}>
+          {rotating ? _t("storage.syncRotating") : _t("storage.syncRotateConfirm")}
+        </button>
         <button type="button" onclick={closeRotateDialog}>{_t("storage.syncRotateCancel")}</button>
       </div>
     </form>

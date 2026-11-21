@@ -165,11 +165,11 @@
   {:else if filePreviewState === "ready"}
     <pre class="file-content-preview">{filePreviewText}</pre>
     {#if filePreviewTruncated}
-      <span class="file-preview-note"
-        >{_t("detail.filePreviewTruncated", {
+      <span class="file-preview-note">
+        {_t("detail.filePreviewTruncated", {
           size: Math.round(FILE_PREVIEW_LIMIT / 1024),
-        })}</span
-      >
+        })}
+      </span>
     {/if}
   {:else if filePreviewState === "failed"}
     <div class="file-preview-state file-preview-error">{_t("detail.filePreviewFailed")}</div>

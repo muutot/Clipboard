@@ -21,9 +21,9 @@
   <section class="setting-card" data-settings-search-id={searchId ?? config.id ?? undefined}>
     {#snippet children()}
       {#if config.actionLabel && (!config.actionVisible || config.actionVisible())}
-        <button type="button" class="settings-action-btn" onclick={config.onaction}
-          >{resolveActionLabel(config.actionLabel)}</button
-        >
+        <button type="button" class="settings-action-btn" onclick={config.onaction}>
+          {resolveActionLabel(config.actionLabel)}
+        </button>
       {/if}
     {/snippet}
     <EntryHeading icon={config.icon} label={config.label} desc={config.desc} inline {children} />

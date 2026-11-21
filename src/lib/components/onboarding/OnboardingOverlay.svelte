@@ -87,8 +87,10 @@
       class="onboarding-close"
       type="button"
       aria-label={_t("onboarding.skip")}
-      onclick={onclose}>×</button
+      onclick={onclose}
     >
+      ×
+    </button>
   </header>
 
   <div class="onboarding-body">
@@ -112,8 +114,9 @@
       {/each}
     </div>
     <div class="onboarding-actions">
-      <button class="onboarding-btn" type="button" onclick={onclose}>{_t("onboarding.skip")}</button
-      >
+      <button class="onboarding-btn" type="button" onclick={onclose}>
+        {_t("onboarding.skip")}
+      </button>
       <button class="onboarding-btn" type="button" disabled={step === 0} onclick={previous}>
         {_t("onboarding.prev")}
       </button>

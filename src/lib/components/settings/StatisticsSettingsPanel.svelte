@@ -197,11 +197,9 @@
           label={_t("statistics.image")}
           desc={_t("storage.imageDesc")}
         />
-        <span class="stats-metric-value"
-          >{status.imageCount}{_t("storage.imageCountUnit")} · {formatBytes(
-            status.imageSizeBytes,
-          )}</span
-        >
+        <span class="stats-metric-value">
+          {status.imageCount}{_t("storage.imageCountUnit")} · {formatBytes(status.imageSizeBytes)}
+        </span>
       </section>
 
       <section class="setting-card stats-metric-card">
@@ -212,11 +210,9 @@
           label={_t("statistics.file")}
           desc={_t("storage.fileDesc")}
         />
-        <span class="stats-metric-value"
-          >{status.fileCount}{_t("storage.fileCountUnit")} · {formatBytes(
-            status.fileSizeBytes,
-          )}</span
-        >
+        <span class="stats-metric-value">
+          {status.fileCount}{_t("storage.fileCountUnit")} · {formatBytes(status.fileSizeBytes)}
+        </span>
       </section>
 
       <section
@@ -303,9 +299,9 @@
           label={_t("storage.memoryPeak")}
           desc={_t("storage.memoryPeakDesc")}
         />
-        <span class="stats-metric-value"
-          >{Math.round(perfMetrics.memory.peakBytes / 1048576)} MB</span
-        >
+        <span class="stats-metric-value">
+          {Math.round(perfMetrics.memory.peakBytes / 1048576)} MB
+        </span>
       </section>
 
       <section class="setting-card stats-metric-card">
@@ -321,9 +317,9 @@
             </p>
           </div>
         </div>
-        <span class="stats-metric-value"
-          >{perfMetrics.searchInputLatency.averageMs?.toFixed(1) ?? "-"}ms</span
-        >
+        <span class="stats-metric-value">
+          {perfMetrics.searchInputLatency.averageMs?.toFixed(1) ?? "-"}ms
+        </span>
       </section>
       {#each [{ label: "P95", value: perfMetrics.searchInputLatency.p95Ms }, { label: "P99", value: perfMetrics.searchInputLatency.p99Ms }] as metric}
         <section class="setting-card stats-metric-card">
@@ -355,9 +351,9 @@
             label={_t("storage.searchAvgTime")}
             desc={_t("storage.searchAvgTimeDesc")}
           />
-          <span class="stats-metric-value"
-            >{perfMetrics.searchLatency.averageMs?.toFixed(1) ?? "-"}ms</span
-          >
+          <span class="stats-metric-value">
+            {perfMetrics.searchLatency.averageMs?.toFixed(1) ?? "-"}ms
+          </span>
         </section>
 
         <section class="setting-card stats-metric-card">
@@ -389,11 +385,9 @@
   {:else}
     {#if memoryDiagnostics}
       <div class="memory-toolbar">
-        <span class="memory-sampled-at"
-          >{_t("storage.sampleTime")}{new Date(
-            memoryDiagnostics.sampledAtMs,
-          ).toLocaleTimeString()}</span
-        >
+        <span class="memory-sampled-at">
+          {_t("storage.sampleTime")}{new Date(memoryDiagnostics.sampledAtMs).toLocaleTimeString()}
+        </span>
         <button type="button" class="memory-refresh" onclick={() => void loadMemoryDiagnostics()}>
           {memoryLoading ? _t("storage.reading") : _t("storage.refreshNow")}
         </button>
@@ -434,9 +428,9 @@
             label={_t("storage.processGroupWorkingSet")}
             desc={_t("storage.processGroupWorkingSetDesc")}
           />
-          <span class="stats-metric-value"
-            >{formatBytes(memoryDiagnostics.processGroup.workingSetBytes)}</span
-          >
+          <span class="stats-metric-value">
+            {formatBytes(memoryDiagnostics.processGroup.workingSetBytes)}
+          </span>
         </section>
       {/if}
 
@@ -451,9 +445,9 @@
           label={_t("storage.processWorkingSet")}
           desc={_t("storage.processWorkingSetDesc")}
         />
-        <span class="stats-metric-value"
-          >{formatMaybeBytes(memoryDiagnostics.currentProcess.workingSetBytes)}</span
-        >
+        <span class="stats-metric-value">
+          {formatMaybeBytes(memoryDiagnostics.currentProcess.workingSetBytes)}
+        </span>
       </section>
 
       <section
@@ -467,9 +461,9 @@
           label={_t("storage.processPrivateMem")}
           desc={_t("storage.processPrivateMemDesc")}
         />
-        <span class="stats-metric-value"
-          >{formatMaybeBytes(memoryDiagnostics.currentProcess.privateBytes)}</span
-        >
+        <span class="stats-metric-value">
+          {formatMaybeBytes(memoryDiagnostics.currentProcess.privateBytes)}
+        </span>
       </section>
 
       <section class="setting-card stats-metric-card">
@@ -480,11 +474,11 @@
           label={_t("storage.systemAvailableMemory")}
           desc={_t("storage.systemAvailableMemoryDesc")}
         />
-        <span class="stats-metric-value"
-          >{formatMaybeBytes(memoryDiagnostics.system.availableBytes)} / {formatMaybeBytes(
+        <span class="stats-metric-value">
+          {formatMaybeBytes(memoryDiagnostics.system.availableBytes)} / {formatMaybeBytes(
             memoryDiagnostics.system.totalBytes,
-          )}</span
-        >
+          )}
+        </span>
       </section>
 
       {#if browserMemory}
@@ -496,11 +490,11 @@
             label={_t("storage.jsHeapTitle")}
             desc={_t("storage.jsHeapDesc")}
           />
-          <span class="stats-metric-value"
-            >{formatBytes(browserMemory.usedBytes)}{browserMemory.limitBytes
+          <span class="stats-metric-value">
+            {formatBytes(browserMemory.usedBytes)}{browserMemory.limitBytes
               ? ` / ${formatBytes(browserMemory.limitBytes)}`
-              : ""}</span
-          >
+              : ""}
+          </span>
         </section>
       {/if}
 
@@ -521,12 +515,12 @@
             <div class="memory-process-row">
               <span class="memory-process-name">{process.role || process.name}</span>
               <span class="memory-process-pid">PID {process.pid}</span>
-              <span class="memory-process-private"
-                >{formatMaybeBytes(process.privateWorkingSetBytes)}</span
-              >
-              <span class="memory-process-working-set"
-                >{formatMaybeBytes(process.workingSetBytes)}</span
-              >
+              <span class="memory-process-private">
+                {formatMaybeBytes(process.privateWorkingSetBytes)}
+              </span>
+              <span class="memory-process-working-set">
+                {formatMaybeBytes(process.workingSetBytes)}
+              </span>
             </div>
           {/each}
         </div>
@@ -544,11 +538,10 @@
             label={_t("storage.ocrModelLabel")}
             desc={ocrModelState(memoryDiagnostics.ocr)}
           />
-          <span class="stats-metric-value"
-            >{formatBytes(memoryDiagnostics.ocr.modelBytes)} · {memoryDiagnostics.ocr
-              .modelFileCount}
-            {_t("storage.ocrModelFileCount")}</span
-          >
+          <span class="stats-metric-value">
+            {formatBytes(memoryDiagnostics.ocr.modelBytes)} · {memoryDiagnostics.ocr.modelFileCount}
+            {_t("storage.ocrModelFileCount")}
+          </span>
         </section>
       {/if}
     {:else}

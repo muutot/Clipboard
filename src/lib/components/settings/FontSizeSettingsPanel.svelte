@@ -171,9 +171,9 @@
       <h2>{_t("general.fontSizePanel")}</h2>
       <p>{_t("general.fontSizePanelDescription")}</p>
     </div>
-    <button class="close-button" type="button" aria-label={_t("actions.close")} onclick={onclose}
-      >×</button
-    >
+    <button class="close-button" type="button" aria-label={_t("actions.close")} onclick={onclose}>
+      ×
+    </button>
   </header>
 {/if}
 
@@ -181,11 +181,13 @@
   <nav class="font-subnav">
     <button
       class:active={currentFontSection === "interface"}
-      onclick={() => selectFontSection("interface")}>{_t("general.fontSizeInterfaceTab")}</button
+      onclick={() => selectFontSection("interface")}
     >
-    <button class:active={currentFontSection === "card"} onclick={() => selectFontSection("card")}
-      >{_t("general.fontSizeCardTab")}</button
-    >
+      {_t("general.fontSizeInterfaceTab")}
+    </button>
+    <button class:active={currentFontSection === "card"} onclick={() => selectFontSection("card")}>
+      {_t("general.fontSizeCardTab")}
+    </button>
   </nav>
 
   {#if currentFontSection === "interface"}

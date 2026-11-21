@@ -196,9 +196,9 @@
   {:else if !privacy || !pauseReady}
     <div class="settings-state" role="status">
       <p>{_t("storage.configLoadFailed")}</p>
-      <button type="button" class="settings-action-btn" onclick={retryConfiguration}
-        >{_t("storage.retryLoad")}</button
-      >
+      <button type="button" class="settings-action-btn" onclick={retryConfiguration}>
+        {_t("storage.retryLoad")}
+      </button>
     </div>
   {:else}
     <CustomEntry
@@ -266,8 +266,10 @@
           type="button"
           class="settings-action-btn"
           disabled={patternsSaving}
-          onclick={savePatterns}>{_t("actions.save")}</button
+          onclick={savePatterns}
         >
+          {_t("actions.save")}
+        </button>
       </div>
     </CustomEntry>
   {/if}

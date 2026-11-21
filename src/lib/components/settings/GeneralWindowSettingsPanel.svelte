@@ -108,9 +108,9 @@
       <p>{_t("storage.generalWindowDescription")}</p>
     </div>
     {#if s.showSettingsCloseButton}
-      <button class="close-button" type="button" aria-label={_t("actions.close")} onclick={onclose}
-        >×</button
-      >
+      <button class="close-button" type="button" aria-label={_t("actions.close")} onclick={onclose}>
+        ×
+      </button>
     {/if}
   </header>
 {/if}

@@ -293,8 +293,10 @@
           type="button"
           class="settings-action-btn"
           disabled={historyConfigLoading}
-          onclick={loadHistoryConfig}>{_t("storage.retryLoad")}</button
+          onclick={loadHistoryConfig}
         >
+          {_t("storage.retryLoad")}
+        </button>
       {:else}
         {_t("storage.readingConfig")}
       {/if}

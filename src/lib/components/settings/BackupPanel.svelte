@@ -100,13 +100,17 @@
     <button
       class="settings-action-btn"
       disabled={unavailable || !isTauriRuntime()}
-      onclick={() => run("create")}>{_t("backup.create")}</button
+      onclick={() => run("create")}
     >
+      {_t("backup.create")}
+    </button>
     <button
       class="settings-action-btn"
       disabled={unavailable || !isTauriRuntime()}
-      onclick={() => run("preview")}>{_t("backup.preview")}</button
+      onclick={() => run("preview")}
     >
+      {_t("backup.preview")}
+    </button>
   </div>
   <BackgroundOperationStatus {operation} />
   {#if busy && !operation.active}<p class="settings-state" role="status">
@@ -122,12 +126,12 @@
         size: formatBytes(preview.resourceBytes),
       })}
     </p>
-    <button class="settings-action-btn" disabled={unavailable} onclick={() => run("restore")}
-      >{_t("backup.restore")}</button
-    >
+    <button class="settings-action-btn" disabled={unavailable} onclick={() => run("restore")}>
+      {_t("backup.restore")}
+    </button>
   {/if}
   {#if truncated > 0}<p class="settings-state">{_t("backup.retention", { count: truncated })}</p>
-    <button class="settings-action-btn" onclick={onadjustlimit}
-      >{_t("storage.importAdjustLimit")}</button
-    >{/if}
+    <button class="settings-action-btn" onclick={onadjustlimit}>
+      {_t("storage.importAdjustLimit")}
+    </button>{/if}
 </section>

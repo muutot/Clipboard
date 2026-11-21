@@ -337,9 +337,9 @@
       <h2>{_t("keyboard.title")}</h2>
       <p>{_t("keyboard.description")}</p>
     </div>
-    <button class="close-button" type="button" aria-label={_t("actions.close")} onclick={onclose}
-      >×</button
-    >
+    <button class="close-button" type="button" aria-label={_t("actions.close")} onclick={onclose}>
+      ×
+    </button>
   </header>
 {/if}
 
@@ -403,8 +403,10 @@
                 <button
                   type="button"
                   class="binding-chip-close"
-                  onclick={() => removeBinding(action.id, shortcut)}>&minus;</button
+                  onclick={() => removeBinding(action.id, shortcut)}
                 >
+                  &minus;
+                </button>
               </div>
             {/each}
           {:else if config && !(action.id in config.shortcuts) && action.defaults.length > 0}
@@ -414,8 +416,10 @@
                 <button
                   type="button"
                   class="binding-chip-close"
-                  onclick={() => removeBinding(action.id, shortcut)}>&minus;</button
+                  onclick={() => removeBinding(action.id, shortcut)}
                 >
+                  &minus;
+                </button>
               </div>
             {/each}
           {:else}
@@ -425,14 +429,14 @@
           {#if recordingAction === action.id}
             <div class="binding-chip recording">
               <kbd>{_t("keyboard.pressKey")}</kbd>
-              <button type="button" class="binding-chip-close" onclick={stopRecording}
-                >&times;</button
-              >
+              <button type="button" class="binding-chip-close" onclick={stopRecording}>
+                &times;
+              </button>
             </div>
           {:else}
-            <button type="button" class="binding-add" onclick={() => startRecording(action.id)}
-              >+</button
-            >
+            <button type="button" class="binding-add" onclick={() => startRecording(action.id)}>
+              +
+            </button>
           {/if}
         </div>
       </section>

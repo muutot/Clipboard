@@ -33,9 +33,9 @@
   >
     {#snippet headingAction()}
       {#if config.actionLabel && (!config.actionVisible || config.actionVisible())}
-        <button type="button" class="settings-action-btn" onclick={config.onaction}
-          >{resolveActionLabel(config.actionLabel)}</button
-        >
+        <button type="button" class="settings-action-btn" onclick={config.onaction}>
+          {resolveActionLabel(config.actionLabel)}
+        </button>
       {/if}
     {/snippet}
     <EntryHeading

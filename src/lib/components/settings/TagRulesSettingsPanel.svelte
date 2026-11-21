@@ -141,9 +141,9 @@
       <h2>{_t("tags.autoTagTitle")}</h2>
       <p>{_t("tags.autoTagDescription")}</p>
     </div>
-    <button class="close-button" type="button" aria-label={_t("actions.close")} onclick={onclose}
-      >×</button
-    >
+    <button class="close-button" type="button" aria-label={_t("actions.close")} onclick={onclose}>
+      ×
+    </button>
   </header>
 {/if}
 
@@ -184,8 +184,10 @@
               class="autotag-remove"
               aria-label={_t("tags.autoTagDelete")}
               title={_t("tags.autoTagDelete")}
-              onclick={() => removeRule(index)}>×</button
+              onclick={() => removeRule(index)}
             >
+              ×
+            </button>
           </div>
           <div class="autotag-row">
             <input
@@ -252,8 +254,10 @@
         <button
           class="settings-action-btn"
           disabled={busy || !isTauriRuntime()}
-          onclick={() => runPreview("sample")}>{_t("autoTags.test")}</button
+          onclick={() => runPreview("sample")}
         >
+          {_t("autoTags.test")}
+        </button>
       </div>
       {#if sampleTags !== null}<p class="preview-result" role="status">
           {sampleTags.join(", ") || _t("autoTags.noMatch")}
@@ -265,13 +269,17 @@
         <button
           class="settings-action-btn"
           disabled={busy || !isTauriRuntime()}
-          onclick={() => runPreview("history")}>{_t("autoTags.previewHistory")}</button
+          onclick={() => runPreview("history")}
         >
+          {_t("autoTags.previewHistory")}
+        </button>
         <button
           class="settings-action-btn"
           disabled={busy || !preview?.changedCount || !isTauriRuntime()}
-          onclick={() => runPreview("apply")}>{_t("autoTags.applyHistory")}</button
+          onclick={() => runPreview("apply")}
         >
+          {_t("autoTags.applyHistory")}
+        </button>
       </div>
       <BackgroundOperationStatus {operation} />
       {#if preview}

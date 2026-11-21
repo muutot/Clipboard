@@ -233,9 +233,9 @@
       <h2>{_t("capture.title")}</h2>
       <p>{_t("capture.description")}</p>
     </div>
-    <button class="close-button" type="button" aria-label={_t("actions.close")} onclick={onclose}
-      >×</button
-    >
+    <button class="close-button" type="button" aria-label={_t("actions.close")} onclick={onclose}>
+      ×
+    </button>
   </header>
 {/if}
 
@@ -248,8 +248,10 @@
           type="button"
           class="settings-action-btn"
           disabled={fileCopySizeLoading}
-          onclick={loadStorageConfig}>{_t("storage.retryLoad")}</button
+          onclick={loadStorageConfig}
         >
+          {_t("storage.retryLoad")}
+        </button>
       {:else}
         {_t("storage.readingConfig")}
       {/if}
@@ -319,8 +321,10 @@
             type="button"
             title={_t("capture.refreshApps")}
             aria-label={_t("capture.refreshApps")}
-            onclick={loadSettings}>&#x21bb;</button
+            onclick={loadSettings}
           >
+            &#x21bb;
+          </button>
         </div>
         <SearchField
           value={availableSearch}
@@ -360,15 +364,17 @@
           aria-label={_t("capture.ignoreSelected")}
           title={_t("capture.ignoreSelected")}
           disabled={saving || selectedAvailable.length === 0}
-          onclick={ignoreSelected}>&#x2192;</button
+          onclick={ignoreSelected}
         >
+          &#x2192;
+        </button>
       </div>
 
       <div class="application-column">
         <div class="column-heading">
-          <strong
-            >{_t("capture.ignoredApps")} <span>{settings.ignoredApplications.length}</span></strong
-          >
+          <strong>
+            {_t("capture.ignoredApps")} <span>{settings.ignoredApplications.length}</span>
+          </strong>
           <span class="plus-mark">+</span>
         </div>
         <SearchField
@@ -388,8 +394,10 @@
           <button
             type="button"
             disabled={saving || !manualApplication.trim()}
-            onclick={addManualApplication}>{_t("capture.add")}</button
+            onclick={addManualApplication}
           >
+            {_t("capture.add")}
+          </button>
         </div>
         <div class="application-list">
           {#each visibleIgnored as application}
@@ -409,8 +417,10 @@
                 aria-label={_t("capture.removeIgnored", { app: application })}
                 title={_t("capture.moveOut")}
                 disabled={saving}
-                onclick={() => removeIgnored(application)}>×</button
+                onclick={() => removeIgnored(application)}
               >
+                ×
+              </button>
             </div>
           {:else}
             <p class="empty-list">{_t("capture.noIgnoredMatch")}</p>

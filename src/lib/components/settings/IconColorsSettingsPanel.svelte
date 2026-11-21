@@ -78,9 +78,9 @@
       <h2>{_t("storage.iconsTab")}</h2>
       <p>{_t("general.iconColorsDescription")}</p>
     </div>
-    <button class="close-button" type="button" aria-label={_t("actions.close")} onclick={onclose}
-      >×</button
-    >
+    <button class="close-button" type="button" aria-label={_t("actions.close")} onclick={onclose}>
+      ×
+    </button>
   </header>
 {/if}
 

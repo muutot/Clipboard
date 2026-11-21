@@ -98,9 +98,9 @@
       <h2>{_t("sourceMapping.title")}</h2>
       <p>{_t("sourceMapping.description")}</p>
     </div>
-    <button class="close-button" type="button" aria-label={_t("actions.close")} onclick={onclose}
-      >×</button
-    >
+    <button class="close-button" type="button" aria-label={_t("actions.close")} onclick={onclose}>
+      ×
+    </button>
   </header>
 {/if}
 
@@ -134,8 +134,10 @@
               class="mapping-remove"
               aria-label={_t("sourceMapping.deleteRule")}
               title={_t("sourceMapping.deleteRule")}
-              onclick={() => removeRule(index)}>×</button
+              onclick={() => removeRule(index)}
             >
+              ×
+            </button>
           </div>
           <div class="mapping-row">
             <input

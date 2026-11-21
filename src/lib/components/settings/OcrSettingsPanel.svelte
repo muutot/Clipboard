@@ -323,8 +323,10 @@
           type="button"
           class="settings-action-btn"
           disabled={ocrStatusLoading}
-          onclick={loadOcrStatus}>{_t("storage.retryLoad")}</button
+          onclick={loadOcrStatus}
         >
+          {_t("storage.retryLoad")}
+        </button>
       {:else}
         {_t("storage.readingConfig")}
       {/if}
@@ -456,24 +458,24 @@
       />
       <div class="stats-grid">
         <div class="stat-item">
-          <span class="stat-value">{ocrTotal}</span><span class="stat-label"
-            >{_t("statistics.ocrTotal")}</span
-          >
+          <span class="stat-value">{ocrTotal}</span><span class="stat-label">
+            {_t("statistics.ocrTotal")}
+          </span>
         </div>
         <div class="stat-item">
-          <span class="stat-value">{ocrPending}</span><span class="stat-label"
-            >{_t("statistics.ocrPending")}</span
-          >
+          <span class="stat-value">{ocrPending}</span><span class="stat-label">
+            {_t("statistics.ocrPending")}
+          </span>
         </div>
         <div class="stat-item">
-          <span class="stat-value">{ocrCompleted}</span><span class="stat-label"
-            >{_t("statistics.ocrCompleted")}</span
-          >
+          <span class="stat-value">{ocrCompleted}</span><span class="stat-label">
+            {_t("statistics.ocrCompleted")}
+          </span>
         </div>
         <div class="stat-item">
-          <span class="stat-value">{ocrFailed}</span><span class="stat-label"
-            >{_t("statistics.ocrFailed")}</span
-          >
+          <span class="stat-value">{ocrFailed}</span><span class="stat-label">
+            {_t("statistics.ocrFailed")}
+          </span>
         </div>
       </div>
       <div class:available={ocrEngineAvailable} class="status-pill">

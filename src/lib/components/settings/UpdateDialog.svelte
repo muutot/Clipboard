@@ -53,13 +53,13 @@
   }}
 >
   <div class="update-dialog-header" class:update-dialog-header--current={mode === "current"}>
-    <span class="update-dialog-icon"
-      ><AppIcon name={mode === "current" ? "file" : "info"} size={18} /></span
-    >
+    <span class="update-dialog-icon">
+      <AppIcon name={mode === "current" ? "file" : "info"} size={18} />
+    </span>
     <div class="update-dialog-title">
-      <strong
-        >{mode === "current" ? _t("about.releaseNotes") : _t("about.updateDialogTitle")}</strong
-      >
+      <strong>
+        {mode === "current" ? _t("about.releaseNotes") : _t("about.updateDialogTitle")}
+      </strong>
       <p class="update-dialog-version">
         v{result.latestVersion}
         {#if result.publishedAt}

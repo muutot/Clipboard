@@ -64,29 +64,37 @@
     type="button"
     title={_t("card.viewDetail")}
     aria-label={_t("card.viewDetail")}
-    onclick={(event) => onrunaction("detail", event)}><AppIcon name="eye" size={16} /></button
+    onclick={(event) => onrunaction("detail", event)}
   >
+    <AppIcon name="eye" size={16} />
+  </button>
   <button
     type="button"
     title={_t("card.copy")}
     aria-label={_t("card.copy")}
-    onclick={(event) => onrunaction("copy", event)}><AppIcon name="copy" size={16} /></button
+    onclick={(event) => onrunaction("copy", event)}
   >
+    <AppIcon name="copy" size={16} />
+  </button>
   {#if item.kind === "image" || item.kind === "file"}
     <button
       type="button"
       title={_t("card.copyPath")}
       aria-label={_t("card.copyPath")}
-      onclick={(event) => onrunaction("copyPath", event)}><AppIcon name="link" size={16} /></button
+      onclick={(event) => onrunaction("copyPath", event)}
     >
+      <AppIcon name="link" size={16} />
+    </button>
   {/if}
   {#if item.kind === "image" || item.kind === "file"}
     <button
       type="button"
       title={_t("card.saveAs")}
       aria-label={_t("card.saveAs")}
-      onclick={onsaveas}><AppIcon name="download" size={16} /></button
+      onclick={onsaveas}
     >
+      <AppIcon name="download" size={16} />
+    </button>
   {/if}
   {#if canEdit}
     <button
@@ -97,8 +105,10 @@
       aria-label={item.kind === "image" || item.kind === "file"
         ? _t("edit.editFileName")
         : _t("card.edit")}
-      onclick={(event) => onrunaction("edit", event)}><AppIcon name="edit" size={16} /></button
+      onclick={(event) => onrunaction("edit", event)}
     >
+      <AppIcon name="edit" size={16} />
+    </button>
   {/if}
   {#if item.kind === "text"}
     <button
@@ -106,8 +116,9 @@
       title={_t("card.pastePlain")}
       aria-label={_t("card.pastePlain")}
       onclick={(event) => onrunaction("plainpaste", event)}
-      ><AppIcon name="type" size={16} /></button
     >
+      <AppIcon name="type" size={16} />
+    </button>
   {/if}
   {#if item.kind === "text" && (item.htmlContent || item.hasHtml)}
     <button
@@ -115,8 +126,9 @@
       title={_t("card.pasteFormat")}
       aria-label={_t("card.pasteFormat")}
       onclick={(event) => onrunaction("formatpaste", event)}
-      ><AppIcon name="clipboard" size={16} /></button
     >
+      <AppIcon name="clipboard" size={16} />
+    </button>
   {/if}
   {#if item.kind === "text"}
     <button
@@ -124,16 +136,19 @@
       title={_t("card.cleanPaste")}
       aria-label={_t("card.cleanPaste")}
       onclick={(event) => onrunaction("cleanpaste", event)}
-      ><AppIcon name="scan" size={16} /></button
     >
+      <AppIcon name="scan" size={16} />
+    </button>
   {/if}
   {#if !item.favorite}
     <button
       type="button"
       title={_t("card.delete")}
       aria-label={_t("card.delete")}
-      onclick={(event) => onrunaction("delete", event)}><AppIcon name="trash" size={16} /></button
+      onclick={(event) => onrunaction("delete", event)}
     >
+      <AppIcon name="trash" size={16} />
+    </button>
   {/if}
   {#if item.deleted && canRestore}
     <button
@@ -141,8 +156,9 @@
       title={_t("card.restore")}
       aria-label={_t("card.restore")}
       onclick={(event) => onrunaction("restore", event)}
-      ><AppIcon name="restore" size={16} /></button
     >
+      <AppIcon name="restore" size={16} />
+    </button>
   {/if}
   <button
     type="button"
@@ -150,12 +166,13 @@
     title={item.favorite ? _t("card.unfavorite") : _t("card.favorite")}
     aria-label={item.favorite ? _t("card.unfavorite") : _t("card.favorite")}
     onclick={(event) => onrunaction("favorite", event)}
-    ><AppIcon name="star" size={16} filled={item.favorite} /></button
   >
+    <AppIcon name="star" size={16} filled={item.favorite} />
+  </button>
 </div>
-<span class="shortcut" class:shortcut-resident={quickCopyBadgeAlwaysVisible}
-  >{index < 9 ? `Ctrl+${index + 1}` : `#${index + 1}`}</span
->
+<span class="shortcut" class:shortcut-resident={quickCopyBadgeAlwaysVisible}>
+  {index < 9 ? `Ctrl+${index + 1}` : `#${index + 1}`}
+</span>
 
 <style>
   .actions {

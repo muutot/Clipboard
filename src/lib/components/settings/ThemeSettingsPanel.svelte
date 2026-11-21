@@ -266,9 +266,9 @@
       <h2>{_t("theme.title")}</h2>
       <p>{_t("theme.themeModeDescription")}</p>
     </div>
-    <button class="close-button" type="button" aria-label={_t("actions.close")} onclick={onclose}
-      >×</button
-    >
+    <button class="close-button" type="button" aria-label={_t("actions.close")} onclick={onclose}>
+      ×
+    </button>
   </header>
 {/if}
 

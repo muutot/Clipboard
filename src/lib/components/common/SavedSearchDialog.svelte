@@ -78,8 +78,10 @@
   <header>
     <strong>{_t("savedSearches.title")}</strong><button
       onclick={onclose}
-      aria-label={_t("savedSearches.close")}>×</button
+      aria-label={_t("savedSearches.close")}
     >
+      ×
+    </button>
   </header>
   <form
     onsubmit={(event) => {
@@ -98,8 +100,9 @@
         !name.trim() ||
         ($generalSettings.savedSearches.length >= MAX_SAVED_SEARCHES &&
           !$generalSettings.savedSearches.some((s) => s.name === name.trim()))}
-      >{_t("savedSearches.save")}</button
     >
+      {_t("savedSearches.save")}
+    </button>
   </form>
   <p class="hint">{_t("savedSearches.hint")}</p>
   <div class="saved-list">
@@ -114,9 +117,9 @@
           >
             <input bind:value={renameDraft} maxlength={80} aria-label={_t("savedSearches.name")} />
             <button disabled={busy}>{_t("savedSearches.rename")}</button>
-            <button type="button" onclick={() => (renaming = null)}
-              >{_t("savedSearches.cancel")}</button
-            >
+            <button type="button" onclick={() => (renaming = null)}>
+              {_t("savedSearches.cancel")}
+            </button>
           </form>
         {:else}
           <button
@@ -126,21 +129,26 @@
             onclick={() => {
               onapply(search);
               onclose();
-            }}>{search.name}</button
+            }}
           >
+            {search.name}
+          </button>
           <button
             disabled={busy}
             onclick={() => {
               renaming = search.id;
               renameDraft = search.name;
-            }}>{_t("savedSearches.rename")}</button
+            }}
           >
+            {_t("savedSearches.rename")}
+          </button>
           <button
             disabled={busy}
             onclick={() =>
               persist($generalSettings.savedSearches.filter((s) => s.id !== search.id))}
-            >{_t("savedSearches.remove")}</button
           >
+            {_t("savedSearches.remove")}
+          </button>
         {/if}
       </div>
     {:else}
@@ -148,9 +156,9 @@
     {/each}
   </div>
   {#if error}<p role="alert">{error}</p>
-    <button disabled={busy} onclick={() => persist($generalSettings.savedSearches)}
-      >{_t("savedSearches.retry")}</button
-    >{/if}
+    <button disabled={busy} onclick={() => persist($generalSettings.savedSearches)}>
+      {_t("savedSearches.retry")}
+    </button>{/if}
 </dialog>
 
 <style>

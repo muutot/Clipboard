@@ -64,8 +64,10 @@
       class="tag-add"
       aria-label={_t("detail.addTag")}
       disabled={!tagDraft.trim()}
-      onclick={addTagFromInput}><AppIcon name="plus" size={12} /></button
+      onclick={addTagFromInput}
     >
+      <AppIcon name="plus" size={12} />
+    </button>
   </div>
   {#if (item.tags ?? []).length > 0}
     <div class="tags-list">

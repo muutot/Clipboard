@@ -78,8 +78,10 @@
     <button
       class="close-button"
       aria-label={resolvePath($messages, "actions.close")}
-      onclick={onclose}>×</button
+      onclick={onclose}
     >
+      ×
+    </button>
   </header>
 {/if}
 
@@ -96,8 +98,10 @@
         aria-checked={settings.customCssEnabled}
         aria-label={t("enabled")}
         disabled={busy}
-        onclick={toggle}><span class="toggle-knob"></span></button
+        onclick={toggle}
       >
+        <span class="toggle-knob"></span>
+      </button>
     </section>
     <section class="setting-card css-card" data-settings-search-id="appearance.custom-css">
       <EntryHeading label={t("editor")} desc={t("editorHint")} />
@@ -116,16 +120,20 @@
         <button
           class="settings-action-btn"
           disabled={busy || !dirty}
-          onclick={() => (draft = settings.customCss)}>{t("resetDraft")}</button
+          onclick={() => (draft = settings.customCss)}
         >
+          {t("resetDraft")}
+        </button>
         <button
           class="settings-action-btn"
           disabled={busy || !!draft.trim()}
-          onclick={() => (draft = example)}>{t("example")}</button
+          onclick={() => (draft = example)}
         >
-        <button class="settings-action-btn" disabled={busy || !draft} onclick={() => (draft = "")}
-          >{t("clear")}</button
-        >
+          {t("example")}
+        </button>
+        <button class="settings-action-btn" disabled={busy || !draft} onclick={() => (draft = "")}>
+          {t("clear")}
+        </button>
       </div>
       <p class="css-note">
         {draft.length.toLocaleString()} / {MAX_CUSTOM_CSS_LENGTH.toLocaleString()}{dirty

@@ -236,12 +236,12 @@
   </div>
   {#if importResult && importResult.pendingTruncation > 0}
     <div class="transfer-limit-warning">
-      <span
-        >{_t("storage.importTruncationWarning", {
+      <span>
+        {_t("storage.importTruncationWarning", {
           max: importResult.maxItems,
           count: importResult.pendingTruncation,
-        })}</span
-      >
+        })}
+      </span>
       <button type="button" class="settings-action-btn" onclick={onadjustlimit}>
         {_t("storage.importAdjustLimit")}
       </button>

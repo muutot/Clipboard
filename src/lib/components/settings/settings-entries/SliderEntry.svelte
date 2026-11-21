@@ -17,9 +17,9 @@
 
 <section class="setting-card" data-settings-search-id={searchId ?? config.id ?? undefined}>
   {#snippet children()}
-    <span class="value-label"
-      >{config.display ? config.display(config.get()) : config.get()}{config.suffix}</span
-    >
+    <span class="value-label">
+      {config.display ? config.display(config.get()) : config.get()}{config.suffix}
+    </span>
   {/snippet}
   <EntryHeading icon={config.icon} label={config.label} desc={config.desc} inline {children} />
   <input

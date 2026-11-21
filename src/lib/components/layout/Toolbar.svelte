@@ -184,8 +184,10 @@
                 onclick={() => {
                   onsourceapp("");
                   sourceAppDropdownOpen = false;
-                }}><span>{_t("sourceApp.all")}</span></button
+                }}
               >
+                <span>{_t("sourceApp.all")}</span>
+              </button>
               {#each filteredSourceApps as app}
                 <button
                   type="button"
@@ -194,8 +196,10 @@
                   onclick={() => {
                     onsourceapp(app);
                     sourceAppDropdownOpen = false;
-                  }}><span>{app}</span></button
+                  }}
                 >
+                  <span>{app}</span>
+                </button>
               {/each}
             </div>
           </div>
@@ -217,12 +221,11 @@
           {#if dateFilter === "all"}
             <AppIcon name="calendar" size={15} />
           {/if}
-          <span class="dropdown-label"
-            >{dateFilter === "all"
+          <span class="dropdown-label">
+            {dateFilter === "all"
               ? _t("dateFilter.all")
-              : (dateFilterOptions.find((o) => o.id === dateFilter)?.label ??
-                _t("dateFilter.all"))}</span
-          >
+              : (dateFilterOptions.find((o) => o.id === dateFilter)?.label ?? _t("dateFilter.all"))}
+          </span>
           {#if dateFilter === "all"}
             <AppIcon name="chevron-down" size={12} strokeWidth={2.5} />
           {/if}
@@ -242,8 +245,10 @@
                 onclick={() => {
                   ondatefilter(option.id);
                   dateDropdownOpen = false;
-                }}><span>{option.label}</span></button
+                }}
               >
+                <span>{option.label}</span>
+              </button>
             {/each}
           </div>
         {/if}
@@ -257,8 +262,10 @@
           aria-label={_t("savedSearches.title")}
           class="saved-search-trigger"
           title={_t("savedSearches.title")}
-          onclick={onsavedsearches}><AppIcon name="search" size={17} /></button
+          onclick={onsavedsearches}
         >
+          <AppIcon name="search" size={17} />
+        </button>
       {/if}
       <button
         type="button"
@@ -266,14 +273,17 @@
         aria-label={_t("toolbar.pinWindow")}
         title={_t("toolbar.pinWindow")}
         onclick={() => generalSettings.updateSetting("alwaysOnTop", !$generalSettings.alwaysOnTop)}
-        ><AppIcon name="window-top" size={17} /></button
       >
+        <AppIcon name="window-top" size={17} />
+      </button>
       <button
         type="button"
         aria-label={_t("toolbar.settings")}
         title={_t("toolbar.settings")}
-        onclick={onsettings}><AppIcon name="settings" size={17} /></button
+        onclick={onsettings}
       >
+        <AppIcon name="settings" size={17} />
+      </button>
     </div>
   </div>
 </div>

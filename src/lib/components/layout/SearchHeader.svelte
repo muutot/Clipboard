@@ -137,8 +137,10 @@
         class="clear-button"
         type="button"
         aria-label={_t("app.clearSearch")}
-        onclick={onclear}>×</button
+        onclick={onclear}
       >
+        ×
+      </button>
     {/if}
   </div>
   <img

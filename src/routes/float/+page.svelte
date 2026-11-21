@@ -511,19 +511,23 @@
         role="tab"
         aria-selected={filter === "all"}
         class:active={filter === "all"}
-        onclick={() => switchFilter("all")}>{_t("float.all")}</button
+        onclick={() => switchFilter("all")}
       >
+        {_t("float.all")}
+      </button>
       <button
         type="button"
         role="tab"
         aria-selected={filter === "favorite"}
         class:active={filter === "favorite"}
-        onclick={() => switchFilter("favorite")}>{_t("float.favorites")}</button
+        onclick={() => switchFilter("favorite")}
       >
+        {_t("float.favorites")}
+      </button>
     </div>
-    <button type="button" class="float-close" aria-label={_t("float.close")} onclick={close}
-      >×</button
-    >
+    <button type="button" class="float-close" aria-label={_t("float.close")} onclick={close}>
+      ×
+    </button>
   </header>
 
   <main class="float-list" aria-label={_t("float.title")}>

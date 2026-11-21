@@ -252,9 +252,9 @@
           width={180}
         />
       {/if}
-      <button class="close-button" type="button" aria-label={_t("actions.close")} onclick={onclose}
-        >×</button
-      >
+      <button class="close-button" type="button" aria-label={_t("actions.close")} onclick={onclose}>
+        ×
+      </button>
     </div>
   </header>
 {/if}

@@ -21,8 +21,10 @@
     <button
       class="settings-action-btn"
       disabled={operation.cancelling || operation.snapshot.status === "cancelling"}
-      onclick={() => operation.cancel()}>{t("operations.cancel")}</button
+      onclick={() => operation.cancel()}
     >
+      {t("operations.cancel")}
+    </button>
   </div>
 {:else if operation.snapshot?.status === "cancelled"}
   <p class="settings-state" role="status">{t("operations.cancelled")}</p>

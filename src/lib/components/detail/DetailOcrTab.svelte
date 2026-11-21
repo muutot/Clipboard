@@ -124,8 +124,9 @@
               class="ocr-copy-btn"
               disabled={selected.size === 0}
               onclick={() => copyText(selectedOcrText(item.ocrBlocks ?? [], selected))}
-              >{_t("ocrBlocks.copySelected", { count: selected.size })}</button
             >
+              {_t("ocrBlocks.copySelected", { count: selected.size })}
+            </button>
           {/if}
         {/if}
       </div>

@@ -167,8 +167,10 @@
         generalSettings.updateSetting(
           "devtoolsShortcutEnabled",
           !$generalSettings.devtoolsShortcutEnabled,
-        )}><span class="toggle-knob"></span></button
+        )}
     >
+      <span class="toggle-knob"></span>
+    </button>
   </section>
 
   {#if updateResult}

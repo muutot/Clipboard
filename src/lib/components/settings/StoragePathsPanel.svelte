@@ -250,12 +250,12 @@
         spellcheck="false"
         placeholder={_t("storage.placeholderPath")}
       />
-      <button type="button" disabled={saving} onclick={restoreDefaultDirectory}
-        >{_t("storage.restoreDefault")}</button
-      >
-      <button type="button" disabled={saving} onclick={saveCustomDirectory}
-        >{saving ? _t("storage.saving") : _t("storage.saveDirectory")}</button
-      >
+      <button type="button" disabled={saving} onclick={restoreDefaultDirectory}>
+        {_t("storage.restoreDefault")}
+      </button>
+      <button type="button" disabled={saving} onclick={saveCustomDirectory}>
+        {saving ? _t("storage.saving") : _t("storage.saveDirectory")}
+      </button>
     </div>
 
     {#if pending}
@@ -263,9 +263,9 @@
         <span>{_t("storage.nextLaunch")}</span>
         <code title={pending.storagePath}>{pending.storagePath}</code>
         {#if restartNeeded}
-          <button class="restart-btn" type="button" onclick={restartApp}
-            >{_t("storage.restartNow")}</button
-          >
+          <button class="restart-btn" type="button" onclick={restartApp}>
+            {_t("storage.restartNow")}
+          </button>
         {/if}
       </div>
     {/if}
@@ -307,20 +307,22 @@
         <button
           type="button"
           disabled={savingResourceStorage}
-          onclick={restoreDefaultResourceStoragePaths}>{_t("storage.restoreDefault")}</button
+          onclick={restoreDefaultResourceStoragePaths}
         >
-        <button type="button" disabled={savingResourceStorage} onclick={saveResourceStoragePaths}
-          >{savingResourceStorage ? _t("storage.saving") : _t("storage.saveDirectory")}</button
-        >
+          {_t("storage.restoreDefault")}
+        </button>
+        <button type="button" disabled={savingResourceStorage} onclick={saveResourceStoragePaths}>
+          {savingResourceStorage ? _t("storage.saving") : _t("storage.saveDirectory")}
+        </button>
       </div>
       {#if pendingResourceStorage}
         <div class="resource-path-summary">
-          <code title={pendingResourceStorage.imageStoragePath}
-            >{_t("storage.imageStoragePath")}: {pendingResourceStorage.imageStoragePath}</code
-          >
-          <code title={pendingResourceStorage.fileStoragePath}
-            >{_t("storage.fileStoragePath")}: {pendingResourceStorage.fileStoragePath}</code
-          >
+          <code title={pendingResourceStorage.imageStoragePath}>
+            {_t("storage.imageStoragePath")}: {pendingResourceStorage.imageStoragePath}
+          </code>
+          <code title={pendingResourceStorage.fileStoragePath}>
+            {_t("storage.fileStoragePath")}: {pendingResourceStorage.fileStoragePath}
+          </code>
           {#if resourceStorageRestartNeeded}
             <button class="restart-btn" type="button" onclick={restartApp}>
               {_t("storage.restartNow")}
