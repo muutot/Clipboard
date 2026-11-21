@@ -1,66 +1,60 @@
-# Clipboard Desktop v1.8.4
+# Clipboard Desktop v1.8.5
 
-> 批量粘贴重做：合并为单次写入单次交付，附批量诊断；一批保存/隐私/更新链路的正确性修复，以及复制性能优化
+> 主窗口透明度彻底修复：浅色背景现在能真正透出桌面；浅色调色板改为象牙白 #f8f8f9，彩色图标默认开启
 >
-> Released: 2026-11-11
+> Released: 2026-11-21
 
 ---
 
 ## 新功能
 
-### 批量粘贴
+### 设置
 
-- **单次写入单次交付** — 批量粘贴不再逐条写入剪贴板，合并为一次写入一次交付，减少中间状态与触发次数 | [`dd104f87`](https://github.com/muutot/Clipboard/commit/dd104f87)
-- **批量诊断** — 交付失败时输出批量粘贴诊断，便于定位是哪一条、哪一环失败 | [`2e4730fd`](https://github.com/muutot/Clipboard/commit/2e4730fd)
-
----
-
-## 正确性加固
-
-### 粘贴链路
-
-- **批量租约** — 每次批量操作只租用一个已校验的粘贴目标，中途窗口切换不再改变落点 | [`5244015b`](https://github.com/muutot/Clipboard/commit/5244015b)
-- **窗口隐藏时暂存** — 后续批量条目在窗口隐藏期间暂存，避免中途打断前台应用 | [`41d37415`](https://github.com/muutot/Clipboard/commit/41d37415)
-- **shift 范围方向** — shift 多选粘贴时保留选择方向，正序/倒序不再被反向 | [`f6dd90ae`](https://github.com/muutot/Clipboard/commit/f6dd90ae)
-- **HTML 写入走后端** — 桌面端 HTML 写入统一经由后端 writer，前端直写路径移除 | [`2752cf86`](https://github.com/muutot/Clipboard/commit/2752cf86)
-
-### 保存与文件
-
-- **保存前能力检查** — 选择目标位置前先检查保存能力，资源缺失在选目录前明确解释 | [`1dd83bd0`](https://github.com/muutot/Clipboard/commit/1dd83bd0) [`67adb86f`](https://github.com/muutot/Clipboard/commit/67adb86f)
-
-### 隐私
-
-- **结构化凭证拦截** — 敏感内容过滤覆盖结构化凭证；默认保持未升级的用户也会升级过滤规则 | [`ca8554b8`](https://github.com/muutot/Clipboard/commit/ca8554b8)
-
-### 存储与导入
-
-- **导入校验** — 导入的元数据先校验再落库；旧版资源引用在导入后保留 | [`1c26f08d`](https://github.com/muutot/Clipboard/commit/1c26f08d)
-- **键盘记录定位** — 键盘配置定位导入的记录 ID 不再经 CSS 插值，特殊字符 ID 不失配 | [`4efe1a38`](https://github.com/muutot/Clipboard/commit/4efe1a38)
-
-### 更新与 Markdown
-
-- **语义化版本比较** — 更新检查保留完整语义化版本优先级，预发布/修订号比较不再错判 | [`08ab6247`](https://github.com/muutot/Clipboard/commit/08ab6247)
-- **Markdown 阻断图片** — 预览中被沙箱阻断的远程图片给出说明，不发起远程请求 | [`39603748`](https://github.com/muutot/Clipboard/commit/39603748)
+- **彩色图标默认开启** — 新配置默认以每个图标自带的彩色渲染，而不是单色；仍可在设置中关闭 | [`0079f796`](https://github.com/muutot/Clipboard/commit/0079f796)
+- **搜索防抖可调** — 防抖时长改为可配置项（0–1000ms），设为 0 时改为回车触发搜索 | [`92f80fc8`](https://github.com/muutot/Clipboard/commit/92f80fc8)
 
 ---
 
-## 性能
+## 透明度修复
 
-- **复制提速** — 复制时复用已捕获的 SHA-256，文件读取移出 UI 线程 | [`1e74f3b3`](https://github.com/muutot/Clipboard/commit/1e74f3b3)
+这一版把主窗口透明度上三个互相独立的问题全部修掉了。
+
+### 浅色背景现在真的能透出桌面
+
+之前无论在设置里怎么拖动不透明度，浅色背景看起来都和完全不透明一样。根因在原生窗口层：`tauri-runtime-wry` 会给每个透明窗口创建一个 softbuffer 表面并填满整窗（丢弃 alpha），这层画在 WebView2 下方，于是 CSS 的透明度只能和它合成，永远到不了桌面。浅色 `#f8f8f9` 在白底上合成只差 3 个色阶，所以看起来毫无变化；暗色因为往白色方向变化跨了 91 个色阶，才「看起来能用」——那实际是变灰，不是透出桌面。
+
+现在只在背景本该不透明时才填这层表面，半透明背景完全不填，CSS 透明度可以直接和桌面合成。 | [`fd340bf5`](https://github.com/muutot/Clipboard/commit/fd340bf5)
+
+### 不透明度滑杆不再「调了没反应」
+
+原实现只在保存值 ≥ 100 时才把窗口建成不透明，而 WebView2 的默认底色在控制器创建时就固定、且不可逆。一旦建成不透明，之后拉低不透明度只能在同一颜色上叠加，必须重启才「生效」。现在窗口始终以透明方式创建。 | [`033ab1f5`](https://github.com/muutot/Clipboard/commit/033ab1f5)
+
+### 背景色不再叠加两层
+
+`body` 和 `.app-shell` 之前都在用同一个透明度系数涂背景色，两层半透明叠起来后实际是 `1-(1-a)²`：滑杆 60% 时桌面只透 16%。现在只由 `.app-shell` 一层负责，滑杆值就是实际值。 | [`0ffbba09`](https://github.com/muutot/Clipboard/commit/0ffbba09)
+
+### 其他
+
+- **页面不再写主窗口原生底色** — 避免一次页面侧写入把主窗口永久冻成不透明白色 | [`7c018ccf`](https://github.com/muutot/Clipboard/commit/7c018ccf)
 
 ---
 
-## 工程与发布
+## 视觉
 
-- **静态 VC 运行时** — Tauri 配置声明静态链接 VC 运行时 | [`30e8b8f3`](https://github.com/muutot/Clipboard/commit/30e8b8f3)
-- **zstd 安全补丁** — 同步兼容的 zstd 安全补丁版本 | [`b4969dac`](https://github.com/muutot/Clipboard/commit/b4969dac)
-- **技能目录迁移** — 全部 agent skills 迁入 `.agents/skills/` 供 DSH 自动发现 | [`764a2f28`](https://github.com/muutot/Clipboard/commit/764a2f28) [`9d3b8eaa`](https://github.com/muutot/Clipboard/commit/9d3b8eaa) [`491764cf`](https://github.com/muutot/Clipboard/commit/491764cf)
-- **测试与文档** — 粘贴测试覆盖后端文本写入；i18n 区分本地资源主机与语言键；备份认证流格式原型与上限断言；文件保存能力多回退验证；路线图按审计与竞品报告重建 | [`82c4498e`](https://github.com/muutot/Clipboard/commit/82c4498e) [`67a1723a`](https://github.com/muutot/Clipboard/commit/67a1723a) [`e14343ae`](https://github.com/muutot/Clipboard/commit/e14343ae) [`b719572d`](https://github.com/muutot/Clipboard/commit/b719572d) [`f68b26d8`](https://github.com/muutot/Clipboard/commit/f68b26d8) [`258183f5`](https://github.com/muutot/Clipboard/commit/258183f5)
+- **浅色调色板改为象牙白** — 浅色背景由 `#f5f5f5` 调整为 `#f8f8f9`，不透明度 100% 时精确呈现该颜色 | [`40318634`](https://github.com/muutot/Clipboard/commit/40318634)
 
 ---
 
-## 构建产物
+## 构建与依赖
 
-- **Windows**: `Clipboard_1.8.4_x64-setup.exe`（SignPath 签名）、`Clipboard_1.8.4_x64_en-US.msi`
-- **macOS**: `Clipboard_1.8.4_aarch64.dmg`
-- **Linux**: `Clipboard_1.8.4_amd64.AppImage`（内嵌 zsync 更新信息）、`Clipboard_1.8.4_amd64.deb`、`Clipboard-1.8.4-1.x86_64.rpm`
+- **Rust 2024 edition** — 全仓升级到 edition 2024 | [`8f85f6d0`](https://github.com/muutot/Clipboard/commit/8f85f6d0)
+- **SvelteKit 3** — 升级 SvelteKit 3 与 adapter-static 4 | [`9a15bad2`](https://github.com/muutot/Clipboard/commit/9a15bad2)
+- **Windows 构建修复** — 链接前预创建 ort-sys 的 DLL 目录（覆盖各 target triple 与 copy_dylibs 查找路径），失败时 dump 布局取证；补入 NSIS 安装包所需的 `RestartManager.nsh` | [`740c3e00`](https://github.com/muutot/Clipboard/commit/740c3e00) [`41a18056`](https://github.com/muutot/Clipboard/commit/41a18056) [`bd615a5e`](https://github.com/muutot/Clipboard/commit/bd615a5e) [`bae645dd`](https://github.com/muutot/Clipboard/commit/bae645dd) [`70908ef3`](https://github.com/muutot/Clipboard/commit/70908ef3) [`9938d8d7`](https://github.com/muutot/Clipboard/commit/9938d8d7)
+- **依赖更新** — jsdom 31.0.0 及其余 npm 依赖对齐最新兼容版本 | [`bf768e85`](https://github.com/muutot/Clipboard/commit/bf768e85) [`ea22dd3a`](https://github.com/muutot/Clipboard/commit/ea22dd3a)
+
+---
+
+## 内部整理
+
+- **clippy 收敛** — 三处 `collapsible-if` 与 macOS 采集器守卫按 clippy 建议重构 | [`5a0f0ce1`](https://github.com/muutot/Clipboard/commit/5a0f0ce1) [`f5cbebae`](https://github.com/muutot/Clipboard/commit/f5cbebae) [`890021c1`](https://github.com/muutot/Clipboard/commit/890021c1)
+- **测试稳定性** — 有界命令测试吸收夹具启动开销 | [`82cc9f00`](https://github.com/muutot/Clipboard/commit/82cc9f00)

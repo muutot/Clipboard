@@ -1,5 +1,58 @@
 # Changelog
 
+## 1.8.5 (2026-11-21)
+
+### ✨ Features
+
+- **settings**: enable colour icons by default (0079f796)
+- **search**: make input debounce configurable with Enter-to-search at zero (92f80fc8)
+
+### 🐛 Bug Fixes
+
+- **bundle**: include RestartManager.nsh so the NSIS installer builds (9938d8d7)
+- **ci**: seed both ort-sys bases and dump them when the job fails (70908ef3)
+- **release**: report the ort-sys build layout when the Windows leg fails (bae645dd)
+- **ci**: seed every plausible ort-sys DLL base and dump the layout (bd615a5e)
+- **ci**: create the ort-sys DLL dirs under the target triple too (41a18056)
+- **ci**: create the ort-sys DLL dirs where copy_dylibs looks (740c3e00)
+- **window**: stop painting the window surface under a translucent backdrop (fd340bf5)
+- **theme**: stop compositing the backdrop colour twice (0ffbba09)
+- **window**: keep the main window transparent so the opacity slider stays live (033ab1f5)
+- **window**: stop the page from freezing the main window backdrop opaque (7c018ccf)
+- **ci**: precreate ort-sys DLL dirs on Windows before linking (3617d82f)
+
+### ♻️ Refactoring
+
+- **memory**: collapse macos collector guard for clippy (5a0f0ce1)
+- **platform**: collapse cfg-gated nested ifs for clippy collapsible-if (f5cbebae)
+- **platform**: collapse monitor stop guard for clippy collapsible-if (890021c1)
+
+### 🎨 Styling
+
+- **theme**: set the light palette background to ivory #f8f8f9 (40318634)
+
+### 📝 Documentation
+
+- **settings**: record colour icons as the default (6b2aa7d6)
+- **theme**: document the single-painted-layer rule for backdrop alpha (82876492)
+- **pitfalls**: record ort-sys Windows copy_dylibs NotFound panic (162bd8b0)
+- **todo**: scope roadmap to Windows and drop native format probe (5430b985)
+- **readme**: update rust edition and dependency reachability notes (afce9f65)
+- **todo**: record native verification evidence for f02/f06/f07 (79a30a1f)
+- **deps**: update references for sveltekit 3 migration (5987ff36)
+
+### ✅ Testing
+
+- **platform**: absorb fixture startup cost in bounded command tests (82cc9f00)
+
+### 🔧 Chores
+
+- **deps**: upgrade rust edition from 2021 to 2024 (8f85f6d0)
+- **deps**: remove completed sveltekit 3 migration checklist (1335f3c4)
+- **deps**: upgrade sveltekit to 3 and adapter-static to 4 (9a15bad2)
+- **deps**: upgrade jsdom to 31.0.0 (bf768e85)
+- **deps**: update npm dependencies to latest compatible versions (ea22dd3a)
+
 ## 1.8.4 (2026-11-11)
 
 ### ✨ Features
