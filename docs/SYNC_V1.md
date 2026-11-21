@@ -114,6 +114,9 @@ metadata envelopes, pack chunks and fixed-integer pack headers, and never uses a
 container count or compressed size as the budget. Tiny malformed inputs cannot reserve near
 the global ceiling before reporting truncation. Valid large/dense records retain their wire
 layout and writer limits; they can still use substantial memory within the protocol bounds.
+The frozen `bincode 2` layout is a protocol decision, not a swappable dependency; the evaluation
+of alternatives (wincode / postcard / rkyv) and why none is a drop-in replacement is recorded in
+[`BINCODE_REPLACEMENT_EVAL.md`](BINCODE_REPLACEMENT_EVAL.md).
 
 Normal discovery performs one paginated `v1/heads/` listing, which is O(device count). The client
 retains a disposable per-scope/device head cache only after that head has been fully validated and

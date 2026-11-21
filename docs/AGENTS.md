@@ -9,7 +9,8 @@ Read `.agents/skills/clipboard-dev/SKILL.md` (documentation currency gate) befor
   `NATIVE_VERIFICATION.md`, `RELEASE.md` (release process).
 - Archival evidence, retained while cited by `TODO.md` or README: `V1_8_IMPLEMENTATION.md`,
   `V1_8_FOLLOWUP.md`, `PERFORMANCE_V1_8.md`, `SEARCH_OPTIMIZATION_REPORT.md`,
-  `SYNC_V2.md` (scoping/progress record for not-yet-complete v2 items).
+  `SYNC_V2.md` (scoping/progress record for not-yet-complete v2 items),
+  `BINCODE_REPLACEMENT_EVAL.md` (dependency decision evidence for the frozen v1 wire codec).
 - Keep factual claims in sync with the source. When dated evidence (test counts, CI run ids,
   competitor surveys, superseded statuses) goes stale, remove or update it instead of
   accumulating it.

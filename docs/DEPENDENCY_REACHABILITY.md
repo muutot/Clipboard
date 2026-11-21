@@ -1,6 +1,8 @@
 # 依赖公告可达性复核
 
-复核日期：2026-11-08。证据基线：应用源码、package-lock.json 与 2a43b4df 之前构建的静态前端。后续依赖或部署模式改变时必须重查。
+复核日期：2026-11-08；最近一次版本基线更新：2026-11-21（依赖升级后重新核对锁文件版本）。证据基线：应用源码、package-lock.json、src-tauri/Cargo.lock 与 2a43b4df 之前构建的静态前端。后续依赖或部署模式改变时必须重查。
+
+> 2026-11-21 版本基线：SvelteKit 3.4.0、svelte 5.59.1、vitest 5.1.1、TypeScript 6.0.3（TS 7 因 SvelteKit 依赖编译器 JS API 暂缓）；Rust 侧 tantivy 0.27.0、zip 9.8.1、rusqlite 0.43.0、lru 0.18.5、zstd 0.13.5（另有传递依赖 0.14.4）、bincode 2.0.1。下面部分公告的「当前版本适用范围」按旧版本写成历史记录，以本行版本为准重新判断。bincode 停止维护的处置见 [`BINCODE_REPLACEMENT_EVAL.md`](BINCODE_REPLACEMENT_EVAL.md)。
 
 ## npm
 
@@ -29,7 +31,11 @@ zstd 0.13.3 与 zstd-safe 7.3.0 分别有 RUSTSEC-2026-0391、0398、0403 以及
 
 剩余 ZIP 8.6.0 公告为 RUSTSEC-2026-0367、0368、0369、0429，修复范围为 >=9.0.0。问题 API 为 ZipArchive::extract / ZipStreamReader::extract 的权限、符号链接或进程中止行为。当前备份逐项使用 by_index、受控名称、拒绝重复及受限 transfer，不调用上述通用 extract，也不恢复 ZIP Unix 权限；未证明当前入口可利用。跨主版本 ZIP 更新需要单独验证，不能静默标为已修复。
 
+> 2026-11-21 更新：ZIP 已升到 9.8.1，落在上述公告修复范围（>=9.0.0）。升级带来 API 变更：`ZipFile::name()` 从 `&str` 改为 `ZipResult<Cow<str>>`，`export/backup.rs` 的 validate/rewrite 已适配并保持原有名称校验语义；全量 Rust 测试与 clippy 通过。此时应重新跑 cargo-audit 确认 ZIP 公告消除，旧的「8.6.0 未修」结论不再适用。
+
 剩余 informational：bincode 2.0.1、paste 1.0.15、proc-macro-error 1.0.4、ttf-parser 0.25.1 为停止维护公告；glib 0.18.5（RUSTSEC-2024-0429）和 lru 0.16.4（RUSTSEC-2026-0253）为 unsound 警告。维护状态不是已证明攻击；glib 是 Linux 平台依赖，当前 Windows 检查不覆盖其运行；lru 的 panic/pop 入口仍需逐个追踪。不得通过忽略列表让扫描变绿。
+
+> 2026-11-21 更新：lru 经 tantivy 0.27 升到 0.18.5（不再是 0.16.4），但「不调用 pop、键为 usize 无析构 panic」的不可达论证仍需按新版本源码重新确认后才可沿用。bincode 的停止维护处置（为何不升 3.0.0、为何不换 wincode/postcard/rkyv）见 [`BINCODE_REPLACEMENT_EVAL.md`](BINCODE_REPLACEMENT_EVAL.md)。
 
 原始扫描保存为本地 cargo-audit-current.json 与 cargo-audit-zstd-patched.json。Rust 检查不是无风险结论；上述剩余问题保留后续维护范围。
 
