@@ -252,7 +252,7 @@ mod tests {
             global_hotkey::hotkey::Modifiers::ALT
                 | global_hotkey::hotkey::Modifiers::CONTROL
                 | global_hotkey::hotkey::Modifiers::SHIFT
-                | global_hotkey::hotkey::Modifiers::SUPER
+                | global_hotkey::hotkey::Modifiers::META
         );
         for key in [
             0x08, 0x09, 0x0d, 0x1b, 0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x2d,

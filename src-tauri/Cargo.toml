@@ -30,8 +30,8 @@ tauri = { version = "2.12.1", features = ["protocol-asset", "tray-icon", "devtoo
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 semver = "1"
-rusqlite = { version = "0.40.1", features = ["bundled"] }
-tantivy = "0.26.1"
+rusqlite = { version = "0.43", features = ["bundled"] }
+tantivy = "0.27"
 regex-lite = "0.1"
 base64 = "0.23"
 sha2 = "0.11"
@@ -43,12 +43,12 @@ open = "5"
 tauri-plugin-dialog = "2"
 tauri-plugin-autostart = "2"
 window-vibrancy = "0.8"
-oar-ocr = { version = "0.9", features = ["download-binaries", "auto-download"] }
+oar-ocr = { version = "0.11", features = ["download-binaries", "auto-download"] }
 reqwest = { version = "0.13", default-features = false, features = ["stream", "rustls", "blocking"] }
 tokio = { version = "1", features = ["fs", "io-util"] }
-ort = "=2.0.0-rc.13"
+ort = "=2.0.0-rc.15"
 hex = "0.4.3"
-zip = "8"
+zip = "9"
 chrono = "0.4"
 rand = "0.10"
 uuid = { version = "1", features = ["v4"] }
@@ -73,7 +73,7 @@ mach2 = "0.7"
 gtk = "0.18"
 raw-window-handle = "0.6"
 dbus = "0.9"
-x11rb = { version = "0.13", features = ["xtest"] }
+x11rb = { version = "0.14", features = ["xtest"] }
 # crypto-rust keeps crypto in pure Rust. OpenSSL and libdbus link against the
 # system libraries (libssl-dev is already required; libdbus-1-dev was added to
 # the CI/docs apt lists) so Linux builds stay fast: no vendored C compilation.
@@ -87,7 +87,7 @@ wayland-protocols = { version = "0.32", features = ["client", "staging"] }
 wayland-protocols-wlr = { version = "0.3", features = ["client"] }
 
 [target.'cfg(not(target_os = "windows"))'.dependencies]
-global-hotkey = "0.8"
+global-hotkey = "0.10"
 
 [dev-dependencies]
 # Isolated encrypted-backup format prototype; not exposed by application IPC yet.
@@ -96,10 +96,10 @@ hmac = "0.13"
 pbkdf2 = "0.13"
 # Exercise calendar boundaries in real DST zones without changing the host timezone.
 chrono-tz = "0.10"
-global-hotkey = "0.8"
-x11rb = { version = "0.13", features = ["xtest"] }
+global-hotkey = "0.10"
+x11rb = { version = "0.14", features = ["xtest"] }
 clipboard-sync = { path = "crates/clipboard-sync", features = ["engine-test-support"] }
-rusqlite = { version = "0.40.1", features = ["hooks"] }
+rusqlite = { version = "0.43", features = ["hooks"] }
 
 # Dev-profile tuning for the fastest possible local `tauri dev` builds:
 # - dependencies stay unoptimized (opt-level 0) with no debug symbols, so the

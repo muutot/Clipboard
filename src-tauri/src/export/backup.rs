@@ -411,8 +411,9 @@ fn validate(
             Some(zip.len() as u64),
         )?;
         let entry = zip.by_index(index).map_err(err)?;
-        if !names.insert(entry.name().to_owned())
-            || (entry.name() != "manifest.json" && !safe_entry(entry.name()))
+        let name = entry.name().map_err(err)?;
+        if !names.insert(name.to_string())
+            || (name != "manifest.json" && !safe_entry(&name))
             || entry.is_dir()
             || entry
                 .unix_mode()
@@ -753,7 +754,7 @@ mod tests {
         let mut entries = Vec::new();
         for i in 0..original.len() {
             let mut entry = original.by_index(i).unwrap();
-            let name = entry.name().to_owned();
+            let name = entry.name().unwrap().into_owned();
             let mut bytes = Vec::new();
             entry.read_to_end(&mut bytes).unwrap();
             alter(&name, &mut bytes);
